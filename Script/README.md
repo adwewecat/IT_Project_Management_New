@@ -120,6 +120,35 @@ npm run dev
 
 ---
 
+### [2026-10-12] - Tối Ưu Toàn Diện Giao Diện Responsive & Trải Nghiệm Sử Dụng Trên Điện Thoại Di Động
+- **Bối cảnh & Yêu cầu người dùng**:
+  - Người dùng truy cập trên điện thoại (ảnh chụp thực tế qua IP server port 5001) gặp phải các vấn đề:
+    + Cột nội dung trang bị co hẹp chỉ chiếm ~60% màn hình, để lại khoảng trống trắng/xám vô lý ở bên phải.
+    + Bảng danh sách nhà hàng bị bóp nghẹt chiều cao, không hiển thị được dòng dữ liệu nào do Header, 5 nút bấm dọc và bộ lọc chiếm hết chiều cao màn hình (`100vh - 60px` với `overflow: hidden`).
+    + 5 nút hành động xếp chồng dọc chiếm diện tích khổng lồ.
+    + Thanh Header trên cùng có các nút Hotline và icon tràn quá bề rộng màn hình làm nới rộng viewport gây vỡ tỷ lệ trang.
+- **Nguyên nhân cốt lõi**:
+  1. Header có các nút hiển thị đầy đủ text ("Hotline: TẮT", "Cuộc Gọi", logo lớn) khiến chiều rộng tối thiểu của Header lên tới ~585px trong khi màn hình điện thoại chỉ rộng 360px - 412px. Trình duyệt mobile phải phóng rộng viewport theo Header khiến nội dung bên dưới co lại chỉ chiếm ~60% màn hình.
+  2. Trang `RestaurantListPage` và `RestaurantAuditLogsPage` bị cố định `height: calc(100vh - 60px)` và `overflow: hidden`. Trên mobile chiều cao hiển thị hạn chế, các khối phía trên đẩy bảng xuống dưới khiến bảng bị ép còn 0px chiều cao.
+  3. Lệnh CSS `table { display: block; max-width: 100%; overflow-x: auto; }` trước đây phá vỡ cấu trúc bảng chuẩn của HTML, làm lệch cột và ảnh hưởng tiêu đề dính (sticky header).
+- **Chi tiết kỹ thuật & Khắc phục**:
+  1. **Header & Viewport (`index.html`, `Header.tsx`, `index.css`)**:
+     - Cập nhật viewport meta: `width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes`.
+     - Tối ưu Header trên mobile: logo co gọn 28px, ẩn chữ phụ (`Hotline: TẮT` $\rightarrow$ chỉ giữ nút tròn trạng thái kèm icon tai nghe nhỏ gọn; `Cuộc Gọi` $\rightarrow$ chỉ giữ icon điện thoại kèm số badge đỏ; nút Theme/Đổi mật khẩu/Đăng xuất thu gọn padding). Chiều rộng Header trên mobile giảm còn ~310px, vừa vặn 100% mọi dòng máy.
+  2. **Khung chứa chính (`MainLayout.tsx`, `Sidebar.tsx`, `index.css`)**:
+     - Khi sidebar đóng trên mobile: đặt `display: none !important` để triệt tiêu hoàn toàn khoảng trống phụ trong flex container.
+     - `.app-main-content` đặt `width: 100% !important; max-width: 100% !important; overflow-x: hidden !important; padding: 10px 8px !important;`.
+  3. **Tối ưu Danh Sách Nhà Hàng (`RestaurantListPage.tsx`, `RestaurantAuditLogsPage.tsx`)**:
+     - Class `.page-container-fullheight`: Trên desktop giữ nguyên full-height fit màn hình; trên mobile tự động chuyển thành `height: auto !important; min-height: calc(100vh - 56px); overflow: visible;` cho phép vuốt cuộn dọc mượt mà.
+     - 5 nút hành động: Chuyển sang lưới 2 cột (`.mobile-action-grid`), nút `+ Thêm Nhà Hàng` chiếm trọn 2 cột ở trên (`.mobile-action-primary`), 4 nút còn lại gọn gàng 2 hàng x 2 cột.
+     - Bộ lọc tìm kiếm (`.mobile-filter-stack`): Chuyển thành khối dọc linh hoạt 100% chiều rộng.
+     - Bảng dữ liệu: Đặt trong `.table-responsive-container` vuốt ngang cảm ứng mượt mà, bổ sung gợi ý vuốt trực quan (`.mobile-swipe-hint`), phân trang co gọn 2 tầng dễ bấm (`.mobile-pagination-container`).
+  4. **Kiểm thử & Đóng gói**:
+     - `cmd /c "npm run build"` thành công exit code 0 (`built in 5.10s`), bundle `frontend/dist/` đã sẵn sàng đưa lên server.
+     - Smoke test backend đạt 100% chuẩn.
+
+---
+
 ### [2026-10-12] - Sửa Triệt Để Lỗi NameError Khởi Động Backend Trên IIS & Ban Hành Quy Tắc Bất Biến Về Thứ Tự Khai Báo & Smoke Test
 - **Bối cảnh & Yêu cầu người dùng**:
   - Khi khởi động backend trên IIS (qua file batch), hệ thống văng lỗi dừng server:

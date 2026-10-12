@@ -19,7 +19,7 @@ export const MainLayout: React.FC = () => {
         mobileSidebarOpen={mobileSidebarOpen}
         onToggleMobileSidebar={() => setMobileSidebarOpen((prev) => !prev)}
       />
-      <div style={{ display: 'flex', flex: 1, minHeight: 'calc(100vh - 64px)', position: 'relative' }}>
+      <div style={{ display: 'flex', flex: 1, minHeight: 'calc(100vh - 64px)', position: 'relative', width: '100%', maxWidth: '100vw', overflowX: 'hidden' }}>
         <Sidebar
           mobileOpen={mobileSidebarOpen}
           onCloseMobile={() => setMobileSidebarOpen(false)}
@@ -30,7 +30,9 @@ export const MainLayout: React.FC = () => {
             flex: 1,
             padding: '24px',
             minWidth: 0,
-            overflowX: 'auto',
+            width: '100%',
+            maxWidth: '100%',
+            boxSizing: 'border-box',
           }}
         >
           <Outlet />

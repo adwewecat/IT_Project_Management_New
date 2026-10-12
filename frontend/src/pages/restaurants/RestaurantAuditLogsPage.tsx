@@ -156,7 +156,7 @@ export const RestaurantAuditLogsPage: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px', height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
+    <div className="page-container-fullheight" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px', height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>

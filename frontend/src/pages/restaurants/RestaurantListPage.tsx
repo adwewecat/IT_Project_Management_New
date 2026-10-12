@@ -390,7 +390,7 @@ export const RestaurantListPage: React.FC = () => {
   }, []);
 
   return (
-    <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px', height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
+    <div className="page-container-fullheight" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px', height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
       {/* Header Section */}
       <div
         style={{
@@ -470,11 +470,23 @@ export const RestaurantListPage: React.FC = () => {
         </div>
 
         {/* Top Actions */}
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="mobile-action-grid" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <Button
+            variant="primary"
+            leftIcon={<Plus size={16} />}
+            className="mobile-action-primary mobile-action-btn"
+            onClick={() => {
+              setEditingRestaurant(null);
+              setFormModalOpen(true);
+            }}
+          >
+            + Thêm Nhà Hàng
+          </Button>
           {canManageBrandRegion && (
             <Button
               variant="secondary"
               leftIcon={<Layers size={16} />}
+              className="mobile-action-btn"
               onClick={() => setBrandRegionModalOpen(true)}
               title="Quản lý và thêm mới Thương hiệu, Khu vực (Tỉnh/Thành)"
             >
@@ -484,6 +496,7 @@ export const RestaurantListPage: React.FC = () => {
           <Button
             variant="secondary"
             leftIcon={<Download size={16} />}
+            className="mobile-action-btn"
             onClick={handleExportExcel}
             isLoading={isExporting}
           >
@@ -492,28 +505,20 @@ export const RestaurantListPage: React.FC = () => {
           <Button
             variant="secondary"
             leftIcon={<Wrench size={15} />}
+            className="mobile-action-btn"
             onClick={() => setVncSetupOpen(true)}
             title="Tải bộ cài Scrcpy (KDS) và file cấu hình Registry Windows"
           >
             Cài Đặt VNC / KDS
           </Button>
           <Button
-            variant="primary"
-            leftIcon={<Plus size={16} />}
-            onClick={() => {
-              setEditingRestaurant(null);
-              setFormModalOpen(true);
-            }}
-          >
-            Thêm Nhà Hàng
-          </Button>
-          <Button
             variant="secondary"
             leftIcon={<ClipboardList size={16} />}
+            className="mobile-action-btn"
             onClick={() => setLogsModalOpen(true)}
             title="Xem báo cáo logs thêm mới và chỉnh sửa nhà hàng"
           >
-            Báo Cáo Logs Nhà Hàng
+            Báo Cáo Logs
           </Button>
         </div>
       </div>
@@ -661,8 +666,9 @@ export const RestaurantListPage: React.FC = () => {
       )}
 
       {/* Filter & Search Bar */}
-      <Card style={{ padding: '12px 16px' }}>
+      <Card style={{ padding: '12px 16px' }} className="mobile-filter-card">
         <div
+          className="mobile-filter-stack"
           style={{
             display: 'flex',
             gap: '16px',
@@ -671,7 +677,7 @@ export const RestaurantListPage: React.FC = () => {
           }}
         >
           {/* Trang Thai MultiSelect */}
-          <div style={{ width: '260px', minWidth: '220px', flexShrink: 0 }}>
+          <div className="mobile-filter-item" style={{ width: '260px', minWidth: '220px', flexShrink: 0 }}>
             <MultiSelect
               label="Trạng Thái Hoạt Động"
               values={selectedTrangThai}
@@ -686,7 +692,7 @@ export const RestaurantListPage: React.FC = () => {
           </div>
 
           {/* Search Input - Highlighted & Expanded */}
-          <div style={{ flex: 1, minWidth: '280px' }}>
+          <div className="mobile-filter-item" style={{ flex: 1, minWidth: '280px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <label
@@ -827,7 +833,12 @@ export const RestaurantListPage: React.FC = () => {
       )}
 
       {/* Main Table Card */}
-      <Card style={{ padding: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      <Card style={{ padding: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }} className="mobile-table-card">
+        {/* Mobile horizontal swipe indicator */}
+        <div className="mobile-swipe-hint">
+          <span>👉 Vuốt ngang bảng để xem đủ các cột: IP LAN, SĐT, Email, Trạng thái...</span>
+        </div>
+
         {/* Thanh cuộn ngang ở trên (Đồng bộ với bảng dữ liệu) */}
         {showTopScroll && (
           <div
@@ -852,12 +863,14 @@ export const RestaurantListPage: React.FC = () => {
         <div
           ref={bottomScrollRef}
           onScroll={handleBottomScroll}
+          className="table-responsive-container"
           style={{
             overflowX: 'auto',
             overflowY: 'auto',
             flex: 1,
             minHeight: 0,
             width: '100%',
+            WebkitOverflowScrolling: 'touch',
           }}
         >
           <table
@@ -1227,6 +1240,7 @@ export const RestaurantListPage: React.FC = () => {
 
         {/* Pagination Footer */}
         <div
+          className="mobile-pagination-container"
           style={{
             padding: '8px 16px',
             flexShrink: 0,

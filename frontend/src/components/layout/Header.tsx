@@ -101,6 +101,7 @@ export const Header: React.FC<HeaderProps> = ({
           <img
             src="/ggg_logo.png"
             alt="Golden Gate Restaurant Group"
+            className="header-brand-logo"
             style={{ height: '38px', width: 'auto', objectFit: 'contain', display: 'block' }}
           />
           <span
@@ -123,11 +124,12 @@ export const Header: React.FC<HeaderProps> = ({
       <div style={userSectionStyle} className="header-user-section">
         {/* Cụm Điều Khiển Hotline 3CX Toàn Ứng Dụng (Chỉ hiển thị cho người có quyền trực) */}
         {canAccessHotline && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: '4px' }} className="header-hotline-controls">
             {/* Nút BẬT/TẮT Hotline */}
             <button
               type="button"
               onClick={toggleHotlineDuty}
+              className="header-hotline-toggle-btn"
               title={isHotlineActive ? 'Nghe Hotline đang BẬT (Toàn hệ thống) - Nhấn để TẮT' : 'Nghe Hotline đang TẮT - Nhấn để BẬT'}
               style={{
                 display: 'inline-flex',
@@ -164,6 +166,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={openMissedCallsModal}
+              className="header-hotline-calls-btn"
               title="Mở Quản Lý Cuộc Gọi Hotline (Cuộc gọi nhỡ & Lịch sử đã nghe 3 ngày gần nhất)"
               style={{
                 display: 'inline-flex',
@@ -223,6 +226,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           type="button"
           onClick={toggleTheme}
+          className="header-theme-btn"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
