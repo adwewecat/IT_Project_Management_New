@@ -13,8 +13,10 @@ import {
 
 export const hotlineService = {
   // Lấy trạng thái phân hệ trực hotline
-  getStatus: async (): Promise<HotlineStatus> => {
-    const res = await apiClient.get<HotlineStatus>('/hotline/status');
+  getStatus: async (username?: string): Promise<HotlineStatus> => {
+    const res = await apiClient.get<HotlineStatus>('/hotline/status', {
+      params: username ? { username } : {},
+    });
     return res.data;
   },
 

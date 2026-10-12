@@ -37,7 +37,19 @@ export const Hotline3cxGuideModal: React.FC<Hotline3cxGuideModalProps> = ({
 
   const loginUrl = 'https://ggg.ringbot.co:5001/#/login';
   const effectiveBaseUrl = serverUrl || window.location.origin;
-  const pwaIntegrationUrl = `${effectiveBaseUrl}/api/v1/hotline/3cx-webhook?Number=%CallerNumber%`;
+  const currentUsername = (user?.username || '').trim();
+  const [customAgent, setCustomAgent] = useState(currentUsername);
+
+  useEffect(() => {
+    if (user?.username) {
+      setCustomAgent(user.username.trim());
+    }
+  }, [user?.username]);
+
+  const effectiveAgent = customAgent.trim() || currentUsername;
+  const pwaIntegrationUrl = effectiveAgent
+    ? `${effectiveBaseUrl}/api/v1/hotline/3cx-webhook?Number=%CallerNumber%&Agent=${encodeURIComponent(effectiveAgent)}`
+    : `${effectiveBaseUrl}/api/v1/hotline/3cx-webhook?Number=%CallerNumber%`;
   const webhookUrl = `${effectiveBaseUrl}/api/v1/hotline/3cx-webhook`;
 
   const handleCopyLink = async () => {
@@ -292,7 +304,7 @@ export const Hotline3cxGuideModal: React.FC<Hotline3cxGuideModalProps> = ({
                 <div style={{ color: '#166534', fontSize: '13px', marginBottom: '8px' }}>
                   Tích chọn <strong>"Auto launch a Custom Contact URL using variables"</strong>, sau đó dán URL sau:
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: '6px', backgroundColor: '#FFFFFF', border: '1px solid #86EFAC', width: 'fit-content', maxWidth: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: '6px', backgroundColor: '#FFFFFF', border: '1px solid #86EFAC', width: 'fit-content', maxWidth: '100%', marginBottom: '8px' }}>
                   <code style={{ fontSize: '12.5px', color: '#15803D', fontWeight: 700, wordBreak: 'break-all' }}>{pwaIntegrationUrl}</code>
                   <button
                     type="button"
@@ -310,15 +322,38 @@ export const Hotline3cxGuideModal: React.FC<Hotline3cxGuideModalProps> = ({
                       gap: '4px',
                       fontSize: '11px',
                       fontWeight: 600,
+                      flexShrink: 0,
                     }}
                   >
                     {copiedPwaUrl ? <Check size={13} /> : <Copy size={13} />}
                     {copiedPwaUrl ? 'Đã sao chép' : 'Sao chép'}
                   </button>
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#166534', marginBottom: '8px' }}>
+                  <span>👤 Định danh tài khoản nhận:</span>
+                  <input
+                    type="text"
+                    value={customAgent}
+                    onChange={(e) => setCustomAgent(e.target.value)}
+                    placeholder="Tên tài khoản (username) hoặc Line máy nhánh"
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid #86EFAC',
+                      fontSize: '12px',
+                      color: '#15803D',
+                      fontWeight: 600,
+                      width: '180px',
+                    }}
+                  />
+                  <span style={{ color: '#059669', fontSize: '11.5px' }}>(Mặc định theo tài khoản đang đăng nhập)</span>
+                </div>
+                <div style={{ fontSize: '12px', color: '#166534', lineHeight: 1.5, backgroundColor: '#DCFCE7', padding: '6px 10px', borderRadius: '6px', border: '1px solid #86EFAC' }}>
+                  🛡️ <strong>Cá nhân hóa chính xác:</strong> Tham số <code>&Agent={effectiveAgent}</code> đảm bảo khi 3CX reo chuông, <strong>CHỈ DUY NHẤT</strong> máy của bạn nhận thông báo và bung popup kết nối VNC/KDS từ xa, tuyệt đối <strong>không làm phiền</strong> hoặc mở kết nối trên máy các đồng nghiệp khác.
+                </div>
                 <div style={{ fontSize: '12px', color: '#166534', marginTop: '8px', lineHeight: 1.5 }}>
                   • <strong>Notify When (Khi nào kích hoạt):</strong> Chọn <strong>Ringing</strong> (khi chuông reo) hoặc <strong>Connected</strong> (khi nghe máy).<br />
-                  • Bấm <strong>Save (Lưu)</strong> là hoàn tất! Không cần chạy thêm bất cứ file nào.
+                  • Bấm <strong>Save (Lưu)</strong> trên 3CX PWA là hoàn tất! Không cần chạy thêm bất cứ file nào.
                 </div>
               </div>
             </div>

@@ -41,6 +41,7 @@ export interface HotlineStatus {
     call_status: string;
     is_resolved: boolean;
     is_restaurant: boolean;
+    duty_user?: string | null;
     created_at: string;
   } | null;
 }

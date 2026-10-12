@@ -901,10 +901,12 @@ def stop_scanner() -> bool:
     return True
 
 
-def get_status() -> Dict[str, Any]:
+def get_status(current_username: Optional[str] = None) -> Dict[str, Any]:
     """Lấy trạng thái hệ thống trực hotline (chỉ tính cuộc gọi nhỡ chưa giải quyết trong 3 ngày gần nhất)"""
     db = SessionLocal()
     try:
+        from sqlalchemy import func, or_, and_
+        clean_user = (current_username or "").strip().lower()
         three_days_ago = datetime.now() - timedelta(days=3)
         cutoff_incoming = datetime.now() - timedelta(minutes=3)
         unresolved_count = db.query(HotlineCallLog).filter(
@@ -915,11 +917,54 @@ def get_status() -> Dict[str, Any]:
                 | ((HotlineCallLog.call_status == "INCOMING") & (HotlineCallLog.created_at < cutoff_incoming))
             )
         ).count()
-        # Lấy thông tin cuộc gọi chưa xử lý mới nhất (để hiển thị banner thông báo cuộc gọi nội bộ / ngoài danh mục)
-        latest_unresolved = db.query(HotlineCallLog).filter(
+
+        # 1. Lọc cuộc gọi đang reo (current_call) phù hợp với người dùng hiện tại
+        call_to_return = None
+        if _current_active_call:
+            call_duty = (_current_active_call.get("duty_user") or "").strip().lower()
+            is_restaurant = bool(_current_active_call.get("restaurant"))
+            has_specific_agent = bool(
+                call_duty and call_duty not in ["3cx pwa client", "pbx server", "ring group"]
+            )
+
+            if is_restaurant:
+                # Cuộc gọi nhà hàng:
+                # Nếu có agent cụ thể -> chỉ hiển thị mở VNC cho chính agent đó
+                # Nếu không có agent cụ thể (cuộc gọi chung) -> hiển thị cho tất cả kỹ thuật viên đang trực
+                if not has_specific_agent or (clean_user and call_duty == clean_user):
+                    call_to_return = _current_active_call
+                elif not clean_user and not has_specific_agent:
+                    call_to_return = _current_active_call
+            else:
+                # Cuộc gọi nội bộ (đồng nghiệp IT, không phải nhà hàng):
+                # TUYỆT ĐỐI chỉ hiển thị cho chính agent nhận cuộc gọi!
+                if clean_user and has_specific_agent and call_duty == clean_user:
+                    call_to_return = _current_active_call
+                else:
+                    call_to_return = None
+
+        # 2. Lấy thông tin cuộc gọi chưa xử lý mới nhất (latest_call_info):
+        # TUYỆT ĐỐI KHÔNG trả về cuộc gọi nội bộ của người khác cho client này!
+        latest_call_query = db.query(HotlineCallLog).filter(
             HotlineCallLog.created_at >= three_days_ago,
             HotlineCallLog.is_resolved == False
-        ).order_by(desc(HotlineCallLog.id)).first()
+        )
+        if clean_user:
+            # Cuộc gọi nhà hàng HOẶC cuộc gọi nội bộ thuộc về chính user này
+            latest_unresolved = latest_call_query.filter(
+                or_(
+                    HotlineCallLog.restaurant_id != None,
+                    and_(
+                        HotlineCallLog.restaurant_id == None,
+                        func.lower(HotlineCallLog.duty_user) == clean_user
+                    )
+                )
+            ).order_by(desc(HotlineCallLog.id)).first()
+        else:
+            # Nếu không truyền username: Chỉ lấy cuộc gọi nhà hàng
+            latest_unresolved = latest_call_query.filter(
+                HotlineCallLog.restaurant_id != None
+            ).order_by(desc(HotlineCallLog.id)).first()
 
         latest_call_info = None
         if latest_unresolved:
@@ -932,13 +977,14 @@ def get_status() -> Dict[str, Any]:
                 "call_status": latest_unresolved.call_status,
                 "is_resolved": latest_unresolved.is_resolved,
                 "is_restaurant": bool(latest_unresolved.restaurant_id),
+                "duty_user": latest_unresolved.duty_user,
                 "created_at": latest_unresolved.created_at.strftime("%H:%M:%S %d/%m/%Y"),
             }
 
         return {
             "scanner_running": _scanner_running,
             "active_subscribers": len(_subscribers),
-            "current_call": _current_active_call,
+            "current_call": call_to_return,
             "unresolved_missed_calls_count": unresolved_count,
             "latest_call_info": latest_call_info,
         }

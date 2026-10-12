@@ -60,9 +60,9 @@ async def hotline_events_stream():
 
 
 @router.get("/status")
-def get_hotline_status():
+def get_hotline_status(username: Optional[str] = Query(None)):
     """Lấy trạng thái hiện tại của phân hệ trực hotline"""
-    return hotline_3cx_service.get_status()
+    return hotline_3cx_service.get_status(current_username=username)
 
 
 @router.post("/toggle-duty")
@@ -77,7 +77,7 @@ def toggle_hotline_duty(req: ToggleDutyRequest):
     return {
         "success": True,
         "is_active": req.active,
-        "status": hotline_3cx_service.get_status(),
+        "status": hotline_3cx_service.get_status(current_username=req.duty_user),
     }
 
 
@@ -127,7 +127,10 @@ async def receive_3cx_pbx_webhook(
     )
     c_type = (call_type or qp.get("CallType") or qp.get("call_type") or "Inbound").lower()
     c_name = caller_name or qp.get("CallerName") or qp.get("caller_name") or qp.get("CallerDisplayName") or ""
-    duty_user = agent or qp.get("Agent") or qp.get("agent") or qp.get("User") or "3CX PWA Client"
+    raw_agent = agent or qp.get("Agent") or qp.get("agent") or qp.get("User") or qp.get("user") or qp.get("duty_user") or qp.get("ext_receiver") or ""
+    duty_user: Optional[str] = raw_agent.strip() if raw_agent and raw_agent.strip() else None
+    if duty_user and duty_user.lower() == "3cx pwa client":
+        duty_user = None
 
     # Nếu gửi qua POST body
     if request.method == "POST":
@@ -137,7 +140,11 @@ async def receive_3cx_pbx_webhook(
                 ext = ext or body.get("Number") or body.get("number") or body.get("CallerNumber") or body.get("ext") or body.get("caller") or ""
                 c_type = (body.get("CallType") or body.get("call_type") or c_type).lower()
                 c_name = c_name or body.get("CallerName") or body.get("caller_name") or body.get("CallerDisplayName") or body.get("name") or ""
-                duty_user = duty_user or body.get("Agent") or body.get("agent") or body.get("User") or "3CX PWA Client"
+                post_agent = body.get("Agent") or body.get("agent") or body.get("User") or body.get("user") or body.get("duty_user") or ""
+                if post_agent and str(post_agent).strip():
+                    duty_user = str(post_agent).strip()
+                    if duty_user.lower() == "3cx pwa client":
+                        duty_user = None
         except Exception:
             try:
                 form = await request.form()
