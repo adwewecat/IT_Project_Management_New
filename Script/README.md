@@ -1802,6 +1802,16 @@ estaurant_service.py).
 - **Hạng mục 5: Đồng Bộ GitHub Repository & Quy Tắc Bắt Buộc Commit/Push**:
   - Kết nối Remote GitHub: `https://github.com/adwewecat/IT_Project_Management_New.git`.
   - Bổ sung quy định bắt buộc phải commit và push code lên GitHub ngay sau mỗi lần làm tính năng hoặc sửa lỗi (`GEMINI.md`, `AGENTS.md`, `PROJECT_GUIDELINES.md`).
+- **Hạng mục 6: Khắc Phục Triệt Để Lỗi Báo Thành Công Giả & Cần Chạy 2-3 Lần Ở Ticket 3CX & G-Process**:
+  - **Nguyên nhân cốt lõi**:
+    1. *False-positive của check disabled*: Code cũ kiểm tra selector `.styles_checkListItemContainer__ZLEVV label.ant-radio-wrapper-disabled`. Trong G-Process, form của Nhà Hàng ở Bước 1 luôn luôn bị `disabled` đối với IT (dung.nguyenanh). Do đó, ngay khi tải trang, script bắt trúng phần tử này và lập tức trả về `status: "success"` với câu "Nhiệm vụ đã được kết thúc từ trước" mà hoàn toàn không thực hiện bất kỳ hành động nào trên GPMS!
+    2. *Mất liên kết Modal Timesheet & Popup Xác nhận*: Khi bấm nút "Xác nhận", Ant Design mở Modal xác nhận ("Đồng ý", "Xác nhận") hoặc Modal Timesheet ("Lưu"). Code cũ chờ 8s trong selector `#container-portal button:has-text('Lưu')` (không khớp với Ant Modal của G-Process) dẫn tới việc bỏ qua các popup xác nhận hoặc chưa lưu Timesheet đã vội kết thúc.
+    3. *Đóng Browser vội vàng khi API đang gửi*: Code cũ không kiểm tra Toast phản hồi (`.ant-message-success` / `.ant-message-error`) và chỉ sleep 1s rồi gọi `browser.close()` ngay lập tức, ngắt kết nối TCP đột ngột khiến backend GPMS hủy giao dịch lưu dữ liệu. Đó là lý do khi mạng nhanh hoặc chạy lại 2-3 lần thì mới ăn may thành công.
+  - **Giải pháp xử lý toàn diện**:
+    1. *Loại bỏ check disabled sai lầm*: Chỉ coi nhiệm vụ đã hoàn thành từ trước khi trên trang KHÔNG CÒN nút hành động "Xác nhận" nào và trạng thái trang ghi nhận đã kết thúc.
+    2. *Vòng lặp Modal đa tầng (Dynamic Modal Handler Loop)*: Tự động phát hiện và xử lý tuần tự mọi modal xuất hiện (điền 1h + note cho Timesheet, bấm Đồng ý/Xác nhận cho Confirmation Dialog).
+    3. *Xác thực kết quả thực tế qua Toast GPMS*: Bắt lỗi ngay nếu GPMS trả về `.ant-message-error` để hiển thị đúng logs cho người dùng, chờ `.ant-message-success` và thiết lập buffer 3.0s an toàn trước khi đóng tab/chuyển mục.
+    4. *Tự động bỏ chọn vé thành công trên giao diện*: `handleRunTicketBatch` tự động deselect các mục đã hoàn tất thật sự, chỉ giữ lại mục lỗi (nếu có).
 
 ---
 

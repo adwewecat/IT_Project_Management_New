@@ -736,6 +736,17 @@ export const JobManagementPage: React.FC = () => {
       setTicketBatchResult(result);
       const updatedHist = await ticketBatchService.getLatestHistory();
       setTicketHistory(updatedHist);
+      // Tự động bỏ chọn các mục đã hoàn tất thành công, chỉ giữ lại các mục thất bại
+      if (result.results && Array.isArray(result.results)) {
+        const successIds = new Set(result.results.filter((r: any) => r.status === 'success').map((r: any) => String(r.ticket_id)));
+        setSelectedTicketIds(prev => {
+          const next = new Set<string>();
+          prev.forEach(id => {
+            if (!successIds.has(String(id))) next.add(id);
+          });
+          return next;
+        });
+      }
       showToast(`Đã xử lý xong ${result.total_processed} mục. Thành công: ${result.success_count}, Thất bại: ${result.failed_count}`, result.failed_count > 0 ? 'info' : 'success');
     } catch (err: any) {
       showToast('Lỗi khi chạy xử lý: ' + (err.response?.data?.detail || err.message), 'error');
