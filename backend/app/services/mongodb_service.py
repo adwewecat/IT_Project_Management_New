@@ -170,13 +170,12 @@ from app.schemas.mongodb import (
 
 
 
-def _check_tcp_port(ip: str, port: int = 27017, timeout: float = 1.5) -> bool:
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(timeout)
+def _check_tcp_port(ip: str, port: int = 27017, timeout: float = 1.0) -> bool:
     try:
-        s.connect((ip, port))
-        s.close()
-        return True
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout)
+            s.connect((ip, port))
+            return True
     except Exception:
         return False
 
@@ -189,6 +188,175 @@ def _verify_mongo_ping(ip: str, port: int = 27017, timeout_ms: int = 2000) -> bo
         return True
     except Exception:
         return False
+
+
+def resolve_mongo_target_ip(ip: str, default_port: int = 27017, timeout_sec: float = 0.7) -> tuple[Optional[str], Optional[str]]:
+    """
+    Tự động dò tìm địa chỉ IP máy POS/KDS thực tế đang chạy MongoDB (port 27017).
+    Do trong bảng RESTAURANT, IP thường được lưu là IP router gateway (kết thúc bằng .1),
+    trong khi MongoDB thực tế chạy ở các máy POS/KDS (.11, .12, .41, .13, .14, .42).
+
+    Trả về: (actual_ip, error_message).
+    """
+    raw_ip = (ip or "").strip()
+    if not raw_ip:
+        return None, "Thiếu địa chỉ IP nhà hàng"
+
+    subnet = MongoDBService.extract_subnet_prefix(raw_ip)
+    if not subnet or not subnet.endswith("."):
+        return None, f"Địa chỉ IP không hợp lệ: {raw_ip}"
+
+    # Danh sách các đuôi máy POS / KDS đặc trưng của Golden Gate
+    candidate_tails = ["11", "12", "41", "13", "14", "42"]
+
+    # 1. Nếu raw_ip không phải .1, không phải .X (ví dụ người dùng đã chỉ định sẵn đích danh .11 hay .12)
+    clean_raw = raw_ip.lower()
+    is_gateway = clean_raw.endswith(".1")
+    is_wildcard = clean_raw.endswith(".x") or clean_raw.endswith(".")
+
+    if not is_gateway and not is_wildcard:
+        if _check_tcp_port(raw_ip, default_port, timeout=timeout_sec):
+            return raw_ip, None
+
+    # 2. Quét song song các candidate IP trong subnet (.11, .12, .41, .13, .14, .42)
+    candidate_ips = [f"{subnet}{tail}" for tail in candidate_tails if f"{subnet}{tail}" != raw_ip]
+
+    def _test_candidate(c_ip: str) -> Optional[str]:
+        if _check_tcp_port(c_ip, default_port, timeout=timeout_sec):
+            return c_ip
+        return None
+
+    with ThreadPoolExecutor(max_workers=min(6, len(candidate_ips))) as executor:
+        found_ips = list(executor.map(_test_candidate, candidate_ips))
+
+    for f_ip in found_ips:
+        if f_ip:
+            return f_ip, None
+
+    # 3. Nếu là gateway .1 nhưng cấu hình đặc thù server đặt ở gateway, thử kiểm tra nhanh
+    if is_gateway:
+        if _check_tcp_port(raw_ip, default_port, timeout=0.4):
+            return raw_ip, None
+
+    return None, f"Không tìm thấy máy POS/KDS nào mở port {default_port} trong dải {subnet}X (đã quét .11, .12, .41, .13, .14, .42)"
+
+
+def _push_params_to_restaurant(
+    r_info: dict,
+    params_to_push: List[dict],
+    mode: str
+) -> dict:
+    """
+    Thực thi đẩy tham số APP_PARAM xuống một nhà hàng mục tiêu.
+    Được thiết kế để chạy đa luồng an toàn trong ThreadPool.
+    """
+    r_name = r_info.get("name") or r_info.get("restaurant_name") or r_info.get("ip") or "Chưa rõ"
+    raw_ip = (r_info.get("ip") or "").strip()
+    r_port = int(r_info.get("port") or 27017)
+    r_sap = r_info.get("sap_code")
+    r_rk7 = r_info.get("rk7_code")
+
+    if not raw_ip:
+        return {
+            "restaurant_name": r_name,
+            "ip": "",
+            "sap_code": r_sap,
+            "rk7_code": r_rk7,
+            "success": False,
+            "inserted": 0,
+            "updated": 0,
+            "skipped": 0,
+            "error": "Thiếu địa chỉ IP nhà hàng"
+        }
+
+    actual_ip, err_msg = resolve_mongo_target_ip(raw_ip, r_port)
+    if not actual_ip:
+        return {
+            "restaurant_name": r_name,
+            "ip": raw_ip,
+            "sap_code": r_sap,
+            "rk7_code": r_rk7,
+            "success": False,
+            "inserted": 0,
+            "updated": 0,
+            "skipped": 0,
+            "error": err_msg or "Không thể kết nối đến máy chủ MongoDB nhà hàng"
+        }
+
+    client = None
+    try:
+        client = MongoClient(actual_ip, r_port, serverSelectionTimeoutMS=3000, socketTimeoutMS=5000)
+        col = client["G_ORDER"]["APP_PARAM"]
+
+        ins_cnt = 0
+        upd_cnt = 0
+        skp_cnt = 0
+
+        for p in params_to_push:
+            code = p.get("paramCode")
+            if not code:
+                continue
+            existing = col.find_one({"paramCode": code})
+            if existing:
+                if mode in ["upsert", "overwrite"]:
+                    col.update_one(
+                        {"paramCode": code},
+                        {"$set": {
+                            "paramName": p.get("paramName") or existing.get("paramName") or code,
+                            "paramType": p.get("paramType") or existing.get("paramType") or "FUNCTION",
+                            "status": int(p.get("status", 1)),
+                            "value": str(p.get("value", "")),
+                            "note": str(p.get("note", "")),
+                            "updateDate": datetime.datetime.now()
+                        }}
+                    )
+                    upd_cnt += 1
+                else:
+                    skp_cnt += 1
+            else:
+                col.insert_one({
+                    "paramCode": code,
+                    "paramName": p.get("paramName") or code,
+                    "paramType": p.get("paramType") or "FUNCTION",
+                    "status": int(p.get("status", 1)),
+                    "value": str(p.get("value", "")),
+                    "note": str(p.get("note", "")),
+                    "createDate": datetime.datetime.now(),
+                    "updateDate": datetime.datetime.now()
+                })
+                ins_cnt += 1
+
+        return {
+            "restaurant_name": r_name,
+            "ip": actual_ip,
+            "raw_ip": raw_ip,
+            "sap_code": r_sap,
+            "rk7_code": r_rk7,
+            "success": True,
+            "inserted": ins_cnt,
+            "updated": upd_cnt,
+            "skipped": skp_cnt,
+            "error": None
+        }
+    except Exception as e:
+        return {
+            "restaurant_name": r_name,
+            "ip": actual_ip or raw_ip,
+            "raw_ip": raw_ip,
+            "sap_code": r_sap,
+            "rk7_code": r_rk7,
+            "success": False,
+            "inserted": 0,
+            "updated": 0,
+            "skipped": 0,
+            "error": f"Lỗi ghi dữ liệu MongoDB ({actual_ip}): {str(e)}"
+        }
+    finally:
+        if client:
+            try:
+                client.close()
+            except Exception:
+                pass
 
 
 class MongoDBService:
@@ -1000,81 +1168,39 @@ class MongoDBService:
                 })
 
         mode = (payload.mode or "upsert").strip().lower()
-        results: List[BatchApplyRestaurantResult] = []
-        success_count = 0
-        failed_count = 0
+        target_dicts = [
+            {
+                "name": r.name or r.ip,
+                "ip": r.ip,
+                "port": r.port or 27017,
+                "sap_code": r.sap_code,
+                "rk7_code": r.rk7_code
+            }
+            for r in payload.target_restaurants
+        ]
 
-        for r in payload.target_restaurants:
-            r_name = r.name or r.ip
-            r_ip = r.ip
-            r_port = r.port or 27017
-            try:
-                client = MongoClient(r_ip, r_port, serverSelectionTimeoutMS=4000)
-                col = client["G_ORDER"]["APP_PARAM"]
+        # Xử lý song song đa luồng qua ThreadPoolExecutor
+        workers = min(12, max(1, len(target_dicts)))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            push_fn = lambda r_item: _push_params_to_restaurant(r_item, params_to_push, mode)
+            raw_results = list(executor.map(push_fn, target_dicts))
 
-                ins_cnt = 0
-                upd_cnt = 0
-                skp_cnt = 0
-
-                for p in params_to_push:
-                    code = p.get("paramCode")
-                    if not code:
-                        continue
-                    existing = col.find_one({"paramCode": code})
-                    if existing:
-                        if mode in ["upsert", "overwrite"]:
-                            col.update_one(
-                                {"paramCode": code},
-                                {"$set": {
-                                    "paramName": p.get("paramName") or existing.get("paramName") or code,
-                                    "paramType": p.get("paramType") or existing.get("paramType") or "FUNCTION",
-                                    "status": int(p.get("status", 1)),
-                                    "value": str(p.get("value", "")),
-                                    "note": str(p.get("note", "")),
-                                    "updateDate": datetime.datetime.now()
-                                }}
-                            )
-                            upd_cnt += 1
-                        else:
-                            skp_cnt += 1
-                    else:
-                        col.insert_one({
-                            "paramCode": code,
-                            "paramName": p.get("paramName") or code,
-                            "paramType": p.get("paramType") or "FUNCTION",
-                            "status": int(p.get("status", 1)),
-                            "value": str(p.get("value", "")),
-                            "note": str(p.get("note", "")),
-                            "createDate": datetime.datetime.now(),
-                            "updateDate": datetime.datetime.now()
-                        })
-                        ins_cnt += 1
-
-                client.close()
-                results.append(BatchApplyRestaurantResult(
-                    restaurant_name=r_name,
-                    ip=r_ip,
-                    sap_code=r.sap_code,
-                    rk7_code=r.rk7_code,
-                    success=True,
-                    inserted=ins_cnt,
-                    updated=upd_cnt,
-                    skipped=skp_cnt
-                ))
-                success_count += 1
-            except Exception as e:
-                failed_count += 1
-                results.append(BatchApplyRestaurantResult(
-                    restaurant_name=r_name,
-                    ip=r_ip,
-                    sap_code=r.sap_code,
-                    rk7_code=r.rk7_code,
-                    success=False,
-                    inserted=0,
-                    updated=0,
-                    skipped=0,
-                    error=str(e)
-                ))
+        results = [
+            BatchApplyRestaurantResult(
+                restaurant_name=res["restaurant_name"],
+                ip=res["ip"],
+                sap_code=res.get("sap_code"),
+                rk7_code=res.get("rk7_code"),
+                success=res["success"],
+                inserted=res.get("inserted", 0),
+                updated=res.get("updated", 0),
+                skipped=res.get("skipped", 0),
+                error=res.get("error")
+            )
+            for res in raw_results
+        ]
+        success_count = sum(1 for res in results if res.success)
+        failed_count = sum(1 for res in results if not res.success)
 
         audit = AuditLog(
             manhinh="APP_PARAM_BATCH_APPLY",
@@ -1100,7 +1226,7 @@ class MongoDBService:
         triggered_by: str = "System (Scheduler)"
     ) -> ScheduledParamPushJob:
         """
-        Thực thi một lịch hẹn giờ đẩy param xuống các nhà hàng đã cấu hình.
+        Thực thi một lịch hẹn giờ đẩy param xuống các nhà hàng đã cấu hình (chạy song song đa luồng).
         """
         job.status = "RUNNING"
         db.commit()
@@ -1116,93 +1242,15 @@ class MongoDBService:
             return job
 
         mode = (job.mode or "upsert").strip().lower()
-        results = []
-        success_count = 0
-        failed_count = 0
 
-        for r in target_restaurants:
-            r_name = r.get("name") or r.get("ip") or "Chưa rõ"
-            r_ip = r.get("ip")
-            r_port = int(r.get("port") or 27017)
-            r_sap = r.get("sap_code")
-            r_rk7 = r.get("rk7_code")
+        # Xử lý song song đa luồng qua ThreadPoolExecutor
+        workers = min(12, max(1, len(target_restaurants)))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            push_fn = lambda r_item: _push_params_to_restaurant(r_item, params_to_push, mode)
+            results = list(executor.map(push_fn, target_restaurants))
 
-            if not r_ip:
-                failed_count += 1
-                results.append({
-                    "restaurant_name": r_name,
-                    "ip": "",
-                    "sap_code": r_sap,
-                    "rk7_code": r_rk7,
-                    "success": False,
-                    "error": "Thiếu địa chỉ IP MongoDB"
-                })
-                continue
-
-            try:
-                client = MongoClient(r_ip, r_port, serverSelectionTimeoutMS=4000)
-                col = client["G_ORDER"]["APP_PARAM"]
-
-                ins_cnt = 0
-                upd_cnt = 0
-                skp_cnt = 0
-
-                for p in params_to_push:
-                    code = p.get("paramCode")
-                    if not code:
-                        continue
-                    existing = col.find_one({"paramCode": code})
-                    if existing:
-                        if mode in ["upsert", "overwrite"]:
-                            col.update_one(
-                                {"paramCode": code},
-                                {"$set": {
-                                    "paramName": p.get("paramName") or existing.get("paramName") or code,
-                                    "paramType": p.get("paramType") or existing.get("paramType") or "FUNCTION",
-                                    "status": int(p.get("status", 1)),
-                                    "value": str(p.get("value", "")),
-                                    "note": str(p.get("note", "")),
-                                    "updateDate": datetime.datetime.now()
-                                }}
-                            )
-                            upd_cnt += 1
-                        else:
-                            skp_cnt += 1
-                    else:
-                        col.insert_one({
-                            "paramCode": code,
-                            "paramName": p.get("paramName") or code,
-                            "paramType": p.get("paramType") or "FUNCTION",
-                            "status": int(p.get("status", 1)),
-                            "value": str(p.get("value", "")),
-                            "note": str(p.get("note", "")),
-                            "createDate": datetime.datetime.now(),
-                            "updateDate": datetime.datetime.now()
-                        })
-                        ins_cnt += 1
-
-                client.close()
-                results.append({
-                    "restaurant_name": r_name,
-                    "ip": r_ip,
-                    "sap_code": r_sap,
-                    "rk7_code": r_rk7,
-                    "success": True,
-                    "inserted": ins_cnt,
-                    "updated": upd_cnt,
-                    "skipped": skp_cnt
-                })
-                success_count += 1
-            except Exception as e:
-                failed_count += 1
-                results.append({
-                    "restaurant_name": r_name,
-                    "ip": r_ip,
-                    "sap_code": r_sap,
-                    "rk7_code": r_rk7,
-                    "success": False,
-                    "error": str(e)
-                })
+        success_count = sum(1 for res in results if res.get("success"))
+        failed_count = sum(1 for res in results if not res.get("success"))
 
         job.status = "COMPLETED" if success_count > 0 else "FAILED"
         job.success_count = success_count
@@ -1220,6 +1268,22 @@ class MongoDBService:
         db.commit()
 
         return job
+
+    @staticmethod
+    def execute_scheduled_param_job_by_id(
+        job_id: int,
+        triggered_by: str = "System (Scheduler)"
+    ) -> Optional[ScheduledParamPushJob]:
+        """
+        Thực thi một lịch hẹn giờ đẩy param trong một Session riêng biệt (thread-safe cho background scheduler).
+        """
+        from app.core.database import SessionLocal
+        with SessionLocal() as db:
+            job = db.query(ScheduledParamPushJob).filter(ScheduledParamPushJob.id == job_id).first()
+            if not job:
+                logger.error("Không tìm thấy ScheduledParamPushJob #%s", job_id)
+                return None
+            return MongoDBService.execute_scheduled_param_job(db=db, job=job, triggered_by=triggered_by)
 
     @staticmethod
     def get_scheduled_param_jobs(db: Session, status: Optional[str] = None) -> List[ScheduledParamJobItem]:
@@ -5913,6 +5977,7 @@ async def param_schedule_worker(stop_event: asyncio.Event):
     while not stop_event.is_set():
         try:
             from app.core.database import SessionLocal
+            jobs_to_trigger = []
             with SessionLocal() as db:
                 now_dt = datetime.datetime.now()
                 today_str = now_dt.strftime("%Y-%m-%d")
@@ -5930,15 +5995,30 @@ async def param_schedule_worker(stop_event: asyncio.Event):
                         should_run = True
 
                     if should_run:
-                        logger.info("Kích hoạt chạy job hẹn giờ đẩy param: #%s '%s' (%s %s)", job.id, job.job_title, job.run_date, job.run_time)
-                        MongoDBService.execute_scheduled_param_job(db=db, job=job, triggered_by="System (Scheduler)")
+                        # Đánh dấu RUNNING ngay trong DB để không quét trùng ở chu kỳ tiếp theo
+                        job.status = "RUNNING"
+                        jobs_to_trigger.append((job.id, job.job_title, job.run_date, job.run_time))
+
+                if jobs_to_trigger:
+                    db.commit()
+
+            # Chạy các jobs trong worker thread pool riêng biệt, KHÔNG block asyncio event loop
+            for j_id, j_title, j_date, j_time in jobs_to_trigger:
+                logger.info("Kích hoạt chạy job hẹn giờ đẩy param: #%s '%s' (%s %s)", j_id, j_title, j_date, j_time)
+                asyncio.create_task(
+                    asyncio.to_thread(
+                        MongoDBService.execute_scheduled_param_job_by_id,
+                        job_id=j_id,
+                        triggered_by="System (Scheduler)"
+                    )
+                )
 
         except Exception as e:
             logger.error("Lỗi trong param_schedule_worker: %s", e)
 
-        # Chờ 25 giây kiểm tra 1 lần hoặc khi stop_event được kích hoạt
+        # Chờ 20 giây kiểm tra 1 lần hoặc khi stop_event được kích hoạt
         try:
-            await asyncio.wait_for(stop_event.wait(), timeout=25.0)
+            await asyncio.wait_for(stop_event.wait(), timeout=20.0)
         except asyncio.TimeoutError:
             pass
 

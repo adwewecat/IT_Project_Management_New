@@ -1815,6 +1815,32 @@ estaurant_service.py).
 
 ---
 
+### [2026-10-12] - Sửa Lỗi Treo / Chết Backend & Quét Sai IP Gateway Trong Lịch Hẹn Giờ Đẩy Param Xuống Nhà Hàng
+- **Màn hình**: Phân Tích MongoDB Nhà Hàng -> 9. Xử Lý Param (Cấu Hình Bảng APP_PARAM) -> ⏰ Quản Lý Lịch Hẹn Giờ Đẩy Param Xuống Nhà Hàng.
+- **Hiện tượng lỗi**:
+  1. Người dùng bấm lưu lịch hẹn giờ đẩy param xuống các nhà hàng (12 - 18 nhà hàng).
+  2. Đến đúng giờ hẹn chạy, backend FastAPI bị **treo cứng hoàn toàn**, không thể nhận request HTTP, server uvicorn đứng đơ ("treo, chết backend luôn").
+  3. Khi mở chi tiết kết quả, 100% nhà hàng đều báo lỗi: `No servers found yet, Timeout: 4.0s, Topology Description: <TopologyDescription id: ..., servers: [<ServerDescription ('10.8.217.1', 27017) server_type: Unknown, rtt: None>]>`.
+- **Nguyên nhân cốt lõi**:
+  1. *Blocking Asyncio Event Loop*: Worker chạy nền `param_schedule_worker` là một hàm `async def` chạy trực tiếp trong event loop chính của FastAPI. Khi tới giờ chạy, worker gọi trực tiếp hàm đồng bộ `MongoDBService.execute_scheduled_param_job` trên luồng chính. Hàm này lặp tuần tự qua từng nhà hàng với `MongoClient(..., serverSelectionTimeoutMS=4000)`. Khi 12-18 nhà hàng bị timeout, toàn bộ event loop bị phong tỏa liên tục 48s - 72s (nếu 100 nhà hàng thì bị phong tỏa hàng chục phút). Việc này làm tê liệt hoàn toàn uvicorn khiến toàn bộ hệ thống sập và không thể phản hồi bất kỳ API nào.
+  2. *Kết nối nhầm IP Router Gateway (`.1`)*: Bảng `RESTAURANT.ip` lưu địa chỉ dải mạng của nhà hàng (thường kết thúc bằng `.1` như `10.9.82.1`, `10.8.217.1`). Địa chỉ `.1` là Router/Firewall của nhà hàng, hoàn toàn không mở port 27017! Trong khi đó, MongoDB thực tế chạy ở các máy POS/KDS (`.11`, `.12`, `.41`, `.13`, `.14`, `.42`). Code cũ kết nối trực tiếp vào `.1:27017` nên 100% các nhà hàng đều bị ServerSelectionTimeoutError.
+- **Giải pháp xử lý toàn diện**:
+  1. *Cơ chế Smart Mongo Endpoint Resolver (`resolve_mongo_target_ip`)*:
+     - Tự động nhận diện nếu IP là Router Gateway (`.1`), Subnet prefix (`.X`), hoặc IP chưa mở port 27017.
+     - Dò tìm song song cực nhanh qua socket TCP (timeout 0.7s) vào các đuôi POS/KDS đặc thù Golden Gate: `.11` (POS 1), `.12` (POS 2), `.41` (KDS/POS 3), `.13`, `.14`, `.42`.
+     - Tự động phát hiện và kết nối đúng vào máy POS/KDS thực tế đang mở cổng MongoDB 27017.
+  2. *Xử lý song song đa luồng (Concurrent Worker Pool)*:
+     - Tái cấu trúc hàm `execute_scheduled_param_job` và `batch_apply_params` sang sử dụng `ThreadPoolExecutor(max_workers=min(12, len(restaurants)))`.
+     - Quét và đẩy param đồng thời cho 12 - 50 nhà hàng chỉ mất 1 - 2 giây thay vì 48s - 72s tuần tự.
+  3. *Giải phóng 100% Asyncio Event Loop*:
+     - Tách hàm `execute_scheduled_param_job_by_id(job_id, triggered_by)` chạy với `SessionLocal()` riêng biệt, an toàn đa luồng.
+     - Trong `param_schedule_worker`: Cập nhật `job.status = "RUNNING"` ngay trong DB, sau đó dùng `asyncio.create_task(asyncio.to_thread(...))` để đẩy tác vụ sang ThreadPool của hệ điều hành. Luồng chính của FastAPI hoàn toàn thong dong xử lý các request HTTP khác mà không có bất kỳ độ trễ nào.
+  4. *Cập nhật giao diện Modal Kết quả thực thi (`MongoDbParamManagementTask.tsx`)*:
+     - Hiển thị địa chỉ IP máy POS/KDS thực tế đã nhận dữ liệu cùng IP gốc (`Gốc: 10.9.82.1`).
+     - Tối ưu bảng chi tiết hiển thị lỗi rõ ràng, ngắt dòng chuẩn đẹp khi gặp sự cố mạng.
+
+---
+
 ### [2026-10-04 và trước đó] - Nền Tảng & Quy Chuẩn Giao Diện Toàn Hệ Thống
 - **Quy định No Stat Cards**: Tuyệt đối không đặt các khối thẻ thống kê to ở đầu các trang tác vụ nghiệp vụ (CentralizedLogs, RestaurantMongoAnalysis...).
 - **Quy tắc Đóng Modal**: Modal chỉ đóng khi bấm `Esc`, bấm nút `X` hoặc nút "Đóng" / "Hủy"; không đóng khi click ngoài overlay.

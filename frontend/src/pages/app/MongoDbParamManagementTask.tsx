@@ -4002,7 +4002,12 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                     viewingJobDetail.result_summary.map((res: any, idx: number) => (
                       <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
                         <td style={{ padding: '8px 10px', fontWeight: 600 }}>{res.restaurant_name}</td>
-                        <td style={{ padding: '8px 10px', fontFamily: 'monospace' }}>{res.ip}</td>
+                        <td style={{ padding: '8px 10px', fontFamily: 'monospace' }}>
+                          <div style={{ fontWeight: 600 }}>{res.ip || res.raw_ip || '—'}</div>
+                          {res.raw_ip && res.ip && res.raw_ip !== res.ip && (
+                            <div style={{ fontSize: '10px', color: '#6B7280' }}>Gốc: {res.raw_ip}</div>
+                          )}
+                        </td>
                         <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                           {res.success ? (
                             <span style={{ color: '#059669', fontWeight: 700 }}>✓ Thành công</span>
@@ -4010,14 +4015,14 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                             <span style={{ color: '#DC2626', fontWeight: 700 }}>✕ Thất bại</span>
                           )}
                         </td>
-                        <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: '11px' }}>
+                        <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: '11px', maxWidth: '320px', wordBreak: 'break-word' }}>
                           {res.success ? (
                             <div>
                               <span>Thêm: {res.inserted || 0}</span> • <span>Sửa: {res.updated || 0}</span> •{' '}
                               <span>Bỏ qua: {res.skipped || 0}</span>
                             </div>
                           ) : (
-                            <div style={{ color: '#DC2626' }}>{res.error}</div>
+                            <div style={{ color: '#DC2626', lineHeight: '1.4' }}>{res.error}</div>
                           )}
                         </td>
                       </tr>
