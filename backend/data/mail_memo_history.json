@@ -1,0 +1,68 @@
+[
+  {
+    "memo_id": 7286,
+    "memo_code": "402600KP025",
+    "total_sub": 3,
+    "ten_memo": "KP_Giảm 100K cho HĐ 500K_GRO_ChurnT10",
+    "nguoi_yeu_cau": "Thủy Mai Thị (HN | GRO)",
+    "it_setup": "tram.nv",
+    "imported_at": "2026-09-26 17:06:40",
+    "received_time": "2026-09-25 16:19:42",
+    "link_salesforce": "https://g-loyalty.my.salesforce.com/a0LRA00000irxbh"
+  },
+  {
+    "memo_id": 7285,
+    "memo_code": "402600SG036",
+    "total_sub": 4,
+    "ten_memo": "SG_Giảm 100K cho HĐ 500K_GRO_ChurnT10",
+    "nguoi_yeu_cau": "Thủy Mai Thị (HN | GRO)",
+    "it_setup": "thuc.nguyen",
+    "imported_at": "2026-09-26 17:06:40",
+    "received_time": "2026-09-25 16:21:12",
+    "link_salesforce": "https://g-loyalty.my.salesforce.com/a0LRA00000is6yL"
+  },
+  {
+    "memo_id": 7284,
+    "memo_code": "402600LC012",
+    "total_sub": 4,
+    "ten_memo": "LC_Giảm 100K cho HĐ 500K_GRO_ChurnT10",
+    "nguoi_yeu_cau": "Thủy Mai Thị (HN | GRO)",
+    "it_setup": "hung.phamtran",
+    "imported_at": "2026-09-26 17:06:40",
+    "received_time": "2026-09-25 16:21:28",
+    "link_salesforce": "https://g-loyalty.my.salesforce.com/a0LRA00000ioOAf"
+  },
+  {
+    "memo_id": 7283,
+    "memo_code": "402600SS022",
+    "total_sub": 4,
+    "ten_memo": "SS_Giảm 50K cho HĐ 350K _GRO_ChurnT10",
+    "nguoi_yeu_cau": "Thủy Mai Thị (HN | GRO)",
+    "it_setup": "duy.ngo",
+    "imported_at": "2026-09-26 17:06:40",
+    "received_time": "2026-09-25 16:21:32",
+    "link_salesforce": "https://g-loyalty.my.salesforce.com/a0LRA00000io6bx"
+  },
+  {
+    "memo_id": 7282,
+    "memo_code": "302621SG004",
+    "total_sub": 3,
+    "ten_memo": "SG_GIẢM 10% _BOOKING GG MAPS_LPS_SGGP",
+    "nguoi_yeu_cau": "Ánh, Nguyễn Ngọc (HCM | MKT)",
+    "it_setup": "luc.lh",
+    "imported_at": "2026-09-26 17:06:40",
+    "received_time": "2026-09-26 11:57:13",
+    "link_salesforce": "https://g-loyalty.my.salesforce.com/a0LRA00000iuzvV"
+  },
+  {
+    "memo_id": 7281,
+    "memo_code": "402600CK001",
+    "total_sub": 1,
+    "ten_memo": "CK_Combo rủ rê 99K",
+    "nguoi_yeu_cau": "Linh, Mai Phương (HN | MKT)",
+    "it_setup": "quyen.tt",
+    "imported_at": "2026-09-26 17:06:40",
+    "received_time": "2026-09-26 13:05:38",
+    "link_salesforce": "https://g-loyalty.my.salesforce.com/a0LRA00000iX9eH"
+  }
+]

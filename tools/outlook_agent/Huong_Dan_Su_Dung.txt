@@ -1,0 +1,29 @@
+========================================================================
+         HƯỚNG DẪN CÀI ĐẶT & SỬ DỤNG OUTLOOK MEMO AGENT (LOCAL)
+========================================================================
+
+1. GIỚI THIỆU:
+   Outlook Memo Agent là phần mềm cầu nối siêu nhẹ chạy trên máy tính cá nhân
+   của bạn (nơi có mở sẵn ứng dụng Microsoft Outlook Desktop).
+   Agent này giúp Web trên Server có thể đọc trực tiếp các email "Yêu cầu tạo nút RK cho Memo mới"
+   từ hòm thư Outlook mà KHÔNG CẦN NHẬP PASS VÀ KHÔNG BỊ VƯỚNG 2FA.
+
+2. CÁC TẬP TIN TRONG GÓI NÀY:
+   - Cai_Dat_Tu_Dong_Schedule.bat : Nhấp đúp vào đây để tự động cài lịch chạy vào Windows Task Scheduler.
+                                    Lịch gồm: Start cùng Windows, chạy lúc 09:30, 14:00, 19:00 hàng ngày.
+   - Chay_Outlook_Agent.bat        : Nhấp đúp để chạy thủ công (hiện cửa sổ để xem log).
+   - Chay_Ngam.vbs                 : Dùng để chạy ngầm Agent hoàn toàn không hiện cửa sổ CMD.
+   - Go_Cai_Dat_Schedule.bat       : Nhấp đúp để gỡ bỏ toàn bộ lịch tự động khỏi Windows Task Scheduler.
+   - agent_config.json             : File cấu hình (Server URL, Port 18890, Thư mục 5. MKT, Giờ quét).
+   - outlook_agent.py              : Mã nguồn Python của Agent.
+
+3. HƯỚNG DẪN CÀI ĐẶT NHANH (1-CLICK):
+   Bước 1: Giải nén toàn bộ thư mục này vào một vị trí cố định trên máy (Ví dụ: D:\Tools\OutlookAgent hoặc C:\OutlookAgent).
+   Bước 2: Mở file "agent_config.json", nếu web chạy trên Server nội bộ thì đổi "server_url" thành địa chỉ IP của Server (Ví dụ: http://172.16.8.25:8000). Mặc định là http://172.16.8.25:8000.
+   Bước 3: Nhấp đúp chuột vào file "Cai_Dat_Tu_Dong_Schedule.bat" (Lưu ý: Nhấp đúp bình thường, KHÔNG chọn Run as administrator).
+           -> Xong! Lịch đã được cài đặt và Agent sẽ tự động chạy ngầm mãi mãi.
+
+4. CÁCH HOẠT ĐỘNG:
+   - Mỗi ngày: Tự động chạy lúc 09:30, 14:00 và 19:00.
+   - Mỗi khi bật máy/khởi động Windows: Tự động chạy 1 lần.
+   - Khi bạn mở trang web Quản Lý Tác Vụ từ bất kỳ đâu, bạn bấm nút "Quét Mail Ngay", web sẽ tự động kết nối qua Agent để quét Outlook của bạn tức thì.

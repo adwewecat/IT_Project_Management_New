@@ -1,0 +1,75 @@
+{
+  "last_scanned_at": "2026-10-12 09:17:24",
+  "last_run_at": null,
+  "run_mode": "manual",
+  "sso_username": "dung.nguyenanh",
+  "total_items": 3,
+  "ticket_count": 0,
+  "gprocess_count": 3,
+  "timesheet_summary": {
+    "2026-10-01": 24.0,
+    "2026-10-02": 24.0,
+    "2026-10-03": 24.0,
+    "2026-10-04": 24.0,
+    "2026-10-05": 24.0,
+    "2026-10-06": 24.0,
+    "2026-10-07": 24.0,
+    "2026-10-08": 24.0,
+    "2026-10-09": 24.0,
+    "2026-10-10": 24.0,
+    "2026-10-11": 24.0,
+    "2026-10-12": 24.0
+  },
+  "items": [
+    {
+      "ticket_id": "644679",
+      "ticket_name": "IT xác nhận lỗi kỹ thuật (6800_Tích lũy bù giao dịch khách hàng (30DN4997): REQ-2026-16724 (burn ví 100k))",
+      "source_type": "GPROCESS",
+      "created_by": "hcm.dng.sh.ntp",
+      "assignee": "dung.nguyenanh",
+      "due_date": "23:59 12/10/2026",
+      "url": "https://gpms.ggg.com.vn/g-process/my-mission/644679",
+      "status": "Đang triển khai",
+      "execution_status": "pending",
+      "execution_message": "Vừa quét, chưa xử lý",
+      "error_details": null,
+      "execution_time": null
+    },
+    {
+      "ticket_id": "643681",
+      "ticket_name": "IT xác nhận lỗi kỹ thuật (6703_DNG.KK.AOM.DBP Tích lũy bù ngày 05/10/2026)",
+      "source_type": "GPROCESS",
+      "created_by": "dng.kk.aom.dbp",
+      "assignee": "dung.nguyenanh",
+      "due_date": "13:00 12/10/2026",
+      "url": "https://gpms.ggg.com.vn/g-process/my-mission/643681",
+      "status": "Đang triển khai",
+      "execution_status": "pending",
+      "execution_message": "Vừa quét, chưa xử lý",
+      "error_details": null,
+      "execution_time": null
+    },
+    {
+      "ticket_id": "643677",
+      "ticket_name": "IT xác nhận lỗi kỹ thuật (6702_DNG.KK.AOM.DBP Tích lũy bù ngày 05/10/2026)",
+      "source_type": "GPROCESS",
+      "created_by": "dng.kk.aom.dbp",
+      "assignee": "dung.nguyenanh",
+      "due_date": "12:56 12/10/2026",
+      "url": "https://gpms.ggg.com.vn/g-process/my-mission/643677",
+      "status": "Đang triển khai",
+      "execution_status": "pending",
+      "execution_message": "Vừa quét, chưa xử lý",
+      "error_details": null,
+      "execution_time": null
+    }
+  ],
+  "summary": {
+    "status": "scanned",
+    "total_processed": 0,
+    "success_count": 0,
+    "failed_count": 0,
+    "skipped_count": 0,
+    "message": "Quét thủ công: Tìm thấy 0 ticket 3CX và 3 nhiệm vụ G-Process (2026-10-12 09:17:24)"
+  }
+}

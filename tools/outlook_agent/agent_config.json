@@ -1,0 +1,10 @@
+{
+  "server_url": "http://172.16.8.25:8000",
+  "agent_secret": "dung_memo_agent_secret_2026",
+  "folder_name": "5. MKT",
+  "keyword": "Yêu cầu tạo nút RK cho Memo mới",
+  "max_items": 400,
+  "agent_port": 18890,
+  "auto_sync_times": ["09:30", "14:00", "19:00"],
+  "sync_on_startup": true
+}

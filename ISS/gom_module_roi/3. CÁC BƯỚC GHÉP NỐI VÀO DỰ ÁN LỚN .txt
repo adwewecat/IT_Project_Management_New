@@ -1,0 +1,58 @@
+CÁC BƯỚC GHÉP NỐI VÀO DỰ ÁN LỚN (INTEGRATION WORKFLOW)
+Khi một thành viên dev hoàn thành module trên máy nhánh riêng, quá trình tích hợp vào dự án lớn chỉ mất 2 phút thông qua 4 điểm cắm duy nhất:
+
+Bước 1: Copy các file vào dự án lớn
+Sao chép thư mục và file theo đúng cấu trúc models, schemas, services, api/v1 (Backend) và types, services, components, pages (Frontend).
+
+Bước 2: Kích hoạt Router Backend
+Mở file 
+
+router.py
+ và thêm 2 dòng:
+
+python
+# 1. Import router mới
+from app.api.v1.device_borrow import router as device_borrow_router
+# 2. Đăng ký vào api_v1_router
+api_v1_router.include_router(device_borrow_router)
+Bước 3: Đăng ký Route Frontend
+Mở file 
+
+AppRoutes.tsx
+ và thêm:
+
+tsx
+// 1. Import Page
+import { DeviceBorrowPage } from '../pages/device-borrow/DeviceBorrowPage';
+// 2. Thêm vào Protected Routes
+<Route path="device-borrow" element={<DeviceBorrowPage />} />
+Bước 4: Hiển thị Menu trên Sidebar
+Mở file 
+
+Sidebar.tsx
+ và thêm NavLink:
+
+tsx
+import { Monitor } from 'lucide-react'; // Chọn icon phù hợp
+<NavLink
+  to="/device-borrow"
+  style={({ isActive }) => (isActive ? activeNavLinkStyle : navLinkStyle)}
+>
+  <Monitor size={18} />
+  <span>Mượn Thiết Bị</span>
+</NavLink>
+PHẦN 6: NHỮNG LỖI CẦN TRÁNH TUYỆT ĐỐI (BEST PRACTICES & CHECKLIST)
+SQL Server FETCH NEXT vs LIMIT:
+Trong MSSQL không có từ khóa LIMIT ... OFFSET. Khi viết SQLAlchemy luôn dùng .offset(x).limit(y), dự án đã tích hợp sẵn cơ chế tương thích tự động trong backend/app/core/database.py. Tuyệt đối không viết raw SQL dạng SELECT * FROM tbl LIMIT 10.
+Khởi tạo bảng mới:
+Nếu có bảng mới, có thể khai báo Base.metadata.create_all(engine, tables=[...]) trong sự kiện lifespan tại 
+
+main.py
+, hoặc chạy migration script SQL Server.
+Quản lý Token & Session:
+Không tự ý viết hàm gọi fetch() hay tự đọc localStorage.getItem('access_token'). Luôn dùng instance apiClient từ frontend/src/services/api.ts vì nó đã tích hợp sẵn cơ chế auto-attach Bearer Token và tự động chuyển về /login khi phiên làm việc hết hạn (HTTP 401).
+Phân quyền người dùng:
+Luôn dùng các hàm helper có sẵn trong 
+
+authUtils.ts
+ (checkIsAdmin, checkIsAppRole, checkIsHelpdeskRole, checkIsSuperAdmin) thay vì tự so sánh chuỗi phân quyền thủ công.

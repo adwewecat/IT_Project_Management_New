@@ -1,0 +1,172 @@
+{
+  "scan_date": "2026-09-27",
+  "scanned_at": "2026-09-27 08:06:27",
+  "total_unassigned": 15,
+  "items": [
+    {
+      "ticket_id": "1871988",
+      "ticket_title": "HCM Cloudpot Cao Thắng-HỔ TRỢ CHECK DATA LŨY KẾ LỖI DO ÁP DỤNG VOUCHER NGÀY 20/9",
+      "creator": "hcm.cp.sh.ct",
+      "due_date": "25/09/26 23:59:59",
+      "status": "Mới mở",
+      "assignee_status": "Chưa gán người xử lý",
+      "url": "https://gpms.ggg.com.vn/gticket/work-list/detail?id=1871988",
+      "created_at": "24/09/2026 17:58:51",
+      "scanned_at": "2026-09-27 08:06:27"
+    },
+    {
+      "ticket_id": "1872975",
+      "ticket_title": "HCM Cloudpot Giga Mall Phạm Văn Đồng-LỖI KDS CO/SO không vào được",
+      "creator": "hcm.cp.ggm.pvd",
+      "due_date": "26/09/26 23:59:59",
+      "status": "Mới mở",
+      "assignee_status": "Chưa gán người xử lý",
+      "url": "https://gpms.ggg.com.vn/gticket/work-list/detail?id=1872975",
+      "created_at": "25/09/2026 12:26:21",
+      "scanned_at": "2026-09-27 08:06:27"
+    },
+    {
+      "ticket_id": "1873162",
+      "ticket_title": "HCM Kichi Kichi Lotte Mart Tân Bình-CẤP TÀI KHOẢN KDS",
+      "creator": "hcm.kk.lte.ch",
+      "due_date": "27/09/26 23:59:59",
+      "status": "Mới mở",
+      "assignee_status": "Chưa gán người xử lý",
+      "url": "https://gpms.ggg.com.vn/gticket/work-list/detail?id=1873162",
+      "created_at": "25/09/2026 14:05:31",
+      "scanned_at": "2026-09-27 08:06:27"
+    },
+    {
+      "ticket_id": "1874598",
+      "ticket_title": "HCM Cloudpot SC Vivo City-kds lỗi ngày 26/09/2026",
+      "creator": "hcm.cp.vvc.nvl",
+      "due_date": "27/09/26 23:59:59",
+      "status": "Mới mở",
+      "assignee_status": "Chưa gán người xử lý",
+      "url": "https://gpms.ggg.com.vn/gticket/work-list/detail?id=1874598",
+      "created_at": "26/09/2026 10:40:22",
+      "scanned_at": "2026-09-27 08:06:27"
+    },
+    {
+      "ticket_id": "1873920",
+      "ticket_title": "HCM Kichi Kichi Vincom Nguyễn Xí-TÀI KHOẢN KDS",
+      "creator": "hcm.kk.sgr.nx",
+      "due_date": "28/09/26 23:59:59",
+      "status": "Mới mở",
+      "assignee_status": "Chưa gán người xử lý",
+      "url": "https://gpms.ggg.com.vn/gticket/work-list/detail?id=1873920",
+      "created_at": "25/09/2026 17:59:05",
+      "scanned_at": "2026-09-27 08:06:27"
+    },
+    {
+      "ticket_id": "1873678",
+      "ticket_title": "HCM GoGi House Vincom Mega Mall Grand Park-CẤP MẬT KHẨU VÀ TÀI KHOẢN MÁY KDS BẾP THỊT",
+      "creator": "hcm.ggh.vcr.pt",
+      "due_date": "28/09/26 23:59:59",
+      "status": "Mới mở",
+      "assignee_status": "Chưa gán người xử lý",
+      "url": "https://gpms.ggg.com.vn/gticket/work-list/detail?id=1873678",
+      "created_at": "25/09/2026 16:57:18",
+      "scanned_at": "2026-09-27 08:06:27"
+    },
+    {
+      "ticket_id": "1872475",
+      "ticket_title": "DNG Manwah AEON Đà Nẵng-MẠNG NHÀ HÀNG BỊ LỖI",
+      "creator": "dng.mw.aom.dbp",
+      "due_date": "28/09/26 23:59:59",
+      "status": "Mới mở",
+      "assignee_status": "Chưa gán người xử lý",
+      "url": "https://gpms.ggg.com.vn/gticket/work-list/detail?id=1872475",
+      "created_at": "25/09/2026 09:01:43",
+      "scanned_at": "2026-09-27 08:06:27"
+    },
+    {
+      "ticket_id": "1875691",
+      "ticket_title": "Nhãn hàng Kichi Kichi-HỖ TRƠ KIỂM TRA HÓA ĐƠN NGÀY 26/9",
+      "creator": "bdi.kk.sh.adv",
+      "due_date": "28/09/26 23:59:59",
+      "status": "Mới mở",
+      "assignee_status": "Chưa gán người xử lý",
+      "url": "https://gpms.ggg.com.vn/gticket/work-list/detail?id=1875691",
+      "created_at": "27/09/2026 00:49:17",
+      "scanned_at": "2026-09-27 08:06:27"
+    },
+    {
+      "ticket_id": "1874427",
+      "ticket_title": "HCM GoGi House Lotte Mart Nguyễn Hữu Thọ, Q7-THĐB-Gogi Lte Q7 Tivi sảnh mất tín hiệu onl",
+      "creator": "hcm.ggh.lte.nht",
+      "due_date": "28/09/26 23:59:59",
+      "status": "Mới mở",
+      "assignee_status": "Chưa gán người xử lý",
+      "url": "https://gpms.ggg.com.vn/gticket/work-list/detail?id=1874427",
+      "created_at": "26/09/2026 00:38:04",
+      "scanned_at": "2026-09-27 08:06:27"
+    },
+    {
+      "ticket_id": "1872185",
+      "ticket_title": "LDG Manwah Nguyễn Chí Thanh Đà Lạt-4369 - MW Đà Lạt - burn ví bù",
+      "creator": "ldo.mw.sh.nct",
+      "due_date": "29/09/26 23:59:59",
+      "status": "Mới mở",
+      "assignee_status": "Chưa gán người xử lý",
+      "url": "https://gpms.ggg.com.vn/gticket/work-list/detail?id=1872185",
+      "created_at": "24/09/2026 20:56:11",
+      "scanned_at": "2026-09-27 08:06:27"
+    },
+    {
+      "ticket_id": "1873509",
+      "ticket_title": "Kichi Phan Đình Phùng - Quãng Ngãi-HỖ TRỢ TÀI KHOẢN TRUY CẬP KDS",
+      "creator": "qng.kk.sh.pdp",
+      "due_date": "29/09/26 23:59:59",
+      "status": "Mới mở",
+      "assignee_status": "Chưa gán người xử lý",
+      "url": "https://gpms.ggg.com.vn/gticket/work-list/detail?id=1873509",
+      "created_at": "25/09/2026 16:03:01",
+      "scanned_at": "2026-09-27 08:06:27"
+    },
+    {
+      "ticket_id": "1873204",
+      "ticket_title": "HCM Manwah Vincom Lê Văn Việt-4350_KDS NGÀY 25/09",
+      "creator": "hcm.mw.vcr.lvv",
+      "due_date": "30/09/26 23:59:59",
+      "status": "Mới mở",
+      "assignee_status": "Chưa gán người xử lý",
+      "url": "https://gpms.ggg.com.vn/gticket/work-list/detail?id=1873204",
+      "created_at": "25/09/2026 14:20:03",
+      "scanned_at": "2026-09-27 08:06:27"
+    },
+    {
+      "ticket_id": "1873205",
+      "ticket_title": "DNI CloudPot Vincom Biên Hòa-TÌNH TRẠNG LỖI PHÂN QUYỀN SSC THANH LÝ/HỦY",
+      "creator": "dni.cp.vcr.pvt",
+      "due_date": "30/09/26 23:59:59",
+      "status": "Mới mở",
+      "assignee_status": "Chưa gán người xử lý",
+      "url": "https://gpms.ggg.com.vn/gticket/work-list/detail?id=1873205",
+      "created_at": "25/09/2026 14:20:04",
+      "scanned_at": "2026-09-27 08:06:27"
+    },
+    {
+      "ticket_id": "1873128",
+      "ticket_title": "DNI CloudPot Vincom Biên Hòa-TÌNH TRẠNG KDS CỦA CD VINCOM BIÊN HÒA",
+      "creator": "dni.cp.vcr.pvt",
+      "due_date": "30/09/26 23:59:59",
+      "status": "Mới mở",
+      "assignee_status": "Chưa gán người xử lý",
+      "url": "https://gpms.ggg.com.vn/gticket/work-list/detail?id=1873128",
+      "created_at": "25/09/2026 13:45:26",
+      "scanned_at": "2026-09-27 08:06:27"
+    },
+    {
+      "ticket_id": "1873142",
+      "ticket_title": "HCM Manwah Lotte Mart Q7-tạo TK KDS thứ 3 của NH",
+      "creator": "hcm.mw.lte.nht",
+      "due_date": "30/09/26 23:59:59",
+      "status": "Mới mở",
+      "assignee_status": "Chưa gán người xử lý",
+      "url": "https://gpms.ggg.com.vn/gticket/work-list/detail?id=1873142",
+      "created_at": "25/09/2026 13:57:31",
+      "scanned_at": "2026-09-27 08:06:27"
+    }
+  ]
+}

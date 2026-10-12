@@ -1,0 +1,351 @@
+import logging
+from datetime import datetime, date, timedelta
+from typing import Optional, Dict, Any, List
+from sqlalchemy import text
+from app.core.database import engine, get_rk7_engine
+
+logger = logging.getLogger(__name__)
+
+
+class SalesSyncService:
+    @staticmethod
+    def build_rk7_sales_query(target_date_str: str) -> str:
+        """
+        Build SQL batch for querying RK7 Dcorp server (172.16.8.26).
+        Includes #Z temp table to detect restaurants missing shifts in the target date.
+        """
+        return f"""
+SET NOCOUNT ON;
+
+DECLARE @DATE1 datetime = '{target_date_str}';
+DECLARE @DATE2 datetime = '{target_date_str}';
+
+CREATE TABLE #Z (
+    [DVCS] [nchar](10) NULL,
+    [RESTAURANTNAME] [nvarchar](40) NULL,
+    [SHIFTDATE] [datetime] NULL,
+    [GUEST] [int] NULL,[SERVICECHARGE] [money] NULL,[PRICESUM_5] [money] NULL,[DISCOUNT_5] [money] NULL,[DISCOUNT_5_BANK] [money] NULL,[TAX_5] [money] NULL,[PRICESUM_8] [money] NULL,
+    [DISCOUNT_8] [money] NULL,[DISCOUNT_8_BANK] [money] NULL,[TAX_8] [money] NULL,[PRICESUM_10] [money] NULL,[DISCOUNT_10] [money] NULL,[DISCOUNT_10_BANK] [money] NULL,[TAX_10] [money] NULL,
+    [PAYSUM] [money] NULL,[PAYSUM_CASH] [money] NULL,[PAYSUM_CARD] [money] NULL,[PAYSUM_VCINTERNAL] [money] NULL,[PAYSUM_GIFTPOP] [money] NULL,[PAYSUM_GOTIT] [money] NULL,
+    [PAYSUM_URBOX] [money] NULL,[PAYSUM_UTOP] [money] NULL,[PAYSUM_SODEXO] [money] NULL,[PAYSUM_DEALTODAY] [money] NULL,[VOUCHERFORTIP] [money] NULL,[PAYSUM_ENTERTAINMENT] [money] NULL,
+    [PAYSUM_CASHLESS] [money] NULL,[VOUCHER_BURN_VI] [money] NULL,[PAYSUM_GPP] [money] NULL,[PAYSUM_VNPAY] [money] NULL,[PAYSUM_ZALOPAY] [money] NULL,[PAYSUM_GRABPAY] [money] NULL,
+    [PAYSUM_MOMO] [money] NULL,[PAYSUM_VINID] [money] NULL,[PAYSUM_NOW] [money] NULL,[PAYSUM_GRABFOOD] [money] NULL,[PAYSUM_VNPT] [money] NULL,[PAYSUM_SHOPEE] [money] null,[PAYSUM_GBUSINESS] [money] NULL,[PAYSUM_OTHER] [money] NULL
+);
+
+INSERT INTO #Z (DVCS,RESTAURANTNAME,SHIFTDATE,[GUEST]
+    ,[SERVICECHARGE],[PRICESUM_5],[DISCOUNT_5],[DISCOUNT_5_BANK],[TAX_5],[PRICESUM_8],[DISCOUNT_8],[DISCOUNT_8_BANK],[TAX_8],[PRICESUM_10]
+    ,[DISCOUNT_10],[DISCOUNT_10_BANK],[TAX_10],[PAYSUM],[PAYSUM_CASH],[PAYSUM_CARD],[PAYSUM_VCINTERNAL],[PAYSUM_GIFTPOP],[PAYSUM_GOTIT]
+    ,[PAYSUM_URBOX],[PAYSUM_UTOP],[PAYSUM_SODEXO],[PAYSUM_DEALTODAY],[VOUCHERFORTIP],[PAYSUM_ENTERTAINMENT],[PAYSUM_CASHLESS],[VOUCHER_BURN_VI],[PAYSUM_GPP],[PAYSUM_VNPAY],[PAYSUM_ZALOPAY]
+    ,[PAYSUM_GRABPAY],[PAYSUM_MOMO],[PAYSUM_VINID],[PAYSUM_NOW],[PAYSUM_GRABFOOD],[PAYSUM_VNPT],[PAYSUM_SHOPEE],[PAYSUM_GBUSINESS],[PAYSUM_OTHER])
+SELECT GEN.PROPERTYVAL, r.name, @DATE1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+FROM RESTAURANTS R 
+LEFT JOIN GENERATEDPROPDATAS GEN WITH(NOLOCK) ON GEN.RKTYPEIDENT = 1000008 AND GEN.OBJECTREFNO = 137 AND GEN.OBJECTIDENT = R.SIFR
+WHERE r.SIFR in (
+    select distinct(gs.IRESTAURANT) as IRESTAURANT from GLOBALSHIFTS gs 
+    left join (
+        select distinct(gs.IRESTAURANT) as IRESTAURANT from GLOBALSHIFTS gs 
+        where gs.SHIFTDATE between @DATE1 and @DATE2
+    ) g on g.IRESTAURANT=gs.IRESTAURANT
+    where gs.SHIFTDATE between dateadd(day,-30,@DATE1) and DATEADD(day,30, @DATE1)
+    and g.IRESTAURANT is null
+)
+AND R.STATUS=3;
+
+SELECT DVCS,RESTAURANTNAME,SHIFTDATE,GUEST,SERVICECHARGE,PRICESUM_5,DISCOUNT_5,DISCOUNT_5_BANK,TAX_5,PRICESUM_8,DISCOUNT_8,DISCOUNT_8_BANK,TAX_8,PRICESUM_10,DISCOUNT_10,DISCOUNT_10_BANK,TAX_10,PAYSUM,PAYSUM_CASH,PAYSUM_CARD,PAYSUM_VCINTERNAL,PAYSUM_GIFTPOP,PAYSUM_GOTIT,PAYSUM_URBOX,PAYSUM_SODEXO,PAYSUM_DEALTODAY,VOUCHERFORTIP,PAYSUM_ENTERTAINMENT,PAYSUM_CASHLESS,VOUCHER_BURN_VI,PAYSUM_GPP,PAYSUM_VNPAY,PAYSUM_ZALOPAY,PAYSUM_GRABPAY,PAYSUM_MOMO,PAYSUM_VINID,PAYSUM_NOW,PAYSUM_GRABFOOD,PAYSUM_VNPT,PAYSUM_SHOPEE,PAYSUM_GBUSINESS,PAYSUM_OTHER
+FROM
+(
+    SELECT 
+        AA.DVCS AS DVCS,
+        AA.RESTAURANTNAME AS RESTAURANTNAME,
+        AA.SHIFTDATE AS SHIFTDATE,
+        SUM(AA.GUEST) AS GUEST,
+        SUM(AA.SERVICECHARGE) AS SERVICECHARGE,
+        SUM(AA.PRICESUM_5) AS PRICESUM_5,
+        SUM(ISNULL(AA.DISCOUNT_5,0)) AS DISCOUNT_5,
+        SUM(ISNULL(AA.DISCOUNT_5_BANK,0)) AS DISCOUNT_5_BANK,
+        SUM(ISNULL(AA.TAX_5,0)) AS TAX_5 ,
+        SUM(AA.PRICESUM_7) AS PRICESUM_7,
+        SUM(ISNULL(AA.DISCOUNT_7,0)) AS DISCOUNT_7,
+        SUM(ISNULL(AA.DISCOUNT_7_BANK,0)) AS DISCOUNT_7_BANK,
+        SUM(ISNULL(AA.TAX_7,0)) AS TAX_7 ,
+        SUM(AA.PRICESUM_8) AS PRICESUM_8,
+        SUM(ISNULL(AA.DISCOUNT_8,0)) AS DISCOUNT_8,
+        SUM(ISNULL(AA.DISCOUNT_8_BANK,0)) AS DISCOUNT_8_BANK,
+        SUM(ISNULL(AA.TAX_8,0)) AS TAX_8 ,
+        SUM(AA.PRICESUM_10) AS PRICESUM_10,
+        SUM(ISNULL(AA.DISCOUNT_10,0)) AS DISCOUNT_10,
+        SUM(ISNULL(AA.DISCOUNT_10_BANK,0)) AS DISCOUNT_10_BANK,
+        SUM(ISNULL(AA.TAX_10,0)) AS TAX_10 ,
+        ROUND(SUM(AA.PAYSUM),0) AS PAYSUM,
+        ROUND(SUM(AA.PAYSUM_CASH),0) AS PAYSUM_CASH,	
+        SUM(AA.PAYSUM_CARD) AS PAYSUM_CARD,
+        SUM(AA.PAYSUM_VCINTERNAL) AS PAYSUM_VCINTERNAL,
+        SUM(AA.PAYSUM_GIFTPOP) AS PAYSUM_GIFTPOP,
+        SUM(AA.PAYSUM_GOTIT) AS PAYSUM_GOTIT,
+        SUM(AA.PAYSUM_URBOX) AS PAYSUM_URBOX,
+        SUM(AA.PAYSUM_UTOP) AS PAYSUM_UTOP,
+        SUM(AA.PAYSUM_SODEXO) AS PAYSUM_SODEXO,
+        SUM(AA.PAYSUM_DEALTODAY) AS PAYSUM_DEALTODAY,
+        SUM(AA.VOUCHERFORTIP) AS VOUCHERFORTIP,
+        SUM(AA.PAYSUM_ENTERTAINMENT) AS PAYSUM_ENTERTAINMENT,
+        SUM(AA.PAYSUM_CASHLESS) AS PAYSUM_CASHLESS,
+        SUM(AA.VOUCHER_BURN_VI) AS VOUCHER_BURN_VI,
+        SUM(AA.PAYSUM_GPP) AS PAYSUM_GPP,
+        SUM(AA.PAYSUM_VNPAY) AS PAYSUM_VNPAY,
+        SUM(AA.PAYSUM_ZALOPAY) AS PAYSUM_ZALOPAY,
+        SUM(AA.PAYSUM_GRABPAY) AS PAYSUM_GRABPAY,
+        SUM(AA.PAYSUM_MOMO) AS PAYSUM_MOMO,
+        SUM(AA.PAYSUM_VINID) AS PAYSUM_VINID,   
+        SUM(AA.PAYSUM_NOW) AS PAYSUM_NOW,
+        SUM(AA.PAYSUM_GRABFOOD) AS PAYSUM_GRABFOOD,
+        SUM(AA.PAYSUM_VNPT) AS PAYSUM_VNPT,
+        SUM(AA.PAYSUM_SHOPEE) AS PAYSUM_SHOPEE,
+        SUM(AA.PAYSUM_GBUSINESS) AS PAYSUM_GBUSINESS,
+        SUM(AA.PAYSUM_OTHER) AS PAYSUM_OTHER
+    FROM 
+    (
+        SELECT 
+            GEN.PROPERTYVAL AS DVCS,
+            R.NAME AS RESTAURANTNAME,
+            GS.SHIFTDATE AS SHIFTDATE,
+            PC.CHECKNUM AS CHECKNUM,
+            PC.GUESTCNT AS GUEST,
+            SUM(ISNULL(PB.PRICESUM_5,0)) AS PRICESUM_5,
+            SUM(ISNULL(DP.DISCOUNT_5,0)) AS DISCOUNT_5,
+            SUM(ISNULL(DP2.DISCOUNT_5,0)) AS DISCOUNT_5_BANK,
+            SUM(ISNULL(PB.TAX_5,0)) AS TAX_5 ,
+            SUM(PB.PRICESUM_5)+SUM(dp.DISCOUNT_5)+SUM(dp2.DISCOUNT_5)+SUM(PB.TAX_5) AS PAYSUM_5,
+            SUM(ISNULL(PB.PRICESUM_7,0)) AS PRICESUM_7,
+            SUM(ISNULL(DP.DISCOUNT_7,0)) AS DISCOUNT_7,
+            SUM(ISNULL(DP2.DISCOUNT_7,0)) AS DISCOUNT_7_BANK,
+            SUM(ISNULL(PB.TAX_7,0)) AS TAX_7 ,
+            SUM(PB.PRICESUM_7)+SUM(dp.DISCOUNT_7)+SUM(dp2.DISCOUNT_7)+SUM(PB.TAX_7) AS PAYSUM_7,
+            SUM(ISNULL(PB.PRICESUM_8,0)) AS PRICESUM_8,
+            SUM(ISNULL(DP.DISCOUNT_8,0)) AS DISCOUNT_8,
+            SUM(ISNULL(DP2.DISCOUNT_8,0)) AS DISCOUNT_8_BANK,
+            SUM(ISNULL(PB.TAX_8,0)) AS TAX_8 ,
+            SUM(PB.PRICESUM_8)+SUM(dp.DISCOUNT_8)+SUM(dp2.DISCOUNT_8)+SUM(PB.TAX_8) AS PAYSUM_8,
+            SUM(ISNULL(PB.PRICESUM_10,0)) AS PRICESUM_10,
+            SUM(ISNULL(DP.DISCOUNT_10,0)) AS DISCOUNT_10,  
+            SUM(ISNULL(DP2.DISCOUNT_10,0)) AS DISCOUNT_10_BANK,
+            SUM(ISNULL(PB.TAX_10,0)) AS TAX_10,
+            SUM(PB.PRICESUM_10)+SUM(dp.DISCOUNT_10)+SUM(dp2.DISCOUNT_10)+SUM(PB.TAX_10) AS PAYSUM_10,
+            SUM(ISNULL(DP.SERVICECHARGE,0)) AS SERVICECHARGE,
+            ROUND(SUM(PB.PAYSUM),0) AS PAYSUM,
+            ROUND(SUM(IIF(CL.IHIGHLEVELTYPE = 103,PB.PAYSUM,0)),0) AS PAYSUM_CASH,	
+            SUM(IIF(CL.IHIGHLEVELTYPE = 102,PB.PAYSUM,0)) AS PAYSUM_CARD,
+            SUM(IIF(CL.IHIGHLEVELTYPE = 1055028 OR CL.SIFR = 1152745,PB.PAYSUM,0)) AS PAYSUM_VCINTERNAL,
+            SUM(IIF(CL.IHIGHLEVELTYPE = 1000540 AND CL.SIFR = 1000556,PB.PAYSUM,0)) AS PAYSUM_GIFTPOP,
+            SUM(IIF(CL.SIFR IN (1000557,1058870,1058871,1058872,1058873,1058874,1058881,1058876),PB.PAYSUM,0)) AS PAYSUM_GOTIT,
+            SUM(IIF(CL.IHIGHLEVELTYPE = 1000540 AND CL.SIFR = 1000561,PB.PAYSUM,0)) AS PAYSUM_URBOX,
+            SUM(IIF(CL.IHIGHLEVELTYPE = 1000540 AND CL.SIFR = 1152745,PB.PAYSUM,0)) AS PAYSUM_UTOP,
+            SUM(IIF(CL.IHIGHLEVELTYPE = 1000538 AND CL.SIFR = 1098718,PB.PAYSUM,0)) AS PAYSUM_SODEXO,
+            SUM(IIF(CL.IHIGHLEVELTYPE = 1000540 AND CL.SIFR = 1000543,PB.PAYSUM,0)) AS PAYSUM_DEALTODAY,
+            SUM(ISNULL(TIP.TIPAMOUNT,0)) AS VOUCHERFORTIP,
+            SUM(IIF((CL.IHIGHLEVELTYPE IN (1000540,1000538,1055028) AND CL.SIFR <> 1002485),PB.PAYSUM,0)) AS PAYSUM_VOUCHER,			    
+            SUM(IIF(CL.IHIGHLEVELTYPE IN (1000539,1000542),PB.PAYSUM,0)) AS E_WALLET, 
+            SUM(IIF(CL.IHIGHLEVELTYPE = 1002980 OR CL.SIFR = 1002981,PB.PAYSUM,0)) AS PAYSUM_ENTERTAINMENT,
+            SUM(IIF(CL.IHIGHLEVELTYPE = 101,PB.PAYSUM,0)) AS PAYSUM_CASHLESS,
+            SUM(IIF(CL.SIFR = 1002485,PB.PAYSUM,0)) AS VOUCHER_BURN_VI,
+            SUM(IIF(CL.IHIGHLEVELTYPE = 104 AND CL.SIFR IN (10,1002011,1061041),PB.PAYSUM,0)) AS PAYSUM_GPP,
+            SUM(IIF(CL.SIFR = 1001983 OR CL.SIFR = 1001977,PB.PAYSUM,0)) AS PAYSUM_VNPAY,
+            SUM(IIF(CL.SIFR = 1001978 OR CL.SIFR = 1002979,PB.PAYSUM,0)) AS PAYSUM_ZALOPAY,
+            SUM(IIF(CL.SIFR = 1029570 OR CL.SIFR = 1001981,PB.PAYSUM,0)) AS PAYSUM_GRABPAY,
+            SUM(IIF(CL.SIFR = 1001982 OR CL.SIFR = 1055027,PB.PAYSUM,0)) AS PAYSUM_MOMO,
+            SUM(IIF(CL.SIFR = 1058815 OR CL.SIFR = 1057757,PB.PAYSUM,0)) AS PAYSUM_VINID,   
+            SUM(IIF(CL.SIFR = 1076082,PB.PAYSUM,0)) AS PAYSUM_NOW,
+            SUM(IIF(CL.SIFR = 1076080,PB.PAYSUM,0)) AS PAYSUM_GRABFOOD,
+            SUM(IIF(CL.SIFR = 1153100 OR CL.SIFR = 1153105,PB.PAYSUM,0)) AS PAYSUM_VNPT,
+            SUM(IIF(CL.SIFR = 1152807 OR CL.SIFR = 1153099,PB.PAYSUM,0)) AS PAYSUM_SHOPEE,
+            SUM(IIF(CL.IHIGHLEVELTYPE = 1137013,PB.PAYSUM,0)) AS PAYSUM_GBUSINESS, 
+            SUM(IIF(CL.IHIGHLEVELTYPE NOT IN (1057757,2236865,1985921,103,102,1001634,1154084,1055028,1240423,101,104,1003259,1930519,1000541,1000542,1000539,1000538,1000540,1002980,1001977,1076079,1137013),PB.PAYSUM,0)) AS PAYSUM_OTHER
+        FROM GLOBALSHIFTS GS WITH(NOLOCK) 
+        JOIN RESTAURANTS R WITH(NOLOCK) ON R.SIFR = GS.IRESTAURANT
+        JOIN RESTAURANTCONCEPTS RC WITH(NOLOCK) ON RC.SIFR = R.CONCEPT
+        JOIN RESTAURANTREGIONS RG WITH(NOLOCK) ON RG.SIFR = R.REGION
+        JOIN ORDERS O WITH(NOLOCK) ON O.MIDSERVER = GS.MIDSERVER AND O.ICOMMONSHIFT = GS.SHIFTNUM	
+        JOIN PRINTCHECKS PC WITH(NOLOCK) ON PC.MIDSERVER = O.MIDSERVER AND PC.VISIT = O.VISIT AND PC.ORDERIDENT = O.IDENTINVISIT AND PC.STATE = 6
+        JOIN CURRLINES CL WITH(NOLOCK) ON CL.MIDSERVER = PC.MIDSERVER AND CL.VISIT = PC.VISIT AND CL.CHECKUNI = PC.UNI
+        CROSS APPLY (
+            SELECT SUM(CASE WHEN TP.SIFR=3 THEN PB.PRICESUM/(1+(TP.TAXRATE/100)) ELSE PB.PRICESUM END) AS PRICESUM,	
+                    SUM(ISNULL(TP.SUM,0)) AS TAXESADDED,
+                    SUM(CASE WHEN TP.TAXRATE =5 THEN TP.SUM ELSE 0 END ) AS TAX_5,
+                    SUM(CASE WHEN TP.TAXRATE =7 THEN TP.SUM ELSE 0 END ) AS TAX_7,
+                    SUM(CASE WHEN TP.TAXRATE =8 THEN TP.SUM ELSE 0 END ) AS TAX_8,
+                    SUM(CASE WHEN TP.TAXRATE =10 THEN TP.SUM ELSE 0 END ) AS TAX_10,
+                    SUM(CASE WHEN TP.TAXRATE =5 THEN CASE WHEN TP.SIFR=6 THEN PB.PRICESUM/(1+(TP.TAXRATE/100)) ELSE PB.PRICESUM END ELSE 0 END ) AS PRICESUM_5,
+                    SUM(CASE WHEN TP.TAXRATE =7 THEN CASE WHEN TP.SIFR=6 THEN PB.PRICESUM/(1+(TP.TAXRATE/100)) ELSE PB.PRICESUM END ELSE 0 END ) AS PRICESUM_7,
+                    SUM(CASE WHEN TP.TAXRATE =8 THEN CASE WHEN TP.SIFR=6 THEN PB.PRICESUM/(1+(TP.TAXRATE/100)) ELSE PB.PRICESUM END ELSE 0 END ) AS PRICESUM_8,
+                    SUM(CASE WHEN TP.TAXRATE =10 THEN CASE WHEN TP.SIFR=6 THEN PB.PRICESUM/(1+(TP.TAXRATE/100)) ELSE PB.PRICESUM END ELSE 0 END ) AS PRICESUM_10,
+                    SUM(PB.PAYSUM) AS PAYSUM
+            FROM PAYBINDINGS PB WITH(NOLOCK) 
+            JOIN SESSIONDISHES SD WITH(NOLOCK) ON SD.VISIT = PB.VISIT AND SD.MIDSERVER = PB.MIDSERVER AND SD.UNI = PB.DISHUNI AND SD.STATE IN (5,6) AND SD.SIFR <> 99999 
+            LEFT JOIN TAXPARTS TP WITH(NOLOCK) ON TP.VISIT = PB.VISIT AND TP.MIDSERVER = PB.MIDSERVER AND TP.BINDINGUNI = PB.UNI
+            WHERE PB.MIDSERVER = CL.MIDSERVER AND PB.VISIT = CL.VISIT AND PB.CURRUNI = CL.UNI AND PB.STATE = 6 AND PB.DISHUNI <> 0
+        ) PB
+        OUTER APPLY(
+            SELECT SUM(IIF(ISNULL(DP.SUM,0) < 0, IIF(TP.SIFR=6, ISNULL(DP.SUM, 0)/(1+(TP.TAXRATE/100)), ISNULL(DP.SUM, 0)), 0)) AS DISCOUNT,
+                    SUM(CASE WHEN TP.TAXRATE =5 THEN IIF(ISNULL(DP.SUM,0) < 0, IIF(TP.SIFR=6, ISNULL(DP.SUM, 0)/(1+(TP.TAXRATE/100)), ISNULL(DP.SUM, 0)), 0) ELSE 0 END) AS DISCOUNT_5,
+                    SUM(CASE WHEN TP.TAXRATE =7 THEN IIF(ISNULL(DP.SUM,0) < 0, IIF(TP.SIFR=6, ISNULL(DP.SUM, 0)/(1+(TP.TAXRATE/100)), ISNULL(DP.SUM, 0)), 0) ELSE 0 END) AS DISCOUNT_7,
+                    SUM(CASE WHEN TP.TAXRATE =8 THEN IIF(ISNULL(DP.SUM,0) < 0, IIF(TP.SIFR=6, ISNULL(DP.SUM, 0)/(1+(TP.TAXRATE/100)), ISNULL(DP.SUM, 0)), 0) ELSE 0 END) AS DISCOUNT_8,
+                    SUM(CASE WHEN TP.TAXRATE =10 THEN IIF(ISNULL(DP.SUM,0) < 0, IIF(TP.SIFR=6, ISNULL(DP.SUM, 0)/(1+(TP.TAXRATE/100)), ISNULL(DP.SUM, 0)), 0) ELSE 0 END) AS DISCOUNT_10,
+                    SUM(IIF(ISNULL(DP.SUM,0) > 0 AND DP.SIFR <> 1055604, IIF(TP.SIFR=6, ISNULL(DP.SUM, 0)/(1+(TP.TAXRATE/100)), ISNULL(DP.SUM, 0)), 0)) AS SERVICECHARGE
+            FROM PAYBINDINGS PB WITH(NOLOCK) 
+            JOIN SESSIONDISHES SD WITH(NOLOCK) ON SD.VISIT = PB.VISIT AND SD.MIDSERVER = PB.MIDSERVER AND SD.UNI = PB.DISHUNI AND SD.STATE IN (5,6) AND SD.SIFR <> 99999 						
+            JOIN DISCPARTS DP WITH(NOLOCK) ON DP.MIDSERVER = PB.MIDSERVER AND DP.VISIT = PB.VISIT AND DP.BINDINGUNI = PB.UNI AND DP.SIFR <> 1000553 							
+            LEFT JOIN DISCOUNTS DC WITH(NOLOCK) ON DC.SIFR = DP.SIFR
+            LEFT JOIN DISCOUNTTYPES DT WITH(NOLOCK) ON DC.PARENT = DT.SIFR
+            JOIN TAXPARTS TP WITH(NOLOCK) ON TP.VISIT = PB.VISIT AND TP.MIDSERVER = PB.MIDSERVER AND TP.BINDINGUNI = PB.UNI
+            WHERE PB.MIDSERVER = CL.MIDSERVER AND PB.VISIT = CL.VISIT AND PB.CURRUNI = CL.UNI AND PB.STATE = 6 AND PB.DISHUNI <> 0 AND DT.SIFR <> 1058788 
+        ) DP
+        OUTER APPLY(
+            SELECT SUM(IIF(ISNULL(DP.SUM,0) < 0, IIF(TP.SIFR=6, ISNULL(DP.SUM, 0)/(1+(TP.TAXRATE/100)), ISNULL(DP.SUM, 0)), 0)) AS DISCOUNT,
+                    SUM(CASE WHEN TP.TAXRATE =5 THEN IIF(ISNULL(DP.SUM,0) < 0, IIF(TP.SIFR=6, ISNULL(DP.SUM, 0)/(1+(TP.TAXRATE/100)), ISNULL(DP.SUM, 0)), 0) ELSE 0 END) AS DISCOUNT_5,
+                    SUM(CASE WHEN TP.TAXRATE =7 THEN IIF(ISNULL(DP.SUM,0) < 0, IIF(TP.SIFR=6, ISNULL(DP.SUM, 0)/(1+(TP.TAXRATE/100)), ISNULL(DP.SUM, 0)), 0) ELSE 0 END) AS DISCOUNT_7,
+                    SUM(CASE WHEN TP.TAXRATE =8 THEN IIF(ISNULL(DP.SUM,0) < 0, IIF(TP.SIFR=6, ISNULL(DP.SUM, 0)/(1+(TP.TAXRATE/100)), ISNULL(DP.SUM, 0)), 0) ELSE 0 END) AS DISCOUNT_8,
+                    SUM(CASE WHEN TP.TAXRATE =10 THEN IIF(ISNULL(DP.SUM,0) < 0, IIF(TP.SIFR=6, ISNULL(DP.SUM, 0)/(1+(TP.TAXRATE/100)), ISNULL(DP.SUM, 0)), 0) ELSE 0 END) AS DISCOUNT_10,
+                    SUM(IIF(ISNULL(DP.SUM,0) > 0 AND DP.SIFR <> 1055604, IIF(TP.SIFR=6, ISNULL(DP.SUM, 0)/(1+(TP.TAXRATE/100)), ISNULL(DP.SUM, 0)), 0)) AS SERVICECHARGE
+            FROM PAYBINDINGS PB WITH(NOLOCK) 
+            JOIN SESSIONDISHES SD WITH(NOLOCK) ON SD.VISIT = PB.VISIT AND SD.MIDSERVER = PB.MIDSERVER AND SD.UNI = PB.DISHUNI AND SD.STATE IN (5,6) AND SD.SIFR <> 99999 						
+            JOIN DISCPARTS DP WITH(NOLOCK) ON DP.MIDSERVER = PB.MIDSERVER AND DP.VISIT = PB.VISIT AND DP.BINDINGUNI = PB.UNI AND DP.SIFR <> 1000553 							
+            LEFT JOIN DISCOUNTS DC WITH(NOLOCK) ON DC.SIFR = DP.SIFR
+            LEFT JOIN DISCOUNTTYPES DT WITH(NOLOCK) ON DC.PARENT = DT.SIFR
+            JOIN TAXPARTS TP WITH(NOLOCK) ON TP.VISIT = PB.VISIT AND TP.MIDSERVER = PB.MIDSERVER AND TP.BINDINGUNI = PB.UNI
+            WHERE PB.MIDSERVER = CL.MIDSERVER AND PB.VISIT = CL.VISIT AND PB.CURRUNI = CL.UNI AND PB.STATE = 6 AND PB.DISHUNI <> 0 AND DT.SIFR = 1058788 
+        ) DP2
+        OUTER APPLY (
+            SELECT SUM(ISNULL(DPT.SUM,0)) AS TIPAMOUNT 
+            FROM PAYBINDINGS PB WITH(NOLOCK) 
+            JOIN DISCPARTS DPT WITH(NOLOCK) ON DPT.MIDSERVER = PB.MIDSERVER AND DPT.VISIT = PB.VISIT AND DPT.BINDINGUNI = PB.UNI
+            WHERE PB.MIDSERVER = CL.MIDSERVER AND PB.VISIT = CL.VISIT AND PB.CURRUNI = CL.UNI AND DPT.SIFR = 1000553
+        ) TIP					
+        LEFT JOIN GENERATEDPROPDATAS GEN WITH(NOLOCK) ON GEN.RKTYPEIDENT = 1000008 AND GEN.OBJECTREFNO = 137 AND GEN.OBJECTIDENT = R.SIFR
+        WHERE (GS.STATUS = 3) AND (GS.CLOSED = 1)
+        AND GS.SHIFTDATE BETWEEN @DATE1 AND @DATE2
+        AND R.STATUS=3
+        GROUP BY 
+            GEN.PROPERTYVAL,	
+            R.NAME,			
+            GS.SHIFTDATE,PC.GUESTCNT,PC.CHECKNUM,
+            R.SIFR
+    ) AA
+    GROUP BY AA.SHIFTDATE,
+        AA.DVCS,	
+        AA.RESTAURANTNAME
+) B
+UNION
+SELECT DVCS,RESTAURANTNAME,SHIFTDATE,GUEST,SERVICECHARGE,PRICESUM_5,DISCOUNT_5,DISCOUNT_5_BANK,TAX_5,PRICESUM_8,DISCOUNT_8,DISCOUNT_8_BANK,TAX_8,PRICESUM_10,DISCOUNT_10,DISCOUNT_10_BANK,TAX_10,PAYSUM,PAYSUM_CASH,PAYSUM_CARD,PAYSUM_VCINTERNAL,PAYSUM_GIFTPOP,PAYSUM_GOTIT,PAYSUM_URBOX,PAYSUM_SODEXO,PAYSUM_DEALTODAY,VOUCHERFORTIP,PAYSUM_ENTERTAINMENT,PAYSUM_CASHLESS,VOUCHER_BURN_VI,PAYSUM_GPP,PAYSUM_VNPAY,PAYSUM_ZALOPAY,PAYSUM_GRABPAY,PAYSUM_MOMO,PAYSUM_VINID,PAYSUM_NOW,PAYSUM_GRABFOOD,PAYSUM_VNPT,PAYSUM_SHOPEE,PAYSUM_GBUSINESS,PAYSUM_OTHER 
+FROM #Z;
+"""
+
+    @classmethod
+    def sync_sales_from_rk7(cls, target_date: Optional[date] = None) -> Dict[str, Any]:
+        """
+        Extract daily sales from RK7 Dcorp 172.16.8.26 and store into ITDEPT (172.16.20.103)
+        tables: dbo.SO_LIEU_CHECK_SALES_DAILY & dbo.TOTAL_SALES_DAILY.
+        """
+        if target_date is None:
+            # Default to yesterday
+            target_date = date.today() - timedelta(days=1)
+
+        date_str = target_date.strftime("%Y-%m-%d")
+        logger.info("Bắt đầu đồng bộ Sales RK7 cho ngày %s...", date_str)
+
+        # 1. Query RK7 Dcorp
+        rk7_sql = cls.build_rk7_sales_query(date_str)
+        rk7_engine = get_rk7_engine()
+        
+        with rk7_engine.raw_connection() as rk7_raw:
+            cursor = rk7_raw.cursor()
+            cursor.execute(rk7_sql)
+            rows = cursor.fetchall()
+
+        total_restaurants = len(rows)
+        logger.info("RK7 trả về %d nhà hàng cho ngày %s", total_restaurants, date_str)
+
+        # 2. Insert into ITDEPT
+        total_sales_sum = 0.0
+        total_guests_sum = 0
+        success_count = 0
+
+        with engine.connect() as conn:
+            # Clear existing data for this date in SO_LIEU_CHECK_SALES_DAILY
+            conn.execute(
+                text("DELETE FROM dbo.SO_LIEU_CHECK_SALES_DAILY WHERE NGAY_SALE = :dt"),
+                {"dt": date_str}
+            )
+
+            insert_sql = text("""
+                INSERT INTO dbo.SO_LIEU_CHECK_SALES_DAILY (
+                    DVCS, TEN_NHAHANG, TONGTIEN_SV, SL_KHACH_SV, NGAY_SALE, ACTIVE, NOTE, TRANGTHAI, CREATED_AT, UPDATED_AT
+                ) VALUES (
+                    :dvcs, :ten_nh, :tongtien_sv, :sl_khach_sv, :ngay_sale, 1, :note, :trangthai, GETDATE(), GETDATE()
+                )
+            """)
+
+            for item in rows:
+                dvcs = str(item[0]).strip() if item[0] is not None else ""
+                ten_nhahang = str(item[1]).strip() if item[1] is not None else ""
+                sl_khach = int(item[3]) if item[3] is not None else 0
+                tong_tien = float(item[17]) if item[17] is not None else 0.0
+
+                total_sales_sum += tong_tien
+                total_guests_sum += sl_khach
+                if tong_tien > 0:
+                    success_count += 1
+
+                conn.execute(
+                    insert_sql,
+                    {
+                        "dvcs": dvcs,
+                        "ten_nh": ten_nhahang,
+                        "tongtien_sv": f"{tong_tien:.4f}",
+                        "sl_khach_sv": str(sl_khach),
+                        "ngay_sale": date_str,
+                        "note": "Lấy từ Server RK7" if tong_tien > 0 else "Ca thiếu / Chưa có sales",
+                        "trangthai": "DA_LAY_RK7" if tong_tien > 0 else "THIEU_CA"
+                    }
+                )
+
+            # 3. Update or Insert into TOTAL_SALES_DAILY
+            check_total_sql = text("SELECT id FROM dbo.TOTAL_SALES_DAILY WHERE CAST(NGAY AS DATE) = :dt")
+            existing_id = conn.execute(check_total_sql, {"dt": date_str}).scalar()
+
+            int_sales_rounded = int(round(total_sales_sum))
+            if existing_id:
+                conn.execute(
+                    text("""
+                        UPDATE dbo.TOTAL_SALES_DAILY 
+                        SET TOTAL_SALE = :sale, TOTAL_TC = :tc, ACTIVE = 1 
+                        WHERE id = :id
+                    """),
+                    {"sale": str(int_sales_rounded), "tc": str(total_guests_sum), "id": existing_id}
+                )
+            else:
+                conn.execute(
+                    text("""
+                        INSERT INTO dbo.TOTAL_SALES_DAILY (NGAY, TOTAL_SALE, TOTAL_TC, ACTIVE, CREATED_AT)
+                        VALUES (:ngay, :sale, :tc, 1, GETDATE())
+                    """),
+                    {"ngay": f"{date_str} 00:00:00", "sale": str(int_sales_rounded), "tc": str(total_guests_sum)}
+                )
+
+            conn.commit()
+
+        logger.info(
+            "Đã đồng bộ thành công %d nhà hàng (%d có doanh số, Tổng tiền: %s VNĐ, Tổng khách: %d)",
+            total_restaurants, success_count, f"{total_sales_sum:,.0f}", total_guests_sum
+        )
+
+        return {
+            "target_date": date_str,
+            "total_restaurants": total_restaurants,
+            "success_count": success_count,
+            "total_sales": total_sales_sum,
+            "total_guests": total_guests_sum,
+            "status": "success",
+            "message": f"Đồng bộ thành công {total_restaurants} nhà hàng. Tổng sales: {total_sales_sum:,.0f} VNĐ, Tổng khách: {total_guests_sum:,}."
+        }
+
+
+sales_sync_service = SalesSyncService()

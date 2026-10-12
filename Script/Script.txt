@@ -1,0 +1,54 @@
+﻿Tat het python con sot : taskkill /F /IM python.exe
+Check Loi : cd C:\DUNGIT\IT_Project_Management_New\backend
+.venv\Scripts\python.exe run.py
+
+C:\DUNGIT\IT_Project_Management_New\nssm-2.24\win64\nssm.exe restart ITBackend
+Khởi động service	nssm start ITBackend
+Dừng service:	nssm stop ITBackend
+Khởi động lại service:	nssm restart ITBackend
+Xem trạng thái (Running/Stopped):	nssm status ITBackend
+Mở lại bảng cấu hình để sửa:	nssm edit ITBackend
+Xóa hẳn service:	nssm remove ITBackend confirm
+
+
+---------------
+Cài đặt thư viện bổ sung lẻ : 
+cd C:\DUNGIT\IT_Project_Management_New\backend
+.venv\Scripts\pip.exe install httpx matplotlib pillow 
+.venv\Scripts\pip.exe install --force-reinstall playwright
+.venv\Scripts\pip install pymongo
+.venv\Scripts\python.exe -m playwright install chromium
+
+---------------
+
+
+Chạy thử backend : .venv\Scripts\python.exe run.py
+
+
+
+
+---------------
+Cài đặt thư viện hàng loạt : 
+cd C:\DUNGIT\IT_Project_Management_New\backend
+.venv\Scripts\pip.exe install -r requirements.txt
+------------------
+
+
+
+
+--------------
+Tạo môi trường cho dự án:
+cd C:\IT_Project_Management_New\backend
+python -m venv .venv
+.venv\Scripts\pip.exe install -r requirements.txt
+--------------
+
+
+
+----------------
+Build frontend chạy , mở powershell:
+
+cd "d:\Z.Dung_luu_rieng\LAPTRINH\IT_Project_Management_New\frontend"
+npm run build
+
+

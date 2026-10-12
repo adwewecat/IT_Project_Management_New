@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+backend/.venv/
+.venv/
+env/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node & Frontend
+frontend/node_modules/
+node_modules/
+frontend/dist/
+dist/
+.pnpm-debug.log*
+
+# Environment & local files
+*.env.local
+*.env.*.local
+.DS_Store
+Thumbs.db
+
+# IDE & Editor
+.vscode/
+.idea/
+*.suo
+*.user
+*.tsbuildinfo
+*.log

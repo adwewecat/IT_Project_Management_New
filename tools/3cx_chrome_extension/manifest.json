@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "3CX Hotline Connector (ITPM)",
+  "version": "1.0.0",
+  "description": "Tu dong bat su kien cuoc goi 3CX tren trinh duyet va dong bo ve he thong IT Project Management ma khong can chay file .bat",
+  "icons": {
+    "48": "icon48.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "3CX Hotline Connector"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://ggg.ringbot.co:5001/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://ggg.ringbot.co:5001/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

@@ -1,0 +1,438 @@
+@import './variables.css';
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--font-family);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scrollbar-gutter: stable;
+}
+
+#root {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color-dark);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Dedicated prominent scrollbar for horizontal dual-scroll tables */
+.top-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 var(--bg-secondary);
+}
+
+.top-scrollbar::-webkit-scrollbar {
+  height: 10px;
+}
+
+.top-scrollbar::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+.top-scrollbar::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 5px;
+}
+
+.top-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary, #F5B800);
+}
+
+/* Spin animation for loading indicators */
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ========================================================
+   CHẾ ĐỘ TỐI (DARK MODE) - GLOBAL OVERRIDES
+   ======================================================== */
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Inputs & Form Controls */
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--text-muted) !important;
+}
+
+[data-theme="dark"] option {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+/* Tables */
+[data-theme="dark"] table {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] thead th {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] tbody td {
+  border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] tbody tr:hover td {
+  background-color: var(--bg-hover) !important;
+}
+
+/* Hardcoded white buttons override */
+[data-theme="dark"] button[style*="rgb(255, 255, 255)"],
+[data-theme="dark"] button[style*="#ffffff"],
+[data-theme="dark"] button[style*="#FFFFFF"] {
+  background-color: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+
+/* Hardcoded white cards/containers override */
+[data-theme="dark"] div[style*="background-color: rgb(255, 255, 255)"],
+[data-theme="dark"] div[style*="background-color: #ffffff"],
+[data-theme="dark"] div[style*="background-color: #FFFFFF"],
+[data-theme="dark"] div[style*="background: rgb(255, 255, 255)"],
+[data-theme="dark"] div[style*="background: #ffffff"],
+[data-theme="dark"] div[style*="background: #FFFFFF"] {
+  background-color: var(--bg-card) !important;
+}
+
+/* Hardcoded light gray badges/chips override */
+[data-theme="dark"] [style*="background-color: rgb(243, 244, 246)"],
+[data-theme="dark"] [style*="background-color: #F3F4F6"],
+[data-theme="dark"] [style*="background-color: #f3f4f6"],
+[data-theme="dark"] [style*="background: rgb(243, 244, 246)"],
+[data-theme="dark"] [style*="background: #F3F4F6"],
+[data-theme="dark"] [style*="background: #f3f4f6"] {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-secondary) !important;
+}
+
+/* Hardcoded yellow alerts/tags */
+[data-theme="dark"] [style*="background-color: rgb(254, 252, 232)"],
+[data-theme="dark"] [style*="background-color: #FEFCE8"],
+[data-theme="dark"] [style*="background-color: #fefce8"] {
+  background-color: rgba(245, 184, 0, 0.14) !important;
+  color: #FDE68A !important;
+  border-color: rgba(245, 184, 0, 0.3) !important;
+}
+
+/* Hardcoded white table rows override */
+[data-theme="dark"] tr[style*="rgb(255, 255, 255)"],
+[data-theme="dark"] tr[style*="#ffffff"],
+[data-theme="dark"] tr[style*="#FFFFFF"] {
+  background-color: var(--bg-card) !important;
+}
+
+[data-theme="dark"] tr[style*="rgb(250, 250, 250)"],
+[data-theme="dark"] tr[style*="#fafafa"],
+[data-theme="dark"] tr[style*="#FAFAFA"],
+[data-theme="dark"] tr[style*="rgb(249, 250, 251)"],
+[data-theme="dark"] tr[style*="#f9fafb"],
+[data-theme="dark"] tr[style*="#F9FAFB"] {
+  background-color: var(--bg-secondary) !important;
+}
+
+/* Ensure solid primary button always has crisp black text */
+[data-theme="dark"] button[style*="background-color: var(--color-primary)"],
+[data-theme="dark"] button[style*="background-color: #F5B800"],
+[data-theme="dark"] button[style*="background-color: rgb(245, 184, 0)"] {
+  color: #111827 !important;
+}
+
+[data-theme="dark"] button[style*="background-color: var(--color-primary)"] span,
+[data-theme="dark"] button[style*="background-color: #F5B800"] span,
+[data-theme="dark"] button[style*="background-color: rgb(245, 184, 0)"] span {
+  color: #111827 !important;
+}
+
+/* ========================================================
+   HIỆU ỨNG RÊ CHUỘT (HOVER POP-OUT & HIGHLIGHT EFFECT)
+   Làm nổi bật dòng, chữ to rõ và dễ thao tác, không đè nút
+   ======================================================== */
+
+/* 1. Sidebar Menu Item Hover Effect */
+.sidebar-interactive-item {
+  position: relative;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+              background-color 0.15s ease,
+              box-shadow 0.18s ease,
+              color 0.15s ease !important;
+  transform-origin: left center;
+  z-index: 1;
+}
+
+.sidebar-interactive-item:hover {
+  transform: translateX(4px) scale(1.025);
+  z-index: 15 !important;
+  background-color: #FEF3C7 !important;
+  color: #92400E !important;
+  box-shadow: 0 4px 14px -2px rgba(217, 119, 6, 0.22), 0 2px 6px -1px rgba(0, 0, 0, 0.08) !important;
+  font-weight: 700 !important;
+}
+
+.sidebar-interactive-item:hover svg {
+  transform: scale(1.18);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  color: #D97706 !important;
+}
+
+[data-theme="dark"] .sidebar-interactive-item:hover {
+  background-color: rgba(245, 184, 0, 0.18) !important;
+  color: #FBBF24 !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* Sub-items inside accordion */
+.sidebar-sub-item {
+  position: relative;
+  transition: transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1),
+              background-color 0.15s ease,
+              box-shadow 0.16s ease,
+              color 0.15s ease !important;
+  transform-origin: left center;
+  z-index: 1;
+}
+
+.sidebar-sub-item:hover {
+  transform: translateX(3px) scale(1.02);
+  z-index: 15 !important;
+  background-color: #FEF3C7 !important;
+  color: #B45309 !important;
+  box-shadow: 0 3px 10px -1px rgba(217, 119, 6, 0.18) !important;
+  font-weight: 700 !important;
+}
+
+[data-theme="dark"] .sidebar-sub-item:hover {
+  background-color: rgba(245, 184, 0, 0.15) !important;
+  color: #FBBF24 !important;
+}
+
+.sidebar-interactive-item:hover span,
+.sidebar-sub-item:hover span {
+  font-weight: 700 !important;
+  color: inherit !important;
+}
+
+/* 2. Table Rows Hover Pop-out Effect */
+.interactive-table-row {
+  position: relative;
+  transition: transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1),
+              background-color 0.15s ease,
+              box-shadow 0.16s ease !important;
+  transform-origin: center center;
+  z-index: 1;
+}
+
+.interactive-table-row:hover {
+  transform: scale(1.008);
+  z-index: 10 !important;
+  background-color: #F0FDF4 !important;
+  box-shadow: inset 4px 0 0 #10B981, 0 6px 18px rgba(0, 0, 0, 0.08) !important;
+}
+
+.interactive-table-row:hover td {
+  background-color: #F0FDF4 !important;
+  color: #0F172A !important;
+}
+
+.interactive-table-row:hover .table-action-btn {
+  transform: scale(1.08);
+  box-shadow: 0 3px 8px rgba(79, 70, 229, 0.35) !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+[data-theme="dark"] .interactive-table-row:hover {
+  background-color: rgba(16, 185, 129, 0.12) !important;
+  box-shadow: inset 4px 0 0 #10B981, 0 6px 18px rgba(0, 0, 0, 0.35) !important;
+}
+
+[data-theme="dark"] .interactive-table-row:hover td {
+  background-color: rgba(16, 185, 129, 0.12) !important;
+}
+
+/* ========================================================
+   RESPONSIVE DESIGN & MOBILE DRAWER NAVIGATION
+   ======================================================== */
+@media (max-width: 768px) {
+  /* Header adjustments on mobile */
+  .mobile-sidebar-toggle-btn {
+    display: inline-flex !important;
+  }
+
+  .brand-version-badge {
+    display: none !important;
+  }
+
+  .header-container {
+    padding: 0 12px !important;
+  }
+
+  .header-user-info {
+    display: none !important;
+  }
+
+  .header-user-section {
+    gap: 6px !important;
+  }
+
+  .header-btn-text,
+  .header-theme-text {
+    display: none !important;
+  }
+
+  /* Sidebar off-canvas mobile drawer */
+  .app-sidebar {
+    position: fixed !important;
+    top: 64px !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: 280px !important;
+    height: calc(100vh - 64px) !important;
+    z-index: 999 !important;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25) !important;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  }
+
+  .app-sidebar.mobile-closed {
+    transform: translateX(-100%) !important;
+    pointer-events: none !important;
+  }
+
+  .app-sidebar.mobile-open {
+    transform: translateX(0) !important;
+    pointer-events: auto !important;
+  }
+
+  .sidebar-mobile-backdrop {
+    position: fixed;
+    top: 64px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 998;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+
+  /* Main content padding on mobile */
+  .app-main-content {
+    padding: 12px 10px !important;
+  }
+
+  /* Responsive touch-friendly scrolling for tables */
+  table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Ensure inputs and buttons don't blow out on small screens */
+  input, select, textarea {
+    font-size: 16px !important; /* Prevents auto-zoom on iOS */
+  }
+}
+
+@media (min-width: 769px) {
+  .sidebar-mobile-backdrop {
+    display: none !important;
+  }
+
+  .app-sidebar {
+    transform: none !important;
+  }
+}
+
+/* Optimized Global Modal Styles & Animation */
+@keyframes modalSlideIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.app-modal-container {
+  animation: modalSlideIn 0.08s ease-out;
+}
+
+.memo-table-row {
+  transition: background-color 0.1s ease;
+  cursor: pointer;
+}
+
+.memo-table-row:hover {
+  background-color: rgba(37, 99, 235, 0.08) !important;
+}
+
+@media (max-width: 640px) {
+  .app-modal-overlay {
+    padding: 10px 8px !important;
+  }
+  .app-modal-container {
+    max-height: 94vh !important;
+    border-radius: 14px !important;
+  }
+  .app-modal-header {
+    padding: 12px 16px !important;
+  }
+  .app-modal-title {
+    font-size: 16px !important;
+  }
+  .app-modal-body {
+    padding: 14px 12px !important;
+  }
+  .app-modal-footer {
+    padding: 12px 14px !important;
+  }
+}

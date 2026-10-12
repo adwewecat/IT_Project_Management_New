@@ -1,0 +1,12 @@
+{
+  "enabled_roles": [
+    "admin",
+    "helpdesk"
+  ],
+  "allowed_users": [
+    "dung.nguyenanh",
+    "admin"
+  ],
+  "allow_all": false,
+  "agent_server_url": "http://172.16.8.25:8000"
+}

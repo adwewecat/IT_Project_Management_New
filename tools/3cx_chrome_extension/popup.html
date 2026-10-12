@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>3CX Hotline Connector</title>
+  <style>
+    body {
+      width: 320px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 14px;
+      background: #f8fafc;
+      color: #1e293b;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .header h3 {
+      margin: 0;
+      font-size: 15px;
+      color: #0f172a;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #dcfce7;
+      color: #15803d;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #16a34a;
+    }
+    .field {
+      margin-bottom: 12px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+      margin-bottom: 4px;
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 7px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+    }
+    input:focus {
+      border-color: #2563eb;
+    }
+    button {
+      width: 100%;
+      padding: 8px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #1d4ed8;
+    }
+    .msg {
+      font-size: 11.5px;
+      color: #16a34a;
+      margin-top: 6px;
+      text-align: center;
+      display: none;
+    }
+    .info {
+      font-size: 11.5px;
+      color: #64748b;
+      margin-top: 10px;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h3>📞 3CX Hotline Connector</h3>
+  </div>
+  <div class="status-badge">
+    <div class="status-dot"></div> Sẵn sàng đồng bộ cuộc gọi
+  </div>
+  <div class="field">
+    <label>Server ITPM URL:</label>
+    <input type="text" id="serverUrl" placeholder="http://192.168.1.50:8000" />
+  </div>
+  <button id="saveBtn">Lưu Cấu Hình</button>
+  <div id="msg" class="msg">✓ Đã lưu cấu hình thành công!</div>
+  <div class="info">
+    💡 Tiện ích chạy trực tiếp trên tab 3CX Web Client. Không cần mở file .bat hay phần mềm nào khác.
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

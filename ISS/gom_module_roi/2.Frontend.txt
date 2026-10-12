@@ -1,0 +1,311 @@
+1. TypeScript Definition: frontend/src/types/deviceBorrow.ts
+typescript
+export interface DeviceBorrowItem {
+  id: number;
+  device_name: string;
+  borrower_name: string;
+  purpose?: string;
+  status: 'PENDING' | 'APPROVED' | 'RETURNED';
+  borrow_date?: string;
+  return_date?: string;
+  note?: string;
+  active: boolean;
+}
+export interface DeviceBorrowCreatePayload {
+  device_name: string;
+  borrower_name: string;
+  purpose?: string;
+  note?: string;
+}
+export interface DeviceBorrowListResponse {
+  items: DeviceBorrowItem[];
+  total: number;
+}
+2. Service API: frontend/src/services/deviceBorrowService.ts
+typescript
+import apiClient from './api';
+import {
+  DeviceBorrowItem,
+  DeviceBorrowCreatePayload,
+  DeviceBorrowListResponse,
+} from '../types/deviceBorrow';
+export const deviceBorrowService = {
+  async getBorrows(params: {
+    status?: string;
+    search?: string;
+    page?: number;
+    page_size?: number;
+  } = {}): Promise<DeviceBorrowListResponse> {
+    const response = await apiClient.get<DeviceBorrowListResponse>('/device-borrow', {
+      params,
+    });
+    return response.data;
+  },
+  async createBorrow(payload: DeviceBorrowCreatePayload): Promise<DeviceBorrowItem> {
+    const response = await apiClient.post<DeviceBorrowItem>('/device-borrow', payload);
+    return response.data;
+  },
+  async updateBorrow(id: number, payload: Partial<DeviceBorrowItem>): Promise<DeviceBorrowItem> {
+    const response = await apiClient.put<DeviceBorrowItem>(`/device-borrow/${id}`, payload);
+    return response.data;
+  },
+  async deleteBorrow(id: number): Promise<void> {
+    await apiClient.delete(`/device-borrow/${id}`);
+  },
+};
+3. Modal Form: frontend/src/components/device-borrow/DeviceBorrowModal.tsx
+Sử dụng các Component UI lõi có sẵn: Modal, Input, Button.
+
+tsx
+import React, { useState } from 'react';
+import { Modal } from '../ui/Modal';
+import { Input } from '../ui/Input';
+import { Button } from '../ui/Button';
+import { DeviceBorrowCreatePayload } from '../../types/deviceBorrow';
+interface Props {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (data: DeviceBorrowCreatePayload) => Promise<void>;
+}
+export const DeviceBorrowModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
+  const [deviceName, setDeviceName] = useState('');
+  const [borrowerName, setBorrowerName] = useState('');
+  const [purpose, setPurpose] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deviceName.trim() || !borrowerName.trim()) return;
+    try {
+      setIsSubmitting(true);
+      await onSubmit({
+        device_name: deviceName.trim(),
+        borrower_name: borrowerName.trim(),
+        purpose: purpose.trim(),
+      });
+      onClose();
+      setDeviceName('');
+      setBorrowerName('');
+      setPurpose('');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Tạo phiếu mượn thiết bị" maxWidth="500px">
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <Input
+          label="Tên thiết bị *"
+          value={deviceName}
+          onChange={(e) => setDeviceName(e.target.value)}
+          placeholder="Ví dụ: Laptop Dell XPS 15..."
+          required
+        />
+        <Input
+          label="Người mượn *"
+          value={borrowerName}
+          onChange={(e) => setBorrowerName(e.target.value)}
+          placeholder="Ví dụ: Nguyen Van A..."
+          required
+        />
+        <div>
+          <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>
+            Mục đích
+          </label>
+          <textarea
+            rows={3}
+            value={purpose}
+            onChange={(e) => setPurpose(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid var(--border-color)',
+              borderRadius: 'var(--radius-md)',
+              fontFamily: 'inherit',
+            }}
+          />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
+            Hủy
+          </Button>
+          <Button type="submit" variant="primary" isLoading={isSubmitting}>
+            Lưu phiếu
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+};
+4. Main Page: frontend/src/pages/device-borrow/DeviceBorrowPage.tsx
+tsx
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, Search, RefreshCw, Trash2, CheckCircle } from 'lucide-react';
+import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { Alert } from '../../components/ui/Alert';
+import { DeviceBorrowItem } from '../../types/deviceBorrow';
+import { deviceBorrowService } from '../../services/deviceBorrowService';
+import { DeviceBorrowModal } from '../../components/device-borrow/DeviceBorrowModal';
+import { useAuth } from '../../contexts/AuthContext';
+import { checkIsAppRole } from '../../utils/authUtils';
+export const DeviceBorrowPage: React.FC = () => {
+  const { user } = useAuth();
+  const isAppRole = checkIsAppRole(user);
+  const [items, setItems] = useState<DeviceBorrowItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const fetchData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const res = await deviceBorrowService.getBorrows({ search });
+      setItems(res.items);
+      setTotal(res.total);
+    } catch (err: any) {
+      setAlert({ type: 'error', message: 'Không thể tải danh sách thiết bị mượn' });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [search]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+  const handleCreate = async (payload: any) => {
+    await deviceBorrowService.createBorrow(payload);
+    setAlert({ type: 'success', message: 'Đã tạo yêu cầu mượn thiết bị thành công!' });
+    fetchData();
+  };
+  const handleApprove = async (id: number) => {
+    await deviceBorrowService.updateBorrow(id, { status: 'APPROVED' });
+    setAlert({ type: 'success', message: 'Đã duyệt yêu cầu mượn.' });
+    fetchData();
+  };
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa mục này?')) return;
+    await deviceBorrowService.deleteBorrow(id);
+    setAlert({ type: 'success', message: 'Đã xóa bản ghi.' });
+    fetchData();
+  };
+  return (
+    <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* Header bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 style={{ fontSize: '20px', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+            Quản Lý Mượn Thiết Bị
+          </h1>
+          <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            Tổng số: {total} thiết bị
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <Button variant="secondary" onClick={fetchData} leftIcon={<RefreshCw size={16} />}>
+            Làm mới
+          </Button>
+          <Button variant="primary" onClick={() => setIsModalOpen(true)} leftIcon={<Plus size={16} />}>
+            Tạo phiếu mới
+          </Button>
+        </div>
+      </div>
+      {alert && <Alert type={alert.type} message={alert.message} onClose={() => setAlert(null)} />}
+      {/* Filter toolbar */}
+      <Card style={{ padding: '16px' }}>
+        <div style={{ maxWidth: '350px' }}>
+          <Input
+            placeholder="Tìm theo tên máy hoặc người mượn..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            leftIcon={<Search size={16} />}
+          />
+        </div>
+      </Card>
+      {/* Table */}
+      <Card style={{ overflow: 'hidden', padding: 0 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
+          <thead>
+            <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)' }}>
+              <th style={{ padding: '12px 16px', fontWeight: 600 }}>ID</th>
+              <th style={{ padding: '12px 16px', fontWeight: 600 }}>Tên thiết bị</th>
+              <th style={{ padding: '12px 16px', fontWeight: 600 }}>Người mượn</th>
+              <th style={{ padding: '12px 16px', fontWeight: 600 }}>Trạng thái</th>
+              <th style={{ padding: '12px 16px', fontWeight: 600 }}>Mục đích</th>
+              <th style={{ padding: '12px 16px', fontWeight: 600, textAlign: 'right' }}>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                  Đang tải dữ liệu...
+                </td>
+              </tr>
+            ) : items.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                  Không tìm thấy bản ghi nào.
+                </td>
+              </tr>
+            ) : (
+              items.map((item) => (
+                <tr key={item.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <td style={{ padding: '12px 16px' }}>#{item.id}</td>
+                  <td style={{ padding: '12px 16px', fontWeight: 600 }}>{item.device_name}</td>
+                  <td style={{ padding: '12px 16px' }}>{item.borrower_name}</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <span
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        backgroundColor: item.status === 'APPROVED' ? 'var(--color-success-bg)' : 'var(--bg-secondary)',
+                        color: item.status === 'APPROVED' ? 'var(--color-success)' : 'var(--text-secondary)',
+                      }}
+                    >
+                      {item.status}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{item.purpose || '—'}</td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                      {isAppRole && item.status === 'PENDING' && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleApprove(item.id)}
+                          title="Duyệt"
+                        >
+                          <CheckCircle size={14} style={{ color: 'var(--color-success)' }} />
+                        </Button>
+                      )}
+                      {isAppRole && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleDelete(item.id)}
+                          title="Xóa"
+                        >
+                          <Trash2 size={14} style={{ color: 'var(--color-error)' }} />
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </Card>
+      <DeviceBorrowModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleCreate}
+      />
+    </div>
+  );
+};

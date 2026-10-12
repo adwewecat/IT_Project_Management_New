@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>BÁO CÁO DOANH THU SALES RK7 - Golden Gate Design System</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    :root {
+      --color-primary: #F5B800;
+      --text-primary: #111827;
+      --border-color: #E5E7EB;
+    }
+  </style>
+</head>
+<body class="bg-[#F8F9FA] text-[#111827] p-6">
+  <div class="max-w-6xl mx-auto space-y-4">
+
+    <!-- TOP HEADER -->
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-extrabold text-[#111827] tracking-tight">
+          BÁO CÁO DOANH THU SALES RK7 - NGÀY 07/09/2026
+        </h1>
+        <p class="text-xs font-bold text-gray-500 uppercase tracking-widest mt-0.5">
+          GOLDEN GATE RESTAURANT GROUP • IT MIỀN NAM
+        </p>
+      </div>
+    </div>
+
+    <!-- ROW 1: 2 HERO CARDS + 1 SECONDARY BOX -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+      <!-- HERO CARD 1: DOANH THU HÔM NAY -->
+      <div class="lg:col-span-5 bg-white p-6 rounded-xl border-2 border-[#F5B800] shadow-sm flex flex-col justify-between">
+        <p class="text-xs font-bold uppercase tracking-wider text-gray-600">
+          DOANH THU HÔM NAY (07/09/2026)
+        </p>
+        <div class="my-2">
+          <p class="text-4xl font-black tracking-tight text-[#111827]">
+            14.85 <span class="text-2xl font-bold text-[#F5B800]">TỶ VNĐ</span>
+          </p>
+        </div>
+        <p class="text-xs text-gray-500 font-medium">
+          Dữ liệu chốt từ RK7 Server lúc 09:00 (309 nhà hàng)
+        </p>
+      </div>
+
+      <!-- HERO CARD 2: TỔNG LƯỢNG KHÁCH -->
+      <div class="lg:col-span-4 bg-white p-6 rounded-xl border border-gray-200 border-t-4 border-t-[#F5B800] shadow-sm flex flex-col justify-between">
+        <p class="text-xs font-bold uppercase tracking-wider text-gray-600">
+          TỔNG LƯỢNG KHÁCH HÔM NAY
+        </p>
+        <div class="my-2">
+          <p class="text-4xl font-black tracking-tight text-[#111827]">
+            38,420 <span class="text-2xl font-bold text-gray-700">KHÁCH</span>
+          </p>
+        </div>
+        <p class="text-xs text-gray-500 font-medium">
+          (TB 386,500 đ/khách)
+        </p>
+      </div>
+
+      <!-- SECONDARY BOX: THAM CHIẾU SO SÁNH -->
+      <div class="lg:col-span-3 bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
+        <p class="text-[11px] font-bold uppercase tracking-wider text-gray-500 text-center border-b border-gray-100 pb-1.5">
+          THAM CHIẾU SO SÁNH
+        </p>
+        <div class="space-y-2 my-2 text-xs font-semibold">
+          <div class="p-2 rounded-lg bg-[#F8F9FA] flex items-center justify-between">
+            <span class="text-gray-600">Hôm qua (06/09):</span>
+            <span class="font-bold text-[#111827]">13.68 Tỷ <span class="text-emerald-600 font-bold">(+8.5% ↑)</span></span>
+          </div>
+          <div class="p-2 rounded-lg bg-[#F8F9FA] flex items-center justify-between">
+            <span class="text-gray-600">Cùng ngày tuần trước (31/08):</span>
+            <span class="font-bold text-[#111827]">13.22 Tỷ <span class="text-emerald-600 font-bold">(+12.3% ↑)</span></span>
+          </div>
+        </div>
+        <p class="text-[10px] text-gray-400 text-center">So sánh doanh số các kỳ trước</p>
+      </div>
+    </div>
+
+    <!-- ROW 2: DAILY BAR CHART WITH EXPLICIT NUMBERS ON TOP OF EVERY BAR -->
+    <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xs font-bold text-[#111827] uppercase tracking-wider">
+          BIỂU ĐỒ DOANH SỐ & LƯỢNG KHÁCH THEO NGÀY
+        </h2>
+        <div class="flex items-center space-x-4 text-xs font-bold">
+          <span class="flex items-center"><span class="w-3.5 h-3.5 rounded bg-[#F5B800] mr-1.5 inline-block"></span> Sales (Tỷ VNĐ)</span>
+          <span class="flex items-center"><span class="w-3.5 h-3.5 rounded bg-[#16A34A] mr-1.5 inline-block"></span> Khách (Nghìn TC)</span>
+        </div>
+      </div>
+
+      <!-- Chart Bars With Explicit Floating Labels on Top -->
+      <div class="grid grid-cols-7 gap-3 items-end h-56 pt-6 pb-2 border-b border-gray-200">
+        <!-- T2 (01/09) -->
+        <div class="flex flex-col items-center h-full justify-end">
+          <div class="flex items-end justify-center space-x-1.5 w-full">
+            <div class="flex flex-col items-center">
+              <span class="text-[11px] font-black text-[#B48200] mb-1">1.8 Tỷ</span>
+              <div class="w-7 bg-[#F5B800] rounded-t shadow-sm" style="height: 65px;"></div>
+            </div>
+            <div class="flex flex-col items-center">
+              <span class="text-[11px] font-black text-[#166534] mb-1">4.8k</span>
+              <div class="w-7 bg-[#16A34A] rounded-t shadow-sm" style="height: 105px;"></div>
+            </div>
+          </div>
+          <span class="text-xs font-bold text-gray-700 mt-2">T2 (01/09)</span>
+        </div>
+
+        <!-- T3 (02/09) -->
+        <div class="flex flex-col items-center h-full justify-end">
+          <div class="flex items-end justify-center space-x-1.5 w-full">
+            <div class="flex flex-col items-center">
+              <span class="text-[11px] font-black text-[#B48200] mb-1">1.9 Tỷ</span>
+              <div class="w-7 bg-[#F5B800] rounded-t shadow-sm" style="height: 70px;"></div>
+            </div>
+            <div class="flex flex-col items-center">
+              <span class="text-[11px] font-black text-[#166534] mb-1">5.0k</span>
+              <div class="w-7 bg-[#16A34A] rounded-t shadow-sm" style="height: 110px;"></div>
+            </div>
+          </div>
+          <span class="text-xs font-bold text-gray-700 mt-2">T3 (02/09)</span>
+        </div>
+
+        <!-- T4 (03/09) -->
+        <div class="flex flex-col items-center h-full justify-end">
+          <div class="flex items-end justify-center space-x-1.5 w-full">
+            <div class="flex flex-col items-center">
+              <span class="text-[11px] font-black text-[#B48200] mb-1">2.1 Tỷ</span>
+              <div class="w-7 bg-[#F5B800] rounded-t shadow-sm" style="height: 78px;"></div>
+            </div>
+            <div class="flex flex-col items-center">
+              <span class="text-[11px] font-black text-[#166534] mb-1">5.5k</span>
+              <div class="w-7 bg-[#16A34A] rounded-t shadow-sm" style="height: 120px;"></div>
+            </div>
+          </div>
+          <span class="text-xs font-bold text-gray-700 mt-2">T4 (03/09)</span>
+        </div>
+
+        <!-- T5 (04/09) -->
+        <div class="flex flex-col items-center h-full justify-end">
+          <div class="flex items-end justify-center space-x-1.5 w-full">
+            <div class="flex flex-col items-center">
+              <span class="text-[11px] font-black text-[#B48200] mb-1">2.0 Tỷ</span>
+              <div class="w-7 bg-[#F5B800] rounded-t shadow-sm" style="height: 75px;"></div>
+            </div>
+            <div class="flex flex-col items-center">
+              <span class="text-[11px] font-black text-[#166534] mb-1">5.2k</span>
+              <div class="w-7 bg-[#16A34A] rounded-t shadow-sm" style="height: 115px;"></div>
+            </div>
+          </div>
+          <span class="text-xs font-bold text-gray-700 mt-2">T5 (04/09)</span>
+        </div>
+
+        <!-- T6 (05/09) -->
+        <div class="flex flex-col items-center h-full justify-end">
+          <div class="flex items-end justify-center space-x-1.5 w-full">
+            <div class="flex flex-col items-center">
+              <span class="text-[11px] font-black text-[#B48200] mb-1">2.3 Tỷ</span>
+              <div class="w-7 bg-[#F5B800] rounded-t shadow-sm" style="height: 85px;"></div>
+            </div>
+            <div class="flex flex-col items-center">
+              <span class="text-[11px] font-black text-[#166534] mb-1">6.0k</span>
+              <div class="w-7 bg-[#16A34A] rounded-t shadow-sm" style="height: 135px;"></div>
+            </div>
+          </div>
+          <span class="text-xs font-bold text-gray-700 mt-2">T6 (05/09)</span>
+        </div>
+
+        <!-- T7 (06/09) -->
+        <div class="flex flex-col items-center h-full justify-end">
+          <div class="flex items-end justify-center space-x-1.5 w-full">
+            <div class="flex flex-col items-center">
+              <span class="text-[11px] font-black text-[#B48200] mb-1">2.8 Tỷ</span>
+              <div class="w-7 bg-[#F5B800] rounded-t shadow-sm" style="height: 110px;"></div>
+            </div>
+            <div class="flex flex-col items-center">
+              <span class="text-[11px] font-black text-[#166534] mb-1">7.5k</span>
+              <div class="w-7 bg-[#16A34A] rounded-t shadow-sm" style="height: 165px;"></div>
+            </div>
+          </div>
+          <span class="text-xs font-bold text-gray-700 mt-2">T7 (06/09) ★</span>
+        </div>
+
+        <!-- CN (07/09) -->
+        <div class="flex flex-col items-center h-full justify-end">
+          <div class="flex items-end justify-center space-x-1.5 w-full">
+            <div class="flex flex-col items-center">
+              <span class="text-[11px] font-black text-[#B48200] mb-1">2.7 Tỷ</span>
+              <div class="w-7 bg-[#F5B800] rounded-t shadow-sm" style="height: 105px;"></div>
+            </div>
+            <div class="flex flex-col items-center">
+              <span class="text-[11px] font-black text-[#166534] mb-1">7.2k</span>
+              <div class="w-7 bg-[#16A34A] rounded-t shadow-sm" style="height: 160px;"></div>
+            </div>
+          </div>
+          <span class="text-xs font-bold text-gray-700 mt-2">CN (07/09) ★</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ROW 3: TOP 5 NHÀ HÀNG & DOANH THU THEO BRAND -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <!-- TOP 5 NHÀ HÀNG -->
+      <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-3">
+        <h3 class="text-xs font-bold text-[#111827] uppercase tracking-wider">
+          TOP 5 NHÀ HÀNG DOANH THU CAO NHẤT
+        </h3>
+        <div class="divide-y divide-gray-100 text-xs font-semibold">
+          <div class="py-2.5 flex items-center justify-between">
+            <span><span class="w-5 inline-block text-center font-bold bg-[#FFFBEA] text-[#111827] border border-[#F5B800] rounded mr-2">1</span> Gogi Aeon Tân Phú</span>
+            <span class="font-bold text-[#111827]">189 Tr</span>
+          </div>
+          <div class="py-2.5 flex items-center justify-between">
+            <span><span class="w-5 inline-block text-center font-bold bg-[#F8F9FA] text-gray-700 border border-gray-200 rounded mr-2">2</span> Manwah Cao Thắng</span>
+            <span class="font-bold text-[#111827]">110 Tr</span>
+          </div>
+          <div class="py-2.5 flex items-center justify-between">
+            <span><span class="w-5 inline-block text-center font-bold bg-[#F8F9FA] text-gray-700 border border-gray-200 rounded mr-2">3</span> Kichi Vạn Hạnh Mall</span>
+            <span class="font-bold text-[#111827]">98 Tr</span>
+          </div>
+          <div class="py-2.5 flex items-center justify-between">
+            <span><span class="w-5 inline-block text-center font-bold bg-[#F8F9FA] text-gray-700 border border-gray-200 rounded mr-2">4</span> iSushi</span>
+            <span class="font-bold text-[#111827]">89 Tr</span>
+          </div>
+          <div class="py-2.5 flex items-center justify-between">
+            <span><span class="w-5 inline-block text-center font-bold bg-[#F8F9FA] text-gray-700 border border-gray-200 rounded mr-2">5</span> Ashima</span>
+            <span class="font-bold text-[#111827]">76 Tr</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- DOANH THU THEO BRAND -->
+      <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-3">
+        <h3 class="text-xs font-bold text-[#111827] uppercase tracking-wider">
+          DOANH THU THEO BRAND
+        </h3>
+        <div class="space-y-3.5 text-xs font-semibold pt-1">
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-gray-700 font-bold">Gogi House</span>
+              <span class="text-[#111827] font-bold">5.7 Tỷ</span>
+            </div>
+            <div class="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+              <div class="bg-[#F5B800] h-full rounded-full" style="width: 100%;"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-gray-700 font-bold">Kichi</span>
+              <span class="text-[#111827] font-bold">3.6 Tỷ</span>
+            </div>
+            <div class="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+              <div class="bg-[#F5B800] h-full rounded-full" style="width: 63%;"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-gray-700 font-bold">Manwah</span>
+              <span class="text-[#111827] font-bold">2.7 Tỷ</span>
+            </div>
+            <div class="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+              <div class="bg-[#F5B800] h-full rounded-full" style="width: 47%;"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-gray-700 font-bold">iSushi</span>
+              <span class="text-[#111827] font-bold">1.5 Tỷ</span>
+            </div>
+            <div class="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+              <div class="bg-[#F5B800] h-full rounded-full" style="width: 26%;"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-gray-500 font-bold">Khác</span>
+              <span class="text-[#111827] font-bold">1.3 Tỷ</span>
+            </div>
+            <div class="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+              <div class="bg-[#F5B800] h-full rounded-full" style="width: 22%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

@@ -1,0 +1,12 @@
+[
+  {
+    "chucnang": "view_test",
+    "module": "Cột Tùy Biến Bổ Sung",
+    "action": "Xem test (test)"
+  },
+  {
+    "chucnang": "update_test",
+    "module": "Cột Tùy Biến Bổ Sung",
+    "action": "Cập nhật test"
+  }
+]

@@ -1,0 +1,209 @@
+1. backend/app/models/device_borrow.py
+
+from datetime import datetime
+from sqlalchemy import Column, Integer, Unicode, UnicodeText, DateTime, Boolean
+from app.core.database import Base
+
+class DeviceBorrow(Base):
+    __tablename__ = "DEVICE_BORROW"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    device_name = Column(Unicode(255), nullable=False)
+    borrower_name = Column(Unicode(100), nullable=False)
+    purpose = Column(UnicodeText, nullable=True)
+    status = Column(Unicode(50), default="PENDING")  # PENDING | APPROVED | RETURNED
+    borrow_date = Column(DateTime, default=datetime.now)
+    return_date = Column(DateTime, nullable=True)
+    note = Column(UnicodeText, nullable=True)
+    active = Column(Boolean, default=True)
+
+
+
+
+
+2. Schema: backend/app/schemas/device_borrow.py
+from datetime import datetime
+from typing import Optional, List
+from pydantic import BaseModel, Field
+
+class DeviceBorrowBase(BaseModel):
+    device_name: str = Field(..., min_length=1, description="Tên thiết bị mượn")
+    borrower_name: str = Field(..., min_length=1, description="Người mượn")
+    purpose: Optional[str] = None
+    note: Optional[str] = None
+
+class DeviceBorrowCreate(DeviceBorrowBase):
+    pass
+
+class DeviceBorrowUpdate(BaseModel):
+    device_name: Optional[str] = None
+    borrower_name: Optional[str] = None
+    purpose: Optional[str] = None
+    status: Optional[str] = None
+    note: Optional[str] = None
+    return_date: Optional[datetime] = None
+
+class DeviceBorrowItem(DeviceBorrowBase):
+    id: int
+    status: str
+    borrow_date: Optional[datetime] = None
+    return_date: Optional[datetime] = None
+    active: bool
+
+    class Config:
+        from_attributes = True
+
+class DeviceBorrowListResponse(BaseModel):
+    items: List[DeviceBorrowItem]
+    total: int	
+
+
+
+
+
+
+3. Service: backend/app/services/device_borrow_service.py
+from typing import Optional, List, Tuple
+from sqlalchemy.orm import Session
+from sqlalchemy import select, func, desc
+from datetime import datetime
+from app.models.device_borrow import DeviceBorrow
+from app.schemas.device_borrow import DeviceBorrowCreate, DeviceBorrowUpdate
+
+def get_borrows(
+    db: Session,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50
+) -> Tuple[List[DeviceBorrow], int]:
+    stmt = select(DeviceBorrow).where(DeviceBorrow.active == True)
+    
+    if status and status != "ALL":
+        stmt = stmt.where(DeviceBorrow.status == status)
+        
+    if search:
+        s = f"%{search.strip()}%"
+        stmt = stmt.where(
+            (DeviceBorrow.device_name.ilike(s)) | (DeviceBorrow.borrower_name.ilike(s))
+        )
+        
+    # Đếm tổng
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = db.scalar(count_stmt) or 0
+    
+    # Phân trang
+    stmt = stmt.order_by(desc(DeviceBorrow.id)).offset((page - 1) * page_size).limit(page_size)
+    items = list(db.scalars(stmt).all())
+    return items, total
+
+def create_borrow(db: Session, payload: DeviceBorrowCreate) -> DeviceBorrow:
+    item = DeviceBorrow(
+        device_name=payload.device_name,
+        borrower_name=payload.borrower_name,
+        purpose=payload.purpose,
+        note=payload.note,
+        status="PENDING",
+        borrow_date=datetime.now(),
+        active=True
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+def update_borrow(db: Session, borrow_id: int, payload: DeviceBorrowUpdate) -> Optional[DeviceBorrow]:
+    item = db.scalar(select(DeviceBorrow).where(DeviceBorrow.id == borrow_id, DeviceBorrow.active == True))
+    if not item:
+        return None
+    for field, val in payload.model_dump(exclude_unset=True).items():
+        setattr(item, field, val)
+    db.commit()
+    db.refresh(item)
+    return item
+
+def delete_borrow(db: Session, borrow_id: int) -> bool:
+    item = db.scalar(select(DeviceBorrow).where(DeviceBorrow.id == borrow_id))
+    if not item:
+        return False
+    item.active = False  # Soft delete
+    db.commit()
+    return True
+
+
+
+
+
+
+
+
+4.	API Router: backend/app/api/v1/device_borrow.py
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+from app.core.database import get_db
+from app.api.deps import get_current_user, require_app_or_admin
+from app.schemas.auth import UserInfo
+from app.schemas.device_borrow import (
+    DeviceBorrowItem,
+    DeviceBorrowCreate,
+    DeviceBorrowUpdate,
+    DeviceBorrowListResponse
+)
+from app.services import device_borrow_service
+
+# Định nghĩa router riêng biệt
+router = APIRouter(prefix="/device-borrow", tags=["Quản lý Mượn Thiết Bị"])
+
+@router.get("", response_model=DeviceBorrowListResponse)
+def list_borrows(
+    status: Optional[str] = Query(None, description="Lọc theo trạng thái"),
+    search: Optional[str] = Query(None, description="Tìm theo tên máy hoặc người mượn"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user),  # Yêu cầu đăng nhập
+):
+    items, total = device_borrow_service.get_borrows(
+        db=db, status=status, search=search, page=page, page_size=page_size
+    )
+    return DeviceBorrowListResponse(items=items, total=total)
+
+@router.post("", response_model=DeviceBorrowItem, status_code=status.HTTP_201_CREATED)
+def create_borrow(
+    payload: DeviceBorrowCreate,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user),
+):
+    return device_borrow_service.create_borrow(db=db, payload=payload)
+
+@router.put("/{borrow_id}", response_model=DeviceBorrowItem)
+def update_borrow(
+    borrow_id: int,
+    payload: DeviceBorrowUpdate,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_app_or_admin),  # Chỉ IT App hoặc Admin mới được duyệt/sửa
+):
+    item = device_borrow_service.update_borrow(db=db, borrow_id=borrow_id, payload=payload)
+    if not item:
+        raise HTTPException(status_code=404, detail="Không tìm thấy yêu cầu mượn thiết bị.")
+    return item
+
+@router.delete("/{borrow_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_borrow(
+    borrow_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_app_or_admin),
+):
+    success = device_borrow_service.delete_borrow(db=db, borrow_id=borrow_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Không tìm thấy để xóa.")
+    return None
+
+
+
+
+
+
+
+
