@@ -20,9 +20,9 @@ Hệ thống quản lý dự án, vận hành nhà hàng, tích hợp tổng đ�
 
 ### Khởi động nhanh (Windows):
 - Chạy cả hệ thống: Chạy file `start_all.bat`.
-- Khởi động Backend (Port 5002): Chạy `start_backend.bat`.
-- Khởi động Frontend (Vite Dev Server): Chạy `start_frontend.bat`.
-- Khởi động Production (Backend phục vụ trực tiếp Frontend build): `start_production_5002.bat`.
+- Khởi động Backend (Port 8000): Chạy `start_backend.bat`.
+- Khởi động Frontend (Vite Dev Server Port 5173): Chạy `start_frontend.bat`.
+- Khởi động Production (Port 5001): `start_production_5001.bat`.
 
 ### Triển khai & Cài đặt:
 - **Backend**:
@@ -30,7 +30,7 @@ Hệ thống quản lý dự án, vận hành nhà hàng, tích hợp tổng đ�
   cd backend
   .\.venv\Scripts\Activate.ps1
   pip install -r requirements.txt
-  python -m uvicorn app.main:app --host 0.0.0.0 --port 5002 --reload
+  python run.py
   ```
 - **Frontend**:
   ```powershell

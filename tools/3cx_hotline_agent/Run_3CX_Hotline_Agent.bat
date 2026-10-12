@@ -20,7 +20,7 @@ if not exist "%PS1_FILE%" (
 )
 
 if not exist "%CONFIG_FILE%" (
-    echo SERVER_URL=http://172.16.8.25:5002> "%CONFIG_FILE%"
+    echo SERVER_URL=http://172.16.8.25:5001> "%CONFIG_FILE%"
 )
 
 echo Dang khoi dong tien trinh ket noi 3CX...

@@ -1894,6 +1894,18 @@ estaurant_service.py).
 
 ---
 
+### [2026-10-12] - Chuyển Đổi Cổng Triển Khai Production Server Từ 5002 Sang 5001 (`172.16.8.25:5001`)
+- **Mục tiêu**: Đổi toàn bộ cấu hình truy cập web trên server nội bộ từ `http://172.16.8.25:5002` sang `http://172.16.8.25:5001`.
+- **Chi tiết các thành phần cập nhật**:
+  1. *Frontend Vite Preview (`frontend/vite.config.ts`)*: Cập nhật `preview.port: 5001`.
+  2. *Script Khởi Động (`start_production_5001.bat` & `start_production_5002.bat`)*: Cập nhật tham số khởi chạy `npx vite preview --host 0.0.0.0 --port 5001`.
+  3. *Backend CORS Origin (`backend/.env`)*: Bổ sung origin `http://172.16.8.25:5001`, `http://localhost:5001`, `http://127.0.0.1:5001` vào `CORS_ORIGINS`.
+  4. *Cấu Hình Registry VNC/KDS Chrome & Edge (`vnc_scrcpy_protocol.reg`)*: Bổ sung origin `http://172.16.8.25:5001` vào `AutoLaunchProtocolsFromOrigins` cho Chrome & Edge policies.
+  5. *Hotline Client Desktop Agent (`tools/3cx_hotline_agent/config.txt` & `Run_3CX_Hotline_Agent.bat`)*: Cập nhật `SERVER_URL=http://172.16.8.25:5001`.
+  6. *Dịch Vụ Windows Service ITFrontend (NSSM trên Server)*: Hướng dẫn cập nhật Application Arguments sang `--port 5001`.
+
+---
+
 ### [2026-10-04 và trước đó] - Nền Tảng & Quy Chuẩn Giao Diện Toàn Hệ Thống
 - **Quy định No Stat Cards**: Tuyệt đối không đặt các khối thẻ thống kê to ở đầu các trang tác vụ nghiệp vụ (CentralizedLogs, RestaurantMongoAnalysis...).
 - **Quy tắc Đóng Modal**: Modal chỉ đóng khi bấm `Esc`, bấm nút `X` hoặc nút "Đóng" / "Hủy"; không đóng khi click ngoài overlay.
