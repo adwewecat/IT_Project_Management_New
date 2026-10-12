@@ -117,6 +117,25 @@ npm run dev
      backend\.venv\Scripts\python.exe -c "from app.main import app; print('>>> BACKEND SMOKE TEST: PASSED 100%')"
      ```
      Chỉ khi lệnh này in ra `PASSED 100%`, code mới được bàn giao hoặc copy lên server.
+9. **Quy Tắc Bất Biến: Mọi Tính Năng Mới Bắt Buộc Phải Có Giao Diện Phù Hợp Với Mobile 100% (Mobile-Ready By Default)**:
+   - **Yêu cầu sống còn**: Bất kỳ khi nào làm thêm tính năng mới, trang mới, popup/modal mới hoặc bảng dữ liệu mới, **BẮT BUỘC PHẢI THIẾT KẾ VÀ KIỂM THỬ GIAO DIỆN PHÙ HỢP HOÀN TOÀN VỚI ĐIỆN THOẠI DI ĐỘNG (360px - 430px)**.
+   - **Tuyệt đối cấm**: Chỉ làm giao diện máy tính rồi bỏ quên điện thoại, hoặc coi mobile là việc phụ làm sau. Tính năng mới chỉ được coi là hoàn thành khi đã hiển thị vừa vặn, không tràn màn hình, không ép chiều cao bảng và thao tác chạm thuận tiện trên điện thoại.
+   - **Quy chuẩn kỹ thuật bắt buộc**:
+     + Dùng `.page-container-fullheight` để trên desktop vừa khít 1 màn hình, còn mobile tự động cuộn dọc tự nhiên (`height: auto !important`).
+     + Nút công cụ dùng lưới 2 cột `.mobile-action-grid`, nút chính `.mobile-action-primary`, touch target tối thiểu 36px - 44px.
+     + Bộ lọc/tìm kiếm tự động xếp chồng dọc 100% chiều rộng `.mobile-filter-stack`.
+     + Bảng dữ liệu bọc trong `.table-responsive-container` vuốt ngang cảm ứng mượt mà, kèm `.mobile-swipe-hint` và phân trang 2 tầng `.mobile-pagination-container`.
+     + Modal/Popup co giãn full-width (`max-height: 94vh`, `margin: 8px`), chân trang có `flex-wrap: wrap`.
+     + Tuyệt đối không hard-code `min-width > 360px` gây tràn viewport.
+
+---
+
+### [2026-10-12] - Ban Hành Quy Tắc Bất Biến: Mọi Tính Năng Mới Đều Phải Thêm Giao Diện Phù Hợp Với Mobile (Mobile-Ready 100%)
+- **Yêu cầu người dùng**: Thêm quy tắc bất biến: Khi làm thêm bất kỳ tính năng mới nào đều phải thêm giao diện phù hợp với điện thoại di động (mobile responsive).
+- **Chi tiết thực hiện**:
+  - Ban hành chính thức **Quy Tắc 10 (và Mục 9 trong README)** vào toàn bộ 7 tài liệu quy chuẩn dự án (`GEMINI.md`, `AGENTS.md`, `PROJECT_GUIDELINES.md`, `.agents/rules/project_guidelines.md`, `Script/README.md`, `Script/GEMINI.md`, `Script/PROJECT_GUIDELINES.md`).
+  - Định nghĩa rõ ràng 7 tiêu chuẩn kỹ thuật bắt buộc khi code bất kỳ tính năng mới nào (không khóa cứng chiều cao 100vh, toolbar lưới 2 cột, bảng vuốt ngang mượt mà, modal tự co giãn, không tràn viewport, touch target thuận tiện).
+  - Cam kết 100% tính năng trong tương lai đều Mobile-Ready ngay từ khi bắt đầu phát triển.
 
 ---
 
