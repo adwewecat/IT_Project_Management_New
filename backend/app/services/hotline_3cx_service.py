@@ -428,11 +428,18 @@ def mark_call_answered(db: Session, call_id: int, duty_user: Optional[str] = Non
     return True
 
 
-def get_missed_calls(db: Session, unresolved_only: bool = True, limit: int = 100) -> List[Dict[str, Any]]:
+def get_missed_calls(
+    db: Session,
+    unresolved_only: bool = True,
+    limit: int = 100,
+    current_username: Optional[str] = None,
+    all_agents: bool = False,
+) -> List[Dict[str, Any]]:
     """
     Lấy danh sách các cuộc gọi nhỡ / bận cần gọi lại (Tab 1), chỉ lưu và lấy trong 3 ngày gần nhất.
-    Bao gồm cả nhà hàng và line ngoài danh mục/nội bộ.
+    Lọc nghiêm ngặt theo Agent đang xem để tránh hiển thị lẫn lộn các user khác.
     """
+    from sqlalchemy import or_, and_, func
     three_days_ago = datetime.now() - timedelta(days=3)
     cutoff_incoming = datetime.now() - timedelta(minutes=3)
 
@@ -445,6 +452,37 @@ def get_missed_calls(db: Session, unresolved_only: bool = True, limit: int = 100
     )
     if unresolved_only:
         query = query.filter(HotlineCallLog.is_resolved == False)
+
+    clean_user = (current_username or "").strip().lower()
+    if clean_user and not all_agents:
+        # 1. Cuộc gọi nhà hàng chung (không gán riêng ai, hoặc gán group/server)
+        # 2. Hoặc cuộc gọi gán đích danh cho Agent này (cả nhà hàng lẫn nội bộ)
+        # Tuyệt đối không hiển thị cuộc gọi riêng của Agent khác!
+        query = query.filter(
+            or_(
+                func.lower(HotlineCallLog.duty_user) == clean_user,
+                and_(
+                    HotlineCallLog.restaurant_id != None,
+                    or_(
+                        HotlineCallLog.duty_user == None,
+                        HotlineCallLog.duty_user == "",
+                        func.lower(HotlineCallLog.duty_user).in_(["3cx pwa client", "pbx server", "ring group"])
+                    )
+                )
+            )
+        )
+    elif not clean_user and not all_agents:
+        # Nếu không có user: Chỉ lấy cuộc gọi nhà hàng chung
+        query = query.filter(
+            and_(
+                HotlineCallLog.restaurant_id != None,
+                or_(
+                    HotlineCallLog.duty_user == None,
+                    HotlineCallLog.duty_user == "",
+                    func.lower(HotlineCallLog.duty_user).in_(["3cx pwa client", "pbx server", "ring group"])
+                )
+            )
+        )
 
     items = query.order_by(desc(HotlineCallLog.created_at)).limit(limit).all()
     results = []
@@ -470,11 +508,17 @@ def get_missed_calls(db: Session, unresolved_only: bool = True, limit: int = 100
     return results
 
 
-def get_answered_calls(db: Session, limit: int = 100) -> List[Dict[str, Any]]:
+def get_answered_calls(
+    db: Session,
+    limit: int = 100,
+    current_username: Optional[str] = None,
+    all_agents: bool = False,
+) -> List[Dict[str, Any]]:
     """
-    Lấy danh sách lịch sử các cuộc gọi tới đã nghe hoặc tiếp nhận (Tab 2) trong 3 ngày gần nhất,
-    bao gồm cả các cuộc gọi line không tìm thấy (unlisted) đã được tiếp nhận.
+    Lấy danh sách lịch sử các cuộc gọi tới đã nghe hoặc tiếp nhận (Tab 2) trong 3 ngày gần nhất.
+    Mỗi Agent chỉ hiển thị lịch sử cuộc gọi của chính Agent đó để tránh dùng chung lẫn lộn.
     """
+    from sqlalchemy import or_, func
     three_days_ago = datetime.now() - timedelta(days=3)
     query = db.query(HotlineCallLog).filter(
         HotlineCallLog.created_at >= three_days_ago,
@@ -482,9 +526,22 @@ def get_answered_calls(db: Session, limit: int = 100) -> List[Dict[str, Any]]:
             (HotlineCallLog.call_status == "ANSWERED")
             | (HotlineCallLog.is_resolved == True)
         )
-    ).order_by(desc(HotlineCallLog.created_at)).limit(limit)
+    )
 
-    items = query.all()
+    clean_user = (current_username or "").strip().lower()
+    if clean_user and not all_agents:
+        # CHỈ LẤY các cuộc gọi mà Agent này tiếp nhận hoặc bấm xử lý Done
+        query = query.filter(
+            or_(
+                func.lower(HotlineCallLog.duty_user) == clean_user,
+                func.lower(HotlineCallLog.resolved_by) == clean_user
+            )
+        )
+    elif not clean_user and not all_agents:
+        # Nếu không có user: Chỉ lấy các cuộc gọi nhà hàng
+        query = query.filter(HotlineCallLog.restaurant_id != None)
+
+    items = query.order_by(desc(HotlineCallLog.created_at)).limit(limit).all()
     results = []
     for it in items:
         results.append({
@@ -522,17 +579,41 @@ def resolve_single_missed_call(db: Session, call_id: int, resolved_by: Optional[
     return True
 
 
-def resolve_all_missed_calls(db: Session, resolved_by: Optional[str] = None) -> int:
-    """Đánh dấu tất cả cuộc gọi nhỡ là Done (Check All đóng hàng loạt)"""
+def resolve_all_missed_calls(
+    db: Session,
+    resolved_by: Optional[str] = None,
+    current_username: Optional[str] = None,
+) -> int:
+    """Đánh dấu các cuộc gọi nhỡ của Agent hiện tại là Done (Check All đóng hàng loạt)"""
+    from sqlalchemy import or_, and_, func
     three_days_ago = datetime.now() - timedelta(days=3)
-    calls = db.query(HotlineCallLog).filter(
+    query = db.query(HotlineCallLog).filter(
         HotlineCallLog.created_at >= three_days_ago,
         HotlineCallLog.call_status.in_(["MISSED", "BUSY", "INCOMING"]),
         HotlineCallLog.is_resolved == False
-    ).all()
+    )
+
+    clean_user = (current_username or "").strip().lower()
+    if clean_user:
+        # Chỉ đóng các cuộc gọi nhỡ mà Agent này có quyền xem (cuộc gọi của chính mình hoặc cuộc gọi nhà hàng chung)
+        query = query.filter(
+            or_(
+                func.lower(HotlineCallLog.duty_user) == clean_user,
+                and_(
+                    HotlineCallLog.restaurant_id != None,
+                    or_(
+                        HotlineCallLog.duty_user == None,
+                        HotlineCallLog.duty_user == "",
+                        func.lower(HotlineCallLog.duty_user).in_(["3cx pwa client", "pbx server", "ring group"])
+                    )
+                )
+            )
+        )
+
+    calls = query.all()
     count = len(calls)
     now = datetime.now()
-    user = resolved_by or "IT Hotline"
+    user = resolved_by or current_username or "IT Hotline"
     for c in calls:
         c.is_resolved = True
         c.resolved_at = now
@@ -909,14 +990,41 @@ def get_status(current_username: Optional[str] = None) -> Dict[str, Any]:
         clean_user = (current_username or "").strip().lower()
         three_days_ago = datetime.now() - timedelta(days=3)
         cutoff_incoming = datetime.now() - timedelta(minutes=3)
-        unresolved_count = db.query(HotlineCallLog).filter(
+        # Đếm cuộc gọi nhỡ chưa giải quyết lọc theo Agent đang xem
+        count_query = db.query(HotlineCallLog).filter(
             HotlineCallLog.created_at >= three_days_ago,
             HotlineCallLog.is_resolved == False,
             (
                 HotlineCallLog.call_status.in_(["MISSED", "BUSY"])
                 | ((HotlineCallLog.call_status == "INCOMING") & (HotlineCallLog.created_at < cutoff_incoming))
             )
-        ).count()
+        )
+        if clean_user:
+            count_query = count_query.filter(
+                or_(
+                    func.lower(HotlineCallLog.duty_user) == clean_user,
+                    and_(
+                        HotlineCallLog.restaurant_id != None,
+                        or_(
+                            HotlineCallLog.duty_user == None,
+                            HotlineCallLog.duty_user == "",
+                            func.lower(HotlineCallLog.duty_user).in_(["3cx pwa client", "pbx server", "ring group"])
+                        )
+                    )
+                )
+            )
+        else:
+            count_query = count_query.filter(
+                and_(
+                    HotlineCallLog.restaurant_id != None,
+                    or_(
+                        HotlineCallLog.duty_user == None,
+                        HotlineCallLog.duty_user == "",
+                        func.lower(HotlineCallLog.duty_user).in_(["3cx pwa client", "pbx server", "ring group"])
+                    )
+                )
+            )
+        unresolved_count = count_query.count()
 
         # 1. Lọc cuộc gọi đang reo (current_call) phù hợp với người dùng hiện tại
         call_to_return = None

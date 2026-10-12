@@ -38,17 +38,26 @@ export const hotlineService = {
   },
 
   // Lấy danh sách cuộc gọi nhỡ / bận (Tab 1)
-  getMissedCalls: async (unresolvedOnly = true, limit = 50): Promise<HotlineMissedCallsResponse> => {
+  getMissedCalls: async (unresolvedOnly = true, limit = 50, username?: string, allAgents = false): Promise<HotlineMissedCallsResponse> => {
     const res = await apiClient.get<HotlineMissedCallsResponse>('/hotline/missed-calls', {
-      params: { unresolved_only: unresolvedOnly, limit },
+      params: {
+        unresolved_only: unresolvedOnly,
+        limit,
+        ...(username ? { username } : {}),
+        ...(allAgents ? { all_agents: true } : {}),
+      },
     });
     return res.data;
   },
 
   // Lấy danh sách lịch sử các cuộc gọi tới đã nghe (Tab 2)
-  getAnsweredCalls: async (limit = 100): Promise<HotlineAnsweredCallsResponse> => {
+  getAnsweredCalls: async (limit = 100, username?: string, allAgents = false): Promise<HotlineAnsweredCallsResponse> => {
     const res = await apiClient.get<HotlineAnsweredCallsResponse>('/hotline/answered-calls', {
-      params: { limit },
+      params: {
+        limit,
+        ...(username ? { username } : {}),
+        ...(allAgents ? { all_agents: true } : {}),
+      },
     });
     return res.data;
   },

@@ -623,10 +623,20 @@ def end_current_active_call(call_id: Optional[int] = Query(None)):
 def get_missed_calls_list(
     unresolved_only: bool = Query(True),
     limit: int = Query(50),
+    username: Optional[str] = Query(None),
+    all_agents: bool = Query(False),
     db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user_flexible),
 ):
     """Lấy danh sách các cuộc gọi nhỡ / bận (cho modal dấu chấm than (!))"""
-    items = hotline_3cx_service.get_missed_calls(db, unresolved_only=unresolved_only, limit=limit)
+    effective_user = username or current_user.username
+    items = hotline_3cx_service.get_missed_calls(
+        db,
+        unresolved_only=unresolved_only,
+        limit=limit,
+        current_username=effective_user,
+        all_agents=all_agents,
+    )
     return {
         "total": len(items),
         "items": items,
@@ -711,15 +721,19 @@ def resolve_all_calls(
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(get_current_user_flexible),
 ):
-    """Đánh dấu tất cả cuộc gọi nhỡ là Done (Check All đóng hàng loạt)"""
+    """Đánh dấu các cuộc gọi nhỡ của Agent hiện tại là Done (Check All đóng hàng loạt)"""
     resolved_by = current_user.full_name or current_user.username or "IT Hotline"
-    count = hotline_3cx_service.resolve_all_missed_calls(db, resolved_by=resolved_by)
+    count = hotline_3cx_service.resolve_all_missed_calls(
+        db,
+        resolved_by=resolved_by,
+        current_username=current_user.username,
+    )
     try:
         LogService.record_log(
             db=db,
             nhom_quyen="HELPDESK",
             hanh_dong="UPDATE",
-            mo_ta=f"Xử lý hoàn tất tất cả cuộc gọi nhỡ Hotline ({count} cuộc gọi)",
+            mo_ta=f"Xử lý hoàn tất các cuộc gọi nhỡ Hotline của Agent {resolved_by} ({count} cuộc gọi)",
             current_user=current_user,
         )
     except Exception:
@@ -730,10 +744,19 @@ def resolve_all_calls(
 @router.get("/answered-calls")
 def get_answered_calls_list(
     limit: int = Query(100),
+    username: Optional[str] = Query(None),
+    all_agents: bool = Query(False),
     db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user_flexible),
 ):
-    """Lấy danh sách các cuộc gọi tới đã nghe (Tab 2: Lịch sử cuộc gọi tới đã nghe)"""
-    items = hotline_3cx_service.get_answered_calls(db, limit=limit)
+    """Lấy danh sách các cuộc gọi tới đã nghe (Tab 2: Lịch sử cuộc gọi tới đã nghe theo Agent)"""
+    effective_user = username or current_user.username
+    items = hotline_3cx_service.get_answered_calls(
+        db,
+        limit=limit,
+        current_username=effective_user,
+        all_agents=all_agents,
+    )
     return {
         "total": len(items),
         "items": items,

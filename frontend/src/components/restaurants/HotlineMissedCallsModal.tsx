@@ -16,6 +16,8 @@ import {
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { useHotline } from '../../contexts/HotlineContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { checkIsDungOrSuperAdmin } from '../../utils/authUtils';
 import { hotlineService } from '../../services/hotlineService';
 import { HotlineMissedCallItem } from '../../types/hotline';
 
@@ -35,9 +37,14 @@ export const HotlineMissedCallsModal: React.FC<HotlineMissedCallsModalProps> = (
   onFilterRestaurant,
 }) => {
   const { openGuideModal } = useHotline();
+  const { user } = useAuth();
+  const isSuperAdmin = checkIsDungOrSuperAdmin(user);
 
   // Tab state: 'missed' | 'answered'
   const [activeTab, setActiveTab] = useState<'missed' | 'answered'>('missed');
+
+  // Lọc theo Agent hiện tại hay tất cả Agent (Super Admin có thể xem tất cả)
+  const [showAllAgents, setShowAllAgents] = useState<boolean>(false);
 
   // Data states
   const [missedCalls, setMissedCalls] = useState<HotlineMissedCallItem[]>([]);
@@ -53,7 +60,7 @@ export const HotlineMissedCallsModal: React.FC<HotlineMissedCallsModalProps> = (
   const fetchMissedCalls = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await hotlineService.getMissedCalls(true, 100);
+      const res = await hotlineService.getMissedCalls(true, 100, user?.username, showAllAgents);
       const items = res.items || [];
       setMissedCalls(items);
       if (onCountChange) {
@@ -64,20 +71,20 @@ export const HotlineMissedCallsModal: React.FC<HotlineMissedCallsModalProps> = (
     } finally {
       setIsLoading(false);
     }
-  }, [onCountChange]);
+  }, [user?.username, showAllAgents, onCountChange]);
 
   // Fetch Answered Calls (Tab 2)
   const fetchAnsweredCalls = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await hotlineService.getAnsweredCalls(100);
+      const res = await hotlineService.getAnsweredCalls(100, user?.username, showAllAgents);
       setAnsweredCalls(res.items || []);
     } catch (err) {
       console.error('Lỗi tải lịch sử cuộc gọi đã nghe:', err);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user?.username, showAllAgents]);
 
   const refreshCurrentTab = useCallback(() => {
     if (activeTab === 'missed') {
@@ -367,33 +374,103 @@ export const HotlineMissedCallsModal: React.FC<HotlineMissedCallsModalProps> = (
             </button>
           </div>
 
-          {/* Ô tìm kiếm nhanh trong bảng */}
-          <div style={{ position: 'relative', width: '220px', paddingBottom: '6px' }}>
-            <Search
-              size={14}
-              style={{
-                position: 'absolute',
-                left: '9px',
-                top: '9px',
-                color: 'var(--text-muted)',
-              }}
-            />
-            <input
-              type="text"
-              value={filterQuery}
-              onChange={(e) => setFilterQuery(e.target.value)}
-              placeholder="Lọc số line, tên NH..."
-              style={{
-                width: '100%',
-                padding: '5px 10px 5px 28px',
-                fontSize: '12px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color)',
-                outline: 'none',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-              }}
-            />
+          {/* Bộ lọc Agent & Ô tìm kiếm nhanh */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '6px', flexWrap: 'wrap' }}>
+            {isSuperAdmin ? (
+              <div
+                style={{
+                  display: 'flex',
+                  backgroundColor: 'var(--bg-secondary)',
+                  borderRadius: '6px',
+                  padding: '2px',
+                  border: '1px solid var(--border-color)',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setShowAllAgents(false)}
+                  style={{
+                    border: 'none',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    fontWeight: !showAllAgents ? 700 : 500,
+                    cursor: 'pointer',
+                    backgroundColor: !showAllAgents ? '#2563EB' : 'transparent',
+                    color: !showAllAgents ? '#FFFFFF' : 'var(--text-secondary)',
+                    transition: 'all 0.15s ease',
+                  }}
+                  title="Chỉ hiển thị cuộc gọi gán cho tài khoản của bạn"
+                >
+                  👤 Của tôi ({user?.username})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAllAgents(true)}
+                  style={{
+                    border: 'none',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    fontWeight: showAllAgents ? 700 : 500,
+                    cursor: 'pointer',
+                    backgroundColor: showAllAgents ? '#2563EB' : 'transparent',
+                    color: showAllAgents ? '#FFFFFF' : 'var(--text-secondary)',
+                    transition: 'all 0.15s ease',
+                  }}
+                  title="Xem toàn bộ cuộc gọi của tất cả các Agent trên hệ thống"
+                >
+                  🌐 Tất cả Agent
+                </button>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  color: '#1D4ED8',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                }}
+                title="Dữ liệu hiển thị riêng cho tài khoản của bạn, không dùng chung với các nhân viên khác"
+              >
+                <span>👤 Agent: {user?.username || 'Của tôi'}</span>
+              </div>
+            )}
+
+            {/* Ô tìm kiếm nhanh trong bảng */}
+            <div style={{ position: 'relative', width: '180px' }}>
+              <Search
+                size={14}
+                style={{
+                  position: 'absolute',
+                  left: '9px',
+                  top: '9px',
+                  color: 'var(--text-muted)',
+                }}
+              />
+              <input
+                type="text"
+                value={filterQuery}
+                onChange={(e) => setFilterQuery(e.target.value)}
+                placeholder="Lọc số line, tên NH..."
+                style={{
+                  width: '100%',
+                  padding: '5px 10px 5px 28px',
+                  fontSize: '12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  outline: 'none',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                }}
+              />
+            </div>
           </div>
         </div>
 
@@ -616,21 +693,29 @@ export const HotlineMissedCallsModal: React.FC<HotlineMissedCallsModalProps> = (
                             </div>
                           </td>
 
-                          {/* Trạng thái */}
+                          {/* Trạng thái & Phụ trách */}
                           <td style={{ padding: '10px 12px', verticalAlign: 'middle' }}>
-                            <span
-                              style={{
-                                display: 'inline-block',
-                                padding: '2px 8px',
-                                borderRadius: '12px',
-                                fontSize: '11px',
-                                fontWeight: 700,
-                                backgroundColor: call.call_status === 'BUSY' ? '#FFEDD5' : '#FEE2E2',
-                                color: call.call_status === 'BUSY' ? '#C2410C' : '#DC2626',
-                              }}
-                            >
-                              {call.call_status === 'BUSY' ? 'Bận Máy' : 'Cuộc Gọi Nhỡ'}
-                            </span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <span
+                                style={{
+                                  display: 'inline-block',
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  backgroundColor: call.call_status === 'BUSY' ? '#FFEDD5' : '#FEE2E2',
+                                  color: call.call_status === 'BUSY' ? '#C2410C' : '#DC2626',
+                                  width: 'fit-content',
+                                }}
+                              >
+                                {call.call_status === 'BUSY' ? 'Bận Máy' : 'Cuộc Gọi Nhỡ'}
+                              </span>
+                              {call.duty_user && (
+                                <span style={{ fontSize: '11px', color: '#991B1B', fontWeight: 500 }}>
+                                  👤 {call.duty_user}
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           {/* Thao tác */}
@@ -905,24 +990,32 @@ export const HotlineMissedCallsModal: React.FC<HotlineMissedCallsModalProps> = (
                             )}
                           </td>
 
-                          {/* Trạng thái */}
+                          {/* Trạng thái & Người tiếp nhận */}
                           <td style={{ padding: '10px 12px', verticalAlign: 'middle' }}>
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '2px 8px',
-                                borderRadius: '12px',
-                                fontSize: '11.5px',
-                                fontWeight: 600,
-                                backgroundColor: isUnlisted ? '#F3F4F6' : '#D1FAE5',
-                                color: isUnlisted ? '#4B5563' : '#065F46',
-                              }}
-                            >
-                              <PhoneCall size={12} />
-                              {isUnlisted ? 'Đã Ghi Nhận' : 'Đã Nghe'}
-                            </span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: '11.5px',
+                                  fontWeight: 600,
+                                  backgroundColor: isUnlisted ? '#F3F4F6' : '#D1FAE5',
+                                  color: isUnlisted ? '#4B5563' : '#065F46',
+                                  width: 'fit-content',
+                                }}
+                              >
+                                <PhoneCall size={12} />
+                                {isUnlisted ? 'Đã Ghi Nhận' : 'Đã Nghe'}
+                              </span>
+                              {(call.duty_user || call.resolved_by) && (
+                                <span style={{ fontSize: '11px', color: '#4B5563', fontWeight: 500 }}>
+                                  👤 {call.duty_user || call.resolved_by}
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           {/* Thao tác */}
