@@ -26,7 +26,15 @@ export interface AndroidEmulatorTabProps {
 
 export type TableStatus = 'EMPTY' | 'OCCUPIED' | 'BILL_PRINTED' | 'ORDERING' | 'RESERVED';
 
-export type MenuSuperType = 'alacarte' | 'buffet' | 'drink';
+export type MenuSuperType = 'alacarte' | 'buffet' | 'drink' | 'all';
+
+// Helper kiểm tra và chuẩn hóa IP kết nối MongoDB máy trạm (loại bỏ dải gateway có chữ 'x' như 10.8.153.x)
+const getValidMongoHost = (rawHost?: string | null): string => {
+  if (!rawHost) return '';
+  const clean = rawHost.split(':')[0].trim();
+  if (!clean || clean.toLowerCase().includes('x')) return '';
+  return clean;
+};
 
 // Món ăn trong thực đơn POS
 export interface DishItem {
@@ -273,13 +281,42 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
   };
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 1. TẢI DANH MỤC MENU TỪ RESTAURANT_CATEGORY (CHỖ ẨN HIỆN MENU)
+  // 1. TẢI DANH MỤC MENU TỪ RESTAURANT_CATEGORY & getMenuSoCoCategories
+  // (Đồng nhất 100% với Tác vụ 3 Xử lý SO/CO)
   // ─────────────────────────────────────────────────────────────────────────
-  const loadMenuCategoriesFromMongo = useCallback(async (targetHost: string) => {
-    if (!targetHost) return;
-    const cleanHost = targetHost.split(':')[0].trim();
+  const loadMenuCategoriesFromMongo = useCallback(async (targetHost?: string) => {
+    const raw = targetHost || connectedHost || selectedRestaurant?.ip;
+    const cleanHost = getValidMongoHost(raw);
     if (!cleanHost) return;
     try {
+      // Ưu tiên getMenuSoCoCategories giống Tác vụ 3 để lấy danh mục và số lượng nhóm/món chính xác
+      try {
+        const soRes = await mongoService.getMenuSoCoCategories(cleanHost);
+        if (soRes && soRes.menus && soRes.menus.length > 0) {
+          const mapped: OrderCategoryOption[] = soRes.menus.map((m) => {
+            let displayName = m.name;
+            const match = m.name.match(/^(.*?)\s*\((.*?)\)$/);
+            if (match) {
+              displayName = match[1].trim();
+            }
+            return {
+              id: String(m.id || m.code),
+              name: displayName,
+              code: m.code,
+              description: `Mã menu: ${m.code} • ${m.group_count || 0} nhóm món • ${m.dish_count || 0} món`
+            };
+          });
+          if (mapped.length > 0) {
+            setCategories(mapped);
+            setSelectedCategory(mapped[0]);
+            return;
+          }
+        }
+      } catch (errSo) {
+        console.warn('Lỗi getMenuSoCoCategories, thử getMenuShowHide:', errSo);
+      }
+
+      // Fallback: getMenuShowHide
       const res = await mongoService.getMenuShowHide(cleanHost, 27017);
       if (res && res.menus && res.menus.length > 0) {
         // Chỉ lấy các menu đang mở cho kênh SO (Staff Order: show_in_so !== false)
@@ -294,7 +331,8 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
           const match = m.name.match(/^(.*?)\s*\((.*?)\)$/);
           if (match) {
             displayName = match[1].trim();
-            displayCode = match[2].trim();
+            // Lưu mã menu gốc (m.code = '172') để nạp đúng món
+            displayCode = m.code || match[2].trim();
           }
 
           return {
@@ -313,15 +351,15 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
     } catch (e) {
       console.warn('Không tải được RESTAURANT_CATEGORY từ MongoDB:', e);
     }
-  }, []);
+  }, [connectedHost, selectedRestaurant?.ip]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // 2. TẢI TOÀN BỘ MÓN ĂN THỰC TẾ & ĐỐI CHIẾU MÓN ẨN TỪ MONGODB
   // (Đồng nhất 100% với Tác vụ 3 Xử lý SO/CO ManageMenuSoCoTask)
   // ─────────────────────────────────────────────────────────────────────────
-  const loadDishesFromMongo = useCallback(async (targetHost: string) => {
-    if (!targetHost) return;
-    const cleanHost = targetHost.split(':')[0].trim();
+  const loadDishesFromMongo = useCallback(async (targetHost?: string) => {
+    const raw = targetHost || connectedHost || selectedRestaurant?.ip;
+    const cleanHost = getValidMongoHost(raw);
     if (!cleanHost) return;
     setLoadingDishes(true);
     try {
@@ -339,9 +377,21 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
         console.warn('Lỗi getDishShowHide:', e);
       }
 
-      // b. Tải toàn bộ món ăn thực tế từ loadMenuSoCoItems (giống Tab 1 ManageMenuSoCoTask)
+      // b. Lấy danh sách menu codes từ getMenuSoCoCategories để nạp chính xác
+      let menuCodesToLoad: string[] = [];
+      try {
+        const catRes = await mongoService.getMenuSoCoCategories(cleanHost);
+        if (catRes && catRes.menus && catRes.menus.length > 0) {
+          menuCodesToLoad = catRes.menus.map((m) => m.code);
+        }
+      } catch (e) {
+        console.warn('Lỗi getMenuSoCoCategories trong loadDishes:', e);
+      }
+
+      // c. Tải toàn bộ món ăn thực tế từ loadMenuSoCoItems (giống Tab 1 ManageMenuSoCoTask)
       const res = await mongoService.loadMenuSoCoItems({
         host: cleanHost,
+        menu_codes: menuCodesToLoad.length > 0 ? menuCodesToLoad : undefined,
         search_all: true
       });
 
@@ -385,27 +435,33 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
         const loadedDishes = Array.from(uniqueDishMap.values());
         if (loadedDishes.length > 0) {
           setDishes(loadedDishes);
+          return loadedDishes;
         }
       } else {
-        // Nếu không có dữ liệu trả về thì dùng fallback
-        setDishes(FALLBACK_DISHES_DATA);
+        // Nếu không có dữ liệu trả về từ MongoDB thì chỉ dùng fallback khi trước đó chưa có món nào
+        setDishes((prev) => (prev.length > 0 ? prev : FALLBACK_DISHES_DATA));
       }
     } catch (err) {
-      console.warn('Không tải được thực đơn từ loadMenuSoCoItems, dùng fallback:', err);
-      setDishes(FALLBACK_DISHES_DATA);
+      console.warn('Không tải được thực đơn từ loadMenuSoCoItems:', err);
+      setDishes((prev) => (prev.length > 0 ? prev : FALLBACK_DISHES_DATA));
     } finally {
       setLoadingDishes(false);
     }
-  }, []);
+    return null;
+  }, [connectedHost, selectedRestaurant?.ip]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // 3. ĐỒNG BỘ BÀN TỪ MONGODB (CHỈ BẬT TOAST KHI BẤM THỦ CÔNG)
   // ─────────────────────────────────────────────────────────────────────────
   const syncWithMongo = useCallback(async (isManual: boolean = false) => {
     const rawHost = connectedHost || selectedRestaurant?.ip;
-    if (!rawHost) return;
-    const targetHost = rawHost.split(':')[0].trim();
-    if (!targetHost) return;
+    const targetHost = getValidMongoHost(rawHost);
+    if (!targetHost) {
+      if (isManual && onToastRef.current) {
+        onToastRef.current('Chưa xác định IP kết nối MongoDB máy trạm nhà hàng!', 'info');
+      }
+      return;
+    }
 
     try {
       // Tải danh mục menu và món ăn song song
@@ -470,7 +526,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
 
           // CHỈ hiện toast khi người dùng bấm nút thủ công! Không hiện khi tự động nạp.
           if (isManual && onToastRef.current) {
-            onToastRef.current(`Đã đồng bộ ${newTables.length} bàn thực tế từ MongoDB!`, 'success');
+            onToastRef.current(`Đã đồng bộ ${newTables.length} bàn & thực đơn thực tế từ MongoDB!`, 'success');
           }
         }
       }
@@ -482,11 +538,11 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
     }
   }, [connectedHost, selectedRestaurant?.ip, selectedRestaurant?.id, selectedHall, loadMenuCategoriesFromMongo, loadDishesFromMongo]);
 
-  // Tự động đồng bộ một lần duy nhất khi host hoặc restaurant thay đổi (KHÔNG LẶP, KHÔNG TOAST)
+  // Tự động đồng bộ một lần khi host hoặc restaurant thay đổi (KHÔNG LẶP, KHÔNG TOAST)
   useEffect(() => {
-    const targetHost = connectedHost || selectedRestaurant?.ip || '';
-    if (targetHost && targetHost !== syncedHostRef.current) {
-      syncedHostRef.current = targetHost;
+    const validHost = getValidMongoHost(connectedHost || selectedRestaurant?.ip);
+    if (validHost && validHost !== syncedHostRef.current) {
+      syncedHostRef.current = validHost;
       syncWithMongo(false); // isManual = false -> Im lặng, không toast
     }
   }, [connectedHost, selectedRestaurant?.ip, syncWithMongo]);
@@ -506,6 +562,12 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
   // Click vào bàn trên Sơ đồ bàn -> Mở Bước 2: Chọn Hạng Mục Order
   const handleSelectTableFromMap = (table: PosTableData) => {
     setActiveTableId(table.id);
+
+    // Tự động kiểm tra nếu thực đơn chưa nạp đủ hoặc đang là dữ liệu mẫu fallback (<= 5 món), lập tức nạp từ MongoDB
+    const validHost = getValidMongoHost(connectedHost || selectedRestaurant?.ip);
+    if (validHost && dishes.length <= 5) {
+      loadDishesFromMongo(validHost);
+    }
 
     // Nếu bàn đã có order và đã chọn loại menu thì vào thẳng Menu
     if (table.orderItems.length > 0 && table.selectedCategoryCode) {
@@ -533,6 +595,12 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
       )
     );
 
+    // Tự động kiểm tra nếu thực đơn chưa nạp đủ hoặc đang là dữ liệu mẫu fallback (<= 5 món), lập tức nạp từ MongoDB
+    const validHost = getValidMongoHost(connectedHost || selectedRestaurant?.ip);
+    if (validHost && dishes.length <= 5) {
+      loadDishesFromMongo(validHost);
+    }
+
     // Nếu chọn Buffet và nhà hàng có món 0đ thì ưu tiên tab Buffet, ngược lại Alacarte
     if (hasBuffetDishes && (cat.code.toLowerCase().includes('bf') || cat.name.toLowerCase().includes('buffet'))) {
       setActiveSuperType('buffet');
@@ -556,12 +624,16 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
     }
   }, [hasBuffetDishes, activeSuperType]);
 
-  // ── LOGIC LỌC THỰC ĐƠN MÓN THEO 3 LOẠI: ALACARTE / BUFFET / ĐỒ UỐNG ──
+  // ── LOGIC LỌC THỰC ĐƠN MÓN THEO: TẤT CẢ / ALACARTE / BUFFET / ĐỒ UỐNG ──
+  // - Tất cả ('all'): hiển thị toàn bộ món ăn trong thực đơn
   // - Alacarte: món giá > 0 (không phải đồ uống, trừ khi món đó nằm trong nhóm Combo)
   // - Buffet: món giá = 0 và không phải đồ uống
   // - Đồ uống: các món có isDrink = true
   const filteredDishesBySuperType = useMemo(() => {
     return dishes.filter((dish) => {
+      if (activeSuperType === 'all') {
+        return true;
+      }
       if (activeSuperType === 'alacarte') {
         if (dish.isDrink && dish.group.toLowerCase() !== 'combo') return false;
         return dish.price > 0;
@@ -1522,8 +1594,29 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
             backgroundColor: '#ffffff'
           }}
         >
-          {/* 3 Tabs chính: Alacarte (giá > 0) • Buffet (giá = 0) • Đồ uống */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          {/* Các Tabs chính: Tất cả • Alacarte (giá > 0) • Buffet (giá = 0) • Đồ uống */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {/* Tab: Tất cả */}
+            <button
+              type="button"
+              onClick={() => setActiveSuperType('all')}
+              style={{
+                padding: '12px 6px',
+                fontSize: '15px',
+                fontWeight: activeSuperType === 'all' ? 800 : 500,
+                color: activeSuperType === 'all' ? '#ea580c' : '#374151',
+                borderBottom: activeSuperType === 'all' ? '3px solid #ea580c' : '3px solid transparent',
+                backgroundColor: 'transparent',
+                borderTop: 'none',
+                borderLeft: 'none',
+                borderRight: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              Tất cả ({dishes.length})
+            </button>
+
             {/* Tab: Alacarte */}
             <button
               type="button"
@@ -1590,15 +1683,52 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
             </button>
           </div>
 
-          {/* Ô TÌM KIẾM MÓN ĂN DUY NHẤT - TRỎ TỚI MÓN & NHÓM TƯƠNG ỨNG HOẶC LỌC MÓN (Gom thành 1 ô duy nhất) */}
-          <div
-            ref={jumpSearchContainerRef}
-            style={{
-              position: 'relative',
-              width: '380px',
-              maxWidth: '460px'
-            }}
-          >
+          {/* Phải: Nút Làm Mới Thực Đơn MongoDB & Ô TÌM KIẾM MÓN ĂN */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                const validHost = getValidMongoHost(connectedHost || selectedRestaurant?.ip);
+                if (validHost) {
+                  loadDishesFromMongo(validHost);
+                  if (onToastRef.current) {
+                    onToastRef.current(`Đang nạp lại thực đơn từ MongoDB ${validHost}...`, 'info');
+                  }
+                } else if (onToastRef.current) {
+                  onToastRef.current('Chưa xác định IP kết nối MongoDB máy trạm!', 'info');
+                }
+              }}
+              disabled={loadingDishes}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '7px 12px',
+                borderRadius: '6px',
+                border: '1px solid #fed7aa',
+                backgroundColor: '#fff7ed',
+                color: '#c2410c',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: loadingDishes ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.15s ease'
+              }}
+              title="Làm mới thực đơn trực tiếp từ MongoDB trạm nhà hàng"
+            >
+              <RefreshCw size={13} className={loadingDishes ? 'animate-spin' : ''} />
+              Làm Mới ({dishes.length} món)
+            </button>
+
+            {/* Ô TÌM KIẾM MÓN ĂN DUY NHẤT - TRỎ TỚI MÓN & NHÓM TƯƠNG ỨNG HOẶC LỌC MÓN */}
+            <div
+              ref={jumpSearchContainerRef}
+              style={{
+                position: 'relative',
+                width: '320px',
+                maxWidth: '420px'
+              }}
+            >
             <div
               style={{
                 display: 'flex',
@@ -1784,6 +1914,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
             )}
           </div>
         </div>
+      </div>
 
         {/* Hàng 2: Thanh Nhóm Món (Category/Subgroup tabs - Tự động xuống dòng 2, 3... nếu danh sách dài) */}
         <div

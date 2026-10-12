@@ -1847,6 +1847,29 @@ estaurant_service.py).
 
 ---
 
+### [2026-10-12] - Sửa Lỗi Tab 3: Sơ Đồ Bàn Theo Khu (Restaurant Table Map) Chỉ Hiển Thị 2 Nhóm Món Thay Vì Toàn Bộ Thực Đơn MongoDB
+- **Màn hình**: Phân Tích MongoDB Nhà Hàng -> Tab 3: Sơ Đồ Bàn Theo Khu (Restaurant Table Map) ([`AndroidEmulatorTab.tsx`](file:///d:/Z.Dung_luu_rieng/LAPTRINH/IT_Project_Management_New/frontend/src/pages/app/AndroidEmulatorTab.tsx)).
+- **Hiện tượng lỗi**:
+  1. Tại Tab 1 Tác vụ 3: "Xử Lý SO/CO (Thực Đơn, Món Ăn & Bảng Tính)", hệ thống hiển thị đầy đủ 101 món ăn và 9 nhóm món.
+  2. Nhưng khi chuyển sang Tab 3: "Sơ Đồ Bàn Theo Khu (Restaurant Table Map)" và bấm vào bàn (ví dụ bàn A2), màn hình thực đơn chỉ hiển thị đúng 2 nhóm (`Combo` và `ALC.GÀ RÁN NHẬT BẢN`) và nhóm `Combo` chỉ có 3 món.
+- **Nguyên nhân cốt lõi**:
+  1. *Fallback dữ liệu giả lập `FALLBACK_DISHES_DATA`*: Trong `AndroidEmulatorTab.tsx`, dữ liệu mẫu cứng dự phòng chỉ có đúng 5 món chia làm 2 nhóm: `ALC.GÀ RÁN NHẬT BẢN` (2 món) và `Combo` (3 món).
+  2. *Trigger nhầm IP dải gateway (`10.8.153.x`)*: Khi Tab 3 mount, nếu `connectedHost` chưa sẵn sàng, code cũ lấy fallback `selectedRestaurant.ip` (dạng `10.8.153.x` chứa chữ `x`). Địa chỉ này không phải máy chủ MongoDB nên gọi API bị ném Exception, rơi vào khối `catch (err)` và ghi đè `setDishes(FALLBACK_DISHES_DATA)`.
+  3. *Không có cơ chế kích hoạt nạp lại khi vào bàn*: Khi người dùng bấm vào bàn và xác nhận hạng mục menu, hàm `handleSelectTableFromMap` và `handleConfirmCategory` không kiểm tra số lượng món thực tế, khiến màn hình order bị kẹt vĩnh viễn ở 5 món mẫu fallback.
+  4. *Thiếu mã Menu (`menu_codes`)*: Tab 3 chỉ gửi `search_all: true` mà không gọi `getMenuSoCoCategories` để lấy đúng mã Menu (`172`) như Tab 1 Tác vụ 3 (`ManageMenuSoCoTask.tsx`).
+- **Giải pháp xử lý toàn diện**:
+  1. *Cơ chế chuẩn hóa IP `getValidMongoHost`*: Tự động lọc bỏ các IP gateway có chữ `'x'`, chỉ gọi MongoDB khi có IP máy trạm hợp lệ (ví dụ `10.8.153.41`).
+  2. *Đồng nhất 100% logic nạp thực đơn với Tác vụ 3*:
+     - Tự động gọi `mongoService.getMenuSoCoCategories(cleanHost)` để lấy danh mục và mã Menu thực tế (`172`).
+     - Tải toàn bộ 101 món qua `loadMenuSoCoItems` kèm theo `menu_codes` và `search_all: true`.
+     - Khử trùng lặp chuẩn xác theo nhóm + mã RK7 + mã SAP + tên món + giá.
+     - Tuyệt đối không fallback về dữ liệu mẫu khi đã kết nối MongoDB thành công.
+  3. *Tự động nạp lại khi người dùng click vào bàn (`handleSelectTableFromMap` & `handleConfirmCategory`)*: Nếu `dishes.length <= 5`, tự động gọi `loadDishesFromMongo(validHost)` ngay lập tức để nạp đủ 101 món và 9 nhóm món.
+  4. *Nút "Làm Mới ({dishes.length} món)"*: Thêm trực tiếp trên thanh công cụ của Menu Gọi Món, cho phép người dùng theo dõi số món thực tế và bấm làm mới tức thì bất kỳ lúc nào.
+  5. *Bổ sung Tab "Tất cả" (`all`)*: Bên cạnh các tab "Alacarte" (74 món • 8 nhóm), "Buffet" (0đ), "Đồ uống" (27 món • 1 nhóm), cho phép xem toàn bộ 101 món và 9 nhóm món liền mạch.
+
+---
+
 ### [2026-10-04 và trước đó] - Nền Tảng & Quy Chuẩn Giao Diện Toàn Hệ Thống
 - **Quy định No Stat Cards**: Tuyệt đối không đặt các khối thẻ thống kê to ở đầu các trang tác vụ nghiệp vụ (CentralizedLogs, RestaurantMongoAnalysis...).
 - **Quy tắc Đóng Modal**: Modal chỉ đóng khi bấm `Esc`, bấm nút `X` hoặc nút "Đóng" / "Hủy"; không đóng khi click ngoài overlay.
@@ -1854,3 +1877,4 @@ estaurant_service.py).
 - **Giới hạn Logs Tập Trung**: Giới hạn tối đa 2000 bản ghi log gần nhất (`MAX_LOAD_LIMIT = 2000`) để bảo vệ hiệu năng.
 - **Tương thích Python 3.10**: Bắt buộc `from __future__ import annotations` ở đầu file backend; import đầy đủ model/schema Pydantic.
 - **TypeScript Strict Mode**: Lỗi TS6133 (biến thừa không dùng) là lỗi cấm, phải giữ code sạch 100% khi build.
+
