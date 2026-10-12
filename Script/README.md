@@ -109,6 +109,37 @@ npm run dev
      + **Bắt buộc thêm trực tiếp vào Database Production .25** (`172.16.8.25:1433`, Database: `ITDEPT`).
      + **Kèm cập nhật ngay vào `Script/Full_SCRIPT_SQL_TABLE.sql`** để lưu trữ master DDL cho việc dựng server mới sau này.
      + Khai báo kiểm tra cột / tạo bảng tự động trong hàm `lifespan` tại `backend/app/main.py` để phòng ngừa lỗi 500 khi server khởi động.
+8. **Quy tắc Bất Biến: Thứ Tự Khai Báo Top-Down & Smoke Test Bắt Buộc (Chống 100% Lỗi Khai Báo Thiếu / NameError Backend)**:
+   - **Thứ tự khai báo chuẩn trong từng file router**: `1. Imports` $\rightarrow$ `2. Constants & Pydantic Schemas` $\rightarrow$ `3. Dependencies & Local Helpers` (bắt buộc đặt trên) $\rightarrow$ `4. Route Endpoints (@router.get/post)` nằm ở dưới cùng. Tuyệt đối không để hàm dependency nằm bên dưới route sử dụng `Depends(func)`.
+   - **CẤM CHỈ DÙNG `py_compile`**: Lệnh compile syntax chỉ kiểm tra cú pháp AST mà hoàn toàn không thực thi module scope nên không phát hiện được lỗi NameError.
+   - **Lệnh Smoke Test Bắt Buộc Sau Mọi Chỉnh Sửa Backend**:
+     ```powershell
+     backend\.venv\Scripts\python.exe -c "from app.main import app; print('>>> BACKEND SMOKE TEST: PASSED 100%')"
+     ```
+     Chỉ khi lệnh này in ra `PASSED 100%`, code mới được bàn giao hoặc copy lên server.
+
+---
+
+### [2026-10-12] - Sửa Triệt Để Lỗi NameError Khởi Động Backend Trên IIS & Ban Hành Quy Tắc Bất Biến Về Thứ Tự Khai Báo & Smoke Test
+- **Bối cảnh & Yêu cầu người dùng**:
+  - Khi khởi động backend trên IIS (qua file batch), hệ thống văng lỗi dừng server:
+    `File "C:\DUNGIT\IT_Project_Management_New\backend\app\api\v1\hotline.py", line 629, in <module>`
+    `current_user: UserInfo = Depends(get_current_user_flexible),`
+    `NameError: name 'get_current_user_flexible' is not defined`
+  - Người dùng phàn nàn lỗi khai báo thiếu/khai báo sau khi gọi này xảy ra liên tục và yêu cầu đưa thành quy tắc bất biến để không bao giờ tái diễn.
+- **Nguyên nhân cốt lõi**:
+  - Trong Python, khi FastAPI import module, các tham số mặc định của router như `Depends(get_current_user_flexible)` được đánh giá (evaluated) ngay lập tức tại thời điểm import theo thứ tự từ trên xuống dưới. Do hàm `get_current_user_flexible` trước đây được định nghĩa ở cuối file, Python chưa nạp được tên hàm này vào scope $\rightarrow$ gây ra lỗi `NameError`.
+  - Lệnh kiểm tra cú pháp trước đây (`python -m py_compile`) chỉ phân tích cây cú pháp AST (SyntaxError) mà hoàn toàn không thực thi module/import scope nên đã bỏ lọt lỗi này.
+- **Khắc phục & Kiểm thử**:
+  1. Trong `backend/app/api/v1/hotline.py`: Di chuyển hàm `get_current_user_flexible(...)` lên đầu file (dòng 46), trước toàn bộ các route sử dụng nó.
+  2. Chạy Runtime Smoke Test bằng Python của môi trường ảo:
+     `backend\.venv\Scripts\python.exe -c "from app.main import app; print('>>> BACKEND SMOKE TEST: PASSED 100%')"` $\rightarrow$ Kết quả `PASSED 100%` hoàn hảo.
+  3. Cập nhật quy tắc sắt đá vào toàn bộ tài liệu quy chuẩn dự án:
+     - `.agents/rules/project_guidelines.md` (Mục 7.2 & 7.5)
+     - `GEMINI.md` (Mục 7.2 & 7.5)
+     - `AGENTS.md` (Mục 7.2 & 7.5)
+     - `PROJECT_GUIDELINES.md` (Mục 7.2 & 7.5)
+     - `Script/README.md` (Mục 8 & Changelog)
 
 ---
 

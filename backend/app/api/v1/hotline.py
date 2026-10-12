@@ -43,6 +43,55 @@ class ToggleDutyRequest(BaseModel):
     duty_user: Optional[str] = None
 
 
+def get_current_user_flexible(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> UserInfo:
+    """Lấy thông tin người dùng hiện tại từ Bearer token, nếu không có hoặc hết hạn thì fallback IT Hotline"""
+    try:
+        from app.core.security import decode_access_token
+        from app.models.user import User
+        from sqlalchemy import func, select
+        auth = request.headers.get("Authorization")
+        if auth and auth.startswith("Bearer "):
+            token = auth.split(" ")[1]
+            payload = decode_access_token(token)
+            if payload and payload.get("sub"):
+                username = payload.get("sub")
+                stmt = select(User).where(func.lower(User.user_name1) == username.lower())
+                user = db.scalar(stmt)
+                if user:
+                    return UserInfo(
+                        id=user.id,
+                        username=user.user_name1,
+                        full_name=user.full_name or user.user_name1,
+                        email=user.email or "",
+                        manv=user.manv or "",
+                        phanquyen=user.phanquyen or "",
+                        roles=[],
+                        role_name="",
+                        quyen_mo_rong="",
+                        is_super_admin=False,
+                        permissions={},
+                    )
+    except Exception:
+        pass
+    return UserInfo(
+        id=0,
+        username="hotline",
+        full_name="IT Hotline",
+        email="",
+        manv="",
+        phanquyen="",
+        roles=[],
+        role_name="",
+        quyen_mo_rong="",
+        is_super_admin=False,
+        permissions={},
+    )
+
+
+
 @router.get("/events")
 async def hotline_events_stream():
     """
@@ -642,53 +691,6 @@ def get_missed_calls_list(
         "items": items,
     }
 
-
-def get_current_user_flexible(
-    request: Request,
-    db: Session = Depends(get_db),
-) -> UserInfo:
-    """Lấy thông tin người dùng hiện tại từ Bearer token, nếu không có hoặc hết hạn thì fallback IT Hotline"""
-    try:
-        from app.core.security import decode_access_token
-        from app.models.user import User
-        from sqlalchemy import func, select
-        auth = request.headers.get("Authorization")
-        if auth and auth.startswith("Bearer "):
-            token = auth.split(" ")[1]
-            payload = decode_access_token(token)
-            if payload and payload.get("sub"):
-                username = payload.get("sub")
-                stmt = select(User).where(func.lower(User.user_name1) == username.lower())
-                user = db.scalar(stmt)
-                if user:
-                    return UserInfo(
-                        id=user.id,
-                        username=user.user_name1,
-                        full_name=user.full_name or user.user_name1,
-                        email=user.email or "",
-                        manv=user.manv or "",
-                        phanquyen=user.phanquyen or "",
-                        roles=[],
-                        role_name="",
-                        quyen_mo_rong="",
-                        is_super_admin=False,
-                        permissions={},
-                    )
-    except Exception:
-        pass
-    return UserInfo(
-        id=0,
-        username="hotline",
-        full_name="IT Hotline",
-        email="",
-        manv="",
-        phanquyen="",
-        roles=[],
-        role_name="",
-        quyen_mo_rong="",
-        is_super_admin=False,
-        permissions={},
-    )
 
 
 @router.post("/missed-calls/{call_id}/resolve")
