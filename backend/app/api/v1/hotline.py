@@ -807,6 +807,7 @@ def check_user_permission(
     username: Optional[str] = Query(None),
     roles: Optional[str] = Query(None),
     is_super_admin: bool = Query(False),
+    db: Session = Depends(get_db),
 ):
     """Kiểm tra quyền trực hotline của user hiện tại"""
     role_list = [r.strip().lower() for r in (roles or "").split(",") if r.strip()]
@@ -814,6 +815,7 @@ def check_user_permission(
         username=username,
         role_codes=role_list,
         is_super_admin=is_super_admin,
+        db=db,
     )
     can_manage = is_super_admin or (username or "").strip().lower() in ["admin", "administrator", "dung.nguyenanh"]
     return {

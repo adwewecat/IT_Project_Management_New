@@ -1870,6 +1870,30 @@ estaurant_service.py).
 
 ---
 
+### [2026-10-12] - Khắc Phục Lỗi Phân Quyền Trực Hotline 3CX (hotline_3cx_duty) Cho Nhóm IT Application (Team App) Và Ma Trận Quyền RBAC
+- **Hiện tượng lỗi**:
+  1. Người quản trị đã vào mục **Quản Trị Hệ Thống -> Người Dùng & Quyền**, chọn nhóm quyền **IT Application (Team App)** và tích chọn `[X] Xem` cho quyền **"Quyền Trực Hotline 3CX (Bật/tắt trực & xem cuộc gọi nhỡ)"** (`hotline_3cx_duty`).
+  2. Tuy nhiên, các tài khoản người dùng thuộc Team App khi đăng nhập vẫn không thấy cụm nút Hotline 3CX trên thanh tiêu đề Header (nút `Hotline: BẬT/TẮT` và nút `Cuộc Gọi`).
+- **Nguyên nhân cốt lõi**:
+  1. *Frontend `HotlineContext.tsx`*: Trước đây hoàn toàn bỏ qua đối tượng phân quyền RBAC `user.permissions`, chỉ gọi API kiểm tra tĩnh `hotlineService.checkUserPermission`. Nếu kiểm tra qua API hoặc fallback, chỉ kiểm tra cứng `['admin', 'helpdesk']` mà không nhận diện nhóm `app` hoặc cờ quyền `hotline_3cx_duty`.
+  2. *Backend Service `hotline_3cx_service.py`*: Hàm `check_user_hotline_access` chỉ kiểm tra trong file tĩnh `hotline_permissions.json` (mặc định chỉ có `admin` và `helpdesk`), hoàn toàn không truy vấn bảng phân quyền `dbo.PHANQUYEN_DETAIL` trong SQL Server.
+  3. *Backend Auth `auth_service.py`*: Danh sách quyền mặc định `ALL_PERMISSIONS` thiếu khóa `hotline_3cx_duty`. Đồng thời, hàm `get_user_permissions` trước đây chỉ quét bảng `PHANQUYEN_DETAIL` khi `quyen_mo_rong` được gán khác `0`. Với các tài khoản được gán nhóm theo `phanquyen = 'app'` hoặc `'2'`, hệ thống không tự động map sang mã nhóm tương ứng trong `LV_QUYEN` để lấy các quyền chi tiết.
+- **Giải pháp xử lý toàn diện**:
+  1. *Đồng bộ trực tiếp trên Frontend (`HotlineContext.tsx`)*:
+     - Ưu tiên kiểm tra trực tiếp quyền từ ma trận RBAC: Nếu `user.permissions['hotline_3cx_duty']` hoặc `view_hotline_3cx_duty` là `True`, lập tức cấp quyền hiển thị và trực hotline (`setCanAccessHotline(true)`).
+     - Bổ sung nhóm `app` vào danh sách fallback khi mất kết nối API.
+  2. *Tích hợp kiểm tra Database trong Backend (`hotline_3cx_service.py` & `hotline.py`)*:
+     - Hàm `check_user_hotline_access` được nâng cấp nhận `Session` từ DB: Tự động truy vấn bảng `dbo.PHANQUYEN_DETAIL` theo `quyen_mo_rong` hoặc theo mã nhóm (`id_quyen = 2` của nhóm `app`, `id_quyen = 3` của `helpdesk`, v.v.). Nếu quyền `hotline_3cx_duty` đang `Active == True`, hệ thống lập tức cho phép.
+     - Endpoint `/api/v1/hotline/check-permission` tự động tiêm `db: Session = Depends(get_db)`.
+  3. *Bổ sung `ALL_PERMISSIONS` & Tự Động Phân Giải Nhóm (`auth_service.py`)*:
+     - Bổ sung `hotline_3cx_duty`, `view_hotline_3cx_duty`, `update_hotline_3cx_duty` vào `ALL_PERMISSIONS`.
+     - Nâng cấp `get_user_permissions`: Tự động gom tất cả các mã nhóm từ cả `quyen_mo_rong` và `phanquyen` (thông qua `ROLE_MAP`), đảm bảo người dùng thuộc Team App luôn nhận đủ 100% quyền được cấu hình trong bảng `PHANQUYEN_DETAIL`.
+  4. *Đồng bộ 2 chiều cấu hình (`role_service.py` & `hotline_permissions.json`)*:
+     - Bổ sung nhóm `app` vào `enabled_roles` trong `backend/data/hotline_permissions.json` và `DEFAULT_HOTLINE_PERMISSIONS`.
+     - Khi người quản trị lưu phân quyền trong trang Quản Trị Hệ Thống (`update_role_permissions`), nếu quyền `hotline_3cx_duty` của nhóm được bật/tắt, hệ thống tự động cập nhật ngay lập tức vào `hotline_permissions.json`.
+
+---
+
 ### [2026-10-04 và trước đó] - Nền Tảng & Quy Chuẩn Giao Diện Toàn Hệ Thống
 - **Quy định No Stat Cards**: Tuyệt đối không đặt các khối thẻ thống kê to ở đầu các trang tác vụ nghiệp vụ (CentralizedLogs, RestaurantMongoAnalysis...).
 - **Quy tắc Đóng Modal**: Modal chỉ đóng khi bấm `Esc`, bấm nút `X` hoặc nút "Đóng" / "Hủy"; không đóng khi click ngoài overlay.

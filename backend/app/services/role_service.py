@@ -411,6 +411,45 @@ def update_role_permissions(
     log_admin_action(db, "Admin_quyenmo_rong", "Update_Permissions", actor, log_content)
     db.commit()
 
+    # Tự động đồng bộ hotline_permissions.json khi phân quyền hotline_3cx_duty được cập nhật
+    try:
+        hotline_perm_item = next((p for p in data.permissions if p.chucnang == "hotline_3cx_duty"), None)
+        if hotline_perm_item is not None:
+            from app.services import hotline_3cx_service
+            cfg = hotline_3cx_service.get_hotline_permissions()
+            enabled_roles = set(r.strip().lower() for r in cfg.get("enabled_roles", []))
+            
+            # Xác định mã role tương ứng
+            role_code = None
+            if role_id == 1:
+                role_code = "admin"
+            elif role_id == 2:
+                role_code = "app"
+            elif role_id == 3:
+                role_code = "helpdesk"
+            elif role_id == 4:
+                role_code = "inventory"
+            elif role.tenquyen:
+                tq = role.tenquyen.lower()
+                if "app" in tq:
+                    role_code = "app"
+                elif "helpdesk" in tq:
+                    role_code = "helpdesk"
+                elif "admin" in tq:
+                    role_code = "admin"
+                else:
+                    role_code = str(role_id)
+
+            if role_code:
+                if hotline_perm_item.active:
+                    enabled_roles.add(role_code)
+                else:
+                    enabled_roles.discard(role_code)
+                cfg["enabled_roles"] = list(enabled_roles)
+                hotline_3cx_service.save_hotline_permissions(cfg)
+    except Exception as sync_err:
+        logger.warning(f"Lỗi đồng bộ hotline_permissions.json từ role_service: {sync_err}")
+
     return get_role_permissions(db, role_id)
 
 

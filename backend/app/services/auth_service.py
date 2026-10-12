@@ -29,7 +29,9 @@ ALL_PERMISSIONS = [
     "update_teamview_pc", "update_teamview_pos11", "update_teamview_pos12",
     "update_rustdesk_pos11", "update_rustdesk_pos12",
     "update_sys", "update_ftth", "update_dk_truyenthong", "update_pass_mail",
-    "update_code_photo", "update_ext_rsc", "update_note_nh", "update_test"
+    "update_code_photo", "update_ext_rsc", "update_note_nh", "update_test",
+    # Hotline 3CX permissions
+    "hotline_3cx_duty", "view_hotline_3cx_duty", "update_hotline_3cx_duty"
 ]
 
 ROLE_MAP = {
@@ -105,17 +107,27 @@ def get_user_permissions(db: Session, phanquyen: Optional[str], quyen_mo_rong: O
             permissions[key] = True
         return permissions
 
-    if quyen_mo_rong:
+    # Collect all role IDs associated with this user
+    role_ids_to_check = set()
+    if quyen_mo_rong and str(quyen_mo_rong).strip() not in ["0", ""]:
+        role_ids_to_check.add(str(quyen_mo_rong).strip())
+
+    # Also resolve from roles/phanquyen (e.g. 'app' -> '2', 'helpdesk' -> '3', etc.)
+    for r in roles:
+        r_clean = str(r).strip().lower()
+        if r_clean in ROLE_MAP:
+            role_ids_to_check.add(str(ROLE_MAP[r_clean]["id"]))
+        elif r_clean.isdigit():
+            role_ids_to_check.add(r_clean)
+
+    if role_ids_to_check:
         stmt = select(PermissionDetail).where(
-            PermissionDetail.id_quyen == str(quyen_mo_rong),
+            PermissionDetail.id_quyen.in_(list(role_ids_to_check)),
             PermissionDetail.active == True
         )
         details = db.scalars(stmt).all()
         for d in details:
-            if d.chucnang in permissions:
-                permissions[d.chucnang] = True
-            else:
-                permissions[d.chucnang] = True
+            permissions[d.chucnang] = True
 
     return permissions
 

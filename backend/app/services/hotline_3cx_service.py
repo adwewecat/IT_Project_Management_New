@@ -949,7 +949,7 @@ def get_status() -> Dict[str, Any]:
 HOTLINE_PERMISSIONS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data", "hotline_permissions.json")
 
 DEFAULT_HOTLINE_PERMISSIONS: Dict[str, Any] = {
-    "enabled_roles": ["admin", "helpdesk"],
+    "enabled_roles": ["admin", "helpdesk", "app"],
     "allowed_users": ["dung.nguyenanh", "admin"],
     "allow_all": False,
     "agent_server_url": "",
@@ -963,7 +963,7 @@ def get_hotline_permissions() -> Dict[str, Any]:
             with open(HOTLINE_PERMISSIONS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 return {
-                    "enabled_roles": data.get("enabled_roles", ["admin", "helpdesk"]),
+                    "enabled_roles": data.get("enabled_roles", ["admin", "helpdesk", "app"]),
                     "allowed_users": data.get("allowed_users", ["dung.nguyenanh", "admin"]),
                     "allow_all": bool(data.get("allow_all", False)),
                     "agent_server_url": str(data.get("agent_server_url", "")).strip(),
@@ -977,7 +977,7 @@ def save_hotline_permissions(config: Dict[str, Any]) -> Dict[str, Any]:
     """Lưu cấu hình phân quyền trực hotline và server URL cho Client Agent"""
     os.makedirs(os.path.dirname(HOTLINE_PERMISSIONS_FILE), exist_ok=True)
     clean_config = {
-        "enabled_roles": list(config.get("enabled_roles", ["admin", "helpdesk"])),
+        "enabled_roles": list(config.get("enabled_roles", ["admin", "helpdesk", "app"])),
         "allowed_users": list(config.get("allowed_users", ["dung.nguyenanh", "admin"])),
         "allow_all": bool(config.get("allow_all", False)),
         "agent_server_url": str(config.get("agent_server_url", "")).strip(),
@@ -990,9 +990,10 @@ def save_hotline_permissions(config: Dict[str, Any]) -> Dict[str, Any]:
 def check_user_hotline_access(
     username: Optional[str],
     role_codes: Optional[List[str]] = None,
-    is_super_admin: bool = False
+    is_super_admin: bool = False,
+    db: Optional[Session] = None,
 ) -> bool:
-    """Kiểm tra tài khoản người dùng có quyền thấy & trực hotline 3CX không"""
+    """Kiểm tra tài khoản người dùng có quyền thấy & trực hotline 3CX không (hỗ trợ cả JSON config và DB RBAC)"""
     clean_user = (username or "").strip().lower()
     # Super Admin hoặc user dung.nguyenanh luôn có toàn quyền
     if is_super_admin or clean_user in ["admin", "administrator", "dung.nguyenanh"]:
@@ -1010,6 +1011,63 @@ def check_user_hotline_access(
     user_roles = [r.strip().lower() for r in (role_codes or [])]
     if any(r in enabled_roles for r in user_roles):
         return True
+
+    # Kiểm tra trực tiếp phân quyền từ bảng DB (dbo.PHANQUYEN_DETAIL)
+    check_session = db
+    local_session = False
+    if check_session is None:
+        try:
+            check_session = SessionLocal()
+            local_session = True
+        except Exception:
+            check_session = None
+
+    if check_session is not None:
+        try:
+            from app.models.user import User, PermissionDetail
+            from sqlalchemy import select, func
+
+            role_ids = set()
+            for rc in user_roles:
+                if rc in ["app", "it_application"]:
+                    role_ids.add("2")
+                elif rc in ["helpdesk", "it_helpdesk"]:
+                    role_ids.add("3")
+                elif rc in ["inventory", "inv"]:
+                    role_ids.add("4")
+                elif rc.isdigit():
+                    role_ids.add(rc)
+
+            if clean_user:
+                db_user = check_session.scalar(select(User).where(func.lower(User.user_name1) == clean_user))
+                if db_user:
+                    if db_user.quyen_mo_rong and str(db_user.quyen_mo_rong).strip() not in ["0", ""]:
+                        role_ids.add(str(db_user.quyen_mo_rong).strip())
+                    if db_user.phanquyen:
+                        parts = [p.strip().lower() for p in db_user.phanquyen.replace(";", ",").split(",") if p.strip()]
+                        for p in parts:
+                            if p in ["app", "2"]:
+                                role_ids.add("2")
+                            elif p in ["helpdesk", "3"]:
+                                role_ids.add("3")
+                            elif p.isdigit():
+                                role_ids.add(p)
+
+            if role_ids:
+                duty_perm = check_session.scalar(
+                    select(PermissionDetail).where(
+                        PermissionDetail.id_quyen.in_(list(role_ids)),
+                        PermissionDetail.chucnang.in_(["hotline_3cx_duty", "view_hotline_3cx_duty"]),
+                        PermissionDetail.active == True
+                    )
+                )
+                if duty_perm:
+                    return True
+        except Exception as db_err:
+            logger.warning(f"Lỗi kiểm tra quyền hotline qua DB: {db_err}")
+        finally:
+            if local_session and check_session is not None:
+                check_session.close()
 
     return False
 

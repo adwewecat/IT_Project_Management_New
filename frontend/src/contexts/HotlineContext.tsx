@@ -141,18 +141,33 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return;
     }
 
+    // 1. Kiểm tra trực tiếp từ permissions trong token/user state (phân quyền RBAC từ DB)
+    const hasDutyPermission = Boolean(
+      user.permissions?.['hotline_3cx_duty'] ||
+      user.permissions?.['view_hotline_3cx_duty'] ||
+      user.permissions?.['update_hotline_3cx_duty']
+    );
+
+    if (hasDutyPermission) {
+      setCanAccessHotline(true);
+      setCanManageHotline(Boolean(user.permissions?.['update_hotline_3cx_duty'] || user.permissions?.['hotline_3cx_duty']));
+      return;
+    }
+
+    // 2. Kiểm tra qua API backend
     const userRoles = (user.roles || []).join(',');
     hotlineService
       .checkUserPermission(user.username, userRoles, false)
       .then((res) => {
-        setCanAccessHotline(res.can_access);
-        setCanManageHotline(res.can_manage);
+        setCanAccessHotline(res.can_access || hasDutyPermission);
+        setCanManageHotline(res.can_manage || hasDutyPermission);
       })
       .catch(() => {
-        // Fallback: nếu lỗi kiểm tra API thì cho phép nếu role là admin hoặc helpdesk
+        // Fallback: nếu lỗi kiểm tra API thì cho phép nếu role là admin, helpdesk, app hoặc có permission
         const rolesLower = (user.roles || []).map((r) => r.toLowerCase());
-        const hasAccess = rolesLower.includes('admin') || rolesLower.includes('helpdesk');
+        const hasAccess = rolesLower.includes('admin') || rolesLower.includes('helpdesk') || rolesLower.includes('app') || hasDutyPermission;
         setCanAccessHotline(hasAccess);
+        setCanManageHotline(hasAccess);
       });
   }, [user]);
 
