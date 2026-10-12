@@ -152,6 +152,7 @@ class BatchApplyParamsRequest(BaseModel):
 class BatchApplyRestaurantResult(BaseModel):
     restaurant_name: str
     ip: str
+    raw_ip: Optional[str] = None
     sap_code: Optional[str] = None
     rk7_code: Optional[str] = None
     success: bool
@@ -159,6 +160,7 @@ class BatchApplyRestaurantResult(BaseModel):
     updated: int = 0
     skipped: int = 0
     error: Optional[str] = None
+    device_results: Optional[List[Dict[str, Any]]] = None
 
 
 class BatchApplyParamsResponse(BaseModel):

@@ -21,6 +21,45 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__
 TRANSFER_SETTINGS_FILE = os.path.join(DATA_DIR, "mongo_transfer_settings.json")
 BASE_TRANSFER_DEFAULT_TAILS = ["11", "12", "41"]
 
+PARAM_SETTINGS_FILE = os.path.join(DATA_DIR, "mongo_param_settings.json")
+BASE_PARAM_DEFAULT_TAILS = ["11", "12", "41"]
+
+def get_param_default_tails() -> List[str]:
+    """Lấy danh sách đuôi IP máy POS/KDS mặc định khi đẩy APP_PARAM (gốc: .11, .12, .41)."""
+    if os.path.exists(PARAM_SETTINGS_FILE):
+        try:
+            with open(PARAM_SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                tails = data.get("default_tails")
+                if isinstance(tails, list) and tails:
+                    res = []
+                    for t in tails:
+                        cleaned = str(t).strip().lstrip(".")
+                        if cleaned and cleaned not in res:
+                            res.append(cleaned)
+                    if res:
+                        return res
+        except Exception as e:
+            logger.error(f"Lỗi đọc {PARAM_SETTINGS_FILE}: {e}")
+    return list(BASE_PARAM_DEFAULT_TAILS)
+
+def save_param_default_tails(tails: List[str]) -> List[str]:
+    """Lưu danh sách đuôi IP POS/KDS để người dùng thêm/bớt trạm đẩy param."""
+    clean_tails = []
+    for t in tails:
+        c = str(t).strip().lstrip(".")
+        if c and c not in clean_tails:
+            clean_tails.append(c)
+    if not clean_tails:
+        clean_tails = list(BASE_PARAM_DEFAULT_TAILS)
+    os.makedirs(DATA_DIR, exist_ok=True)
+    try:
+        with open(PARAM_SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump({"default_tails": clean_tails}, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"Lỗi ghi {PARAM_SETTINGS_FILE}: {e}")
+    return clean_tails
+
 def get_transfer_default_tails() -> List[str]:
     """Lấy danh sách đuôi IP mặc định khi quét chuyển DB MongoDB (gốc: .11, .12, .41)."""
     if os.path.exists(TRANSFER_SETTINGS_FILE):
@@ -241,51 +280,29 @@ def resolve_mongo_target_ip(ip: str, default_port: int = 27017, timeout_sec: flo
     return None, f"Không tìm thấy máy POS/KDS nào mở port {default_port} trong dải {subnet}X (đã quét .11, .12, .41, .13, .14, .42)"
 
 
-def _push_params_to_restaurant(
-    r_info: dict,
+def _push_params_to_single_device(
+    ip: str,
+    port: int,
     params_to_push: List[dict],
     mode: str
 ) -> dict:
     """
-    Thực thi đẩy tham số APP_PARAM xuống một nhà hàng mục tiêu.
-    Được thiết kế để chạy đa luồng an toàn trong ThreadPool.
+    Thực thi đẩy param xuống một máy POS/KDS cụ thể.
     """
-    r_name = r_info.get("name") or r_info.get("restaurant_name") or r_info.get("ip") or "Chưa rõ"
-    raw_ip = (r_info.get("ip") or "").strip()
-    r_port = int(r_info.get("port") or 27017)
-    r_sap = r_info.get("sap_code")
-    r_rk7 = r_info.get("rk7_code")
-
-    if not raw_ip:
+    if not _check_tcp_port(ip, port, timeout=0.8):
         return {
-            "restaurant_name": r_name,
-            "ip": "",
-            "sap_code": r_sap,
-            "rk7_code": r_rk7,
+            "ip": ip,
+            "connected": False,
             "success": False,
             "inserted": 0,
             "updated": 0,
             "skipped": 0,
-            "error": "Thiếu địa chỉ IP nhà hàng"
-        }
-
-    actual_ip, err_msg = resolve_mongo_target_ip(raw_ip, r_port)
-    if not actual_ip:
-        return {
-            "restaurant_name": r_name,
-            "ip": raw_ip,
-            "sap_code": r_sap,
-            "rk7_code": r_rk7,
-            "success": False,
-            "inserted": 0,
-            "updated": 0,
-            "skipped": 0,
-            "error": err_msg or "Không thể kết nối đến máy chủ MongoDB nhà hàng"
+            "error": "Port 27017 đóng hoặc máy tắt nguồn (Offline)"
         }
 
     client = None
     try:
-        client = MongoClient(actual_ip, r_port, serverSelectionTimeoutMS=3000, socketTimeoutMS=5000)
+        client = MongoClient(ip, port, serverSelectionTimeoutMS=2500, socketTimeoutMS=5000)
         col = client["G_ORDER"]["APP_PARAM"]
 
         ins_cnt = 0
@@ -327,11 +344,8 @@ def _push_params_to_restaurant(
                 ins_cnt += 1
 
         return {
-            "restaurant_name": r_name,
-            "ip": actual_ip,
-            "raw_ip": raw_ip,
-            "sap_code": r_sap,
-            "rk7_code": r_rk7,
+            "ip": ip,
+            "connected": True,
             "success": True,
             "inserted": ins_cnt,
             "updated": upd_cnt,
@@ -340,16 +354,13 @@ def _push_params_to_restaurant(
         }
     except Exception as e:
         return {
-            "restaurant_name": r_name,
-            "ip": actual_ip or raw_ip,
-            "raw_ip": raw_ip,
-            "sap_code": r_sap,
-            "rk7_code": r_rk7,
+            "ip": ip,
+            "connected": True,
             "success": False,
             "inserted": 0,
             "updated": 0,
             "skipped": 0,
-            "error": f"Lỗi ghi dữ liệu MongoDB ({actual_ip}): {str(e)}"
+            "error": f"Lỗi ghi dữ liệu MongoDB ({ip}): {str(e)}"
         }
     finally:
         if client:
@@ -357,6 +368,101 @@ def _push_params_to_restaurant(
                 client.close()
             except Exception:
                 pass
+
+
+def _push_params_to_restaurant(
+    r_info: dict,
+    params_to_push: List[dict],
+    mode: str
+) -> dict:
+    """
+    Thực thi đẩy tham số APP_PARAM xuống TẤT CẢ các máy POS/KDS (.11, .12, .41...) của nhà hàng.
+    Đảm bảo xử lý đồng thời hết tất cả IP của nhà hàng, không bỏ sót bất kỳ máy POS nào.
+    """
+    r_name = r_info.get("name") or r_info.get("restaurant_name") or r_info.get("ip") or "Chưa rõ"
+    raw_ip = (r_info.get("ip") or "").strip()
+    r_port = int(r_info.get("port") or 27017)
+    r_sap = r_info.get("sap_code")
+    r_rk7 = r_info.get("rk7_code")
+
+    if not raw_ip:
+        return {
+            "restaurant_name": r_name,
+            "ip": "",
+            "raw_ip": "",
+            "sap_code": r_sap,
+            "rk7_code": r_rk7,
+            "success": False,
+            "inserted": 0,
+            "updated": 0,
+            "skipped": 0,
+            "error": "Thiếu địa chỉ IP nhà hàng",
+            "device_results": []
+        }
+
+    subnet = MongoDBService.extract_subnet_prefix(raw_ip)
+    tails = get_param_default_tails()  # Mặc định: ['11', '12', '41']
+
+    # Danh sách tất cả các IP POS/KDS cần xử lý của nhà hàng
+    target_ips = [f"{subnet}{t}" for t in tails]
+
+    # Nếu raw_ip là một IP trạm cụ thể khác (không phải .1, không kết thúc bằng .X và không nằm trong target_ips)
+    clean_raw = raw_ip.lower()
+    if not clean_raw.endswith(".1") and not clean_raw.endswith(".x") and not clean_raw.endswith("."):
+        if raw_ip not in target_ips:
+            target_ips.append(raw_ip)
+
+    # Đẩy song song xuống TẤT CẢ các máy POS/KDS của nhà hàng
+    with ThreadPoolExecutor(max_workers=len(target_ips)) as dev_executor:
+        dev_results = list(dev_executor.map(
+            lambda target_ip: _push_params_to_single_device(target_ip, r_port, params_to_push, mode),
+            target_ips
+        ))
+
+    successful_devices = [d for d in dev_results if d.get("success")]
+    offline_devices = [d for d in dev_results if not d.get("connected")]
+    error_devices = [d for d in dev_results if d.get("connected") and not d.get("success")]
+
+    total_inserted = sum(d.get("inserted", 0) for d in successful_devices)
+    total_updated = sum(d.get("updated", 0) for d in successful_devices)
+    total_skipped = sum(d.get("skipped", 0) for d in successful_devices)
+
+    if len(successful_devices) > 0:
+        success_ip_list = [d["ip"] for d in successful_devices]
+        if len(successful_devices) == len(target_ips):
+            display_ip = f"{', '.join(success_ip_list)} (Đã cập nhật đủ {len(successful_devices)}/{len(target_ips)} máy)"
+        else:
+            offline_tails = [f".{d['ip'].split('.')[-1]}" for d in offline_devices]
+            display_ip = f"{', '.join(success_ip_list)} ({len(successful_devices)}/{len(target_ips)} máy online; tắt: {', '.join(offline_tails)})"
+
+        return {
+            "restaurant_name": r_name,
+            "ip": display_ip,
+            "raw_ip": raw_ip,
+            "sap_code": r_sap,
+            "rk7_code": r_rk7,
+            "success": True,
+            "inserted": total_inserted,
+            "updated": total_updated,
+            "skipped": total_skipped,
+            "error": None,
+            "device_results": dev_results
+        }
+    else:
+        tail_names = [f".{t}" for t in tails]
+        return {
+            "restaurant_name": r_name,
+            "ip": f"{', '.join(target_ips)} (0/{len(target_ips)} máy)",
+            "raw_ip": raw_ip,
+            "sap_code": r_sap,
+            "rk7_code": r_rk7,
+            "success": False,
+            "inserted": 0,
+            "updated": 0,
+            "skipped": 0,
+            "error": f"Cả {len(target_ips)} máy POS/KDS ({', '.join(tail_names)}) đều không kết nối được (Offline / mất mạng)",
+            "device_results": dev_results
+        }
 
 
 class MongoDBService:
@@ -1189,13 +1295,15 @@ class MongoDBService:
             BatchApplyRestaurantResult(
                 restaurant_name=res["restaurant_name"],
                 ip=res["ip"],
+                raw_ip=res.get("raw_ip"),
                 sap_code=res.get("sap_code"),
                 rk7_code=res.get("rk7_code"),
                 success=res["success"],
                 inserted=res.get("inserted", 0),
                 updated=res.get("updated", 0),
                 skipped=res.get("skipped", 0),
-                error=res.get("error")
+                error=res.get("error"),
+                device_results=res.get("device_results")
             )
             for res in raw_results
         ]

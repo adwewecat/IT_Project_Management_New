@@ -1839,6 +1839,12 @@ estaurant_service.py).
      - Hiển thị địa chỉ IP máy POS/KDS thực tế đã nhận dữ liệu cùng IP gốc (`Gốc: 10.9.82.1`).
      - Tối ưu bảng chi tiết hiển thị lỗi rõ ràng, ngắt dòng chuẩn đẹp khi gặp sự cố mạng.
 
+  5. *Đẩy Param Đồng Bộ Xuống TẤT CẢ 3 Máy Trạm POS/KDS Của Nhà Hàng (.11, .12, .41)*:
+     - **Quy chuẩn nghiệp vụ**: Mỗi nhà hàng có tới 3 máy trạm chạy MongoDB (`.11` là POS 1, `.12` là POS 2, `.41` là KDS/POS 3). Tuyệt đối không chỉ xử lý 1 IP rồi dừng lại. Hệ thống phải quét và đẩy cấu hình xuống **TẤT CẢ** các máy POS/KDS đang mở cổng trong nhà hàng.
+     - **Linh hoạt mở rộng**: Cấu hình danh sách đuôi IP được lưu tập trung tại [`backend/data/mongo_param_settings.json`](file:///d:/Z.Dung_luu_rieng/LAPTRINH/IT_Project_Management_New/backend/data/mongo_param_settings.json) (`default_tails: ["11", "12", "41"]`). Sau này người dùng muốn thêm trạm (như `.13`, `.14`, `.42`), chỉ cần sửa file json hoặc cấu hình mà không cần sửa code.
+     - **Thực thi song song từng máy**: Khi đẩy param xuống 1 nhà hàng, hệ thống dùng sub-threadpool đẩy đồng thời xuống cả 3 máy (`.11`, `.12`, `.41`) chỉ trong <0.8s. Báo cáo chi tiết từng máy: máy nào online đã ghi thành công, máy nào tắt nguồn (Offline).
+     - **Hiển thị trực quan**: Modal chi tiết kết quả hiển thị thẻ badge trạng thái độc lập cho từng máy POS/KDS (`✓ 10.9.82.11`, `✓ 10.9.82.12`, `⚡ 10.9.82.41 (Tắt)`).
+
 ---
 
 ### [2026-10-04 và trước đó] - Nền Tảng & Quy Chuẩn Giao Diện Toàn Hệ Thống

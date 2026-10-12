@@ -3962,7 +3962,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
           isOpen={!!viewingJobDetail}
           onClose={() => setViewingJobDetail(null)}
           title={`📊 Kết Quả Thực Thi: #${viewingJobDetail.id} - ${viewingJobDetail.job_title}`}
-          maxWidth="850px"
+          maxWidth="960px"
           footer={
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <Button variant="primary" onClick={() => setViewingJobDetail(null)}>
@@ -3987,25 +3987,59 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
               </div>
             </div>
 
-            <div style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+            <div style={{ maxHeight: '380px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                 <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)' }}>
                   <tr>
-                    <th style={{ padding: '8px 10px', textAlign: 'left' }}>Nhà Hàng</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'left', width: '120px' }}>IP</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'center', width: '100px' }}>Trạng Thái</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'center', width: '140px' }}>Chi Tiết</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', minWidth: '160px' }}>Nhà Hàng</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', minWidth: '220px' }}>Máy Trạm POS / KDS</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', width: '90px' }}>Trạng Thái</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', minWidth: '180px' }}>Chi Tiết Tham Số</th>
                   </tr>
                 </thead>
                 <tbody>
                   {Array.isArray(viewingJobDetail.result_summary) &&
                     viewingJobDetail.result_summary.map((res: any, idx: number) => (
                       <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                        <td style={{ padding: '8px 10px', fontWeight: 600 }}>{res.restaurant_name}</td>
+                        <td style={{ padding: '8px 10px', fontWeight: 600 }}>
+                          <div>{res.restaurant_name}</div>
+                          {res.raw_ip && (
+                            <div style={{ fontSize: '10px', color: '#6B7280', fontFamily: 'monospace' }}>Subnet: {res.raw_ip}</div>
+                          )}
+                        </td>
                         <td style={{ padding: '8px 10px', fontFamily: 'monospace' }}>
-                          <div style={{ fontWeight: 600 }}>{res.ip || res.raw_ip || '—'}</div>
-                          {res.raw_ip && res.ip && res.raw_ip !== res.ip && (
-                            <div style={{ fontSize: '10px', color: '#6B7280' }}>Gốc: {res.raw_ip}</div>
+                          {Array.isArray(res.device_results) && res.device_results.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              {res.device_results.map((d: any, dIdx: number) => (
+                                <div
+                                  key={dIdx}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontSize: '11px',
+                                    backgroundColor: d.success ? '#ECFDF5' : d.connected ? '#FEF2F2' : '#F3F4F6',
+                                    border: `1px solid ${d.success ? '#A7F3D0' : d.connected ? '#FECACA' : '#E5E7EB'}`,
+                                    color: d.success ? '#065F46' : d.connected ? '#991B1B' : '#6B7280'
+                                  }}
+                                >
+                                  <span style={{ fontWeight: 700 }}>
+                                    {d.success ? '✓' : d.connected ? '✕' : '⚡'}
+                                  </span>
+                                  <span>{d.ip}</span>
+                                  {!d.connected && <span style={{ fontSize: '9px', fontStyle: 'italic' }}>(Tắt)</span>}
+                                  {d.success && (
+                                    <span style={{ fontSize: '9px', color: '#047857' }}>
+                                      (+{d.inserted || 0}/~{d.updated || 0})
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ fontWeight: 600 }}>{res.ip || res.raw_ip || '—'}</div>
                           )}
                         </td>
                         <td style={{ padding: '8px 10px', textAlign: 'center' }}>
@@ -4015,7 +4049,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                             <span style={{ color: '#DC2626', fontWeight: 700 }}>✕ Thất bại</span>
                           )}
                         </td>
-                        <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: '11px', maxWidth: '320px', wordBreak: 'break-word' }}>
+                        <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: '11px', wordBreak: 'break-word' }}>
                           {res.success ? (
                             <div>
                               <span>Thêm: {res.inserted || 0}</span> • <span>Sửa: {res.updated || 0}</span> •{' '}
