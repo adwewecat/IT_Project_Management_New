@@ -496,7 +496,7 @@ while ($true) {
         $current = Await ($listener.GetNotificationsAsync([Windows.UI.Notifications.NotificationKinds]::Toast)) ([System.Collections.Generic.IReadOnlyList[Windows.UI.Notifications.UserNotification]])
         foreach ($n in $current) {
             $app = $n.AppInfo.DisplayInfo.DisplayName
-            if ($app -like "*3CX*" -or $app -like "*Chrome*") {
+            if ($app -like "*3CX*" -or $app -like "*Chrome*" -or $app -like "*Edge*" -or $app -like "*Brave*") {
                 $b = $n.Notification.Visual.GetBinding([Windows.UI.Notifications.KnownNotificationBindings]::ToastGeneric)
                 $texts = if ($b) { ($b.GetTextElements() | ForEach-Object { $_.Text }) -join " // " } else { "" }
                 $key = "$($n.Id)_$texts"

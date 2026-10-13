@@ -9,5 +9,5 @@
     "admin"
   ],
   "allow_all": false,
-  "agent_server_url": "http://172.16.8.25:8000"
+  "agent_server_url": "http://14.161.33.122:5001"
 }
