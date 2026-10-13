@@ -4,6 +4,8 @@ import { HotlineCallData } from '../types/hotline';
 import { useAuth } from './AuthContext';
 import { checkIsSuperAdmin, checkIsDungOrSuperAdmin } from '../utils/authUtils';
 
+import { UserInfo } from '../types/auth';
+
 function getIpPrefix(ip?: string | null): string {
   if (!ip) return '';
   const clean = ip.replace(/[^0-9.]/g, '.').replace(/\.+$/, '');
@@ -12,6 +14,43 @@ function getIpPrefix(ip?: string | null): string {
     return parts.slice(0, 3).join('.') + '.';
   }
   return '';
+}
+
+function isAgentMatch(dutyUser?: string | null, curUser?: UserInfo | null): boolean {
+  if (!dutyUser || !curUser) return false;
+  const d = dutyUser.trim().toLowerCase();
+  const u = (curUser.username || '').trim().toLowerCase();
+  if (!d || !u) return false;
+  if (d === u) return true;
+
+  // So sánh sau khi loại bỏ dấu chấm, gạch ngang, gạch dưới, khoảng trắng
+  const cleanD = d.replace(/[^a-z0-9]/g, '');
+  const cleanU = u.replace(/[^a-z0-9]/g, '');
+  if (cleanD === cleanU) return true;
+  if (cleanD.length >= 4 && (cleanU.includes(cleanD) || cleanD.includes(cleanU))) return true;
+
+  // So sánh email prefix nếu có
+  if (curUser.email) {
+    const emailPrefix = curUser.email.split('@')[0].trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (emailPrefix === cleanD || (cleanD.length >= 4 && (emailPrefix.includes(cleanD) || cleanD.includes(emailPrefix)))) return true;
+  }
+
+  // So sánh họ tên không dấu (ví dụ: "Nguyen Anh Dung" -> "nguyenanhdung" match với "nguyenanh")
+  if (curUser.full_name) {
+    const cleanName = curUser.full_name
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+    if (cleanName.includes(cleanD) && cleanD.length >= 4) return true;
+  }
+
+  // Nếu là Super Admin (dung.nguyenanh / admin) và mã máy tính gửi nguyenanh hoặc admin
+  if (curUser.is_super_admin && (cleanD.includes('dung') || cleanD.includes('nguyenanh') || cleanD.includes('admin'))) {
+    return true;
+  }
+
+  return false;
 }
 
 interface HotlineContextType {
@@ -211,8 +250,6 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const count = res.unresolved_missed_calls_count ?? 0;
         setMissedHotlineCount(count);
 
-        const currentUsername = (user?.username || '').trim().toLowerCase();
-
         // 2. Kiểm tra nếu có cuộc gọi đang reo (current_call)
         if (res.current_call) {
           const cur = res.current_call;
@@ -227,7 +264,7 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
           if (cur.restaurant && cur.restaurant.id) {
             // LÀ NHÀ HÀNG: Chỉ tự động bung modal VNC nếu đang bật trực hotline
             // VÀ cuộc gọi dành cho chính mình (nếu có chỉ định Agent cụ thể) hoặc là cuộc gọi chung
-            const isForMe = hasSpecificAgent ? (curDuty === currentUsername) : true;
+            const isForMe = hasSpecificAgent ? isAgentMatch(curDuty, user) : true;
             const shouldAutoOpenVnc = isHotlineActive && isForMe;
 
             if (shouldAutoOpenVnc && lastHandledVncCallIdRef.current !== cur.call_id) {
@@ -250,8 +287,8 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
             }
           } else {
             // KHÔNG PHẢI NHÀ HÀNG (CUỘC GỌI NỘI BỘ):
-            // TUYỆT ĐỐI CHỈ HIỂN THỊ NẾU ĐÍCH DANH MÁY CỦA TÔI!
-            const isForMe = hasSpecificAgent && curDuty === currentUsername;
+            // HIỂN THỊ NẾU ĐÍCH DANH MÁY CỦA TÔI HOẶC TÔI ĐANG TRỰC
+            const isForMe = hasSpecificAgent ? isAgentMatch(curDuty, user) : isHotlineActive;
             if (isForMe) {
               if (lastAlertedNonResCallIdRef.current !== cur.call_id) {
                 lastAlertedNonResCallIdRef.current = cur.call_id;
@@ -279,7 +316,7 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
           if (res.latest_call_info && !res.latest_call_info.is_restaurant && !res.latest_call_info.is_resolved) {
             // Có cuộc gọi không phải nhà hàng chưa xử lý
             const infoDuty = (res.latest_call_info.duty_user || '').trim().toLowerCase();
-            const isForMe = infoDuty && currentUsername && infoDuty === currentUsername;
+            const isForMe = infoDuty ? isAgentMatch(infoDuty, user) : isHotlineActive;
             if (isForMe && res.latest_call_info.id !== dismissedCallId) {
               setLatestNonRestaurantCall({
                 id: res.latest_call_info.id,
@@ -317,7 +354,6 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const unsubscribe = hotlineService.connectEvents(
       (callData) => {
         // Sự kiện cuộc gọi đến (incoming_call)
-        const currentUsername = (user?.username || '').trim().toLowerCase();
         const curDuty = (callData.duty_user || '').trim().toLowerCase();
         const hasSpecificAgent = Boolean(
           curDuty &&
@@ -329,7 +365,7 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (callData.restaurant && callData.restaurant.id) {
           // LÀ NHÀ HÀNG: Tự động mở popup modal kết nối từ xa VNC/KDS
           // Chỉ mở nếu là cuộc gọi cho chính mình hoặc cuộc gọi chung
-          const isForMe = hasSpecificAgent ? (curDuty === currentUsername) : true;
+          const isForMe = hasSpecificAgent ? isAgentMatch(curDuty, user) : true;
           if (isForMe) {
             playHotlineBeep();
             setIncomingCall(callData);
@@ -353,8 +389,8 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
           }
         } else {
           // KHÔNG PHẢI NHÀ HÀNG (CUỘC GỌI NỘI BỘ):
-          // TUYỆT ĐỐI CHỈ HIỂN THỊ NẾU ĐÍCH DANH MÁY CỦA TÔI!
-          const isForMe = hasSpecificAgent && curDuty === currentUsername;
+          // HIỂN THỊ NẾU ĐÍCH DANH MÁY CỦA TÔI HOẶC TÔI ĐANG TRỰC
+          const isForMe = hasSpecificAgent ? isAgentMatch(curDuty, user) : isHotlineActive;
           if (isForMe) {
             playHotlineBeep();
             setLatestNonRestaurantCall({
@@ -377,7 +413,6 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
         // Cuộc gọi nhỡ (missed_call)
         setIncomingCall(null);
         refreshMissedCount();
-        const currentUsername = (user?.username || '').trim().toLowerCase();
         const curDuty = (callData.duty_user || '').trim().toLowerCase();
         const hasSpecificAgent = Boolean(
           curDuty &&
@@ -388,8 +423,8 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         const isNotRes = !callData.restaurant;
         if (isNotRes) {
-          // Cuộc gọi nội bộ nhỡ: CHỈ HIỂN THỊ NẾU ĐÍCH DANH MÁY CỦA TÔI
-          const isForMe = hasSpecificAgent && curDuty === currentUsername;
+          // Cuộc gọi nội bộ nhỡ: HIỂN THỊ NẾU ĐÍCH DANH MÁY CỦA TÔI HOẶC TÔI ĐANG TRỰC
+          const isForMe = hasSpecificAgent ? isAgentMatch(curDuty, user) : isHotlineActive;
           if (isForMe) {
             setLatestNonRestaurantCall({
               id: callData.call_id,

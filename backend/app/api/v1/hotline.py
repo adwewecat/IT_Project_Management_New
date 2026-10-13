@@ -335,7 +335,8 @@ pause
 """
 
 CLIENT_AGENT_PS1_TEMPLATE = """param (
-    [string]$ServerUrl = "{SERVER_URL}"
+    [string]$ServerUrl = "{SERVER_URL}",
+    [string]$AgentUser = "{AGENT_USERNAME}"
 )
 
 # ==============================================================================
@@ -346,25 +347,46 @@ CLIENT_AGENT_PS1_TEMPLATE = """param (
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 try { $Host.UI.RawUI.WindowTitle = "3CX Hotline Client Agent [Dang Chay]" } catch {}
 
-# Nếu không truyền qua tham số, kiểm tra file config.txt cùng thư mục
+# Tu dong dong cac tien trinh Agent cu dang chay trung lap de tranh xung dot
+$myPid = $PID
+try {
+    Get-CimInstance Win32_Process -Filter "Name LIKE '%powershell%'" | Where-Object {
+        $_.ProcessId -ne $myPid -and $_.CommandLine -like "*3CX_Hotline_Agent.ps1*"
+    } | ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+} catch {}
+
+# Neu khong truyen qua tham so, doc file config.txt cung thu muc
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configFile = Join-Path $scriptDir "config.txt"
 
 if (Test-Path $configFile) {
     Get-Content $configFile | ForEach-Object {
         $line = $_.Trim()
-        if ($line -match "^SERVER_URL\\s*=\\s*(.+)$") {
-            $ServerUrl = $matches[1].Trim()
+        if (-not $ServerUrl -or $ServerUrl -eq "{SERVER_URL}") {
+            if ($line -match "^SERVER_URL\\s*=\\s*(.+)$") {
+                $ServerUrl = $matches[1].Trim()
+            }
+        }
+        if (-not $AgentUser -or $AgentUser -eq "{AGENT_USERNAME}") {
+            if ($line -match "^(?:AGENT_USERNAME|DUTY_USER|USERNAME)\\s*=\\s*(.+)$") {
+                $AgentUser = $matches[1].Trim()
+            }
         }
     }
 }
 
-if (-not $ServerUrl) {
+if (-not $AgentUser -or $AgentUser -eq "{AGENT_USERNAME}") {
+    $AgentUser = $env:USERNAME
+}
+
+if (-not $ServerUrl -or $ServerUrl -eq "{SERVER_URL}") {
     Write-Host "Vui lòng nhập địa chỉ Server (ví dụ: http://192.168.1.50:8000 hoặc https://itpm.ggg.com.vn):" -ForegroundColor Yellow
     $ServerUrl = Read-Host "Server URL"
     if ($ServerUrl) {
         $ServerUrl = $ServerUrl.Trim().TrimEnd('/')
-        Set-Content -Path $configFile -Value "SERVER_URL=$ServerUrl" -Encoding UTF8
+        Set-Content -Path $configFile -Value "SERVER_URL=$ServerUrl`nAGENT_USERNAME=$AgentUser" -Encoding UTF8
     } else {
         Write-Host "Không có Server URL, dừng chương trình." -ForegroundColor Red
         exit 1
@@ -373,12 +395,12 @@ if (-not $ServerUrl) {
     $ServerUrl = $ServerUrl.Trim().TrimEnd('/')
 }
 
-Clear-Host
+try { Clear-Host } catch {}
 Write-Host "==================================================================" -ForegroundColor Cyan
 Write-Host "   3CX HOTLINE CLIENT AGENT — TỰ ĐỘNG BẮT CUỘC GỌI TỪ 3CX PWA    " -ForegroundColor Yellow
 Write-Host "==================================================================" -ForegroundColor Cyan
 Write-Host "-> Server nhận sự kiện: $ServerUrl" -ForegroundColor Green
-Write-Host "-> Người trực máy:       $($env:USERNAME)" -ForegroundColor Gray
+Write-Host "-> Người trực máy:       $AgentUser (Windows: $($env:USERNAME))" -ForegroundColor Gray
 Write-Host "-> Đang kết nối tới Windows UserNotificationListener..." -ForegroundColor Gray
 
 # Nạp Windows Runtime cho Notification Listener
@@ -451,7 +473,7 @@ Function Send-CallEvent($ext, $callerText, $isMissed, $isEnded) {
     $payload = @{
         ext = $ext
         caller_raw_text = $callerText
-        duty_user = $env:USERNAME
+        duty_user = $AgentUser
         is_busy = $false
         is_missed = $isMissed
     } | ConvertTo-Json -Compress
@@ -547,21 +569,26 @@ CLIENT_AGENT_VBS_TEMPLATE = (
 
 
 @router.get("/download-agent")
-def download_client_agent(request: Request, server_url: Optional[str] = Query(None)):
+def download_client_agent(
+    request: Request,
+    server_url: Optional[str] = Query(None),
+    agent_username: Optional[str] = Query(None),
+):
     """
     Tải gói 3CX Hotline Client Agent (.zip) cho máy tính cá nhân của Kỹ thuật viên (Client).
-    Tự động nhúng sẵn Server URL đã cấu hình (hoặc URL hiện tại) để kỹ thuật viên tải về mở chạy ngay.
+    Tự động nhúng sẵn Server URL và Tên người trực đã cấu hình để kỹ thuật viên tải về mở chạy ngay.
     Đảm bảo 100% nội dung các file BAT, PS1, VBS, README luôn đầy đủ kể cả khi chạy phân tán trên server.
     """
     cfg = hotline_3cx_service.get_hotline_permissions()
     configured_url = cfg.get("agent_server_url", "").strip()
     base_url = (server_url or configured_url or str(request.base_url)).rstrip("/")
+    clean_user = (agent_username or "").strip()
 
-    # Lấy nội dung mẫu đã nhúng sẵn SERVER_URL
+    # Lấy nội dung mẫu đã nhúng sẵn SERVER_URL và AGENT_USERNAME
     bat_content = CLIENT_AGENT_BAT_TEMPLATE.replace("{SERVER_URL}", base_url)
-    ps1_content = CLIENT_AGENT_PS1_TEMPLATE.replace("{SERVER_URL}", base_url)
+    ps1_content = CLIENT_AGENT_PS1_TEMPLATE.replace("{SERVER_URL}", base_url).replace("{AGENT_USERNAME}", clean_user)
     readme_content = CLIENT_AGENT_README_TEMPLATE.replace("{SERVER_URL}", base_url)
-    config_content = f"SERVER_URL={base_url}\n"
+    config_content = f"SERVER_URL={base_url}\nAGENT_USERNAME={clean_user}\n"
 
     # Đóng gói zip in-memory
     buf = io.BytesIO()

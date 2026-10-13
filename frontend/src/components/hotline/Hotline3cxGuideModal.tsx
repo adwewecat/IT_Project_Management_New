@@ -485,7 +485,7 @@ export const Hotline3cxGuideModal: React.FC<Hotline3cxGuideModalProps> = ({
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
                 <a
-                  href={hotlineService.getDownloadAgentUrl()}
+                  href={hotlineService.getDownloadAgentUrl(user?.username)}
                   download="3CX_Hotline_Client_Agent.zip"
                   style={{
                     display: 'inline-flex',

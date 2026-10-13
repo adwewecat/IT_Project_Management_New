@@ -1985,6 +1985,34 @@ estaurant_service.py).
 
 ---
 
+### [2026-10-13] - Khắc Phục Triệt Để Lỗi Cuộc Gọi 3CX Không Hiện Thông Báo / Popup Trên Màn Hình Web
+- **Màn hình**: Hotline 3CX (`HotlineContext.tsx`, `RestaurantListPage.tsx`, `hotline.py`, `3CX_Hotline_Agent.ps1`).
+- **Hiện tượng lỗi**: Người dùng cài đặt bộ 3CX Client Agent Windows và chạy các file trong thư mục, cuộc gọi từ 3CX PWA (`8345 Hoang Le Pham Bao HCM IT Dept`) đổ chuông nhưng trên màn hình trang web hoàn toàn không nhận được bất kỳ popup, âm thanh chuông hay thông báo toast nào.
+- **Nguyên nhân cốt lõi**:
+  1. *Lệch Tên Tài Khoản Người Trực (`duty_user`) Giữa Windows & Hệ Thống Web*:
+     - File agent PowerShell (`3CX_Hotline_Agent.ps1`) chạy trên Windows gửi lên Server `duty_user = $env:USERNAME = "nguyenanh"`.
+     - Trong khi trên hệ thống Web, người dùng đăng nhập tài khoản SSO: `user.username = "dung.nguyenanh"`.
+     - Tại `HotlineContext.tsx`, logic kiểm tra so sánh cứng `curDuty === currentUsername` (`"nguyenanh" === "dung.nguyenanh"` $\rightarrow$ `false`). Hệ thống xác định đây là cuộc gọi của nhân viên IT khác nên chặn hoàn toàn âm thanh, banner và popup thông báo.
+  2. *Thiếu Khai Báo `AGENT_USERNAME` Trong `config.txt` Của Client Agent*:
+     - File `config.txt` chỉ có `SERVER_URL=...` mà không cho phép cấu hình tên người trực, luôn lấy cứng `$env:USERNAME` của Windows.
+  3. *Chạy Trùng Lặp Nhiều Tiến Trình Agent Ngầm*:
+     - Do bấm chạy nhiều lần file `.bat`/`.vbs`, có tới 5 tiến trình PowerShell cùng chạy ngầm trên máy, gửi sự kiện trùng lặp lên server trong cùng 1 tích tắc.
+  4. *Lỗi `HostException` Của `Clear-Host` Khi Chạy Ẩn (`-WindowStyle Hidden`)*:
+     - Lệnh `Clear-Host` không nằm trong khối `try/catch`, khi chạy qua VBScript ẩn ngầm bị lỗi do không có console buffer tương tác.
+- **Giải pháp xử lý toàn diện**:
+  1. *Hàm So Khớp Tác Tử Thông Minh (`isAgentMatch` trong `HotlineContext.tsx`)*:
+     - So khớp linh hoạt giữa `duty_user` và `user`: Tự động chuẩn hóa bỏ dấu chấm/khoảng trắng (`dung.nguyenanh` khớp với `nguyenanh`), so khớp email prefix (`dung.nguyenanh@ggg.com.vn`), so khớp họ tên không dấu (`Nguyen Anh Dung`), và ưu tiên Super Admin.
+  2. *Hỗ Trợ `AGENT_USERNAME` Trong `config.txt` & Bộ Cài Nhanh*:
+     - Cập nhật `3CX_Hotline_Agent.ps1` đọc trường `AGENT_USERNAME` từ `config.txt`. Khi người dùng tải gói `.zip` từ web, server tự động nhúng sẵn `AGENT_USERNAME={user.username}`.
+  3. *Cơ Chế Đơn Tiến Trình & Bọc An Toàn Cho `Clear-Host`*:
+     - Script PowerShell tự động dò tìm và dừng các tiến trình `3CX_Hotline_Agent.ps1` cũ trước khi chạy tiến trình mới để chống trùng lặp.
+     - Bọc `try { Clear-Host } catch {}` đảm bảo chạy tàng hình qua `Run_Silent_Agent.vbs` mượt mà 100%.
+  4. *Đóng Gói & Cập Nhật Trực Tiếp*:
+     - Hoàn thiện build production Frontend `frontend/dist/` (kèm `web.config`), biên dịch kiểm tra cú pháp Backend `backend/app/` sạch 100%.
+     - Cập nhật trực tiếp các file `config.txt` và `3CX_Hotline_Agent.ps1` trong máy người dùng (`D:\1.Download\3CX_Hotline_Client_Agent (1)`).
+
+---
+
 ### [2026-10-04 và trước đó] - Nền Tảng & Quy Chuẩn Giao Diện Toàn Hệ Thống
 - **Quy định No Stat Cards**: Tuyệt đối không đặt các khối thẻ thống kê to ở đầu các trang tác vụ nghiệp vụ (CentralizedLogs, RestaurantMongoAnalysis...).
 - **Quy tắc Đóng Modal**: Modal chỉ đóng khi bấm `Esc`, bấm nút `X` hoặc nút "Đóng" / "Hủy"; không đóng khi click ngoài overlay.

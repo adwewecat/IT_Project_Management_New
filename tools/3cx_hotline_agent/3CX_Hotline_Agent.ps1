@@ -1,5 +1,6 @@
 param (
-    [string]$ServerUrl = ""
+    [string]$ServerUrl = "http://14.161.33.122:5001",
+    [string]$AgentUser = "dung.nguyenanh"
 )
 
 # ==============================================================================
@@ -10,17 +11,38 @@ param (
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 try { $Host.UI.RawUI.WindowTitle = "3CX Hotline Client Agent [Dang Chay]" } catch {}
 
-# Nếu không truyền qua tham số, kiểm tra file config.txt cùng thư mục
+# Tu dong dong cac tien trinh Agent cu dang chay trung lap de tranh xung dot
+$myPid = $PID
+try {
+    Get-CimInstance Win32_Process -Filter "Name LIKE '%powershell%'" | Where-Object {
+        $_.ProcessId -ne $myPid -and $_.CommandLine -like "*3CX_Hotline_Agent.ps1*"
+    } | ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+} catch {}
+
+# Neu khong truyen qua tham so, doc file config.txt cung thu muc
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configFile = Join-Path $scriptDir "config.txt"
 
-if (-not $ServerUrl -and (Test-Path $configFile)) {
+if (Test-Path $configFile) {
     Get-Content $configFile | ForEach-Object {
         $line = $_.Trim()
-        if ($line -match "^SERVER_URL\s*=\s*(.+)$") {
-            $ServerUrl = $matches[1].Trim()
+        if (-not $ServerUrl -or $ServerUrl -eq "") {
+            if ($line -match "^SERVER_URL\s*=\s*(.+)$") {
+                $ServerUrl = $matches[1].Trim()
+            }
+        }
+        if (-not $AgentUser -or $AgentUser -eq "") {
+            if ($line -match "^(?:AGENT_USERNAME|DUTY_USER|USERNAME)\s*=\s*(.+)$") {
+                $AgentUser = $matches[1].Trim()
+            }
         }
     }
+}
+
+if (-not $AgentUser) {
+    $AgentUser = $env:USERNAME
 }
 
 if (-not $ServerUrl) {
@@ -28,7 +50,7 @@ if (-not $ServerUrl) {
     $ServerUrl = Read-Host "Server URL"
     if ($ServerUrl) {
         $ServerUrl = $ServerUrl.Trim().TrimEnd('/')
-        Set-Content -Path $configFile -Value "SERVER_URL=$ServerUrl" -Encoding UTF8
+        Set-Content -Path $configFile -Value "SERVER_URL=$ServerUrl`nAGENT_USERNAME=$AgentUser" -Encoding UTF8
     } else {
         Write-Host "Không có Server URL, dừng chương trình." -ForegroundColor Red
         exit 1
@@ -37,12 +59,12 @@ if (-not $ServerUrl) {
     $ServerUrl = $ServerUrl.Trim().TrimEnd('/')
 }
 
-Clear-Host
+try { Clear-Host } catch {}
 Write-Host "==================================================================" -ForegroundColor Cyan
 Write-Host "   3CX HOTLINE CLIENT AGENT — TỰ ĐỘNG BẮT CUỘC GỌI TỪ 3CX PWA    " -ForegroundColor Yellow
 Write-Host "==================================================================" -ForegroundColor Cyan
 Write-Host "-> Server nhận sự kiện: $ServerUrl" -ForegroundColor Green
-Write-Host "-> Người trực máy:       $($env:USERNAME)" -ForegroundColor Gray
+Write-Host "-> Người trực máy:       $AgentUser (Windows: $($env:USERNAME))" -ForegroundColor Gray
 Write-Host "-> Đang kết nối tới Windows UserNotificationListener..." -ForegroundColor Gray
 
 # Nạp Windows Runtime cho Notification Listener
@@ -115,7 +137,7 @@ Function Send-CallEvent($ext, $callerText, $isMissed, $isEnded) {
     $payload = @{
         ext = $ext
         caller_raw_text = $callerText
-        duty_user = $env:USERNAME
+        duty_user = $AgentUser
         is_busy = $false
         is_missed = $isMissed
     } | ConvertTo-Json -Compress

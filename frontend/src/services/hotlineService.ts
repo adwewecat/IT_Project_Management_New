@@ -227,8 +227,8 @@ export const hotlineService = {
   },
 
   // Link tải file 3CX Hotline Client Agent (.zip) cho máy tính cá nhân
-  getDownloadAgentUrl: (): string => {
-    return `${API_BASE_URL}/hotline/download-agent`;
+  getDownloadAgentUrl: (username?: string): string => {
+    return `${API_BASE_URL}/hotline/download-agent${username ? `?agent_username=${encodeURIComponent(username)}` : ''}`;
   },
 
   // Link tải Google Chrome Extension (.zip)
