@@ -11,7 +11,17 @@ echo.
 set PYTHON_CMD=python
 where python >nul 2>nul
 if %errorlevel% neq 0 (
-    if exist "%LOCALAPPDATA%\Programs\Python\Python314\python.exe" (
+    if exist "C:\Program Files\Python314\python.exe" (
+        set PYTHON_CMD="C:\Program Files\Python314\python.exe"
+    ) else if exist "C:\Program Files\Python313\python.exe" (
+        set PYTHON_CMD="C:\Program Files\Python313\python.exe"
+    ) else if exist "C:\Program Files\Python312\python.exe" (
+        set PYTHON_CMD="C:\Program Files\Python312\python.exe"
+    ) else if exist "C:\Program Files\Python311\python.exe" (
+        set PYTHON_CMD="C:\Program Files\Python311\python.exe"
+    ) else if exist "C:\Program Files\Python310\python.exe" (
+        set PYTHON_CMD="C:\Program Files\Python310\python.exe"
+    ) else if exist "%LOCALAPPDATA%\Programs\Python\Python314\python.exe" (
         set PYTHON_CMD="%LOCALAPPDATA%\Programs\Python\Python314\python.exe"
     ) else if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" (
         set PYTHON_CMD="%LOCALAPPDATA%\Programs\Python\Python313\python.exe"

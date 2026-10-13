@@ -1,7 +1,5 @@
 import apiClient from './api';
 
-const LOCAL_AGENT_URL = 'http://127.0.0.1:18890';
-
 export interface MailMemoStatusResponse {
   email_account: string;
   folder_name: string;
@@ -63,31 +61,37 @@ export const mailMemoService = {
     return { ...res.data, source: 'local_agent' };
   },
 
+  activeAgentUrl: 'http://127.0.0.1:18890',
+
   /**
-   * Kiểm tra xem Local Outlook Agent trên máy tính cá nhân (127.0.0.1:18890) có đang bật không.
+   * Kiểm tra xem Local Outlook Agent trên máy tính cá nhân (hỗ trợ cả cổng 18890 và 18899) có đang bật không.
    */
   async checkLocalAgent(): Promise<LocalAgentStatus> {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(`${LOCAL_AGENT_URL}/status`, {
-        method: 'GET',
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      if (res.ok) {
-        const data = await res.json();
-        return {
-          online: true,
-          connected: data.connected,
-          account: data.account,
-          folder: data.folder,
-        };
+    const candidatePorts = [18890, 18899];
+    for (const port of candidatePorts) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const res = await fetch(`http://127.0.0.1:${port}/status`, {
+          method: 'GET',
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const data = await res.json();
+          this.activeAgentUrl = `http://127.0.0.1:${port}`;
+          return {
+            online: true,
+            connected: data.connected,
+            account: data.account,
+            folder: data.folder,
+          };
+        }
+      } catch {
+        // Thử tiếp cổng kế tiếp
       }
-      return { online: false };
-    } catch {
-      return { online: false };
     }
+    return { online: false };
   },
 
   /**
@@ -99,8 +103,8 @@ export const mailMemoService = {
   async smartScan(maxItems: number = 400): Promise<MailMemoScanResponse> {
     const agentStatus = await this.checkLocalAgent();
     if (agentStatus.online) {
-      // 1. Quét từ Local Agent
-      const scanRes = await fetch(`${LOCAL_AGENT_URL}/scan?max_items=${maxItems}`, {
+      // 1. Quét từ Local Agent (dùng activeAgentUrl vừa dò được)
+      const scanRes = await fetch(`${this.activeAgentUrl}/scan?max_items=${maxItems}`, {
         method: 'GET',
       });
       if (!scanRes.ok) {
@@ -127,7 +131,7 @@ export const mailMemoService = {
     } catch (err: any) {
       const detail = err.response?.data?.detail || err.message;
       throw new Error(
-        `Không thể kết nối Outlook Desktop trên máy bạn (Local Agent 127.0.0.1:18899 đang TẮT).\n` +
+        `Không thể kết nối Outlook Desktop trên máy bạn (Local Agent 127.0.0.1:18890 / 18899 đang TẮT).\n` +
         `Vui lòng bấm chạy file "Chay_Outlook_Agent.bat" trên máy tính của bạn trước khi quét!\n(Chi tiết: ${detail})`
       );
     }

@@ -2057,6 +2057,28 @@ estaurant_service.py).
 
 ---
 
+### [2026-10-13] - Khắc Phục Triệt Để Lỗi Outlook Memo Agent Báo "Chưa Sẵn Sàng / Chưa Bật" Trên Giao Diện Web
+- **Màn hình**: Quét Mail Memo AUTO (Outlook / Salesforce) trên `JobManagementPage.tsx` ([`mailMemoService.ts`](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/services/mailMemoService.ts) và `D:\Setup\Outlook_Memo_Agent_Full`).
+- **Hiện tượng lỗi**: Người dùng đã chạy Agent tại `D:\Setup\Outlook_Memo_Agent_Full`, nhưng trên giao diện web modal Mail Memo vẫn báo: `⚪ Agent Chưa Bật` và `🟡 Chờ Bật Agent Máy Cá Nhân`.
+- **Nguyên nhân cốt lõi**:
+  1. *Lệch Cổng Giữa Frontend & Agent*: `mailMemoService.ts` trỏ cứng vào `http://127.0.0.1:18890/status`. Trong khi file cấu hình của Agent `agent_config.json` tại `D:\Setup\Outlook_Memo_Agent_Full` lại đặt cổng `18899`. Do sai cổng, mọi request thăm dò từ web đều thất bại.
+  2. *Thiếu Đường Dẫn Python 3.14 Trong `Chay_Outlook_Agent.bat`*: Python trên máy cài đặt tại `C:\Program Files\Python314\python.exe`. File `.bat` cũ chỉ tìm trong `%LOCALAPPDATA%` và `C:\Python314\`, dẫn tới khi chạy qua VBScript ngầm bị thoát do không tìm thấy `python`.
+  3. *Phiên Bản Cũ Dùng Single-threaded HTTPServer*: Phiên bản cũ trong `D:\Setup` dùng `HTTPServer` đơn luồng, khi đang kết nối Outlook thì các request `/status` từ trình duyệt bị treo.
+- **Giải pháp xử lý toàn diện**:
+  1. *Nâng Cấp `mailMemoService.ts` Dò Tìm Đa Cổng Thông Minh*:
+     - Tự động thăm dò cả 2 cổng `18890` và `18899`. Cổng nào phản hồi trước sẽ lưu làm `activeAgentUrl` và sử dụng cho toàn bộ các tác vụ quét (`/scan`).
+     - Dọn sạch biến thừa không dùng `LOCAL_AGENT_URL` (chuẩn TypeScript Strict Mode TS6133).
+  2. *Cập Nhật `Chay_Outlook_Agent.bat` Nhận Diện Mọi Phiên Bản Python*:
+     - Bổ sung đường dẫn `C:\Program Files\Python314\python.exe` (và 310-313) vào danh sách ưu tiên.
+  3. *Đồng Bộ Bản Mới Nhất Sang `D:\Setup\Outlook_Memo_Agent_Full`*:
+     - Chuyển `agent_port` về chuẩn `18890`.
+     - Sử dụng `ThreadingHTTPServer` đa luồng, hỗ trợ lọc email theo tiêu đề siêu tốc và đánh dấu đã đọc.
+     - Khởi chạy và kiểm thử thực tế thành công 100%: Endpoint `http://127.0.0.1:18890/status` và `/scan` phản hồi ngay lập tức, đọc trực tiếp 3 mail Memo từ Outlook đang mở.
+  4. *Build Lại `frontend/dist` Sạch Sẽ*:
+     - Chạy `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.18s`).
+
+---
+
 ### [2026-10-04 và trước đó] - Nền Tảng & Quy Chuẩn Giao Diện Toàn Hệ Thống
 - **Quy định No Stat Cards**: Tuyệt đối không đặt các khối thẻ thống kê to ở đầu các trang tác vụ nghiệp vụ (CentralizedLogs, RestaurantMongoAnalysis...).
 - **Quy tắc Đóng Modal**: Modal chỉ đóng khi bấm `Esc`, bấm nút `X` hoặc nút "Đóng" / "Hủy"; không đóng khi click ngoài overlay.
