@@ -13,8 +13,29 @@ from app.services.mail_memo_service import mail_memo_service
 router = APIRouter(prefix="/mail-memo", tags=["Mail Memo - Quét Memo Từ Mail"])
 
 AGENT_SHARED_SECRET = "dung_memo_agent_secret_2026"
-AGENT_TOOL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "tools", "outlook_agent")
-ZIP_FILE_PATH = os.path.join(AGENT_TOOL_DIR, "Outlook_Memo_Agent_Full.zip")
+
+def get_agent_source_dir() -> str:
+    r"""
+    Dò tìm thư mục chứa mã nguồn Agent trên máy chủ.
+    Hỗ trợ tìm tại:
+    1. tools/outlook_agent (Thư mục gốc repo)
+    2. backend/tools/outlook_agent (Bên trong backend)
+    3. backend/data/tools/outlook_agent
+    4. D:\Setup\Outlook_Memo_Agent_Full
+    """
+    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    project_root = os.path.dirname(backend_dir)
+    candidates = [
+        os.path.join(project_root, "tools", "outlook_agent"),
+        os.path.join(backend_dir, "tools", "outlook_agent"),
+        os.path.join(backend_dir, "data", "outlook_agent"),
+        os.path.join(backend_dir, "data", "tools", "outlook_agent"),
+        r"D:\Setup\Outlook_Memo_Agent_Full",
+    ]
+    for c in candidates:
+        if os.path.exists(os.path.join(c, "outlook_agent.py")):
+            return c
+    return os.path.join(project_root, "tools", "outlook_agent")
 
 
 def check_is_dung_or_super_admin(current_user) -> bool:
@@ -96,7 +117,10 @@ def download_outlook_agent(
     if not check_is_dung_or_super_admin(current_user):
         raise HTTPException(status_code=403, detail="Chỉ dung.nguyenanh hoặc Super Admin mới có quyền tải.")
 
-    os.makedirs(AGENT_TOOL_DIR, exist_ok=True)
+    agent_dir = get_agent_source_dir()
+    os.makedirs(agent_dir, exist_ok=True)
+    zip_path = os.path.join(agent_dir, "Outlook_Memo_Agent_Full.zip")
+
     files_to_zip = [
         "outlook_agent.py",
         "agent_config.json",
@@ -106,14 +130,21 @@ def download_outlook_agent(
         "Go_Cai_Dat_Schedule.bat",
         "Huong_Dan_Su_Dung.txt"
     ]
-    with zipfile.ZipFile(ZIP_FILE_PATH, "w", zipfile.ZIP_DEFLATED) as z:
-        for f in files_to_zip:
-            fp = os.path.join(AGENT_TOOL_DIR, f)
-            if os.path.exists(fp):
-                z.write(fp, arcname=f)
+    # Chỉ tái tạo ZIP nếu tìm thấy ít nhất 1 file nguồn rời
+    existing_files = [f for f in files_to_zip if os.path.exists(os.path.join(agent_dir, f))]
+    if existing_files:
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+            for f in existing_files:
+                z.write(os.path.join(agent_dir, f), arcname=f)
+
+    if not os.path.exists(zip_path) or os.path.getsize(zip_path) < 500:
+        raise HTTPException(
+            status_code=404,
+            detail="Gói cài đặt Outlook_Memo_Agent_Full.zip chưa được đưa lên máy chủ tại thư mục tools/outlook_agent."
+        )
 
     return FileResponse(
-        path=ZIP_FILE_PATH,
+        path=zip_path,
         filename="Outlook_Memo_Agent_Full.zip",
         media_type="application/zip",
         headers={"Content-Disposition": "attachment; filename=Outlook_Memo_Agent_Full.zip"}
