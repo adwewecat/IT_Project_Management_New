@@ -64,31 +64,34 @@ export const mailMemoService = {
   activeAgentUrl: 'http://127.0.0.1:18890',
 
   /**
-   * Kiểm tra xem Local Outlook Agent trên máy tính cá nhân (hỗ trợ cả cổng 18890 và 18899) có đang bật không.
+   * Kiểm tra xem Local Outlook Agent trên máy tính cá nhân (hỗ trợ cả 127.0.0.1, localhost và cổng 18890, 18899) có đang bật không.
    */
   async checkLocalAgent(): Promise<LocalAgentStatus> {
+    const candidateHosts = ['127.0.0.1', 'localhost'];
     const candidatePorts = [18890, 18899];
-    for (const port of candidatePorts) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
-        const res = await fetch(`http://127.0.0.1:${port}/status`, {
-          method: 'GET',
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-        if (res.ok) {
-          const data = await res.json();
-          this.activeAgentUrl = `http://127.0.0.1:${port}`;
-          return {
-            online: true,
-            connected: data.connected,
-            account: data.account,
-            folder: data.folder,
-          };
+    for (const host of candidateHosts) {
+      for (const port of candidatePorts) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 2000);
+          const res = await fetch(`http://${host}:${port}/status`, {
+            method: 'GET',
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          if (res.ok) {
+            const data = await res.json();
+            this.activeAgentUrl = `http://${host}:${port}`;
+            return {
+              online: true,
+              connected: Boolean(data.connected),
+              account: data.account,
+              folder: data.folder,
+            };
+          }
+        } catch {
+          // Thử tiếp host hoặc cổng kế tiếp
         }
-      } catch {
-        // Thử tiếp cổng kế tiếp
       }
     }
     return { online: false };

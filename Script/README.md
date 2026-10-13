@@ -2055,6 +2055,33 @@ estaurant_service.py).
   6. *Đẩy code ngay lên GitHub (`origin/main`)*: Bất kỳ lúc nào thêm tính năng hoặc chỉnh sửa xong, BẮT BUỘC phải commit và push lên GitHub ngay lập tức.
   7. *Build sạch `backend/app` và `frontend/dist` để đẩy lên Server (Copy Là Chạy Ngay)*: Sau khi xử lý xong, bắt buộc build frontend ra `dist/` sạch và kiểm tra cú pháp backend `app/` để người dùng chỉ cần copy 2 thư mục này đẩy lên server là chạy ngay mà không cần cấu hình thủ công.
 
+### [2026-10-14] - Xử Lý Triệt Để Lỗi Outlook Memo Agent Báo "🟡 Chờ Bật Agent Máy Cá Nhân" & "⚪ Agent Chưa Bật"
+- **Màn hình**: Quét Mail Memo AUTO (Outlook / Salesforce) trên `JobManagementPage.tsx` ([`mailMemoService.ts`](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/services/mailMemoService.ts) và `D:\Setup\Outlook_Memo_Agent_Full`).
+- **Hiện tượng lỗi**: Người dùng đã chạy file bat nhưng trên giao diện web modal Mail Memo vẫn báo: `⚪ Agent Chưa Bật` và `🟡 Chờ Bật Agent Máy Cá Nhân`.
+- **Nguyên nhân cốt lõi phát hiện qua điều tra**:
+  1. *Chrome / Edge Private Network Access (PNA) chặn CORS Preflight*:
+     - Khi giao diện web được mở từ Web Server (ví dụ IP mạng LAN `http://172.16.8.25`), trình duyệt Chromium phân loại đây là *Private Network Origin*, còn `http://127.0.0.1:18890` là *Local Loopback Target*.
+     - Cơ chế bảo mật PNA của Chromium gửi preflight request `OPTIONS` kèm header `Access-Control-Request-Private-Network: true` và bắt buộc phản hồi từ Local Agent phải có header `Access-Control-Allow-Private-Network: true`.
+     - `outlook_agent.py` trước đó thiếu header này nên trình duyệt lập tức chặn kết nối CORS (`Failed to fetch`), dẫn tới frontend không nhận diện được Agent dù tiến trình Agent thực tế vẫn đang lắng nghe cổng 18890.
+  2. *Lỗi đường dẫn sai trong `Chay_Outlook_Agent.bat` ở thư mục gốc*:
+     - File `Chay_Outlook_Agent.bat` tại thư mục gốc `d:\LAPTRINH\IT_Project_Management_New\` gọi `%~dp0outlook_agent.py`, trong khi file script python lại nằm trong `tools\outlook_agent\` hoặc `D:\Setup\Outlook_Memo_Agent_Full\`. Khi người dùng chạy file này sẽ bị báo lỗi `[Errno 2] No such file or directory`.
+  3. *Tiến trình nền cũ chiếm cổng và file `.bat` cũ không giải phóng*:
+     - Tiến trình Python chạy ngầm cũ (PID cũ) đang giữ cổng 18890 với mã nguồn cũ. Khi người dùng nhấp đúp file `.bat`, file script phát hiện cổng đang mở nên chỉ kích hoạt sync rồi thoát (`sys.exit(0)`), không giải phóng tiến trình cũ để nạp header PNA mới.
+  4. *Frontend chỉ dò tìm `127.0.0.1` mà chưa hỗ trợ `localhost`*:
+     - Trong một số cấu hình Windows/trình duyệt, `127.0.0.1` hoặc `localhost` có thể được xử lý khác nhau giữa IPv4/IPv6.
+- **Giải pháp xử lý toàn diện**:
+  1. *Bổ sung Header PNA trong `outlook_agent.py`*:
+     - Bổ sung `Access-Control-Allow-Private-Network: true`, `Access-Control-Allow-Headers: *`, `Access-Control-Max-Age: 86400` cho cả preflight `do_OPTIONS` và các request `GET /status`, `/scan`, `/auto-sync`.
+  2. *Nâng cấp `Chay_Outlook_Agent.bat` tự động giải phóng tiến trình cũ*:
+     - Tự động dò tìm `outlook_agent.py` qua `%~dp0`, `%~dp0tools\outlook_agent\` và `D:\Setup\Outlook_Memo_Agent_Full\`.
+     - Tự động kiểm tra và giải phóng (`taskkill`) tiến trình cũ trên cổng 18890 khi người dùng chạy trực tiếp hoặc dùng cờ `--restart`, đảm bảo Agent luôn nạp mã nguồn mới nhất.
+  3. *Nâng cấp `mailMemoService.ts`*:
+     - Hỗ trợ dò tìm Agent qua cả `127.0.0.1` và `localhost` trên các cổng dự phòng `18890` và `18899`.
+  4. *Đồng bộ và đóng gói*:
+     - Cập nhật đồng bộ toàn bộ file mới sang `D:\Setup\Outlook_Memo_Agent_Full\` và tạo mới `Outlook_Memo_Agent_Full.zip`.
+     - Khởi động lại Agent thành công trên PID mới `18732`, kiểm thử `curl` cả `OPTIONS` (PNA) và `GET /status` đạt HTTP 200 OK ngay lập tức.
+     - Build lại `frontend/dist` sạch sẽ (`cmd /c "npm run build"`, exit code 0).
+
 ---
 
 ### [2026-10-13] - Khắc Phục Triệt Để Lỗi Outlook Memo Agent Báo "Chưa Sẵn Sàng / Chưa Bật" Trên Giao Diện Web

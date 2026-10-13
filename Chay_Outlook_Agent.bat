@@ -50,7 +50,36 @@ if %errorlevel% neq 0 (
     %PYTHON_CMD% -m pip install pywin32
 )
 
-%PYTHON_CMD% "%~dp0outlook_agent.py" %*
+set "AGENT_PY=%~dp0outlook_agent.py"
+if not exist "%AGENT_PY%" (
+    if exist "%~dp0tools\outlook_agent\outlook_agent.py" (
+        set "AGENT_PY=%~dp0tools\outlook_agent\outlook_agent.py"
+    ) else if exist "D:\Setup\Outlook_Memo_Agent_Full\outlook_agent.py" (
+        set "AGENT_PY=D:\Setup\Outlook_Memo_Agent_Full\outlook_agent.py"
+    )
+)
+
+if "%1"=="--restart" (
+    echo Dang dung tien trinh Agent cu tren cong 18890...
+    for /f "tokens=5" %%a in ('netstat -ano ^| findstr /R /C:":18890 .*LISTENING"') do (
+        taskkill /F /PID %%a >nul 2>nul
+    )
+    timeout /t 1 /nobreak >nul
+) else if not "%1"=="/silent" (
+    if not "%1"=="--sync" (
+        netstat -ano | findstr /R /C:":18890 .*LISTENING" >nul 2>nul
+        if not errorlevel 1 (
+            echo [THONG BAO] Phat hien Agent dang chay tren cong 18890.
+            echo Dang giai phong tien trinh va nap phien ban moi nhat...
+            for /f "tokens=5" %%a in ('netstat -ano ^| findstr /R /C:":18890 .*LISTENING"') do (
+                taskkill /F /PID %%a >nul 2>nul
+            )
+            timeout /t 1 /nobreak >nul
+        )
+    )
+)
+
+%PYTHON_CMD% "%AGENT_PY%" %*
 
 if "%1"=="/silent" exit /b 0
 pause

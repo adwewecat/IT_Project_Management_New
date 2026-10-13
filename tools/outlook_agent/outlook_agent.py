@@ -311,7 +311,9 @@ class AgentHandler(BaseHTTPRequestHandler):
     def _send_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Agent-Secret")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
+        self.send_header("Access-Control-Max-Age", "86400")
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -441,14 +443,41 @@ def main():
         print(json.dumps(res, ensure_ascii=False, indent=2))
         sys.exit(0)
 
-    # Nếu cổng đã chạy và không phải cờ --sync, có thể do Task Scheduler gọi
-    if is_port_in_use(AGENT_PORT):
+    # Nếu chạy với cờ /silent hoặc --silent (do Task Scheduler hoặc Windows Startup gọi)
+    # và port đã mở, chỉ cần kích hoạt sync
+    if is_port_in_use(AGENT_PORT) and ("/silent" in sys.argv or "--silent" in sys.argv):
         logger.info(f"Agent đã đang chạy ở cổng {AGENT_PORT}. Đang kích hoạt quét tự động...")
         try:
             with urlopen(f"http://127.0.0.1:{AGENT_PORT}/auto-sync", timeout=30) as r:
                 print(r.read().decode("utf-8"))
         except Exception as e:
             print(f"Lỗi kích hoạt: {e}")
+        sys.exit(0)
+
+    # Nếu port đã mở mà người dùng mở file bat trực tiếp
+    if is_port_in_use(AGENT_PORT):
+        print("=" * 68)
+        print(f"   🟢 THÔNG BÁO: AGENT ĐÃ ĐANG CHẠY TẠI CỔNG {AGENT_PORT}!")
+        print("=" * 68)
+        try:
+            with urlopen(f"http://127.0.0.1:{AGENT_PORT}/status", timeout=5) as r:
+                data = json.loads(r.read().decode("utf-8"))
+                print(f"   📡 Trạng thái: {data.get('status')}")
+                print(f"   🖥️  Outlook Desktop: {'ĐÃ KẾT NỐI (MAPI)' if data.get('connected') else 'CHƯA MỞ'}")
+                print(f"   📧 Hòm thư: {data.get('account')} | Thư mục: {data.get('folder')}")
+                print(f"   🌐 Đích Server: {data.get('server_url')}")
+        except Exception as e:
+            print(f"   [!] Không thể lấy trạng thái từ cổng {AGENT_PORT}: {e}")
+        print("=" * 68)
+        print("   💡 Agent này đang phục vụ kết nối với Web Server.")
+        print("   Nếu bạn muốn khởi động lại Agent (Restart), hãy đóng tiến trình cũ")
+        print("   hoặc chạy: Chay_Outlook_Agent.bat --restart")
+        print("=" * 68)
+        if "/silent" not in sys.argv:
+            try:
+                time.sleep(10)
+            except KeyboardInterrupt:
+                pass
         sys.exit(0)
 
     if is_running_as_admin():
