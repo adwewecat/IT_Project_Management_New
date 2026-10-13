@@ -1635,6 +1635,37 @@ estaurant_service.py).
 
 ---
 
+### [2026-10-13] - Khắc Phục Triệt Để Lỗi Cuộc Gọi 3CX Bị Kẹt Đổ Chuông Lặp Đi Lặp Lại & Bấm Tắt Vẫn Hiện Lại
+- **Màn hình**: Toàn bộ ứng dụng, đặc biệt trang Danh Sách Nhà Hàng (`RestaurantListPage.tsx`, `HotlineContext.tsx`, `hotline_3cx_service.py`, `hotlineService.ts`).
+- **Hiện tượng lỗi**:
+  1. Banner màu đỏ "🔴 ĐANG ĐỔ CHUÔNG #8345 Cuộc gọi 8345" xuất hiện trên đầu trang và liên tục đổ chuông.
+  2. Người dùng bấm nút tắt `[X]` thì chỉ sau khoảng 2.5 giây banner lại tự động nhảy ra lại.
+  3. Dù cuộc gọi đã diễn ra từ hàng chục phút trước (09:10:15) nhưng hệ thống vẫn coi là đang đổ chuông không dứt.
+- **Nguyên nhân cốt lõi**:
+  1. *Biến `_current_active_call` trong RAM backend không có cơ chế TTL/Hết hạn*: Khi nhận sự kiện cuộc gọi đến từ 3CX Client Agent, backend lưu `_current_active_call` vào RAM mà không có cơ chế tự động giải phóng sau khi chuông dứt (khoảng 30-45 giây).
+  2. *Bản ghi DB kẹt trạng thái `INCOMING`*: Các cuộc gọi chưa được nghe máy hoặc không có tín hiệu kết thúc từ 3CX bị kẹt mãi ở trạng thái `INCOMING` với `is_resolved = 0`.
+  3. *Vòng lặp Polling 2.5s đè dữ liệu Client*: Ở Frontend `HotlineContext.tsx`, khi người dùng bấm nút `[X]` (hàm `dismissNonRestaurantCall`), client chỉ set `latestNonRestaurantCall = null`. Nhưng cứ mỗi 2.5 giây, vòng lặp `pollStatus` lại gọi API `/status`, nhận lại dữ liệu `current_call` cũ từ backend và ghi đè lại state làm banner hồi sinh.
+  4. *Sự kiện SSE `call_ended` không dọn banner*: Khi 3CX ngắt máy bắn sự kiện kết thúc cuộc gọi, callback `call_ended` chỉ set `incomingCall = null` mà bỏ quên `latestNonRestaurantCall`.
+- **Giải pháp xử lý toàn diện**:
+  1. *Backend Service (`hotline_3cx_service.py`)*:
+     - Gắn cờ timestamp `_call_time = time.time()` cho mọi cuộc gọi đến.
+     - Trong `get_status()`: Tự động hết hạn và xóa `_current_active_call = None` nếu đã quá 45 giây.
+     - Tự động quét và chuyển đổi tất cả các cuộc gọi `INCOMING` quá 45 giây trong DB thành `MISSED` (cuộc gọi nhỡ).
+     - Giới hạn `latest_call_query` chỉ lấy trong 10 phút gần nhất thay vì 3 ngày.
+     - Cập nhật hàm `end_current_call(call_id)`: Tự động đánh dấu `is_resolved = True` trong cơ sở dữ liệu khi kết thúc cuộc gọi.
+  2. *Frontend Context (`HotlineContext.tsx` & `hotlineService.ts`)*:
+     - Bổ sung API `hotlineService.endCall(callId)`.
+     - Quản lý danh sách ID đã đóng bằng `dismissedCallIdsRef = useRef<Set<number>>(new Set())`.
+     - Khi bấm nút `[X]` (`dismissNonRestaurantCall`): Lưu ID vào Set, gọi đồng thời cả `resolveMissedCall(callId)` và `endCall(callId)` lên Server để xóa triệt để cả ở DB và RAM Server.
+     - Trong vòng lặp `pollStatus`: Chặn triệt để không cho phép bất kỳ cuộc gọi nào có ID đã bị đóng được xuất hiện lại trên giao diện.
+     - Khi nhận sự kiện SSE `call_ended`: Tự động xóa sạch banner nếu đang ở trạng thái `INCOMING`.
+  3. *Triển khai & Kiểm tra*:
+     - Backend: Biên dịch cú pháp `compileall` sạch 100%, vượt qua `import smoke test`.
+     - Frontend: Chạy build production `npm run build` thành công tuyệt đối (exit code 0).
+     - Database & Server Production: Đã xử lý giải phóng toàn bộ cuộc gọi kẹt trong DB và RAM trên server `172.16.8.25` và `14.161.33.122:5001`.
+
+---
+
 ### [2026-10-08] - Thay Thế Tab 3 Phân Tích MongoDB Bằng "Giả Lập Android POS Tablet" (CO • SO • KDS)
 - **Yêu cầu & Mục tiêu**:
   - Tại trang **Phân Tích MongoDB Nhà Hàng** (`RestaurantMongoAnalysisPage.tsx`), gỡ bỏ Tab 3 cũ (*Tab 3: Phân Tích Từng Table (Collection) Trong 2 DB Hiện Có*).

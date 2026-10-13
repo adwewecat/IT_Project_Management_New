@@ -213,11 +213,17 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Ref chống lặp xử lý cuộc gọi reo
   const lastHandledVncCallIdRef = useRef<number | null>(null);
   const lastAlertedNonResCallIdRef = useRef<number | null>(null);
+  const dismissedCallIdsRef = useRef<Set<number>>(new Set());
 
   // Đóng/Ẩn banner thông báo cuộc gọi không phải nhà hàng
   const dismissNonRestaurantCall = useCallback(() => {
     if (latestNonRestaurantCall) {
-      setDismissedCallId(latestNonRestaurantCall.id);
+      const callId = latestNonRestaurantCall.id;
+      dismissedCallIdsRef.current.add(callId);
+      setDismissedCallId(callId);
+      lastAlertedNonResCallIdRef.current = callId;
+      hotlineService.resolveMissedCall(callId).catch(() => {});
+      hotlineService.endCall(callId).catch(() => {});
     }
     setLatestNonRestaurantCall(null);
   }, [latestNonRestaurantCall]);
@@ -287,7 +293,12 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
             }
           } else {
             // KHÔNG PHẢI NHÀ HÀNG (CUỘC GỌI NỘI BỘ):
-            // HIỂN THỊ NẾU ĐÍCH DANH MÁY CỦA TÔI HOẶC TÔI ĐANG TRỰC
+            // NẾU ĐÃ BẤM ĐÓNG THÌ TUYỆT ĐỐI KHÔNG HIỂN THỊ LẠI!
+            if ((dismissedCallId && cur.call_id === dismissedCallId) || dismissedCallIdsRef.current.has(cur.call_id)) {
+              setLatestNonRestaurantCall(null);
+              return;
+            }
+
             const isForMe = hasSpecificAgent ? isAgentMatch(curDuty, user) : isHotlineActive;
             if (isForMe) {
               if (lastAlertedNonResCallIdRef.current !== cur.call_id) {
@@ -314,10 +325,15 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
         } else {
           // Không có cuộc gọi đang reo -> kiểm tra latest_call_info
           if (res.latest_call_info && !res.latest_call_info.is_restaurant && !res.latest_call_info.is_resolved) {
-            // Có cuộc gọi không phải nhà hàng chưa xử lý
+            // NẾU ĐÃ BẤM ĐÓNG THÌ BỎ QUA!
+            if ((dismissedCallId && res.latest_call_info.id === dismissedCallId) || dismissedCallIdsRef.current.has(res.latest_call_info.id)) {
+              setLatestNonRestaurantCall(null);
+              return;
+            }
+
             const infoDuty = (res.latest_call_info.duty_user || '').trim().toLowerCase();
             const isForMe = infoDuty ? isAgentMatch(infoDuty, user) : isHotlineActive;
-            if (isForMe && res.latest_call_info.id !== dismissedCallId) {
+            if (isForMe) {
               setLatestNonRestaurantCall({
                 id: res.latest_call_info.id,
                 ext: res.latest_call_info.ext,
@@ -330,10 +346,7 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
               setLatestNonRestaurantCall(null);
             }
           } else {
-            // Nếu không có cuộc gọi chưa xử lý, hoặc cuộc gọi đó đã resolved
-            if (count === 0 || (res.latest_call_info && res.latest_call_info.is_resolved)) {
-              setLatestNonRestaurantCall(null);
-            }
+            setLatestNonRestaurantCall(null);
           }
         }
       } catch (_) {}
@@ -453,6 +466,12 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       () => {
         // Kết thúc cuộc gọi (call_ended)
         setIncomingCall(null);
+        setLatestNonRestaurantCall((prev) => {
+          if (prev && prev.call_status === 'INCOMING') {
+            return null;
+          }
+          return prev;
+        });
         refreshMissedCount();
       },
       () => {

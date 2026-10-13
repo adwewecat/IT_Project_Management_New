@@ -310,6 +310,7 @@ def process_incoming_call(
             "is_resolved": is_resolved,
             "duty_user": duty_user,
             "created_at": log_entry.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "_call_time": time.time(),
         }
 
         if is_missed or is_busy:
@@ -406,10 +407,29 @@ def handle_call_ended(ext: str, caller_raw_text: str = "") -> Optional[HotlineCa
 
 
 def end_current_call(call_id: Optional[int] = None) -> bool:
-    """Đánh dấu cuộc gọi hiện tại đã kết thúc (kỹ thuật viên đóng modal VNC/KDS)"""
+    """Đánh dấu cuộc gọi hiện tại đã kết thúc (kỹ thuật viên đóng modal VNC/KDS hoặc bấm bỏ qua)"""
     global _current_active_call
+    active_cid = None
+    if _current_active_call:
+        active_cid = _current_active_call.get("id") or _current_active_call.get("call_id")
     _current_active_call = None
-    broadcast_event("call_ended", {"call_id": call_id, "timestamp": datetime.now().isoformat()})
+
+    target_id = call_id or active_cid
+    if target_id:
+        db = SessionLocal()
+        try:
+            call = db.query(HotlineCallLog).filter(HotlineCallLog.id == target_id).first()
+            if call:
+                call.is_resolved = True
+                if call.call_status == "INCOMING":
+                    call.call_status = "ANSWERED"
+                db.commit()
+        except Exception:
+            db.rollback()
+        finally:
+            db.close()
+
+    broadcast_event("call_ended", {"call_id": target_id, "timestamp": datetime.now().isoformat()})
     return True
 
 
@@ -1027,6 +1047,27 @@ def get_status(current_username: Optional[str] = None) -> Dict[str, Any]:
         unresolved_count = count_query.count()
 
         # 1. Lọc cuộc gọi đang reo (current_call) phù hợp với người dùng hiện tại
+        global _current_active_call
+        if _current_active_call:
+            call_time = _current_active_call.get("_call_time") or 0
+            if call_time and (time.time() - call_time > 45):
+                # Cuộc gọi đã quá 45 giây mà không kết thúc -> tự động coi như hết reo
+                _current_active_call = None
+
+        # Tự động cập nhật các cuộc gọi INCOMING quá 45 giây thành MISSED trong DB
+        try:
+            forty_five_seconds_ago = datetime.now() - timedelta(seconds=45)
+            stale_incomings = db.query(HotlineCallLog).filter(
+                HotlineCallLog.call_status == "INCOMING",
+                HotlineCallLog.created_at < forty_five_seconds_ago
+            ).all()
+            if stale_incomings:
+                for sc in stale_incomings:
+                    sc.call_status = "MISSED"
+                db.commit()
+        except Exception:
+            db.rollback()
+
         call_to_return = None
         if _current_active_call:
             call_duty = (_current_active_call.get("duty_user") or "").strip().lower()
@@ -1052,9 +1093,10 @@ def get_status(current_username: Optional[str] = None) -> Dict[str, Any]:
                     call_to_return = None
 
         # 2. Lấy thông tin cuộc gọi chưa xử lý mới nhất (latest_call_info):
-        # TUYỆT ĐỐI KHÔNG trả về cuộc gọi nội bộ của người khác cho client này!
+        # Chỉ lấy các cuộc gọi trong vòng 10 phút gần đây (tránh kéo lại cuộc gọi từ nhiều ngày trước)
+        ten_minutes_ago = datetime.now() - timedelta(minutes=10)
         latest_call_query = db.query(HotlineCallLog).filter(
-            HotlineCallLog.created_at >= three_days_ago,
+            HotlineCallLog.created_at >= ten_minutes_ago,
             HotlineCallLog.is_resolved == False
         )
         if clean_user:

@@ -76,6 +76,14 @@ export const hotlineService = {
     return res.data;
   },
 
+  // Kết thúc cuộc gọi hiện tại
+  endCall: async (callId?: number): Promise<{ success: boolean }> => {
+    const res = await apiClient.post('/hotline/end-call', null, {
+      params: callId ? { call_id: callId } : {},
+    });
+    return res.data;
+  },
+
   // Đóng hàng loạt tất cả cuộc gọi nhỡ (Check All)
   resolveAllMissedCalls: async (): Promise<{ success: boolean; resolved_count: number }> => {
     const res = await apiClient.post('/hotline/missed-calls/resolve-all');
