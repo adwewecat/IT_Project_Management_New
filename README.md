@@ -41,22 +41,37 @@ Hệ thống quản lý dự án, vận hành nhà hàng, tích hợp tổng đ�
 
 ---
 
-## 🛡️ 3. Quy Tắc & Quy Chuẩn Phát Triển (BẮT BUỘC)
+## 🛡️ 3. Quy Tắc Bất Di Bất Dịch Cho AI & Developer (BẮT BUỘC TUÂN THỦ)
 
-> ⚠️ **ĐIỀU KIỆN TIÊN QUYẾT BẮT BUỘC DÀNH CHO AI & DEVELOPER**:
+> ⚠️ **6 NGUYÊN TẮC CỐT LÕI BẤT BIẾN (IMMUTABLE RULES)**:
 > 
-> 1. **Đồng bộ GitHub ngay lập tức (`origin/main`)**:
->    - Repository: `https://github.com/adwewecat/IT_Project_Management_New.git`
->    - **Mỗi lần thêm tính năng mới, chỉnh sửa logic, cập nhật giao diện hoặc sửa lỗi, BẮT BUỘC phải commit và push lên GitHub ngay lập tức**.
->    - Không được kết thúc lượt làm việc khi code chưa được push đồng bộ lên GitHub.
+> 1. **Kiểm tra và Đọc toàn bộ các file `.md` trước khi làm**:
+>    - Luôn đọc `README.md`, `GEMINI.md`, `PROJECT_GUIDELINES.md` và `Script/README.md` trước khi tiếp nhận hoặc can thiệp bất kỳ mã nguồn nào để nắm rõ toàn cảnh hệ thống.
 > 
-> 2. **Ghi nhật ký thay đổi (Changelog)**:
->    - Mọi cập nhật bắt buộc phải được ghi chép vào `Script/README.md` tại mục **"LỊCH SỬ THAY ĐỔI & NHẬT KÝ NÂNG CẤP (CHANGELOG)"**.
+> 2. **Lưu vết và Cập nhật `GEMINI.md` & `Script/README.md`**:
+>    - Trước và sau khi làm mới hay sửa bất kỳ vấn đề gì, **BẮT BUỘC PHẢI NOTE VÀ LƯU LẠI**.
+>    - Mục đích tối thượng: Khi cài lại Windows hoặc đổi máy tính, Gemini, AI hoặc Developer khác đọc vào đều nắm bắt được toàn bộ dự án và biết chính xác phải làm gì tiếp theo mà không bị đứt đoạn.
 > 
-> 3. **Cơ chế Phân quyền hiển thị**:
->    - Nếu tài khoản không có quyền xem trường thông tin, ô dữ liệu vẫn hiển thị kèm nhãn `🔒 Bị ẩn theo phân quyền`, tuyệt đối không ẩn cả dòng/cột.
+> 3. **Tuân thủ sát sao quy tắc của dự án**:
+>    - Phân quyền hiển thị dữ liệu: Trường không có quyền xem phải hiển thị `🔒 Bị ẩn theo phân quyền`, không ẩn cả dòng/cột.
+>    - UI/UX: Không tạo khối thẻ thống kê to (stat cards) ở đầu trang; giao diện co giãn full-width; modal đóng bằng Esc/X; hỗ trợ Mobile-Ready 100%.
+>    - Tự động tạo bảng DB trong `lifespan` (`backend/app/main.py`) và cập nhật DDL vào `Script/Full_SCRIPT_SQL_TABLE.sql`.
 > 
-> 4. **Tự động khởi tạo Database**:
->    - Mọi model SQL Server mới đều phải đăng ký vào hàm `lifespan` tại `backend/app/main.py` và lưu trữ DDL vào `Script/Full_SCRIPT_SQL_TABLE.sql`.
+> 4. **Build code hoàn toàn sạch sẽ (Clean Code)**:
+>    - Bỏ đi triệt để code dư thừa, import rác, biến không sử dụng (Zero warnings/errors TypeScript TS6133).
+>    - Chỉ bàn giao khi Frontend build exit code 0 (`cmd /c "npm run build"`) và Backend vượt qua Smoke Test (`python -c "from app.main import app; print('>>> PASSED 100%')"`).
+> 
+> 5. **Ghi chú (Comment) chi tiết trong code**:
+>    - Mọi tính năng, hàm, logic nghiệp vụ đều phải được chú thích rõ ràng bằng tiếng Việt trong mã nguồn để khi đọc lại code ai cũng dễ dàng hiểu được.
+> 
+> 6. **Đẩy code lên GitHub ngay lập tức (`origin/main`)**:
+>    - **Bất kỳ lúc nào thêm tính năng hoặc chỉnh sửa xong, BẮT BUỘC phải commit và push lên GitHub ngay lập tức**.
+>    - Tuyệt đối không kết thúc lượt làm việc hay chuyển tác vụ khi code chưa được đồng bộ hoàn toàn lên GitHub repository:
+>      ```cmd
+>      git add .
+>      git commit -m "Mô tả chi tiết tính năng hoặc chỉnh sửa"
+>      git push origin main
+>      ```
 
-Chi tiết tài liệu hướng dẫn kỹ thuật: Xem [GEMINI.md](GEMINI.md), [AGENTS.md](AGENTS.md) và [PROJECT_GUIDELINES.md](PROJECT_GUIDELINES.md).
+Chi tiết tài liệu hướng dẫn kỹ thuật: Xem [GEMINI.md](GEMINI.md), [AGENTS.md](AGENTS.md), [PROJECT_GUIDELINES.md](PROJECT_GUIDELINES.md) và [Script/README.md](Script/README.md).
+

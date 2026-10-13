@@ -2044,6 +2044,18 @@ estaurant_service.py).
 
 ---
 
+### [2026-10-13] - Chuẩn Hóa 6 Nguyên Tắc Bất Di Bất Dịch Cho AI & Developer (Toàn Diện & Bất Biến)
+- **Mục tiêu**: Đồng bộ và khắc sâu 6 quy tắc cốt lõi bất biến vào toàn bộ hệ thống tài liệu (`README.md`, `GEMINI.md`, `AGENTS.md`, `PROJECT_GUIDELINES.md`, `.agents/rules/project_guidelines.md` và `Script/README.md`).
+- **Nội dung 6 nguyên tắc bất di bất dịch**:
+  1. *Kiểm tra và Đọc toàn bộ các file `.md` trước khi làm*: Nắm rõ kiến trúc, nghiệp vụ và lịch sử phát triển trước khi thao tác mã nguồn.
+  2. *Lưu vết và Cập nhật `GEMINI.md` & `Script/README.md`*: Bắt buộc ghi chép trước và sau khi làm/sửa bất kỳ vấn đề gì để khi cài lại Win hoặc đổi máy, AI và Developer đọc vào đều nắm bắt toàn bộ dự án và biết việc tiếp theo.
+  3. *Tuân thủ sát sao quy tắc của dự án*: Quy chuẩn phân quyền hiển thị (`🔒 Bị ẩn theo phân quyền`), kiến trúc UI/UX (không dùng metric stat card ở đầu trang, full-width responsive, modal Esc/X, Mobile-Ready 100%), tự động khởi tạo database trong `lifespan` và cập nhật `Full_SCRIPT_SQL_TABLE.sql`.
+  4. *Build code hoàn toàn sạch sẽ (Clean Code)*: Bỏ code dư thừa, loại bỏ triệt để biến/import không dùng (Zero TS6133), vượt qua build Frontend exit code 0 và Backend Smoke Test.
+  5. *Ghi chú (Comment) chi tiết trong code*: Chú thích rõ ràng bằng tiếng Việt giải thích logic từng hàm/tính năng để dễ đọc, dễ hiểu.
+  6. *Đẩy code ngay lên GitHub (`origin/main`)*: Bất kỳ lúc nào thêm tính năng hoặc chỉnh sửa xong, BẮT BUỘC phải commit và push lên GitHub ngay lập tức.
+
+---
+
 ### [2026-10-04 và trước đó] - Nền Tảng & Quy Chuẩn Giao Diện Toàn Hệ Thống
 - **Quy định No Stat Cards**: Tuyệt đối không đặt các khối thẻ thống kê to ở đầu các trang tác vụ nghiệp vụ (CentralizedLogs, RestaurantMongoAnalysis...).
 - **Quy tắc Đóng Modal**: Modal chỉ đóng khi bấm `Esc`, bấm nút `X` hoặc nút "Đóng" / "Hủy"; không đóng khi click ngoài overlay.
