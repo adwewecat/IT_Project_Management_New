@@ -326,7 +326,8 @@ if not exist "%PS1_FILE%" (
 )
 
 if not exist "%CONFIG_FILE%" (
-    echo SERVER_URL={SERVER_URL}> "%CONFIG_FILE%"
+    echo SERVER_URL=__EMBEDDED_SERVER_URL__> "%CONFIG_FILE%"
+    echo AGENT_USERNAME=__EMBEDDED_AGENT_USER__>> "%CONFIG_FILE%"
 )
 
 echo Dang khoi dong tien trinh ket noi 3CX...
@@ -334,9 +335,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PS1_FILE%"
 pause
 """
 
-CLIENT_AGENT_PS1_TEMPLATE = """param (
-    [string]$ServerUrl = "{SERVER_URL}",
-    [string]$AgentUser = "{AGENT_USERNAME}"
+CLIENT_AGENT_PS1_TEMPLATE = r"""param (
+    [string]$ServerUrl = "",
+    [string]$AgentUser = ""
 )
 
 # ==============================================================================
@@ -350,58 +351,79 @@ try { $Host.UI.RawUI.WindowTitle = "3CX Hotline Client Agent [Dang Chay]" } catc
 # Tu dong dong cac tien trinh Agent cu dang chay trung lap de tranh xung dot
 $myPid = $PID
 try {
+    $parentPid = (Get-CimInstance Win32_Process -Filter "ProcessId = $myPid").ParentProcessId
     Get-CimInstance Win32_Process -Filter "Name LIKE '%powershell%'" | Where-Object {
-        $_.ProcessId -ne $myPid -and $_.CommandLine -like "*3CX_Hotline_Agent.ps1*"
+        $_.ProcessId -ne $myPid -and $_.ProcessId -ne $parentPid -and $_.CommandLine -like "*3CX_Hotline_Agent.ps1*"
     } | ForEach-Object {
         Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
     }
 } catch {}
 
-# Neu khong truyen qua tham so, doc file config.txt cung thu muc
+# Gia tri mac dinh duoc nhung san tu Server
+$embeddedServer = "__EMBEDDED_SERVER_URL__"
+$embeddedAgent  = "__EMBEDDED_AGENT_USER__"
+
+if (-not $ServerUrl -and $embeddedServer -and -not ($embeddedServer -like "*__*")) {
+    $ServerUrl = $embeddedServer
+}
+if (-not $AgentUser -and $embeddedAgent -and -not ($embeddedAgent -like "*__*")) {
+    $AgentUser = $embeddedAgent
+}
+
+# Doc file config.txt cung thu muc neu co (uu tien config.txt khi nguoi dung can sua)
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configFile = Join-Path $scriptDir "config.txt"
+$logFile = Join-Path $scriptDir "agent_activity.log"
 
 if (Test-Path $configFile) {
     Get-Content $configFile | ForEach-Object {
         $line = $_.Trim()
-        if (-not $ServerUrl -or $ServerUrl -eq "{SERVER_URL}") {
-            if ($line -match "^SERVER_URL\\s*=\\s*(.+)$") {
-                $ServerUrl = $matches[1].Trim()
-            }
+        if ($line -match "^SERVER_URL\s*=\s*(.+)$") {
+            $val = $matches[1].Trim()
+            if ($val) { $ServerUrl = $val }
         }
-        if (-not $AgentUser -or $AgentUser -eq "{AGENT_USERNAME}") {
-            if ($line -match "^(?:AGENT_USERNAME|DUTY_USER|USERNAME)\\s*=\\s*(.+)$") {
-                $AgentUser = $matches[1].Trim()
-            }
+        if ($line -match "^(?:AGENT_USERNAME|DUTY_USER|USERNAME)\s*=\s*(.+)$") {
+            $val = $matches[1].Trim()
+            if ($val) { $AgentUser = $val }
         }
     }
 }
 
-if (-not $AgentUser -or $AgentUser -eq "{AGENT_USERNAME}") {
+# Neu van chua co AgentUser, lay username Windows hien tai
+if (-not $AgentUser) {
     $AgentUser = $env:USERNAME
 }
 
-if (-not $ServerUrl -or $ServerUrl -eq "{SERVER_URL}") {
-    Write-Host "Vui lòng nhập địa chỉ Server (ví dụ: http://192.168.1.50:8000 hoặc https://itpm.ggg.com.vn):" -ForegroundColor Yellow
-    $ServerUrl = Read-Host "Server URL"
+# Neu hoan toan chua co ServerUrl thi moi hoi nguoi dung
+if (-not $ServerUrl) {
+    Write-Host "Vui lòng nhập địa chỉ Server (ví dụ: http://14.161.33.122:5001):" -ForegroundColor Yellow
+    try { $ServerUrl = Read-Host "Server URL" } catch {}
     if ($ServerUrl) {
         $ServerUrl = $ServerUrl.Trim().TrimEnd('/')
         Set-Content -Path $configFile -Value "SERVER_URL=$ServerUrl`nAGENT_USERNAME=$AgentUser" -Encoding UTF8
     } else {
         Write-Host "Không có Server URL, dừng chương trình." -ForegroundColor Red
+        Start-Sleep -Seconds 3
         exit 1
     }
 } else {
     $ServerUrl = $ServerUrl.Trim().TrimEnd('/')
 }
 
+Function Log-Activity($msg) {
+    $t = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    $line = "[$t] $msg"
+    Write-Host $line
+    try { Add-Content -Path $logFile -Value $line -Encoding UTF8 -ErrorAction SilentlyContinue } catch {}
+}
+
 try { Clear-Host } catch {}
-Write-Host "==================================================================" -ForegroundColor Cyan
-Write-Host "   3CX HOTLINE CLIENT AGENT — TỰ ĐỘNG BẮT CUỘC GỌI TỪ 3CX PWA    " -ForegroundColor Yellow
-Write-Host "==================================================================" -ForegroundColor Cyan
-Write-Host "-> Server nhận sự kiện: $ServerUrl" -ForegroundColor Green
-Write-Host "-> Người trực máy:       $AgentUser (Windows: $($env:USERNAME))" -ForegroundColor Gray
-Write-Host "-> Đang kết nối tới Windows UserNotificationListener..." -ForegroundColor Gray
+Log-Activity "=================================================================="
+Log-Activity "   3CX HOTLINE CLIENT AGENT — TỰ ĐỘNG BẮT CUỘC GỌI TỪ 3CX PWA    "
+Log-Activity "=================================================================="
+Log-Activity "-> Server nhận sự kiện: $ServerUrl"
+Log-Activity "-> Người trực máy:       $AgentUser (Windows: $($env:USERNAME))"
+Log-Activity "-> Đang kết nối tới Windows UserNotificationListener..."
 
 # Nạp Windows Runtime cho Notification Listener
 try {
@@ -414,39 +436,39 @@ try {
         $netTask.Result
     }
     [Windows.UI.Notifications.Management.UserNotificationListener, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+    [Windows.UI.Notifications.NotificationKinds, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+    [Windows.UI.Notifications.KnownNotificationBindings, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+    [Windows.UI.Notifications.UserNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
     $listener = [Windows.UI.Notifications.Management.UserNotificationListener]::Current
     $access = Await ($listener.RequestAccessAsync()) ([Windows.UI.Notifications.Management.UserNotificationListenerAccessStatus])
 } catch {
-    Write-Host "[LỖI KHỞI TẠO] Không thể kích hoạt Windows Notification API: $_" -ForegroundColor Red
-    Read-Host "Nhấn Enter để thoát..."
+    Log-Activity "[LỖI KHỞI TẠO] Không thể kích hoạt Windows Notification API: $_"
+    Start-Sleep -Seconds 3
     exit 1
 }
 
 if ($access -ne "Allowed") {
-    Write-Host ""
-    Write-Host "[CẢNH BÁO] Quyền truy cập thông báo Windows bị từ chối ($access)." -ForegroundColor Red
-    Write-Host "Vui lòng mở Windows Settings -> Privacy & security -> Notifications và BẬT 'ON'." -ForegroundColor Yellow
-    Read-Host "Nhấn Enter để thoát..."
+    Log-Activity "[CẢNH BÁO] Quyền truy cập thông báo Windows bị từ chối ($access)."
+    Log-Activity "Vui lòng mở Windows Settings -> Privacy & security -> Notifications và BẬT 'ON'."
+    Start-Sleep -Seconds 3
     exit 1
 }
 
-Write-Host "-> Kết nối Windows Notification API: THÀNH CÔNG!" -ForegroundColor Green
-Write-Host "-> ĐANG CHẠY NGẦM: Tự động lắng nghe cuộc gọi đến và nhỡ..." -ForegroundColor Cyan
-Write-Host "------------------------------------------------------------------" -ForegroundColor DarkGray
+Log-Activity "-> Kết nối Windows Notification API: THÀNH CÔNG!"
+Log-Activity "-> ĐANG CHẠY NGẦM: Tự động lắng nghe cuộc gọi đến và nhỡ..."
 
 # Kiểm tra kết nối tới Server
 try {
     $testResp = Invoke-RestMethod -Uri "$ServerUrl/api/v1/hotline/status" -Method Get -TimeoutSec 4
-    Write-Host "[OK] Đã kiểm tra kết nối Server: OK (Hotline status ready)" -ForegroundColor Green
+    Log-Activity "[OK] Đã kiểm tra kết nối Server: OK (Hotline status ready)"
 } catch {
-    Write-Host "[CẢNH BÁO] Chưa kết nối được Server $ServerUrl (Server có thể đang khởi động hoặc sai IP): $_" -ForegroundColor Yellow
+    Log-Activity "[CẢNH BÁO] Chưa kết nối được Server $ServerUrl : $_"
 }
-Write-Host "------------------------------------------------------------------" -ForegroundColor DarkGray
 
 $seen_keys = [System.Collections.Generic.HashSet[string]]::new()
-$cutoff = (Get-Date).AddMinutes(-5)
+$cutoff = (Get-Date).AddMinutes(-2)
 
-# Đọc thông báo 5 phút gần đây để tránh trigger lại cuộc gọi cũ khi vừa mở agent
+# Đọc thông báo 2 phút gần đây để đánh dấu tránh trigger lại cuộc gọi cũ khi vừa mở agent
 try {
     $initial = Await ($listener.GetNotificationsAsync([Windows.UI.Notifications.NotificationKinds]::Toast)) ([System.Collections.Generic.IReadOnlyList[Windows.UI.Notifications.UserNotification]])
     foreach ($n in $initial) {
@@ -460,12 +482,11 @@ try {
 } catch {}
 
 Function Send-CallEvent($ext, $callerText, $isMissed, $isEnded) {
-    $timeStr = (Get-Date).ToString("HH:mm:ss")
     if ($isEnded) {
         try {
             $endUrl = "$ServerUrl/api/v1/hotline/end-call"
             Invoke-RestMethod -Uri $endUrl -Method Post -TimeoutSec 3 | Out-Null
-            Write-Host "[$timeStr] -> Đã báo kết thúc cuộc gọi lên Server." -ForegroundColor DarkGray
+            Log-Activity "-> Đã báo kết thúc cuộc gọi lên Server."
         } catch {}
         return
     }
@@ -483,9 +504,9 @@ Function Send-CallEvent($ext, $callerText, $isMissed, $isEnded) {
         $utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
         $resp = Invoke-RestMethod -Uri $eventUrl -Method Post -Body $utf8Bytes -ContentType "application/json; charset=utf-8" -TimeoutSec 5
         $typeLabel = if ($isMissed) { "CUỘC GỌI NHỠ" } else { "CUỘC GỌI ĐẾN" }
-        Write-Host "[$timeStr] [$typeLabel] Đã đẩy lên Server thành công! Line: $ext | Caller: '$callerText'" -ForegroundColor Green
+        Log-Activity "[$typeLabel] Đã đẩy lên Server thành công! Line: $ext | Caller: '$callerText'"
     } catch {
-        Write-Host "[$timeStr] [LỖI GỬI SERVER] Không thể gửi cuộc gọi Line $ext tới $ServerUrl : $_" -ForegroundColor Red
+        Log-Activity "[LỖI GỬI SERVER] Không thể gửi cuộc gọi Line $ext tới $ServerUrl : $_"
     }
 }
 
@@ -519,7 +540,7 @@ while ($true) {
                     $isEnded = ($hLow -match "call ended|kết thúc|ended")
 
                     # Tìm số EXT trong caller
-                    $match = [regex]::Match($caller, "\\b(\\d{2,12})\\b")
+                    $match = [regex]::Match($caller, "\b(\d{2,12})\b")
                     $ext = if ($match.Success) { $match.Groups[1].Value } else { "EXT_3CX" }
 
                     if ($isIncoming) {
@@ -533,7 +554,8 @@ while ($true) {
             }
         }
     } catch {
-        Start-Sleep -Milliseconds 500
+        Log-Activity "[LỖI VÒNG LẶP] $_"
+        Start-Sleep -Milliseconds 1000
     }
 }
 """
@@ -585,8 +607,8 @@ def download_client_agent(
     clean_user = (agent_username or "").strip()
 
     # Lấy nội dung mẫu đã nhúng sẵn SERVER_URL và AGENT_USERNAME
-    bat_content = CLIENT_AGENT_BAT_TEMPLATE.replace("{SERVER_URL}", base_url)
-    ps1_content = CLIENT_AGENT_PS1_TEMPLATE.replace("{SERVER_URL}", base_url).replace("{AGENT_USERNAME}", clean_user)
+    bat_content = CLIENT_AGENT_BAT_TEMPLATE.replace("__EMBEDDED_SERVER_URL__", base_url).replace("__EMBEDDED_AGENT_USER__", clean_user)
+    ps1_content = CLIENT_AGENT_PS1_TEMPLATE.replace("__EMBEDDED_SERVER_URL__", base_url).replace("__EMBEDDED_AGENT_USER__", clean_user)
     readme_content = CLIENT_AGENT_README_TEMPLATE.replace("{SERVER_URL}", base_url)
     config_content = f"SERVER_URL={base_url}\nAGENT_USERNAME={clean_user}\n"
 
