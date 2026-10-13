@@ -72,6 +72,13 @@ Hệ thống quản lý dự án, vận hành nhà hàng, tích hợp tổng đ�
 >      git commit -m "Mô tả chi tiết tính năng hoặc chỉnh sửa"
 >      git push origin main
 >      ```
+> 
+> 7. **Build sạch `backend/app` và `frontend/dist` để đẩy lên Server (Copy Là Chạy Ngay)**:
+>    - Sau khi xử lý xong bất kỳ tính năng hoặc sửa lỗi nào, **BẮT BUỘC** phải:
+>      + Chạy build Frontend: `cmd /c "npm run build"` tại thư mục `frontend/` để tạo sẵn bản build mới sạch sẽ trong `frontend/dist/` (kèm `web.config` cho IIS).
+>      + Kiểm tra Backend: Chạy `python -m compileall app` và Smoke Test tại thư mục `backend/` đảm bảo toàn bộ mã nguồn trong `backend/app/` hoàn toàn sạch lỗi.
+>    - **Mục đích**: Đảm bảo người dùng/Dev chỉ cần copy 2 thư mục `backend/app` và `frontend/dist` đẩy thẳng lên server là hệ thống chạy mượt mà ngay lập tức mà không cần can thiệp cấu hình thủ công.
 
 Chi tiết tài liệu hướng dẫn kỹ thuật: Xem [GEMINI.md](GEMINI.md), [AGENTS.md](AGENTS.md), [PROJECT_GUIDELINES.md](PROJECT_GUIDELINES.md) và [Script/README.md](Script/README.md).
+
 
