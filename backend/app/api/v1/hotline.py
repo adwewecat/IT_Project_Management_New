@@ -582,6 +582,63 @@ CLIENT_AGENT_README_TEMPLATE = """HƯỚNG DẪN SỬ DỤNG 3CX HOTLINE CLIENT 
 """
 
 
+CLIENT_AGENT_STOP_BAT_TEMPLATE = """@echo off
+chcp 65001 >nul
+title Dung toan bo tien trinh 3CX Hotline Client Agent
+
+echo ==================================================================
+echo   DON DEP & DUNG TOAN BO TIEN TRINH 3CX HOTLINE CLIENT AGENT
+echo ==================================================================
+echo.
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$procs = Get-CimInstance Win32_Process | Where-Object { ($_.Name -match 'powershell|wscript|cscript') -and ($_.CommandLine -like '*3CX_Hotline_Agent*' -or $_.CommandLine -like '*Run_Silent_Agent*') }; if ($procs) { $procs | ForEach-Object { Write-Host ('-> Dang dung PID ' + $_.ProcessId + ': ' + $_.Name) -ForegroundColor Yellow; Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Write-Host '-> Da dung cac tien trinh 3CX Agent thanh cong!' -ForegroundColor Green } else { Write-Host '-> Khong co tien trinh 3CX Agent nao dang chay ngam.' -ForegroundColor Green }"
+
+echo.
+echo ==================================================================
+echo DA DON DEP SACH SE 100%% CAC TIEN TRINH 3CX CHAY NGAM!
+echo ==================================================================
+echo.
+pause
+"""
+
+CLIENT_AGENT_RESTART_BAT_TEMPLATE = """@echo off
+chcp 65001 >nul
+title Khoi dong lai 3CX Hotline Client Agent
+
+echo ==================================================================
+echo   KHOI DONG LAI 3CX HOTLINE CLIENT AGENT (LAM SACH VA CHAY MOI)
+echo ==================================================================
+echo.
+
+echo 1. Dang dung tat ca tien trinh 3CX Agent cu...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$procs = Get-CimInstance Win32_Process | Where-Object { ($_.Name -match 'powershell|wscript|cscript') -and ($_.CommandLine -like '*3CX_Hotline_Agent*' -or $_.CommandLine -like '*Run_Silent_Agent*') }; if ($procs) { $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } }"
+
+echo 2. Dang khoi chay tien trinh Agent moi...
+set "SCRIPT_DIR=%~dp0"
+set "VBS_FILE=%SCRIPT_DIR%Run_Silent_Agent.vbs"
+
+if exist "%VBS_FILE%" (
+    wscript.exe "%VBS_FILE%"
+    echo 3. Da kich hoat chay ngam thanh cong!
+    timeout /t 2 >nul
+    if exist "%SCRIPT_DIR%agent_activity.log" (
+        echo.
+        echo Nhat ky khoi dong gan nhat:
+        powershell.exe -NoProfile -Command "Get-Content '%SCRIPT_DIR%agent_activity.log' -Tail 6"
+    )
+) else (
+    echo [LOI] Khong tim thay file Run_Silent_Agent.vbs!
+)
+
+echo.
+echo ==================================================================
+echo HOAN TAT! Tien trinh dang chay ngam on dinh.
+echo ==================================================================
+echo.
+pause
+"""
+
+
 CLIENT_AGENT_VBS_TEMPLATE = (
     'Set WshShell = CreateObject("WScript.Shell")\r\n'
     'scriptDir = CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName)\r\n'
@@ -618,6 +675,8 @@ def download_client_agent(
         z.writestr("config.txt", config_content.encode("utf-8"))
         z.writestr("Run_3CX_Hotline_Agent.bat", bat_content.encode("utf-8"))
         z.writestr("Run_Silent_Agent.vbs", CLIENT_AGENT_VBS_TEMPLATE.encode("utf-8"))
+        z.writestr("Dung_Toan_Bo_Agent.bat", CLIENT_AGENT_STOP_BAT_TEMPLATE.encode("utf-8"))
+        z.writestr("Khoi_Dong_Lai_Agent.bat", CLIENT_AGENT_RESTART_BAT_TEMPLATE.encode("utf-8"))
         z.writestr("3CX_Hotline_Agent.ps1", ps1_content.encode("utf-8"))
         z.writestr("README_HUONG_DAN.txt", readme_content.encode("utf-8"))
 
