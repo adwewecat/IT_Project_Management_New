@@ -2084,24 +2084,21 @@ estaurant_service.py).
 
 ---
 
-### [2026-10-14] - Hoàn Thiện Cơ Chế Kết Nối Kép (Double Guarantee) & Tự Động Polling Cho Outlook Memo Agent
+### [2026-10-14] - Hoàn Thiện Cơ Chế Kiểm Tra Trung Thực Agent Máy Cá Nhân & Auto-Polling
 - **Bối cảnh & Vấn đề**:
   - Người dùng mở modal Web lúc 07:02:28 (khi Agent chưa bật) nên giao diện ghi nhận trạng thái offline.
   - Người dùng bật file `Chay_Outlook_Agent.bat` lúc 07:03:20, Agent quét 318 mail và đồng bộ lên Server thành công lúc 07:03:22.
-  - Tuy nhiên trên giao diện Web vẫn hiển thị `🟡 Chờ Bật Agent Máy Cá Nhân` và `🟡 Agent Chưa Bật` do Web không tự động làm mới trạng thái nếu người dùng chưa nhấn nút "Làm Mới" hoặc tải lại trang.
-  - Ngoài ra, khi người dùng truy cập web qua IP Public (`14.161.33.122`) hoặc mở từ máy khác, cơ chế Private Network Access (PNA) của trình duyệt Chromium có thể hạn chế gọi thẳng vào `127.0.0.1`.
-- **Giải pháp tối ưu & nâng cấp**:
-  1. *Cơ Chế Tự Động Dò Trạng Thái Khi Mở Modal (Auto-Polling)*:
-     - Thêm `useEffect` interval 3.5s trong `JobManagementPage.tsx` khi modal mở (`showMailMemoModal = true`).
-     - Khi người dùng bật file Agent, giao diện tự động nhảy sang màu xanh 🟢 trong vòng 3.5 giây mà không cần người dùng phải bấm nút "Làm Mới".
-  2. *Cơ Chế Báo Hiệu Hai Chiều Qua Server (Agent Heartbeat & Double Guarantee)*:
-     - Thêm luồng `heartbeat_thread` trong `outlook_agent.py` tự động gửi heartbeat định kỳ 20 giây lên Server qua `POST /api/v1/mail-memo/heartbeat`.
-     - Backend FastAPI ghi nhận `_last_agent_heartbeat` và cung cấp cờ `agent_online` trong `/api/v1/mail-memo/status`.
-     - Frontend kiểm tra song song: `localAgentStatus?.online || mailMemoStatus?.agent_online`. Nhờ đó, dù trình duyệt có chặn CORS hay PNA, Web vẫn nhận diện Agent Online 100%.
-  3. *Đồng bộ mã nguồn Agent & Build Production*:
-     - Đồng bộ `outlook_agent.py` sang cả 3 thư mục: `tools/outlook_agent/`, `backend/tools/outlook_agent/`, và `D:\Setup\Outlook_Memo_Agent_Full\`.
-     - Chạy `npm run build` tạo bundle sạch trong `frontend/dist` (`✓ built in 3.91s`, exit code 0).
-     - Kiểm tra toàn bộ cú pháp backend qua `python -m compileall app` (0 lỗi).
+  - Sau đó, khi thử nghiệm thêm cơ chế heartbeat từ Server vào badge `Local Agent Máy Cá Nhân`: dẫn tới tác dụng phụ là **một máy bất kỳ (máy của Dev/Anh Dũng) đang bật Agent gửi heartbeat lên Server thì tất cả các máy khác trong công ty mở web đều bị sáng xanh theo**, dù máy đó không hề cài Agent. Khi bấm nút quét trên máy không cài Agent thì văng lỗi `No module named win32com`.
+- **Giải pháp xử lý triệt để & trung thực**:
+  1. *Kiểm Tra Trung Thực Theo Từng Máy (Strict Local Machine Verification)*:
+     - Badge `Local Agent Máy Cá Nhân` và thanh kết nối MAPI bắt buộc chỉ kiểm tra trực tiếp qua loopback `http://127.0.0.1:18890` (hoặc `18899`) của chính trình duyệt đang mở.
+     - Loại bỏ hoàn toàn việc dùng cờ chung từ Server cho badge này. Máy nào không cài hoặc chưa bật Agent thì **bắt buộc hiển thị màu xám/vàng: `⚪ Agent Chưa Bật (Máy Này)` và `🟡 Chờ Bật Agent Máy Cá Nhân`**.
+  2. *Thông Báo Lỗi Rõ Ràng Khi Bấm Quét Mà Chưa Bật Agent*:
+     - Nếu máy hiện tại chưa bật Agent mà bấm `[Quét & Tự Động Import Memo]`: Hệ thống hiện ngay toast cảnh báo thân thiện: *"Máy tính này chưa bật Local Agent (127.0.0.1:18890). Vui lòng nhấp đúp file Chay_Outlook_Agent.bat trên máy tính có cài đặt Outlook của bạn trước khi bấm Quét!"*, không gọi fallback lên server gây lỗi `win32com`.
+  3. *Tự Động Làm Mới Khi Đang Mở Modal (Auto-Polling 3.5s)*:
+     - Giữ nguyên `useEffect` polling 3.5s để khi người dùng vừa bật Agent trên máy mình, giao diện máy đó tự động chuyển sang xanh 🟢 ngay mà không cần bấm "Làm Mới".
+  4. *Đóng gói và kiểm thử*:
+     - Build lại `frontend/dist` sạch sẽ (`cmd /c "npm run build"`, exit code 0). Cú pháp `backend/app` đạt 0 lỗi.
 
 ---
 
