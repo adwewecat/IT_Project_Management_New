@@ -2341,6 +2341,24 @@ estaurant_service.py).
   4. *Build Lại `frontend/dist` Sạch Sẽ*:
      - Chạy `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.18s`).
 
+### [2026-10-15] - Đồng Bộ Toàn Diện Quy Tắc 8: Sticky Header & TopScrollTable Cho Toàn Bộ Hệ Thống
+1. **CentralizedLogsPage (`CentralizedLogsPage.tsx`)**:
+   - Bọc bảng logs tập trung (hỗ trợ tới 2000 dòng log) vào `TopScrollTable` với `maxHeight: calc(100vh - 280px)`, cố định `thead` sticky (`position: 'sticky', top: 0, zIndex: 5`). Khi duyệt logs dài không còn bị trôi mất tiêu đề bảng và có thanh cuộn ngang tức thì ở đỉnh bảng.
+2. **RestaurantAuditLogsPage (`RestaurantAuditLogsPage.tsx`)**:
+   - Bọc bảng lịch sử thao tác nhà hàng vào `TopScrollTable` với `maxHeight: calc(100vh - 290px)`, cố định `thead` sticky, dọn sạch div cuộn dư thừa.
+3. **SsoManagementPage (`SsoManagementPage.tsx`)**:
+   - Bọc bảng kết quả tìm kiếm danh sách user IAM/SSO vào `TopScrollTable` với `maxHeight: 520px`, cố định `thead` sticky.
+4. **MemoPage (`MemoPage.tsx`)**:
+   - Loại bỏ hơn 60 dòng code xử lý cuộn ngang thủ công (`tableRef`, `topScrollRef`, `bottomScrollRef`, `ResizeObserver`, `isSyncingTop/Bottom`...), thay bằng `TopScrollTable` chuẩn hoá, cố định `thead` sticky.
+5. **RestaurantMongoAnalysisPage (`RestaurantMongoAnalysisPage.tsx`)**:
+   - Bọc bảng Báo cáo số bàn / Hall Plan (`splitByHall`) vào `TopScrollTable` (`maxHeight: 680px`).
+   - Bọc bảng Chi tiết Action Logs (Task 1) trong modal vào `TopScrollTable` (`maxHeight: 480px`).
+6. **Kiểm Thử & Đóng Gói Triển Khai Server**:
+   - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 3.83s`), bundle `frontend/dist/` đã cập nhật mới nhất cho IIS.
+   - Backend: `python -m compileall app` 0 lỗi và Smoke Test `PASSED 100%`.
+
+---
+
 ### [2026-10-14 - Ca Tối] - Nâng Cấp MongoDB, KDS, SO/CO, APP_PARAM & Quy Chuẩn TopScrollTable
 1. **Loại Bỏ Tính Năng MongoDB Trong Modal Nhà Hàng (`RestaurantDetailModal.tsx`)**:
    - Xóa bỏ nút kiểm tra MongoDB và popup MongoDB khỏi chi tiết nhà hàng, dọn sạch code và imports thừa (`mongoService`, `MongoConnectionCheckResponse`...).

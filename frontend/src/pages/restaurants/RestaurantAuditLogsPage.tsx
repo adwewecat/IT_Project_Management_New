@@ -18,6 +18,7 @@ import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { DateInput, parseAndValidateDate } from '../../components/ui/DateInput';
 import { Badge } from '../../components/ui/Badge';
+import { TopScrollTable } from '../../components/ui/TopScrollTable';
 import { RestaurantAuditLogItem } from '../../types/restaurant';
 import { getRestaurantLogs, exportRestaurantLogsExcel } from '../../services/restaurantService';
 
@@ -281,45 +282,42 @@ export const RestaurantAuditLogsPage: React.FC = () => {
       </Card>
 
       {/* Table */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          overflowX: 'auto',
-          border: '1px solid var(--border-color)',
-          borderRadius: '8px',
-          backgroundColor: 'var(--bg-primary)',
-        }}
-      >
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            fontSize: '13px',
-            textAlign: 'left',
-          }}
-        >
-          <thead>
-            <tr
+      <Card style={{ padding: 0, overflow: 'hidden', flex: 1, minHeight: 0 }}>
+        <TopScrollTable maxHeight="calc(100vh - 290px)">
+          <table
+            style={{
+              width: '100%',
+              minWidth: '980px',
+              borderCollapse: 'collapse',
+              fontSize: '13px',
+              textAlign: 'left',
+            }}
+          >
+            <thead
               style={{
-                backgroundColor: 'var(--bg-secondary, #f8fafc)',
-                borderBottom: '2px solid var(--border-color, #e2e8f0)',
-                color: 'var(--text-secondary, #475569)',
-                fontSize: '12px',
-                fontWeight: 700,
                 position: 'sticky',
                 top: 0,
-                zIndex: 2,
+                zIndex: 5,
+                backgroundColor: 'var(--bg-secondary, #f8fafc)',
               }}
             >
-              <th style={{ padding: '10px 12px', width: '50px', textAlign: 'center' }}>STT</th>
-              <th style={{ padding: '10px 12px', width: '80px', textAlign: 'center' }}>Mã Log</th>
-              <th style={{ padding: '10px 12px', width: '160px' }}>Thời Gian</th>
-              <th style={{ padding: '10px 12px', width: '130px' }}>Người Thực Hiện</th>
-              <th style={{ padding: '10px 12px', width: '120px' }}>Hành Động</th>
-              <th style={{ padding: '10px 12px' }}>Chi Tiết Nội Dung Thay Đổi</th>
-            </tr>
-          </thead>
+              <tr
+                style={{
+                  backgroundColor: 'var(--bg-secondary, #f8fafc)',
+                  borderBottom: '2px solid var(--border-color, #e2e8f0)',
+                  color: 'var(--text-secondary, #475569)',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                }}
+              >
+                <th style={{ padding: '10px 12px', width: '50px', textAlign: 'center', backgroundColor: 'var(--bg-secondary, #f8fafc)' }}>STT</th>
+                <th style={{ padding: '10px 12px', width: '80px', textAlign: 'center', backgroundColor: 'var(--bg-secondary, #f8fafc)' }}>Mã Log</th>
+                <th style={{ padding: '10px 12px', width: '160px', backgroundColor: 'var(--bg-secondary, #f8fafc)' }}>Thời Gian</th>
+                <th style={{ padding: '10px 12px', width: '130px', backgroundColor: 'var(--bg-secondary, #f8fafc)' }}>Người Thực Hiện</th>
+                <th style={{ padding: '10px 12px', width: '120px', backgroundColor: 'var(--bg-secondary, #f8fafc)' }}>Hành Động</th>
+                <th style={{ padding: '10px 12px', backgroundColor: 'var(--bg-secondary, #f8fafc)' }}>Chi Tiết Nội Dung Thay Đổi</th>
+              </tr>
+            </thead>
           <tbody>
             {isLoading ? (
               <tr>
@@ -379,7 +377,8 @@ export const RestaurantAuditLogsPage: React.FC = () => {
             )}
           </tbody>
         </table>
-      </div>
-    </div>
+      </TopScrollTable>
+    </Card>
+  </div>
   );
 };

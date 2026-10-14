@@ -25,6 +25,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
+import { TopScrollTable } from '../../components/ui/TopScrollTable';
 import {
   ssoManagementService,
 } from '../../services/ssoManagementService';
@@ -978,16 +979,16 @@ export const SsoManagementPage: React.FC = () => {
         </div>
 
         {/* Results Table */}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-            <thead>
+        <TopScrollTable maxHeight="520px">
+          <table style={{ width: '100%', minWidth: '780px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>
               <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
-                <th style={{ width: '60px', padding: '12px 16px', textAlign: 'center' }}>Chọn</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600 }}>UserName</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600 }}>Email</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600 }}>Số Điện Thoại</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600 }}>Khóa (Lock)</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600 }}>Loại (Type)</th>
+                <th style={{ width: '60px', padding: '12px 16px', textAlign: 'center', backgroundColor: 'var(--bg-secondary)' }}>Chọn</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, backgroundColor: 'var(--bg-secondary)' }}>UserName</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, backgroundColor: 'var(--bg-secondary)' }}>Email</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, backgroundColor: 'var(--bg-secondary)' }}>Số Điện Thoại</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, backgroundColor: 'var(--bg-secondary)' }}>Khóa (Lock)</th>
+                <th style={{ padding: '12px 16px', fontWeight: 600, backgroundColor: 'var(--bg-secondary)' }}>Loại (Type)</th>
               </tr>
             </thead>
             <tbody>
@@ -1086,7 +1087,7 @@ export const SsoManagementPage: React.FC = () => {
               )}
             </tbody>
           </table>
-        </div>
+        </TopScrollTable>
       </div>
 
       {/* --- MODAL 1: CẤU HÌNH SSO CÁ NHÂN --- */}

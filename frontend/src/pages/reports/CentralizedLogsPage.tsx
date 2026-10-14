@@ -18,6 +18,7 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { useAuth } from '../../contexts/AuthContext';
+import { TopScrollTable } from '../../components/ui/TopScrollTable';
 import {
   logService,
   LogItem,
@@ -587,20 +588,20 @@ export const CentralizedLogsPage: React.FC = () => {
       </Card>
 
       {/* ── BẢNG DỮ LIỆU LOGS ── */}
-      <Card>
-        <div style={{ overflowX: 'auto', width: '100%' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
-            <thead>
+      <Card style={{ padding: 0, overflow: 'hidden' }}>
+        <TopScrollTable maxHeight="calc(100vh - 280px)">
+          <table style={{ width: '100%', minWidth: '1080px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 5, backgroundColor: '#F8FAFC' }}>
               <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1.5px solid var(--border-color)', color: '#475569' }}>
-                <th style={{ padding: '10px 12px', width: '50px', textAlign: 'center' }}>STT</th>
-                <th style={{ padding: '10px 12px', width: '160px' }}>Thời Gian</th>
-                <th style={{ padding: '10px 12px', width: '130px' }}>Nhóm Quyền</th>
-                <th style={{ padding: '10px 12px', width: '160px' }}>Màn Hình / Phân Hệ</th>
-                <th style={{ padding: '10px 12px', width: '130px' }}>Hành Động</th>
-                <th style={{ padding: '10px 12px' }}>Nội Dung Thao Tác</th>
-                <th style={{ padding: '10px 12px', width: '140px' }}>Người Thực Hiện</th>
-                <th style={{ padding: '10px 12px', width: '90px', textAlign: 'center' }}>Trạng Thái</th>
-                <th style={{ padding: '10px 12px', width: '80px', textAlign: 'center' }}>Thao Tác</th>
+                <th style={{ padding: '10px 12px', width: '50px', textAlign: 'center', backgroundColor: '#F8FAFC' }}>STT</th>
+                <th style={{ padding: '10px 12px', width: '160px', backgroundColor: '#F8FAFC' }}>Thời Gian</th>
+                <th style={{ padding: '10px 12px', width: '130px', backgroundColor: '#F8FAFC' }}>Nhóm Quyền</th>
+                <th style={{ padding: '10px 12px', width: '160px', backgroundColor: '#F8FAFC' }}>Màn Hình / Phân Hệ</th>
+                <th style={{ padding: '10px 12px', width: '130px', backgroundColor: '#F8FAFC' }}>Hành Động</th>
+                <th style={{ padding: '10px 12px', backgroundColor: '#F8FAFC' }}>Nội Dung Thao Tác</th>
+                <th style={{ padding: '10px 12px', width: '140px', backgroundColor: '#F8FAFC' }}>Người Thực Hiện</th>
+                <th style={{ padding: '10px 12px', width: '90px', textAlign: 'center', backgroundColor: '#F8FAFC' }}>Trạng Thái</th>
+                <th style={{ padding: '10px 12px', width: '80px', textAlign: 'center', backgroundColor: '#F8FAFC' }}>Thao Tác</th>
               </tr>
             </thead>
             <tbody>
@@ -691,7 +692,7 @@ export const CentralizedLogsPage: React.FC = () => {
               )}
             </tbody>
           </table>
-        </div>
+        </TopScrollTable>
 
         {/* Phân trang */}
         <div

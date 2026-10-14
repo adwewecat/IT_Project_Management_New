@@ -2912,18 +2912,18 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
             </div>
 
             {/* Table */}
-            <div style={{ overflowX: 'auto', maxHeight: '680px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+            <TopScrollTable maxHeight="680px">
+              <table style={{ width: '100%', minWidth: '1000px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
                 <thead style={{ backgroundColor: '#F3F4F6', position: 'sticky', top: 0, zIndex: 10 }}>
-                  <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
-                    <th style={{ padding: '10px 12px', fontWeight: 700, color: '#374151', width: '50px', textAlign: 'center' }}>STT</th>
-                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '240px' }}>Mã SAP &amp; Tên Nhà Hàng</th>
-                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '130px' }}>IP MongoDB</th>
-                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '130px', textAlign: 'center' }}>
+                  <tr style={{ borderBottom: '2px solid var(--border-color)', backgroundColor: '#F3F4F6' }}>
+                    <th style={{ padding: '10px 12px', fontWeight: 700, color: '#374151', width: '50px', textAlign: 'center', backgroundColor: '#F3F4F6' }}>STT</th>
+                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '240px', backgroundColor: '#F3F4F6' }}>Mã SAP &amp; Tên Nhà Hàng</th>
+                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '130px', backgroundColor: '#F3F4F6' }}>IP MongoDB</th>
+                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '130px', textAlign: 'center', backgroundColor: '#F3F4F6' }}>
                       {splitByHall ? 'Tổng Bàn (isCurrentRes: true)' : 'Số Bàn (isCurrentRes: true)'}
                     </th>
-                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '160px' }}>Khu Vực / Tầng (HALL_PLAN)</th>
-                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '320px' }}>Danh Sách Mẫu Bàn</th>
+                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '160px', backgroundColor: '#F3F4F6' }}>Khu Vực / Tầng (HALL_PLAN)</th>
+                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '320px', backgroundColor: '#F3F4F6' }}>Danh Sách Mẫu Bàn</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3083,7 +3083,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                   )}
                 </tbody>
               </table>
-            </div>
+            </TopScrollTable>
           </div>
         </div>
       )}
@@ -7294,18 +7294,18 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                 </div>
 
                 {/* 3. Detailed Actions List / Table */}
-                <div style={{ maxHeight: '480px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                    <thead style={{ position: 'sticky', top: 0, backgroundColor: '#F1F5F9', zIndex: 2 }}>
-                      <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)', color: '#334155' }}>
-                        <th style={{ padding: '8px 10px', width: '35px' }}>#</th>
-                        <th style={{ padding: '8px 10px', width: '135px' }}>Thời Gian</th>
-                        <th style={{ padding: '8px 10px', width: '65px' }}>App</th>
-                        <th style={{ padding: '8px 10px', width: '75px' }}>User</th>
-                        <th style={{ padding: '8px 10px', width: '230px' }}>Hành Động (Action Name)</th>
-                        <th style={{ padding: '8px 10px' }}>Mô Tả Nghiệp Vụ (Ý Nghĩa)</th>
-                        <th style={{ padding: '8px 10px', width: '70px', textAlign: 'right' }}>Thời Gian</th>
-                        <th style={{ padding: '8px 10px', width: '75px', textAlign: 'center' }}>Dữ Liệu</th>
+                <TopScrollTable maxHeight="480px">
+                  <table style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead style={{ position: 'sticky', top: 0, backgroundColor: '#F1F5F9', zIndex: 5 }}>
+                      <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)', color: '#334155', backgroundColor: '#F1F5F9' }}>
+                        <th style={{ padding: '8px 10px', width: '35px', backgroundColor: '#F1F5F9' }}>#</th>
+                        <th style={{ padding: '8px 10px', width: '135px', backgroundColor: '#F1F5F9' }}>Thời Gian</th>
+                        <th style={{ padding: '8px 10px', width: '65px', backgroundColor: '#F1F5F9' }}>App</th>
+                        <th style={{ padding: '8px 10px', width: '75px', backgroundColor: '#F1F5F9' }}>User</th>
+                        <th style={{ padding: '8px 10px', width: '230px', backgroundColor: '#F1F5F9' }}>Hành Động (Action Name)</th>
+                        <th style={{ padding: '8px 10px', backgroundColor: '#F1F5F9' }}>Mô Tả Nghiệp Vụ (Ý Nghĩa)</th>
+                        <th style={{ padding: '8px 10px', width: '70px', textAlign: 'right', backgroundColor: '#F1F5F9' }}>Thời Gian</th>
+                        <th style={{ padding: '8px 10px', width: '75px', textAlign: 'center', backgroundColor: '#F1F5F9' }}>Dữ Liệu</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -7533,7 +7533,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                       })}
                     </tbody>
                   </table>
-                </div>
+                </TopScrollTable>
               </>
             )}
 

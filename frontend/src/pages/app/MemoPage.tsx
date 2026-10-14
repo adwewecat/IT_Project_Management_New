@@ -42,6 +42,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Alert } from '../../components/ui/Alert';
+import { TopScrollTable } from '../../components/ui/TopScrollTable';
 import { MemoTemplateManager } from '../../components/memo/MemoTemplateManager';
 import { checkIsAdmin, checkIsAppRole } from '../../utils/authUtils';
 
@@ -157,70 +158,6 @@ export const MemoPage: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [alert]);
-
-  // Top horizontal scroll synchronization
-  const topScrollRef = React.useRef<HTMLDivElement>(null);
-  const bottomScrollRef = React.useRef<HTMLDivElement>(null);
-  const tableRef = React.useRef<HTMLTableElement>(null);
-
-  const [tableScrollWidth, setTableScrollWidth] = useState<number>(0);
-  const [showTopScroll, setShowTopScroll] = useState<boolean>(false);
-
-  const isSyncingTop = React.useRef(false);
-  const isSyncingBottom = React.useRef(false);
-
-  const handleTopScroll = () => {
-    if (isSyncingTop.current) {
-      isSyncingTop.current = false;
-      return;
-    }
-    if (bottomScrollRef.current && topScrollRef.current) {
-      isSyncingBottom.current = true;
-      bottomScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
-    }
-  };
-
-  const handleBottomScroll = () => {
-    if (isSyncingBottom.current) {
-      isSyncingBottom.current = false;
-      return;
-    }
-    if (topScrollRef.current && bottomScrollRef.current) {
-      isSyncingTop.current = true;
-      topScrollRef.current.scrollLeft = bottomScrollRef.current.scrollLeft;
-    }
-  };
-
-  useEffect(() => {
-    const checkOverflow = () => {
-      if (bottomScrollRef.current && tableRef.current) {
-        const scrollW = tableRef.current.scrollWidth;
-        const clientW = bottomScrollRef.current.clientWidth;
-        setTableScrollWidth(scrollW);
-        setShowTopScroll(scrollW > clientW);
-      }
-    };
-
-    checkOverflow();
-    const timer = setTimeout(checkOverflow, 150);
-
-    const resizeObserver = new ResizeObserver(() => {
-      checkOverflow();
-    });
-
-    if (bottomScrollRef.current) {
-      resizeObserver.observe(bottomScrollRef.current);
-    }
-    if (tableRef.current) {
-      resizeObserver.observe(tableRef.current);
-    }
-
-    return () => {
-      clearTimeout(timer);
-      resizeObserver.disconnect();
-    };
-  }, [items, isLoading, page]);
-
 
   // Modals
   const [formModal, setFormModal] = useState<{
@@ -1645,37 +1582,18 @@ export const MemoPage: React.FC = () => {
 
       {/* Table Card */}
       <Card style={{ padding: '0', overflow: 'hidden' }}>
-        {/* Thanh cuộn ngang ở trên (Đồng bộ với bảng dữ liệu) */}
-        {showTopScroll && (
-          <div
-            ref={topScrollRef}
-            onScroll={handleTopScroll}
-            className="top-scrollbar"
-            style={{
-              overflowX: 'auto',
-              overflowY: 'hidden',
-              width: '100%',
-              height: '12px',
-              backgroundColor: 'var(--bg-secondary)',
-              borderBottom: '1px solid var(--border-color)',
-              cursor: 'pointer',
-            }}
-            title="Kéo để cuộn ngang danh sách Memo"
-          >
-            <div style={{ width: `${tableScrollWidth}px`, height: '1px' }} />
-          </div>
-        )}
-
-        <div
-          ref={bottomScrollRef}
-          onScroll={handleBottomScroll}
-          style={{ overflowX: 'auto' }}
-        >
+        <TopScrollTable maxHeight="calc(100vh - 300px)">
           <table
-            ref={tableRef}
-            style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}
+            style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}
           >
-            <thead>
+            <thead
+              style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 5,
+                backgroundColor: 'var(--bg-secondary, #f8fafc)',
+              }}
+            >
               <tr
                 style={{
                   backgroundColor: 'var(--bg-secondary, #f8fafc)',
@@ -1686,14 +1604,14 @@ export const MemoPage: React.FC = () => {
                   textTransform: 'uppercase',
                 }}
               >
-                <th style={{ padding: '12px 16px', width: '50px', textAlign: 'center' }}>STT</th>
-                <th style={{ padding: '12px 16px', minWidth: '150px' }}>Mã Memo</th>
-                <th style={{ padding: '12px 16px', minWidth: '130px' }}>Người Setup</th>
-                <th style={{ padding: '12px 16px', minWidth: '130px' }}>Trạng Thái</th>
-                <th style={{ padding: '12px 16px', minWidth: '180px' }}>Thời Gian Hiệu Lực</th>
-                <th style={{ padding: '12px 16px', minWidth: '140px' }}>Tiếp Nhận</th>
-                <th style={{ padding: '12px 16px', minWidth: '150px' }}>Đánh Giá</th>
-                <th style={{ padding: '12px 16px', minWidth: '140px', textAlign: 'center' }}>Thao Tác</th>
+                <th style={{ padding: '12px 16px', width: '50px', textAlign: 'center', backgroundColor: 'var(--bg-secondary, #f8fafc)' }}>STT</th>
+                <th style={{ padding: '12px 16px', minWidth: '150px', backgroundColor: 'var(--bg-secondary, #f8fafc)' }}>Mã Memo</th>
+                <th style={{ padding: '12px 16px', minWidth: '130px', backgroundColor: 'var(--bg-secondary, #f8fafc)' }}>Người Setup</th>
+                <th style={{ padding: '12px 16px', minWidth: '130px', backgroundColor: 'var(--bg-secondary, #f8fafc)' }}>Trạng Thái</th>
+                <th style={{ padding: '12px 16px', minWidth: '180px', backgroundColor: 'var(--bg-secondary, #f8fafc)' }}>Thời Gian Hiệu Lực</th>
+                <th style={{ padding: '12px 16px', minWidth: '140px', backgroundColor: 'var(--bg-secondary, #f8fafc)' }}>Tiếp Nhận</th>
+                <th style={{ padding: '12px 16px', minWidth: '150px', backgroundColor: 'var(--bg-secondary, #f8fafc)' }}>Đánh Giá</th>
+                <th style={{ padding: '12px 16px', minWidth: '140px', textAlign: 'center', backgroundColor: 'var(--bg-secondary, #f8fafc)' }}>Thao Tác</th>
               </tr>
             </thead>
             <tbody>
@@ -2129,7 +2047,7 @@ export const MemoPage: React.FC = () => {
               )}
             </tbody>
           </table>
-        </div>
+        </TopScrollTable>
 
         {/* Phân trang */}
         <div
