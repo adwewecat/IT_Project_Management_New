@@ -100,6 +100,8 @@ from app.schemas.mongodb import (
     ResolveConflictResponse,
     ActivateCoRequest,
     ActivateCoResponse,
+    DeactivateCoRequest,
+    DeactivateCoResponse,
     SyncAllSoCoRequest,
     SyncAllSoCoResponse,
     SaveMenuSnapshotRequest,
@@ -1810,6 +1812,37 @@ def activate_dishes_to_co(
         )
 
 
+@router.post("/menu-so-co/deactivate-co", response_model=DeactivateCoResponse)
+def deactivate_dishes_from_co(
+    payload: DeactivateCoRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """Tắt kích hoạt (gỡ bỏ) 1 hoặc nhiều món khỏi CO"""
+    try:
+        res = mongo_menu_so_co_service.deactivate_from_co(
+            host=payload.host,
+            port=payload.port,
+            rk7_codes=payload.rk7_codes,
+        )
+        if res.get("success"):
+            LogService.record_log(
+                db=db,
+                nhom_quyen="APP",
+                man_hinh="GPOS_MENU_SO_CO",
+                hanh_dong="DELETE",
+                noi_dung=f"Tắt kích hoạt {len(payload.rk7_codes)} món khỏi CO trên {payload.host}",
+                user_thuchien=current_user.username,
+                current_user=current_user
+            )
+        return DeactivateCoResponse(**res)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi tắt kích hoạt món khỏi CO: {str(e)}"
+        )
+
+
 @router.post("/menu-so-co/bulk-add", response_model=BulkAddDishesResponse)
 def bulk_add_menu_dishes(
     payload: BulkAddDishesRequest,
@@ -1829,6 +1862,7 @@ def bulk_add_menu_dishes(
             group_name_en=payload.group_name_en,
             level=payload.level,
             items=raw_items,
+            menu_group_map=payload.menu_group_map,
         )
         if res.get("success"):
             LogService.record_log(

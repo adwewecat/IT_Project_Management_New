@@ -78,6 +78,10 @@ Hệ thống quản lý dự án, vận hành nhà hàng, tích hợp tổng đ�
 >      + Chạy build Frontend: `cmd /c "npm run build"` tại thư mục `frontend/` để tạo sẵn bản build mới sạch sẽ trong `frontend/dist/` (kèm `web.config` cho IIS).
 >      + Kiểm tra Backend: Chạy `python -m compileall app` và Smoke Test tại thư mục `backend/` đảm bảo toàn bộ mã nguồn trong `backend/app/` hoàn toàn sạch lỗi.
 >    - **Mục đích**: Đảm bảo người dùng/Dev chỉ cần copy 2 thư mục `backend/app` và `frontend/dist` đẩy thẳng lên server là hệ thống chạy mượt mà ngay lập tức mà không cần can thiệp cấu hình thủ công.
+>
+> 8. **Quy tắc Bất Di Bất Dịch Về Bảng Dữ Liệu (Sticky Header & Top Horizontal Scrollbar)**:
+>    - Cố định hàng tiêu đề (`position: 'sticky', top: 0, zIndex: 5`) trên tất cả các danh sách/bảng để tiêu đề không bị cuộn mất khi duyệt dữ liệu dài.
+>    - Với các bảng có chiều rộng vượt quá màn hình (phải cuộn ngang): **BẮT BUỘC** bọc trong component `TopScrollTable` (`frontend/src/components/ui/TopScrollTable.tsx`) để có thêm thanh cuộn ngang (Scroll X) nằm ngay trên đỉnh/kế thanh header tiêu đề, giúp người dùng cuộn ngang sang trái/phải tức thì mà không cần phải cuộn chuột xuống đáy trang.
 
 Chi tiết tài liệu hướng dẫn kỹ thuật: Xem [GEMINI.md](GEMINI.md), [AGENTS.md](AGENTS.md), [PROJECT_GUIDELINES.md](PROJECT_GUIDELINES.md) và [Script/README.md](Script/README.md).
 

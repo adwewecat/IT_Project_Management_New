@@ -452,6 +452,7 @@ class KdsAssignDishQuayRequest(BaseModel):
     menu_item_codes: List[str]
     place_ids: List[int]
     mode: str = "replace"  # "replace" or "append"
+    group_type_kds: Optional[str] = None  # Nhóm Bếp tùy chọn (VD: NÓNG, SALAD, NƯỚNG...)
 
 
 class KdsAssignDishQuayResponse(BaseModel):
@@ -1199,6 +1200,7 @@ class BulkAddDishesRequest(BaseModel):
     group_name_en: Optional[str] = None
     level: int = -1  # -1 for food, 0 for drink
     items: List[BulkAddDishRow]
+    menu_group_map: Optional[Dict[str, Dict[str, Any]]] = None  # Bản đồ nhóm riêng cho từng menu {menu_code: {group_code, group_name, level}}
 
 
 class BulkAddDishesResponse(BaseModel):
@@ -1302,6 +1304,18 @@ class ActivateCoResponse(BaseModel):
     success: bool
     message: str
     activated_count: int
+
+
+class DeactivateCoRequest(BaseModel):
+    host: str
+    port: int = 27017
+    rk7_codes: List[str]
+
+
+class DeactivateCoResponse(BaseModel):
+    success: bool
+    message: str
+    deactivated_count: int
 
 
 class SyncAllSoCoRequest(BaseModel):

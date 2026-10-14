@@ -2469,17 +2469,21 @@ class MongoDBService:
                 if code_str.isdigit():
                     q.append({"menuItemCode": int(code_str)})
 
+                update_set = {}
+                if payload.group_type_kds is not None and payload.group_type_kds.strip():
+                    update_set["groupTypeKds"] = payload.group_type_kds.strip()
+
                 if payload.mode == "append":
-                    res = cook_col.update_many(
-                        {"$or": q},
-                        {"$addToSet": {"placeIds": {"$each": payload.place_ids}}}
-                    )
+                    update_ops = {"$addToSet": {"placeIds": {"$each": payload.place_ids}}}
+                    if update_set:
+                        update_ops["$set"] = update_set
+                    res = cook_col.update_many({"$or": q}, update_ops)
                     modified_count += res.modified_count
                 else:
-                    res = cook_col.update_many(
-                        {"$or": q},
-                        {"$set": {"placeIds": payload.place_ids}}
-                    )
+                    full_set = {"placeIds": payload.place_ids}
+                    if update_set:
+                        full_set.update(update_set)
+                    res = cook_col.update_many({"$or": q}, {"$set": full_set})
                     modified_count += res.modified_count
 
             if db:

@@ -665,6 +665,59 @@ def activate_to_co(host: str, port: int = 27017, items: Optional[List[Dict[str, 
         client.close()
 
 
+def deactivate_from_co(
+    host: str,
+    port: int = 27017,
+    rk7_codes: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Tắt kích hoạt một hoặc nhiều món khỏi phần mềm CO (Customer Order).
+    Xóa món khỏi collection CO_MENU_ITEM và gỡ bỏ refCode khỏi CO_MENU_GROUP.
+    Tự động cập nhật VERSION_MENU_CO trong SYNC_VERSION để app CO tự tải lại.
+    """
+    if not rk7_codes:
+        return {"success": False, "message": "Danh sách mã món cần tắt CO trống", "deactivated_count": 0}
+
+    clean_codes = [str(c).strip() for c in rk7_codes if str(c).strip()]
+    if not clean_codes:
+        return {"success": False, "message": "Danh sách mã món hợp lệ trống", "deactivated_count": 0}
+
+    client = get_mongo_client(host, port)
+    try:
+        db = client["G_ORDER"]
+        now_ts = int(time.time() * 1000)
+
+        # 1. Xóa khỏi CO_MENU_ITEM
+        del_res = db["CO_MENU_ITEM"].delete_many({"code": {"$in": clean_codes}})
+        deactivated_count = del_res.deleted_count
+
+        # 2. Gỡ khỏi chi tiết nhóm trong CO_MENU_GROUP
+        db["CO_MENU_GROUP"].update_many(
+            {},
+            {"$pull": {"details": {"refCode": {"$in": clean_codes}}}}
+        )
+
+        # 3. Tăng VERSION_MENU_CO trong SYNC_VERSION để app CO tự reload
+        try:
+            co_sync = db["SYNC_VERSION"].find_one({"refName": "VERSION_MENU_CO"})
+            cur_ver = (co_sync.get("version", 1000) if co_sync else 1000) + 1
+            db["SYNC_VERSION"].update_one(
+                {"refName": "VERSION_MENU_CO"},
+                {"$set": {"version": cur_ver, "timeSync": now_ts, "status": "DONE"}},
+                upsert=True
+            )
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "message": f"Đã tắt kích hoạt thành công {deactivated_count} món khỏi phần mềm CO!",
+            "deactivated_count": deactivated_count,
+        }
+    finally:
+        client.close()
+
+
 def bulk_add_dishes(
     host: str,
     port: int = 27017,
@@ -675,9 +728,11 @@ def bulk_add_dishes(
     group_name_en: Optional[str] = None,
     level: int = -1,  # -1 for regular food, 0 for drink
     items: Optional[List[Dict[str, Any]]] = None,
+    menu_group_map: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Thêm một danh sách món ăn vào Nhóm món trong Menu (hỗ trợ thêm đồng thời vào nhiều Menu).
+    Hỗ trợ bản đồ nhóm riêng cho từng menu (menu_group_map) để người dùng chọn nhóm tương ứng của từng Menu.
     Nếu nhóm chưa tồn tại trong menu đích, cảnh báo hoặc tự động thêm nhóm mới với mã duy nhất
     đảm bảo không trùng mã nhóm giữa các menu.
     """
@@ -686,9 +741,9 @@ def bulk_add_dishes(
     if not items:
         return {"success": False, "message": "Danh sách món thêm trống", "added_count": 0, "warnings": []}
 
-    g_name = group_name.strip()
-    if not g_name:
-        return {"success": False, "message": "Vui lòng nhập Tên Nhóm Món", "added_count": 0, "warnings": []}
+    default_g_name = group_name.strip()
+    if not default_g_name and not menu_group_map:
+        return {"success": False, "message": "Vui lòng nhập Tên Nhóm Món hoặc chọn nhóm theo từng Menu", "added_count": 0, "warnings": []}
 
     client = get_mongo_client(host, port)
     try:
@@ -708,39 +763,48 @@ def bulk_add_dishes(
             main_menu = omc.get("main-menu", {}) or {}
             groups = main_menu.get("items", []) or []
 
+            # Xác định thông tin nhóm cho riêng menu này nếu có menu_group_map
+            m_custom = (menu_group_map or {}).get(m_code, {})
+            this_g_code = str(m_custom.get("group_code", "")).strip() or (group_code.strip() if group_code else "")
+            this_g_name = str(m_custom.get("group_name", "")).strip() or default_g_name
+            this_level = int(m_custom.get("level", level)) if "level" in m_custom else level
+
+            if not this_g_name:
+                this_g_name = f"Nhóm Món {m_code}"
+
             # Tìm xem nhóm đã có trong Menu này chưa
             target_group = None
             for g in groups:
-                if group_code and str(g.get("code", "")).strip() == str(group_code).strip():
+                if this_g_code and str(g.get("code", "")).strip() == this_g_code:
                     target_group = g
                     break
-                elif str(g.get("name", "")).strip().lower() == g_name.lower():
+                elif str(g.get("name", "")).strip().lower() == this_g_name.lower():
                     target_group = g
                     break
 
-            actual_g_code = group_code.strip() if group_code else ""
+            actual_g_code = this_g_code
 
             if not target_group:
                 # Nhóm chưa có trong menu này
                 if group_mode == "existing":
                     # Báo cảnh báo cho người dùng
-                    warnings.append(f"Menu '{m_code}' chưa có nhóm '{g_name}' (mã '{actual_g_code}'). Hệ thống đã tự động liên kết nhóm này vào Menu.")
+                    warnings.append(f"Menu '{m_code}' chưa có nhóm '{this_g_name}'. Hệ thống đã tự động liên kết nhóm này vào Menu.")
 
                 # Sinh mã nhóm duy nhất nếu là nhóm mới
                 if not actual_g_code or group_mode == "new":
-                    slug = remove_vietnamese_tones(g_name).replace(" ", "_").upper()[:12]
+                    slug = remove_vietnamese_tones(this_g_name).replace(" ", "_").upper()[:12]
                     actual_g_code = f"{m_code}_{slug}_{int(time.time()) % 10000}"
 
                 new_group_id = int(time.time() * 1000) % 10000000
                 target_group = {
                     "items": [],
                     "form-flag": 0,
-                    "level": level,
+                    "level": this_level,
                     "group-type": 0,
                     "id": new_group_id,
                     "item-id": new_group_id,
                     "code": actual_g_code,
-                    "name": g_name,
+                    "name": this_g_name,
                     "parent-id": 0,
                     "object-sifr": 0,
                     "flags": 0,
@@ -754,9 +818,9 @@ def bulk_add_dishes(
                     mg_doc = {
                         "id": new_group_id,
                         "code": actual_g_code,
-                        "name": g_name,
-                        "nameEn": group_name_en or g_name,
-                        "level": level,
+                        "name": this_g_name,
+                        "nameEn": group_name_en or this_g_name,
+                        "level": this_level,
                         "groupType": 0,
                         "details": [],
                         "srcImage": "",

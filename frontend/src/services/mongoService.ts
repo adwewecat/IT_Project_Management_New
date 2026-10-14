@@ -1150,6 +1150,11 @@ export const mongoService = {
     return res.data;
   },
 
+  deactivateDishesFromCo: async (payload: DeactivateCoRequest): Promise<DeactivateCoResponse> => {
+    const res = await api.post<DeactivateCoResponse>('/mongodb/menu-so-co/deactivate-co', payload);
+    return res.data;
+  },
+
   bulkAddMenuDishes: async (payload: BulkAddDishesRequest): Promise<BulkAddDishesResponse> => {
     const res = await api.post<BulkAddDishesResponse>('/mongodb/menu-so-co/bulk-add', payload);
     return res.data;
@@ -1468,6 +1473,7 @@ export interface KdsAssignDishQuayRequest {
   menu_item_codes: string[];
   place_ids: number[];
   mode?: 'replace' | 'append';
+  group_type_kds?: string;
 }
 
 export interface KdsAssignDishQuayResponse {
@@ -1803,6 +1809,13 @@ export interface BulkAddDishesRequest {
   group_name_en?: string;
   level: number;
   items: BulkAddDishRow[];
+  menu_group_map?: Record<string, {
+    group_mode: 'existing' | 'new';
+    group_code?: string;
+    group_name: string;
+    group_name_en?: string;
+    level?: number;
+  }>;
 }
 
 export interface BulkAddDishesResponse {
@@ -1931,6 +1944,18 @@ export interface ActivateCoResponse {
   success: boolean;
   message: string;
   activated_count: number;
+}
+
+export interface DeactivateCoRequest {
+  host: string;
+  port?: number;
+  rk7_codes: string[];
+}
+
+export interface DeactivateCoResponse {
+  success: boolean;
+  message: string;
+  deactivated_count: number;
 }
 
 export interface SyncAllSoCoResponse {

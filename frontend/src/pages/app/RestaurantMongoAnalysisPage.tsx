@@ -57,6 +57,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
+import { TopScrollTable } from '../../components/ui/TopScrollTable';
 import { getRestaurants } from '../../services/restaurantService';
 import { FixCpuMongoTask } from './FixCpuMongoTask';
 import { MongoDbTransferTask } from './MongoDbTransferTask';
@@ -1443,6 +1444,8 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
   const [showAssignQuayModal, setShowAssignQuayModal] = useState<boolean>(false);
   const [assignTargetDishes, setAssignTargetDishes] = useState<KdsItemDish[]>([]);
   const [selectedPlaceIdsToAssign, setSelectedPlaceIdsToAssign] = useState<number[]>([]);
+  const [assignGroupTypeKds, setAssignGroupTypeKds] = useState<string>('');
+  const [syncGroupWithQuay, setSyncGroupWithQuay] = useState<boolean>(false);
   const [assignMode, setAssignMode] = useState<'replace' | 'append'>('replace');
   const [savingAssignQuay, setSavingAssignQuay] = useState<boolean>(false);
 
@@ -1471,11 +1474,18 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
   const handleOpenAssignQuay = (dishes: KdsItemDish[]) => {
     setAssignTargetDishes(dishes);
-    if (dishes.length === 1 && dishes[0].place_ids) {
-      setSelectedPlaceIdsToAssign([...dishes[0].place_ids]);
+    if (dishes.length === 1) {
+      if (dishes[0].place_ids) {
+        setSelectedPlaceIdsToAssign([...dishes[0].place_ids]);
+      } else {
+        setSelectedPlaceIdsToAssign([]);
+      }
+      setAssignGroupTypeKds(dishes[0].group_type_kds || '');
     } else {
       setSelectedPlaceIdsToAssign([]);
+      setAssignGroupTypeKds('');
     }
+    setSyncGroupWithQuay(false);
     setAssignMode('replace');
     setShowAssignQuayModal(true);
   };
@@ -1492,12 +1502,22 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
     setSavingAssignQuay(true);
     try {
       const codes = assignTargetDishes.map((d) => d.menu_item_code);
+      let targetGroupType = assignGroupTypeKds.trim();
+      if (syncGroupWithQuay) {
+        // Lấy tên quầy đầu tiên được chọn làm tên nhóm bếp để đồng bộ
+        const firstSelectedQuay = kdsPlaces.find((p) => selectedPlaceIdsToAssign.includes(p.id));
+        if (firstSelectedQuay) {
+          targetGroupType = firstSelectedQuay.name.trim();
+        }
+      }
+
       const res = await mongoService.assignDishesToQuay({
         host: hostToUse,
         port: 27017,
         menu_item_codes: codes,
         place_ids: selectedPlaceIdsToAssign,
-        mode: assignMode
+        mode: assignMode,
+        group_type_kds: targetGroupType || undefined
       });
       showToast(res.message, 'success');
       setShowAssignQuayModal(false);
@@ -3089,17 +3109,17 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
           {/* ══════════════════════════════════════════════════════════ */}
           <Card>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', width: '100%' }}>
                 {/* Left: Task Dropdown Selector */}
-                <div style={{ display: 'flex', alignItems: 'flex-start', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '320px', maxWidth: '720px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', flexDirection: 'column', gap: '4px', flex: '1 1 360px', minWidth: 0, maxWidth: '680px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     <Wrench size={13} color="#D97706" />
                     <span>Chọn Tác Vụ Cần Xử Lý:</span>
                   </label>
 
                   {/* Combobox Trigger Box & Nút Chấm Than Giải Thích Tác Vụ */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
-                    <div ref={taskDropdownRef} style={{ position: 'relative', flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', minWidth: 0 }}>
+                    <div ref={taskDropdownRef} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
                       <div
                         onClick={() => setIsTaskDropdownOpen(!isTaskDropdownOpen)}
                         style={{
@@ -3112,12 +3132,13 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                           borderRadius: '8px',
                           cursor: 'pointer',
                           boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                          transition: 'all 0.15s ease'
+                          transition: 'all 0.15s ease',
+                          minWidth: 0
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden', minWidth: 0, flex: 1 }}>
                           {renderTaskIcon(selectedTask.id, false)}
-                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'block', minWidth: 0 }}>
                             {renderHighlightedTitle(selectedTask, false)}
                           </span>
                         </div>
@@ -3291,35 +3312,37 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                       !
                     </button>
 
-                    {/* Nút Đồng Bộ Toàn Bộ SO & CO (Theo yêu cầu: đặt cạnh nút chấm than) */}
-                    <button
-                      type="button"
-                      onClick={handleSyncAllSoCo}
-                      disabled={isSyncingAllSoCo || !connectedHost}
-                      title="Đồng bộ toàn bộ: Đồng bộ SO trước (giá, tên, KDS cooking time), sau đó đồng bộ CO"
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        height: '32px',
-                        padding: '0 12px',
-                        borderRadius: '8px',
-                        backgroundColor: isSyncingAllSoCo ? '#9CA3AF' : '#059669',
-                        color: '#FFFFFF',
-                        border: '1px solid #047857',
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        cursor: (isSyncingAllSoCo || !connectedHost) ? 'not-allowed' : 'pointer',
-                        flexShrink: 0,
-                        boxShadow: '0 1px 3px rgba(5, 150, 105, 0.25)',
-                        transition: 'all 0.15s ease',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      <RefreshCw size={13} style={{ animation: isSyncingAllSoCo ? 'spin 1s linear infinite' : 'none' }} />
-                      <span>{isSyncingAllSoCo ? 'Đang đồng bộ...' : 'Đồng Bộ SO ➔ CO'}</span>
-                    </button>
+                    {/* Nút Đồng Bộ Toàn Bộ SO & CO (Chỉ hiển thị cho tác vụ ManageMenuSoCoTask) */}
+                    {selectedTaskId === 'manage_menu_so_co' && (
+                      <button
+                        type="button"
+                        onClick={handleSyncAllSoCo}
+                        disabled={isSyncingAllSoCo || !connectedHost}
+                        title="Đồng bộ toàn bộ: Đồng bộ SO trước (giá, tên, KDS cooking time), sau đó đồng bộ CO"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          height: '32px',
+                          padding: '0 12px',
+                          borderRadius: '8px',
+                          backgroundColor: isSyncingAllSoCo ? '#9CA3AF' : '#059669',
+                          color: '#FFFFFF',
+                          border: '1px solid #047857',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: (isSyncingAllSoCo || !connectedHost) ? 'not-allowed' : 'pointer',
+                          flexShrink: 0,
+                          boxShadow: '0 1px 3px rgba(5, 150, 105, 0.25)',
+                          transition: 'all 0.15s ease',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        <RefreshCw size={13} style={{ animation: isSyncingAllSoCo ? 'spin 1s linear infinite' : 'none' }} />
+                        <span>{isSyncingAllSoCo ? 'Đang đồng bộ...' : 'Đồng Bộ SO ➔ CO'}</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* Chi Tiết Giải Thích Tác Vụ (Hiển thị khi nhấn nút chấm than) */}
@@ -3350,7 +3373,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                 </div>
 
                 {/* Right: Điều chỉnh Email Báo Cáo Mặc Định (Chỉ Super Admin & dung.nguyenanh) */}
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexWrap: 'wrap', flexShrink: 0, marginLeft: 'auto' }}>
                   {isPrivileged && (
                     <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px' }}>
                       <div>
@@ -5437,11 +5460,11 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                   )}
                 </div>
 
-                <div style={{ overflowX: 'auto' }}>
+                <TopScrollTable>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
-                      <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
-                        <th style={{ padding: '10px 10px', width: '38px', textAlign: 'center' }}>
+                      <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid var(--border-color)', textAlign: 'left', position: 'sticky', top: 0, zIndex: 5 }}>
+                        <th style={{ padding: '10px 10px', width: '38px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>
                           <input
                             type="checkbox"
                             checked={filteredKdsItems.length > 0 && selectedKdsDishCodes.length === filteredKdsItems.length}
@@ -5454,17 +5477,17 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                             }}
                           />
                         </th>
-                        <th style={{ padding: '10px 8px', width: '45px', textAlign: 'center' }}>STT</th>
-                        <th style={{ padding: '10px 12px', width: '110px' }}>Mã Món</th>
-                        <th style={{ padding: '10px 12px', width: '110px' }}>Mã SAP</th>
-                        <th style={{ padding: '10px 12px', minWidth: '200px' }}>Tên Món Ăn</th>
-                        <th style={{ padding: '10px 12px', width: '110px' }}>Nhóm Bếp</th>
-                        <th style={{ padding: '10px 12px', minWidth: '150px' }}>Quầy Bếp (ACCOUNT)</th>
-                        <th style={{ padding: '10px 12px', minWidth: '130px' }}>Máy In</th>
-                        <th style={{ padding: '10px 12px', width: '130px', textAlign: 'center' }}>TG Chế Biến KDS</th>
-                        <th style={{ padding: '10px 12px', width: '120px', textAlign: 'right' }}>Giá Bán</th>
-                        <th style={{ padding: '10px 12px', minWidth: '220px' }}>Đối Chiếu Giá Giữa Các Bảng</th>
-                        <th style={{ padding: '10px 10px', width: '160px', textAlign: 'center' }}>Thao Tác</th>
+                        <th style={{ padding: '10px 8px', width: '45px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>STT</th>
+                        <th style={{ padding: '10px 12px', width: '110px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Mã Món</th>
+                        <th style={{ padding: '10px 12px', width: '110px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Mã SAP</th>
+                        <th style={{ padding: '10px 12px', minWidth: '200px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Tên Món Ăn</th>
+                        <th style={{ padding: '10px 12px', width: '110px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Nhóm Bếp</th>
+                        <th style={{ padding: '10px 12px', minWidth: '150px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Quầy Bếp (ACCOUNT)</th>
+                        <th style={{ padding: '10px 12px', minWidth: '130px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Máy In</th>
+                        <th style={{ padding: '10px 12px', width: '130px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>TG Chế Biến KDS</th>
+                        <th style={{ padding: '10px 12px', width: '120px', textAlign: 'right', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Giá Bán</th>
+                        <th style={{ padding: '10px 12px', minWidth: '220px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Đối Chiếu Giá Giữa Các Bảng</th>
+                        <th style={{ padding: '10px 10px', width: '160px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Thao Tác</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -5843,7 +5866,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                       )}
                     </tbody>
                   </table>
-                </div>
+                </TopScrollTable>
               </Card>
             </>
           )}
@@ -7847,6 +7870,122 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                   );
                 })}
               </div>
+            </div>
+
+            {/* Banner Giải thích Nhóm Bếp vs Quầy Bếp */}
+            <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', fontSize: '12px', color: '#1E40AF', lineHeight: 1.5 }}>
+              <div style={{ fontWeight: 700, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Info size={14} color="#2563EB" />
+                <span>Giải Thích: Nhóm Bếp vs Quầy Bếp (ACCOUNT)</span>
+              </div>
+              <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                <li><strong>Nhóm Bếp (groupTypeKds):</strong> Phân loại tính chất chế biến món ăn (ví dụ: NÓNG, SALAD, NƯỚNG, NƯỚC, LẨU...). Dùng để gom nhóm và hiển thị trên màn hình KDS.</li>
+                <li><strong>Quầy Bếp (ACCOUNT / placeIds):</strong> Trạm thiết bị KDS &amp; máy in nhận lệnh chế biến thực tế trong bếp.</li>
+                <li><strong>Tại sao Nhóm bếp là NÓNG nhưng Quầy lại là SALAD?</strong> Do món có tính chất là NÓNG nhưng chi nhánh phân công cho trạm SALAD chế biến/in phiếu, hoặc do cấu hình trước đó chưa đồng bộ. Nếu bạn muốn 2 thứ giống nhau, hãy tích chọn ô đồng bộ bên dưới!</li>
+              </ul>
+            </div>
+
+            {/* Cấu hình Nhóm Bếp & Tùy chọn Đồng bộ */}
+            <div style={{ padding: '12px 14px', borderRadius: '8px', backgroundColor: '#F8FAFC', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                  Nhóm Bếp (groupTypeKds trong CONFIG_COOKING):
+                </label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    value={assignGroupTypeKds}
+                    onChange={(e) => {
+                      setAssignGroupTypeKds(e.target.value);
+                      setSyncGroupWithQuay(false);
+                    }}
+                    placeholder="VD: NÓNG, SALAD, NƯỚNG, NƯỚC, LẨU..."
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '13px',
+                      backgroundColor: syncGroupWithQuay ? '#F1F5F9' : '#fff',
+                      color: 'var(--text-primary)'
+                    }}
+                    disabled={syncGroupWithQuay}
+                  />
+                  {assignGroupTypeKds && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAssignGroupTypeKds('')}
+                      style={{ fontSize: '11px', padding: '6px 8px' }}
+                      title="Xóa trống nhóm bếp"
+                    >
+                      Xóa
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Nút gợi ý nhanh Nhóm Bếp */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Gợi ý nhanh:</span>
+                {['NÓNG', 'SALAD', 'NƯỚNG', 'NƯỚC', 'LẨU', 'TRÁNG MIỆNG', 'ĐỒ UỐNG'].map((grp) => (
+                  <button
+                    key={grp}
+                    type="button"
+                    onClick={() => {
+                      setAssignGroupTypeKds(grp);
+                      setSyncGroupWithQuay(false);
+                    }}
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: assignGroupTypeKds === grp && !syncGroupWithQuay ? '#1E40AF' : '#FFFFFF',
+                      color: assignGroupTypeKds === grp && !syncGroupWithQuay ? '#FFFFFF' : '#334155',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {grp}
+                  </button>
+                ))}
+              </div>
+
+              {/* Tùy chọn Đồng Bộ Nhóm Bếp theo Quầy Bếp đã chọn */}
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  cursor: 'pointer',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  backgroundColor: syncGroupWithQuay ? '#ECFDF5' : '#FFFBEB',
+                  border: `1.5px solid ${syncGroupWithQuay ? '#10B981' : '#FCD34D'}`,
+                  userSelect: 'none',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: syncGroupWithQuay ? '#065F46' : '#92400E'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={syncGroupWithQuay}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setSyncGroupWithQuay(checked);
+                    if (checked) {
+                      const firstQuay = kdsPlaces.find((p) => selectedPlaceIdsToAssign.includes(p.id));
+                      if (firstQuay) {
+                        setAssignGroupTypeKds(firstQuay.name);
+                      }
+                    }
+                  }}
+                  style={{ cursor: 'pointer' }}
+                />
+                <span>⚡ Đồng bộ Nhóm Bếp (groupTypeKds) theo tên Quầy Bếp đã chọn (tự động điền theo quầy)</span>
+              </label>
             </div>
 
             <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>

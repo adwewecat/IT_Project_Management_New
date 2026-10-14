@@ -17,6 +17,7 @@ import {
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
+import { TopScrollTable } from '../../components/ui/TopScrollTable';
 import { RestaurantItem } from '../../types/restaurant';
 import { UserInfo } from '../../types/auth';
 import {
@@ -1113,37 +1114,51 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
       </Card>
 
       {/* Bảng APP_PARAM */}
-      <Card style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-            Hiển thị <strong>{filteredParams.length}</strong> / {paramsList.length} tham số
+      <Card style={{ padding: 0, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+        <div style={{ padding: '10px 16px', backgroundColor: '#F8FAFC', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+            Danh sách tham số: <strong>{filteredParams.length}</strong> / {paramsList.length} tham số
+          </div>
+          <div style={{ fontSize: '11px', color: '#64748B' }}>
+            💡 Click vào mã để copy • Click vào nút Bật/Tắt để đảo trạng thái tức thì
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto', width: '100%' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+        <TopScrollTable maxHeight="calc(100vh - 270px)">
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
-              <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
-                <th style={{ padding: '10px 12px', width: '200px' }}>Param Code</th>
-                <th style={{ padding: '10px 12px', width: '200px' }}>Tên Param</th>
-                <th style={{ padding: '10px 12px', width: '100px' }}>Kiểu</th>
-                <th style={{ padding: '10px 12px', width: '120px' }}>Trạng Thái</th>
-                <th style={{ padding: '10px 12px', width: '200px' }}>Giá Trị Cấu Hình</th>
-                <th style={{ padding: '10px 12px' }}>Diễn Giải Nghiệp Vụ</th>
-                <th style={{ padding: '10px 12px', width: '180px', textAlign: 'center' }}>Thao Tác</th>
+              <tr style={{ backgroundColor: '#F1F5F9', borderBottom: '2px solid #CBD5E1', textAlign: 'left', color: '#334155' }}>
+                <th style={{ padding: '8px 12px', minWidth: '280px', position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F1F5F9' }}>
+                  Tham Số (Tên & Param Code)
+                </th>
+                <th style={{ padding: '8px 10px', width: '90px', position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F1F5F9' }}>
+                  Kiểu
+                </th>
+                <th style={{ padding: '8px 10px', width: '105px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F1F5F9' }}>
+                  Trạng Thái
+                </th>
+                <th style={{ padding: '8px 10px', width: '130px', position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F1F5F9' }}>
+                  Giá Trị Cấu Hình
+                </th>
+                <th style={{ padding: '8px 12px', minWidth: '240px', position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F1F5F9' }}>
+                  Diễn Giải & Ghi Chú Nghiệp Vụ
+                </th>
+                <th style={{ padding: '8px 12px', width: '160px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F1F5F9' }}>
+                  Thao Tác
+                </th>
               </tr>
             </thead>
             <tbody>
               {loadingParams ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
                     <RefreshCw size={24} className="spin-animation" style={{ margin: '0 auto 10px' }} />
                     <div>Đang tải dữ liệu từ MongoDB {currentHost}:27017...</div>
                   </td>
                 </tr>
               ) : filteredParams.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
                     Không tìm thấy tham số nào phù hợp với bộ lọc.
                   </td>
                 </tr>
@@ -1159,74 +1174,79 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                     <tr
                       key={p.paramCode}
                       style={{
-                        borderBottom: '1px solid var(--border-color)',
-                        backgroundColor: 'transparent',
+                        borderBottom: '1px solid #E2E8F0',
+                        backgroundColor: '#FFFFFF',
                         transition: 'background-color 0.15s ease'
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-secondary)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#FFFFFF')}
                     >
-                      {/* Param Code */}
-                      <td style={{ padding: '10px 12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--color-primary-text)' }}>
-                            {p.paramCode}
-                          </span>
-                          {isEssential && (
-                            <span
-                              style={{
-                                fontSize: '10px',
-                                fontWeight: 600,
-                                backgroundColor: '#EFF6FF',
-                                color: '#1E40AF',
-                                border: '1px solid #BFDBFE',
-                                borderRadius: '4px',
-                                padding: '1px 5px',
-                                lineHeight: 1.2
-                              }}
-                              title="Tham số trọng yếu thường dùng để cấu hình"
-                            >
-                              Cần thiết
+                      {/* Tham số: Gộp Tên và Param Code */}
+                      <td style={{ padding: '8px 12px', verticalAlign: 'middle' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 700, color: '#0F172A', fontSize: '12.5px' }}>
+                              {displayName !== p.paramCode ? displayName : p.paramCode}
                             </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(p.paramCode, p.paramCode)}
-                            style={{
-                              border: 'none',
-                              background: 'transparent',
-                              cursor: 'pointer',
-                              color: copiedCode === p.paramCode ? '#10B981' : 'var(--text-muted)',
-                              padding: '2px'
-                            }}
-                            title="Sao chép Param Code"
-                          >
-                            {copiedCode === p.paramCode ? <Check size={13} color="#10B981" /> : <Copy size={13} />}
-                          </button>
+                            {categoryName && categoryName !== 'Khác' && (
+                              <span style={{ fontSize: '10px', fontWeight: 600, color: '#475569', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', padding: '1px 5px', borderRadius: '4px' }}>
+                                {categoryName}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <code style={{ fontFamily: 'Consolas, monospace', fontSize: '11.5px', fontWeight: 600, color: '#2563EB', backgroundColor: '#EFF6FF', padding: '1px 5px', borderRadius: '3px' }}>
+                              {p.paramCode}
+                            </code>
+                            {isEssential && (
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  backgroundColor: '#FEF3C7',
+                                  color: '#B45309',
+                                  border: '1px solid #FCD34D',
+                                  borderRadius: '4px',
+                                  padding: '0 4px',
+                                  lineHeight: 1.3
+                                }}
+                                title="Tham số trọng yếu thường dùng"
+                              >
+                                ★ Cần thiết
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(p.paramCode, p.paramCode)}
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                cursor: 'pointer',
+                                color: copiedCode === p.paramCode ? '#10B981' : '#94A3B8',
+                                padding: '1px 3px',
+                                display: 'inline-flex',
+                                alignItems: 'center'
+                              }}
+                              title="Sao chép Param Code"
+                            >
+                              {copiedCode === p.paramCode ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
+                            </button>
+                          </div>
                         </div>
                       </td>
 
-                      {/* Tên Param */}
-                      <td style={{ padding: '10px 12px' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{displayName}</div>
-                        {categoryName && categoryName !== 'Khác' && (
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            {categoryName}
-                          </div>
-                        )}
-                      </td>
-
                       {/* Kiểu Tham Số */}
-                      <td style={{ padding: '10px 12px' }}>
+                      <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
                         <span
                           style={{
-                            fontSize: '11px',
+                            fontSize: '10.5px',
                             fontWeight: 700,
-                            padding: '3px 8px',
+                            padding: '2px 6px',
                             borderRadius: '4px',
                             display: 'inline-block',
                             backgroundColor: p.paramType === 'FUNCTION' ? '#F3E8FF' : '#E0F2FE',
-                            color: p.paramType === 'FUNCTION' ? '#7E22CE' : '#0369A1'
+                            color: p.paramType === 'FUNCTION' ? '#7E22CE' : '#0369A1',
+                            border: `1px solid ${p.paramType === 'FUNCTION' ? '#E9D5FF' : '#BAE6FD'}`
                           }}
                         >
                           {p.paramType}
@@ -1234,12 +1254,12 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                       </td>
 
                       {/* Trạng Thái (Bật/Tắt) */}
-                      <td style={{ padding: '10px 12px' }}>
+                      <td style={{ padding: '8px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
                         <button
                           type="button"
                           onClick={() => handleToggleStatus(p)}
                           disabled={isToggling}
-                          title="Nhấp để bật/tắt nhanh trạng thái"
+                          title="Bấm để bật / tắt nhanh trạng thái"
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -1269,60 +1289,61 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                       </td>
 
                       {/* Giá Trị Cấu Hình */}
-                      <td style={{ padding: '10px 12px' }}>
+                      <td style={{ padding: '8px 10px', verticalAlign: 'middle' }}>
                         <div
                           style={{
-                            fontFamily: 'monospace',
+                            fontFamily: 'Consolas, monospace',
                             fontSize: '12px',
-                            backgroundColor: 'var(--bg-secondary)',
-                            padding: '4px 8px',
+                            fontWeight: 600,
+                            backgroundColor: '#F8FAFC',
+                            padding: '3px 8px',
                             borderRadius: '4px',
-                            maxWidth: '200px',
+                            maxWidth: '140px',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
-                            border: '1px solid var(--border-color)'
+                            border: '1px solid #E2E8F0',
+                            color: '#1E293B'
                           }}
                           title={String(p.value ?? '')}
                         >
-                          {p.value !== undefined && p.value !== '' ? String(p.value) : <em style={{ color: 'var(--text-muted)' }}>[rỗng]</em>}
+                          {p.value !== undefined && p.value !== '' ? String(p.value) : <em style={{ color: '#94A3B8' }}>[rỗng]</em>}
                         </div>
                       </td>
 
                       {/* Diễn Giải Nghiệp Vụ */}
-                      <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                        {p.note || <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                      <td style={{ padding: '8px 12px', color: '#475569', fontSize: '11.5px', lineHeight: 1.4, verticalAlign: 'middle' }}>
+                        {p.note ? (
+                          <span>{p.note}</span>
+                        ) : (
+                          <span style={{ color: '#94A3B8' }}>Chưa có diễn giải ghi chú</span>
+                        )}
                       </td>
 
-                      {/* Thao Tác (Lưu Chuẩn [chỉ Admin], Sửa, Xóa) */}
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                          {/* NÚT LƯU VÀO BỘ CHUẨN - CHỈ DÀNH CHO ADMIN & SUPER ADMIN */}
+                      {/* Thao Tác */}
+                      <td style={{ padding: '8px 12px', textAlign: 'center', verticalAlign: 'middle' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                           {isAdmin && (
                             <button
                               type="button"
                               onClick={() => handleSaveSingleToStandard(p)}
                               disabled={isSavingSingle}
-                              title="Lưu tham số này vào Bộ Tham Số Chuẩn dùng chung của hệ thống"
+                              title="Lưu tham số này vào Bộ Tham Số Chuẩn"
                               style={{
                                 border: '1px solid #93C5FD',
                                 backgroundColor: '#EFF6FF',
                                 color: '#1D4ED8',
                                 borderRadius: '4px',
-                                padding: '3px 7px',
+                                padding: '3px 6px',
                                 cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '3px',
-                                fontSize: '11px',
+                                fontSize: '10.5px',
                                 fontWeight: 600
                               }}
                             >
-                              {isSavingSingle ? (
-                                <RefreshCw size={11} className="spin-animation" />
-                              ) : (
-                                <Upload size={12} color="#1D4ED8" />
-                              )}
+                              {isSavingSingle ? <RefreshCw size={10} className="spin-animation" /> : <Upload size={11} color="#1D4ED8" />}
                               <span>Lưu Chuẩn</span>
                             </button>
                           )}
@@ -1331,11 +1352,12 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                             variant="outline"
                             size="sm"
                             onClick={() => openEditModal(p)}
-                            leftIcon={<Edit2 size={12} />}
-                            style={{ padding: '3px 8px', fontSize: '11px' }}
+                            leftIcon={<Edit2 size={11} />}
+                            style={{ padding: '3px 7px', fontSize: '11px', height: '26px' }}
                           >
                             Sửa
                           </Button>
+
                           <button
                             type="button"
                             onClick={() => setDeletingParam(p)}
@@ -1345,14 +1367,15 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                               backgroundColor: '#FEF2F2',
                               color: '#DC2626',
                               borderRadius: '4px',
-                              padding: '4px 7px',
+                              padding: '4px 6px',
                               cursor: 'pointer',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              justifyContent: 'center'
+                              justifyContent: 'center',
+                              height: '26px'
                             }}
                           >
-                            <Trash2 size={13} />
+                            <Trash2 size={12} />
                           </button>
                         </div>
                       </td>
@@ -1362,7 +1385,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
               )}
             </tbody>
           </table>
-        </div>
+        </TopScrollTable>
       </Card>
 
       {/* ══════════════════════════════════════════════════════════════ */}

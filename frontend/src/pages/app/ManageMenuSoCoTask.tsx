@@ -6,7 +6,7 @@ import {
   Trash2,
   Copy,
   Check,
-  AlertTriangle,
+  Plus,
   Layers,
   ChevronDown,
   ChevronUp,
@@ -23,6 +23,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Badge } from '../../components/ui/Badge';
+import { TopScrollTable } from '../../components/ui/TopScrollTable';
 import { RestaurantItem } from '../../types/restaurant';
 import { UserInfo } from '../../types/auth';
 import {
@@ -597,6 +598,140 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     }
   };
 
+  const [deactivatingCo, setDeactivatingCo] = useState<boolean>(false);
+
+  const handleDeactivateCoSingle = async (it: DishMenuItem) => {
+    if (!activeHost) return;
+    if (!confirm(`Bạn có chắc muốn tắt kích hoạt món "${it.name}" (Mã: ${it.rk7_code}) khỏi CO? Món này sẽ không hiển thị trên giao diện gọi món online CO nữa.`)) return;
+    setDeactivatingCo(true);
+    try {
+      const res = await mongoService.deactivateDishesFromCo({
+        host: activeHost,
+        rk7_codes: [it.rk7_code]
+      });
+      showToast(res.message, 'success');
+      fetchDishItems();
+    } catch (err: any) {
+      showToast('Lỗi tắt kích hoạt CO: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setDeactivatingCo(false);
+    }
+  };
+
+  const handleDeactivateCoBulk = async () => {
+    if (!activeHost || selectedDishesList.length === 0) return;
+    const rk7List = Array.from(new Set(selectedDishesList.map((d) => d.rk7_code)));
+    if (!confirm(`Bạn có chắc muốn tắt kích hoạt ${rk7List.length} món đã chọn khỏi CO?`)) return;
+    setDeactivatingCo(true);
+    try {
+      const res = await mongoService.deactivateDishesFromCo({
+        host: activeHost,
+        rk7_codes: rk7List
+      });
+      showToast(res.message, 'success');
+      fetchDishItems();
+    } catch (err: any) {
+      showToast('Lỗi tắt kích hoạt CO hàng loạt: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setDeactivatingCo(false);
+    }
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // THÊM THẲNG MÓN MỚI VÀO NHÓM MÓN ĐANG MỞ
+  // ══════════════════════════════════════════════════════════════════════════
+  const [isAddDishToGroupOpen, setIsAddDishToGroupOpen] = useState<boolean>(false);
+  const [targetGroupForAdd, setTargetGroupForAdd] = useState<{
+    menuCode: string;
+    groupCode: string;
+    groupName: string;
+    level: number;
+  } | null>(null);
+  const [newDishRk7, setNewDishRk7] = useState<string>('');
+  const [newDishName, setNewDishName] = useState<string>('');
+  const [newDishSap, setNewDishSap] = useState<string>('');
+  const [newDishPrice, setNewDishPrice] = useState<number>(0);
+  const [newDishSortOrder, setNewDishSortOrder] = useState<number>(1);
+  const [newDishImg, setNewDishImg] = useState<string>('');
+  const [newDishAutoCo, setNewDishAutoCo] = useState<boolean>(true);
+  const [savingAddDishToGroup, setSavingAddDishToGroup] = useState<boolean>(false);
+
+  const openAddDishToGroupModal = (
+    menuCode: string,
+    groupCode: string,
+    groupName: string,
+    level: number,
+    existingCount: number = 0
+  ) => {
+    setTargetGroupForAdd({ menuCode, groupCode, groupName, level });
+    setNewDishRk7('');
+    setNewDishName('');
+    setNewDishSap('');
+    setNewDishPrice(0);
+    setNewDishSortOrder(existingCount + 1);
+    setNewDishImg('');
+    setNewDishAutoCo(true);
+    setIsAddDishToGroupOpen(true);
+  };
+
+  const handleSaveAddDishToGroup = async () => {
+    if (!activeHost || !targetGroupForAdd) return;
+    if (!newDishRk7.trim()) {
+      showToast('Vui lòng nhập Mã RK7 của món', 'error');
+      return;
+    }
+    if (!newDishName.trim()) {
+      showToast('Vui lòng nhập Tên món', 'error');
+      return;
+    }
+
+    setSavingAddDishToGroup(true);
+    try {
+      const res = await mongoService.bulkAddMenuDishes({
+        host: activeHost,
+        target_menu_codes: [targetGroupForAdd.menuCode],
+        group_mode: 'existing',
+        group_code: targetGroupForAdd.groupCode,
+        group_name: targetGroupForAdd.groupName,
+        level: targetGroupForAdd.level,
+        items: [{
+          rk7_code: newDishRk7.trim(),
+          name: newDishName.trim(),
+          sap_code: newDishSap.trim() || undefined,
+          price: Number(newDishPrice) || 0,
+          sort_order: Number(newDishSortOrder) || 1,
+          image_url: newDishImg.trim() || undefined,
+          level: targetGroupForAdd.level
+        }]
+      });
+
+      if (newDishAutoCo) {
+        try {
+          await mongoService.activateDishesToCo({
+            host: activeHost,
+            items: [{
+              rk7_code: newDishRk7.trim(),
+              name: newDishName.trim(),
+              sap_code: newDishSap.trim() || undefined,
+              price: Number(newDishPrice) || 0,
+              image_url: newDishImg.trim() || undefined
+            }]
+          });
+        } catch {
+          // ignore
+        }
+      }
+
+      showToast(res.message || `Đã thêm món "${newDishName.trim()}" vào nhóm "${targetGroupForAdd.groupName}" thành công!`, 'success');
+      setIsAddDishToGroupOpen(false);
+      fetchDishItems();
+    } catch (err: any) {
+      showToast('Lỗi khi thêm món vào nhóm: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setSavingAddDishToGroup(false);
+    }
+  };
+
   // ══════════════════════════════════════════════════════════════════════════
   // 5. MODAL: SỬA THÔNG TIN MÓN ĂN
   // ══════════════════════════════════════════════════════════════════════════
@@ -660,12 +795,134 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   const [bulkAddTargetMenus, setBulkAddTargetMenus] = useState<string[]>([]);
   const [bulkAddGroupMode, setBulkAddGroupMode] = useState<'existing' | 'new'>('existing');
   const [bulkAddSelectedGroup, setBulkAddSelectedGroup] = useState<string>('');
-  const [bulkAddGroupSearch, setBulkAddGroupSearch] = useState<string>('');
   const [bulkAddNewGroupName, setBulkAddNewGroupName] = useState<string>('');
   const [bulkAddNewGroupLevel, setBulkAddNewGroupLevel] = useState<number>(-1);
   const [bulkAddPasteText, setBulkAddPasteText] = useState<string>('');
   const [bulkAddRows, setBulkAddRows] = useState<BulkAddDishRow[]>([]);
   const [savingBulkAdd, setSavingBulkAdd] = useState<boolean>(false);
+
+  // Danh sách các nhóm theo từng Menu cụ thể
+  const groupsByMenuCode = useMemo(() => {
+    const map: Record<string, Array<{ code: string; name: string; level: number; count: number }>> = {};
+    menus.forEach((m) => {
+      map[m.code] = [];
+    });
+    dishItems.forEach((d) => {
+      if (!map[d.menu_code]) {
+        map[d.menu_code] = [];
+      }
+      const existing = map[d.menu_code].find((g) => g.code === d.group_code);
+      if (!existing) {
+        map[d.menu_code].push({
+          code: d.group_code,
+          name: d.group_name,
+          level: d.level,
+          count: 1
+        });
+      } else {
+        existing.count += 1;
+      }
+    });
+    return map;
+  }, [menus, dishItems]);
+
+  // Cấu hình nhóm riêng cho từng Menu được chọn
+  const [bulkAddMenuGroupMap, setBulkAddMenuGroupMap] = useState<Record<string, {
+    group_mode: 'existing' | 'new';
+    group_code?: string;
+    group_name: string;
+    level: number;
+  }>>({});
+
+  const handleToggleMenuInBulkAdd = (menuCode: string) => {
+    if (bulkAddTargetMenus.includes(menuCode)) {
+      setBulkAddTargetMenus(bulkAddTargetMenus.filter((c) => c !== menuCode));
+    } else {
+      setBulkAddTargetMenus([...bulkAddTargetMenus, menuCode]);
+      if (!bulkAddMenuGroupMap[menuCode]) {
+        const groupsInMenu = groupsByMenuCode[menuCode] || [];
+        const firstGroup = groupsInMenu[0];
+        setBulkAddMenuGroupMap((prev) => ({
+          ...prev,
+          [menuCode]: firstGroup
+            ? { group_mode: 'existing', group_code: firstGroup.code, group_name: firstGroup.name, level: firstGroup.level }
+            : { group_mode: 'new', group_name: 'Nhóm Món Mới', level: -1 }
+        }));
+      }
+    }
+  };
+
+  const handleChangeMenuGroupMode = (menuCode: string, mode: 'existing' | 'new') => {
+    const groupsInMenu = groupsByMenuCode[menuCode] || [];
+    const firstGroup = groupsInMenu[0];
+    setBulkAddMenuGroupMap((prev) => ({
+      ...prev,
+      [menuCode]: {
+        ...(prev[menuCode] || {}),
+        group_mode: mode,
+        group_code: mode === 'existing' ? (firstGroup?.code || '') : undefined,
+        group_name: mode === 'existing' ? (firstGroup?.name || '') : (prev[menuCode]?.group_name || ''),
+        level: mode === 'existing' ? (firstGroup?.level ?? -1) : (prev[menuCode]?.level ?? -1)
+      }
+    }));
+  };
+
+  const handleSelectExistingGroupForMenu = (menuCode: string, groupCode: string) => {
+    const groupsInMenu = groupsByMenuCode[menuCode] || [];
+    const grp = groupsInMenu.find((g) => g.code === groupCode);
+    if (!grp) return;
+    setBulkAddMenuGroupMap((prev) => ({
+      ...prev,
+      [menuCode]: {
+        group_mode: 'existing',
+        group_code: grp.code,
+        group_name: grp.name,
+        level: grp.level
+      }
+    }));
+  };
+
+  const handleUpdateNewGroupNameForMenu = (menuCode: string, name: string) => {
+    setBulkAddMenuGroupMap((prev) => ({
+      ...prev,
+      [menuCode]: {
+        group_mode: 'new',
+        group_code: undefined,
+        group_name: name,
+        level: prev[menuCode]?.level ?? -1
+      }
+    }));
+  };
+
+  const handleUpdateNewGroupLevelForMenu = (menuCode: string, lvl: number) => {
+    setBulkAddMenuGroupMap((prev) => ({
+      ...prev,
+      [menuCode]: {
+        ...(prev[menuCode] || { group_mode: 'new', group_name: '' }),
+        level: lvl
+      }
+    }));
+  };
+
+  const handleApplyGroupToAllCheckedMenus = (sourceMenuCode: string, config: { group_mode: 'existing' | 'new'; group_code?: string; group_name: string; level: number }) => {
+    const newMap = { ...bulkAddMenuGroupMap };
+    bulkAddTargetMenus.forEach((mCode) => {
+      if (mCode === sourceMenuCode) return;
+      const groupsInM = groupsByMenuCode[mCode] || [];
+      if (config.group_mode === 'existing') {
+        const match = groupsInM.find((g) => g.name.toLowerCase() === config.group_name.toLowerCase() || g.code === config.group_code);
+        if (match) {
+          newMap[mCode] = { group_mode: 'existing', group_code: match.code, group_name: match.name, level: match.level };
+        } else {
+          newMap[mCode] = { group_mode: 'new', group_name: config.group_name, level: config.level };
+        }
+      } else {
+        newMap[mCode] = { group_mode: 'new', group_name: config.group_name, level: config.level };
+      }
+    });
+    setBulkAddMenuGroupMap(newMap);
+    showToast(`Đã đồng bộ cấu hình nhóm "${config.group_name}" cho tất cả menu đã chọn`, 'info');
+  };
 
   // Danh sách các nhóm hiện có trong các menu được chọn
   const existingGroupsInMenus = useMemo(() => {
@@ -684,17 +941,6 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     });
     return Array.from(gMap.values());
   }, [dishItems]);
-
-  // Lọc nhóm theo từ khóa tìm kiếm (để dễ tìm nhóm khi có nhiều nhóm)
-  const filteredExistingGroups = useMemo(() => {
-    if (!bulkAddGroupSearch.trim()) return existingGroupsInMenus;
-    const q = removeTones(bulkAddGroupSearch.trim()).toLowerCase();
-    return existingGroupsInMenus.filter((g) => {
-      const nameNorm = removeTones(g.name).toLowerCase();
-      const codeNorm = g.code.toLowerCase();
-      return nameNorm.includes(q) || codeNorm.includes(q);
-    });
-  }, [existingGroupsInMenus, bulkAddGroupSearch]);
 
   // Tự động nhận diện Level theo Nhóm món đã chọn (Level 0: Đồ uống/Nước, Level -1: Món ăn/Thường mặc định)
   const currentGroupLevel = useMemo(() => {
@@ -797,33 +1043,27 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   }, [currentGroupLevel]);
 
   const openBulkAddModal = () => {
-    setBulkAddTargetMenus(selectedMenuCodes.length > 0 ? selectedMenuCodes : (menus[0] ? [menus[0].code] : []));
+    const initTarget = selectedMenuCodes.length > 0 ? selectedMenuCodes : (menus[0] ? [menus[0].code] : []);
+    setBulkAddTargetMenus(initTarget);
+    const initialMap: Record<string, { group_mode: 'existing' | 'new'; group_code?: string; group_name: string; level: number }> = {};
+    initTarget.forEach((mCode) => {
+      const gList = groupsByMenuCode[mCode] || [];
+      const first = gList[0];
+      if (first) {
+        initialMap[mCode] = { group_mode: 'existing', group_code: first.code, group_name: first.name, level: first.level };
+      } else {
+        initialMap[mCode] = { group_mode: 'new', group_name: 'Nhóm Món Mới', level: -1 };
+      }
+    });
+    setBulkAddMenuGroupMap(initialMap);
     setBulkAddGroupMode('existing');
     setBulkAddSelectedGroup(existingGroupsInMenus[0]?.code || '');
-    setBulkAddGroupSearch('');
     setBulkAddNewGroupName('');
     setBulkAddNewGroupLevel(-1);
     setBulkAddPasteText('');
     setBulkAddRows([]);
     setIsBulkAddOpen(true);
   };
-
-  // Cảnh báo nếu nhóm chọn chưa có trong menu đích
-  const groupMenuWarnings = useMemo(() => {
-    if (bulkAddGroupMode !== 'existing' || !bulkAddSelectedGroup) return [];
-    const grp = existingGroupsInMenus.find((g) => g.code === bulkAddSelectedGroup);
-    if (!grp) return [];
-
-    const warnings: string[] = [];
-    bulkAddTargetMenus.forEach((mCode) => {
-      if (!grp.menuCodes.has(mCode)) {
-        const mObj = menus.find((m) => m.code === mCode);
-        const mTitle = mObj ? `${mObj.name} - ${mObj.code}` : mCode;
-        warnings.push(`Menu '${mTitle}' chưa có nhóm '${grp.name}' (Mã: ${grp.code}). Hệ thống sẽ tự động liên kết nhóm này vào Menu.`);
-      }
-    });
-    return warnings;
-  }, [bulkAddGroupMode, bulkAddSelectedGroup, bulkAddTargetMenus, existingGroupsInMenus, menus]);
 
   const handleSaveBulkAdd = async () => {
     if (!activeHost) return;
@@ -838,20 +1078,14 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
 
     if (bulkAddGroupMode === 'existing') {
       const found = existingGroupsInMenus.find((g) => g.code === bulkAddSelectedGroup);
-      if (!found) {
-        showToast('Vui lòng chọn một Nhóm Món có sẵn hợp lệ', 'error');
-        return;
+      if (found) {
+        gName = found.name;
+        gCode = found.code;
+        gLevel = found.level;
       }
-      gName = found.name;
-      gCode = found.code;
-      gLevel = found.level;
     } else {
       gName = bulkAddNewGroupName.trim();
       gLevel = bulkAddNewGroupLevel;
-      if (!gName) {
-        showToast('Vui lòng nhập Tên Nhóm Món mới', 'error');
-        return;
-      }
     }
 
     if (bulkAddRows.length === 0) {
@@ -874,7 +1108,8 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
         group_code: gCode,
         group_name: gName,
         level: gLevel,
-        items: finalItems
+        items: finalItems,
+        menu_group_map: bulkAddMenuGroupMap
       });
 
       if (res.warnings && res.warnings.length > 0) {
@@ -1730,6 +1965,18 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={handleDeactivateCoBulk}
+                  isLoading={deactivatingCo}
+                  disabled={deactivatingCo}
+                  leftIcon={<X size={13} color="#DC2626" />}
+                  style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA', color: '#DC2626' }}
+                >
+                  Tắt CO ({selectedDishKeys.size})
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={openMoveCloneModal}
                   leftIcon={<ArrowRightLeft size={13} />}
                   style={{ borderColor: '#3B82F6', color: '#1D4ED8' }}
@@ -2132,15 +2379,37 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                                 >
                                   {isGroupExpanded ? 'Thu gọn nhóm ▲' : 'Mở rộng nhóm ▼'}
                                 </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => openAddDishToGroupModal(m.menu_code, g.group_code, g.group_name, g.level, g.dishes.length)}
+                                  title={`Thêm thẳng món mới vào nhóm "${g.group_name}"`}
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    color: '#065F46',
+                                    backgroundColor: '#ECFDF5',
+                                    border: '1px solid #A7F3D0',
+                                    borderRadius: '4px',
+                                    padding: '3px 8px',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                >
+                                  <Plus size={11} />
+                                  + Thêm Món Vào Nhóm
+                                </button>
                               </div>
 
                               {/* GROUP DISHES TABLE */}
                               {isGroupExpanded && (
-                                <div style={{ overflowX: 'auto' }}>
+                                <TopScrollTable>
                                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                                     <thead>
-                                      <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: '#4B5563' }}>
-                                        <th style={{ padding: '7px 10px', width: '36px', textAlign: 'center' }}>
+                                      <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: '#4B5563', position: 'sticky', top: 0, zIndex: 5 }}>
+                                        <th style={{ padding: '7px 10px', width: '36px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>
                                           <input
                                             type="checkbox"
                                             checked={isGroupSelected}
@@ -2291,9 +2560,33 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                                             {/* Cột CO */}
                                             <td style={{ padding: '7px 10px', textAlign: 'center' }}>
                                               {it.is_co ? (
-                                                <span style={{ fontSize: '11px', fontWeight: 700, color: '#1D4ED8', backgroundColor: '#DBEAFE', padding: '2px 6px', borderRadius: '4px' }}>
-                                                  ✓ Có CO (100)
-                                                </span>
+                                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#1D4ED8', backgroundColor: '#DBEAFE', padding: '2px 5px', borderRadius: '4px' }}>
+                                                    ✓ Có CO
+                                                  </span>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleDeactivateCoSingle(it)}
+                                                    disabled={deactivatingCo}
+                                                    title="Tắt kích hoạt món này khỏi CO (ẩn khỏi menu online CO)"
+                                                    style={{
+                                                      fontSize: '10px',
+                                                      fontWeight: 600,
+                                                      color: '#DC2626',
+                                                      backgroundColor: '#FEF2F2',
+                                                      border: '1px solid #FECACA',
+                                                      padding: '2px 5px',
+                                                      borderRadius: '4px',
+                                                      cursor: 'pointer',
+                                                      display: 'inline-flex',
+                                                      alignItems: 'center',
+                                                      gap: '2px'
+                                                    }}
+                                                  >
+                                                    <X size={10} color="#DC2626" />
+                                                    Tắt CO
+                                                  </button>
+                                                </div>
                                               ) : (
                                                 <button
                                                   type="button"
@@ -2360,7 +2653,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                                       })}
                                     </tbody>
                                   </table>
-                                </div>
+                                </TopScrollTable>
                               )}
                             </div>
                           );
@@ -2375,11 +2668,11 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
             /* ───────────────────────────────────────────────────────────── */
             /* CHẾ ĐỘ 2: BẢNG DANH SÁCH PHẲNG (FLAT TABLE VIEW)              */
             /* ───────────────────────────────────────────────────────────── */
-            <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+            <TopScrollTable>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: '#4B5563' }}>
-                    <th style={{ padding: '8px 10px', width: '36px', textAlign: 'center' }}>
+                  <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: '#4B5563', position: 'sticky', top: 0, zIndex: 5 }}>
+                    <th style={{ padding: '8px 10px', width: '36px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>
                       <input
                         type="checkbox"
                         checked={isAllSelected}
@@ -2387,21 +2680,21 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                         style={{ cursor: 'pointer' }}
                       />
                     </th>
-                    <th style={{ padding: '8px 10px', width: '50px' }}>STT</th>
+                    <th style={{ padding: '8px 10px', width: '50px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>STT</th>
                     {searchAllMenus && (
-                      <th style={{ padding: '8px 10px', minWidth: '150px' }}>Menu (Tên - Mã)</th>
+                      <th style={{ padding: '8px 10px', minWidth: '150px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Menu (Tên - Mã)</th>
                     )}
-                    <th style={{ padding: '8px 10px', minWidth: '130px' }}>Nhóm Món</th>
-                    <th style={{ padding: '8px 10px', width: '90px' }}>Loại</th>
-                    <th style={{ padding: '8px 10px', width: '90px' }}>Mã RK7</th>
-                    <th style={{ padding: '8px 10px', minWidth: '180px' }}>Tên Món</th>
-                    <th style={{ padding: '8px 10px', width: '100px' }}>Mã SAP</th>
-                    <th style={{ padding: '8px 10px', width: '60px', textAlign: 'center' }}>Thứ Tự</th>
-                    <th style={{ padding: '8px 10px', width: '90px', textAlign: 'right' }}>Giá (VNĐ)</th>
-                    <th style={{ padding: '8px 10px', width: '80px', textAlign: 'center' }}>Hình Ảnh</th>
-                    <th style={{ padding: '8px 10px', width: '70px', textAlign: 'center' }}>SO</th>
-                    <th style={{ padding: '8px 10px', width: '120px', textAlign: 'center' }}>CO</th>
-                    <th style={{ padding: '8px 10px', width: '110px', textAlign: 'center' }}>Thao Tác</th>
+                    <th style={{ padding: '8px 10px', minWidth: '130px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Nhóm Món</th>
+                    <th style={{ padding: '8px 10px', width: '90px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Loại</th>
+                    <th style={{ padding: '8px 10px', width: '90px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Mã RK7</th>
+                    <th style={{ padding: '8px 10px', minWidth: '180px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Tên Món</th>
+                    <th style={{ padding: '8px 10px', width: '100px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Mã SAP</th>
+                    <th style={{ padding: '8px 10px', width: '60px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Thứ Tự</th>
+                    <th style={{ padding: '8px 10px', width: '90px', textAlign: 'right', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Giá (VNĐ)</th>
+                    <th style={{ padding: '8px 10px', width: '80px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Hình Ảnh</th>
+                    <th style={{ padding: '8px 10px', width: '70px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>SO</th>
+                    <th style={{ padding: '8px 10px', width: '130px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>CO</th>
+                    <th style={{ padding: '8px 10px', width: '110px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Thao Tác</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2553,9 +2846,29 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                         {/* Cột CO */}
                         <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                           {it.is_co ? (
-                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#1D4ED8', backgroundColor: '#DBEAFE', padding: '2px 6px', borderRadius: '4px' }}>
-                              ✓ Có CO (100)
-                            </span>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '11px', fontWeight: 700, color: '#1D4ED8', backgroundColor: '#DBEAFE', padding: '2px 6px', borderRadius: '4px' }}>
+                                ✓ Có CO (100)
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleDeactivateCoSingle(it)}
+                                disabled={deactivatingCo}
+                                title="Tắt kích hoạt: Gỡ món này khỏi phần mềm CO"
+                                style={{
+                                  fontSize: '10px',
+                                  fontWeight: 600,
+                                  color: '#DC2626',
+                                  backgroundColor: '#FEE2E2',
+                                  border: '1px solid #FCA5A5',
+                                  padding: '1px 5px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Tắt CO
+                              </button>
+                            </div>
                           ) : (
                             <button
                               type="button"
@@ -2622,7 +2935,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                   })}
                 </tbody>
               </table>
-            </div>
+            </TopScrollTable>
           )}
         </div>
       </Card>
@@ -2770,207 +3083,194 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
               </div>
             </div>
 
-            {/* Chọn Menu Đích Áp Dụng */}
+            {/* 1. Chọn Menu Áp Dụng & Nhóm Món Tương Ứng (Dạng Danh Sách Dọc) */}
             <div>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '6px' }}>
-                1. Áp dụng cho các Menu nào (chọn nhiều menu để chèn đồng thời):
-              </label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '90px', overflowY: 'auto', padding: '6px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: '#F9FAFB' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  1. Chọn Menu Áp Dụng & Nhóm Món Tương Ứng (Đã chọn {bulkAddTargetMenus.length} / {menus.length} Menu):
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulkAddTargetMenus(menus.map(m => m.code));
+                      const newMap: Record<string, any> = {};
+                      menus.forEach(m => {
+                        const gList = groupsByMenuCode[m.code] || [];
+                        const first = gList[0];
+                        newMap[m.code] = first
+                          ? { group_mode: 'existing', group_code: first.code, group_name: first.name, level: first.level }
+                          : { group_mode: 'new', group_name: 'Nhóm Món Mới', level: -1 };
+                      });
+                      setBulkAddMenuGroupMap(newMap);
+                    }}
+                    style={{ fontSize: '11px', color: '#2563EB', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Chọn tất cả Menu
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulkAddTargetMenus([]);
+                      setBulkAddMenuGroupMap({});
+                    }}
+                    style={{ fontSize: '11px', color: '#6B7280', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Bỏ chọn hết
+                  </button>
+                </div>
+              </div>
+
+              {/* Danh Sách Dọc Các Menu */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '250px', overflowY: 'auto', padding: '6px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: '#F8FAFC' }}>
                 {menus.map((m) => {
-                  const checked = bulkAddTargetMenus.includes(m.code);
+                  const isChecked = bulkAddTargetMenus.includes(m.code);
+                  const groupsInMenu = groupsByMenuCode[m.code] || [];
+                  const currentConfig = bulkAddMenuGroupMap[m.code] || {
+                    group_mode: 'existing',
+                    group_code: groupsInMenu[0]?.code || '',
+                    group_name: groupsInMenu[0]?.name || '',
+                    level: groupsInMenu[0]?.level ?? -1
+                  };
+
                   return (
-                    <label
+                    <div
                       key={m.code}
                       style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        padding: '3px 8px',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        cursor: 'pointer',
-                        backgroundColor: checked ? '#DBEAFE' : '#FFFFFF',
-                        border: '1px solid',
-                        borderColor: checked ? '#3B82F6' : '#D1D5DB',
-                        color: checked ? '#1E40AF' : '#374151'
+                        borderRadius: '6px',
+                        border: isChecked ? '1.5px solid #3B82F6' : '1px solid #E2E8F0',
+                        backgroundColor: isChecked ? '#EFF6FF' : '#FFFFFF',
+                        padding: '8px 12px',
+                        transition: 'all 0.15s ease'
                       }}
                     >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => {
-                          if (checked) {
-                            setBulkAddTargetMenus(bulkAddTargetMenus.filter((c) => c !== m.code));
-                          } else {
-                            setBulkAddTargetMenus([...bulkAddTargetMenus, m.code]);
-                          }
-                        }}
-                      />
-                      <span>{m.name} - {m.code}</span>
-                    </label>
+                      {/* Dòng Menu Header */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleToggleMenuInBulkAdd(m.code)}
+                            style={{ cursor: 'pointer', width: '15px', height: '15px' }}
+                          />
+                          <span style={{ fontWeight: 700, fontSize: '12.5px', color: isChecked ? '#1D4ED8' : '#1E293B' }}>
+                            📋 {m.name}
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#64748B', fontFamily: 'Consolas, monospace' }}>
+                            ({m.code})
+                          </span>
+                          <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#0369A1', backgroundColor: '#E0F2FE', padding: '1px 6px', borderRadius: '4px' }}>
+                            {groupsInMenu.length} nhóm có sẵn
+                          </span>
+                        </label>
+
+                        {isChecked && currentConfig.group_mode === 'existing' && currentConfig.group_name && (
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: currentConfig.level === 0 ? '#7E22CE' : '#047857' }}>
+                            Sẽ thêm vào: 📂 <strong>{currentConfig.group_name}</strong> ({currentConfig.level === 0 ? '🥤 Level 0' : '🍛 Level -1'})
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Khi Menu được check: Sổ ngay bộ chọn nhóm món của Menu này */}
+                      {isChecked && (
+                        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #BFDBFE', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '11.5px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontWeight: 600, color: currentConfig.group_mode === 'existing' ? '#1D4ED8' : '#4B5563' }}>
+                              <input
+                                type="radio"
+                                name={`group_mode_${m.code}`}
+                                checked={currentConfig.group_mode === 'existing'}
+                                onChange={() => handleChangeMenuGroupMode(m.code, 'existing')}
+                              />
+                              Chọn nhóm có sẵn trong menu này ({groupsInMenu.length})
+                            </label>
+
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontWeight: 600, color: currentConfig.group_mode === 'new' ? '#1D4ED8' : '#4B5563' }}>
+                              <input
+                                type="radio"
+                                name={`group_mode_${m.code}`}
+                                checked={currentConfig.group_mode === 'new'}
+                                onChange={() => handleChangeMenuGroupMode(m.code, 'new')}
+                              />
+                              + Tạo nhóm mới cho menu này
+                            </label>
+                          </div>
+
+                          {currentConfig.group_mode === 'existing' ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <select
+                                value={currentConfig.group_code || ''}
+                                onChange={(e) => handleSelectExistingGroupForMenu(m.code, e.target.value)}
+                                style={{
+                                  flex: '1 1 320px',
+                                  padding: '5px 8px',
+                                  fontSize: '11.5px',
+                                  borderRadius: '5px',
+                                  border: '1px solid #93C5FD',
+                                  backgroundColor: '#FFFFFF',
+                                  outline: 'none',
+                                  cursor: 'pointer',
+                                  fontWeight: 600,
+                                  color: '#1E293B'
+                                }}
+                              >
+                                {groupsInMenu.length === 0 ? (
+                                  <option value="">-- Menu này chưa có nhóm nào (hãy chọn Tạo nhóm mới) --</option>
+                                ) : (
+                                  groupsInMenu.map((g) => (
+                                    <option key={g.code} value={g.code}>
+                                      📂 {g.name} (Mã: {g.code}) &bull; {g.level === 0 ? '🥤 Đồ uống (Level 0)' : '🍛 Món ăn (Level -1)'} [{g.count} món]
+                                    </option>
+                                  ))
+                                )}
+                              </select>
+
+                              {bulkAddTargetMenus.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleApplyGroupToAllCheckedMenus(m.code, currentConfig)}
+                                  title="Tìm và gán nhóm có cùng tên/loại sang tất cả các Menu đang được chọn khác"
+                                  style={{
+                                    fontSize: '10.5px',
+                                    fontWeight: 600,
+                                    color: '#2563EB',
+                                    backgroundColor: '#FFFFFF',
+                                    border: '1px solid #93C5FD',
+                                    borderRadius: '4px',
+                                    padding: '4px 8px',
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  ⚡ Gán nhóm này cho các Menu khác
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px' }}>
+                              <input
+                                type="text"
+                                value={currentConfig.group_name || ''}
+                                onChange={(e) => handleUpdateNewGroupNameForMenu(m.code, e.target.value)}
+                                placeholder="Nhập tên nhóm mới (VD: Món Mới Khai Trương, Tráng Miệng...)"
+                                style={{ width: '100%', padding: '5px 8px', fontSize: '11.5px', borderRadius: '5px', border: '1px solid #CBD5E1', outline: 'none' }}
+                              />
+                              <select
+                                value={currentConfig.level ?? -1}
+                                onChange={(e) => handleUpdateNewGroupLevelForMenu(m.code, parseInt(e.target.value, 10))}
+                                style={{ width: '100%', padding: '5px 8px', fontSize: '11.5px', borderRadius: '5px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', outline: 'none' }}
+                              >
+                                <option value={-1}>Món ăn (Level -1)</option>
+                                <option value={0}>Đồ uống (Level 0)</option>
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
-            </div>
-
-            {/* Chọn Nhóm Món (Nhóm có sẵn hoặc Tạo mới) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                2. Nhóm Món:
-              </label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
-                  <input
-                    type="radio"
-                    name="groupMode"
-                    checked={bulkAddGroupMode === 'existing'}
-                    onChange={() => setBulkAddGroupMode('existing')}
-                  />
-                  <span>Chọn nhóm món có sẵn</span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
-                  <input
-                    type="radio"
-                    name="groupMode"
-                    checked={bulkAddGroupMode === 'new'}
-                    onChange={() => setBulkAddGroupMode('new')}
-                  />
-                  <span>Tạo nhóm món mới hoàn toàn</span>
-                </label>
-              </div>
-
-              {bulkAddGroupMode === 'existing' ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {/* Ô tìm kiếm lọc nhanh nhóm món */}
-                  <div style={{ position: 'relative' }}>
-                    <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} />
-                    <input
-                      type="text"
-                      value={bulkAddGroupSearch}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setBulkAddGroupSearch(val);
-                        if (val.trim()) {
-                          const q = removeTones(val.trim()).toLowerCase();
-                          const match = existingGroupsInMenus.find(g => removeTones(g.name).toLowerCase().includes(q) || g.code.toLowerCase().includes(q));
-                          if (match) {
-                            setBulkAddSelectedGroup(match.code);
-                          }
-                        }
-                      }}
-                      placeholder="🔍 Gõ tìm tên nhóm hoặc mã nhóm (VD: nước, burger, gà, combo...)..."
-                      style={{
-                        width: '100%',
-                        padding: '6px 28px 6px 30px',
-                        fontSize: '12px',
-                        borderRadius: '6px',
-                        border: '1px solid var(--border-color)',
-                        backgroundColor: '#FFFFFF',
-                        outline: 'none'
-                      }}
-                    />
-                    {bulkAddGroupSearch && (
-                      <button
-                        type="button"
-                        onClick={() => setBulkAddGroupSearch('')}
-                        style={{
-                          position: 'absolute',
-                          right: '8px',
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          background: 'none',
-                          border: 'none',
-                          color: '#9CA3AF',
-                          cursor: 'pointer',
-                          padding: '2px',
-                          display: 'flex',
-                          alignItems: 'center'
-                        }}
-                      >
-                        <X size={13} />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Dropdown danh sách nhóm đã lọc */}
-                  <select
-                    value={bulkAddSelectedGroup}
-                    onChange={(e) => setBulkAddSelectedGroup(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '7px 10px',
-                      fontSize: '12px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border-color)',
-                      backgroundColor: '#FFFFFF',
-                      outline: 'none',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {filteredExistingGroups.length === 0 ? (
-                      <option value="">-- Không tìm thấy nhóm nào khớp với "{bulkAddGroupSearch}" --</option>
-                    ) : (
-                      filteredExistingGroups.map((g) => (
-                        <option key={g.code} value={g.code}>
-                          {g.name} (Mã: {g.code} | {g.level === 0 ? 'Đồ uống' : 'Món ăn'})
-                        </option>
-                      ))
-                    )}
-                  </select>
-
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: '#6B7280' }}>
-                    <span>
-                      {bulkAddGroupSearch.trim()
-                        ? `Đang lọc: ${filteredExistingGroups.length} / ${existingGroupsInMenus.length} nhóm`
-                        : `Tổng cộng ${existingGroupsInMenus.length} nhóm món có sẵn`}
-                    </span>
-                    {bulkAddSelectedGroup && (() => {
-                      const sel = existingGroupsInMenus.find(g => g.code === bulkAddSelectedGroup);
-                      if (!sel) return null;
-                      return (
-                        <span style={{ fontWeight: 600, color: sel.level === 0 ? '#1D4ED8' : '#059669' }}>
-                          Đang chọn: {sel.name} &bull; {sel.level === 0 ? '🥤 Đồ uống (Level 0)' : '🍛 Món ăn (Level -1)'}
-                        </span>
-                      );
-                    })()}
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>
-                  <div>
-                    <input
-                      type="text"
-                      value={bulkAddNewGroupName}
-                      onChange={(e) => setBulkAddNewGroupName(e.target.value)}
-                      placeholder="Nhập tên nhóm mới (VD: Món Nhúng Lẩu, Nước Ép...)"
-                      style={{ width: '100%', padding: '6px 10px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border-color)', outline: 'none' }}
-                    />
-                  </div>
-                  <div>
-                    <select
-                      value={bulkAddNewGroupLevel}
-                      onChange={(e) => setBulkAddNewGroupLevel(parseInt(e.target.value, 10))}
-                      style={{ width: '100%', padding: '6px 10px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: '#FFFFFF', outline: 'none' }}
-                    >
-                      <option value={-1}>Menu thường (-1)</option>
-                      <option value={0}>Menu đồ uống (0)</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {/* Warning Cảnh Báo Nếu Nhóm Chưa Có Trong Menu Đích */}
-              {groupMenuWarnings.length > 0 && (
-                <div style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', color: '#B45309', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}>
-                    <AlertTriangle size={13} color="#D97706" />
-                    <span>Lưu ý liên kết nhóm món:</span>
-                  </div>
-                  {groupMenuWarnings.map((w, i) => (
-                    <span key={i}>• {w}</span>
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* Ô Paste Dữ Liệu Kiểu Google Sheets */}
@@ -4184,6 +4484,204 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                 leftIcon={<Globe size={14} />}
               >
                 Bắt Đầu Đồng Bộ Trực Tiếp
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ───────────────────────────────────────────────────────────────── */}
+      {/* MODAL: THÊM THẲNG MÓN MỚI VÀO NHÓM MÓN ĐANG MỞ                   */}
+      {/* ───────────────────────────────────────────────────────────────── */}
+      {isAddDishToGroupOpen && targetGroupForAdd && (
+        <Modal
+          isOpen={true}
+          onClose={() => setIsAddDishToGroupOpen(false)}
+          title={`Thêm Món Mới Vào Nhóm: ${targetGroupForAdd.groupName}`}
+          maxWidth="560px"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '4px 0' }}>
+            {/* Banner tóm tắt Menu & Nhóm */}
+            <div style={{ padding: '10px 12px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '6px', fontSize: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ color: '#166534', fontWeight: 600 }}>Menu Đích:</span>
+                <span style={{ fontWeight: 700, color: '#1E40AF', backgroundColor: '#DBEAFE', padding: '2px 8px', borderRadius: '4px' }}>
+                  {targetGroupForAdd.menuCode}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ color: '#166534', fontWeight: 600 }}>Nhóm Món:</span>
+                <span style={{ fontWeight: 700, color: '#065F46' }}>
+                  {targetGroupForAdd.groupName} ({targetGroupForAdd.groupCode})
+                </span>
+              </div>
+            </div>
+
+            {/* Mã RK7 & Mã SAP */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                  Mã RK7 <span style={{ color: '#DC2626' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newDishRk7}
+                  onChange={(e) => setNewDishRk7(e.target.value)}
+                  placeholder="VD: 33162"
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '13px',
+                    fontFamily: 'Consolas, monospace',
+                    boxSizing: 'border-box'
+                  }}
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                  Mã SAP (Không bắt buộc)
+                </label>
+                <input
+                  type="text"
+                  value={newDishSap}
+                  onChange={(e) => setNewDishSap(e.target.value)}
+                  placeholder="VD: 65003506"
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '13px',
+                    fontFamily: 'Consolas, monospace',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Tên Món Ăn */}
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                Tên Món Ăn <span style={{ color: '#DC2626' }}>*</span>
+              </label>
+              <input
+                type="text"
+                value={newDishName}
+                onChange={(e) => setNewDishName(e.target.value)}
+                placeholder="VD: Combo gà nướng phô mai"
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  fontSize: '13px',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Đơn Giá & Thứ Tự */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                  Đơn Giá (VNĐ)
+                </label>
+                <input
+                  type="number"
+                  value={newDishPrice}
+                  onChange={(e) => setNewDishPrice(Number(e.target.value))}
+                  min={0}
+                  step={1000}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '13px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                  Thứ Tự Hiển Thị
+                </label>
+                <input
+                  type="number"
+                  value={newDishSortOrder}
+                  onChange={(e) => setNewDishSortOrder(Number(e.target.value))}
+                  min={1}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '13px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Link Hình Ảnh */}
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                Link Hình Ảnh (Tùy chọn)
+              </label>
+              <input
+                type="text"
+                value={newDishImg}
+                onChange={(e) => setNewDishImg(e.target.value)}
+                placeholder="VD: https://.../image.jpg"
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  fontSize: '13px',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Tùy chọn Tự kích hoạt CO */}
+            <div style={{ padding: '8px 12px', backgroundColor: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: '6px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: '#92400E' }}>
+                <input
+                  type="checkbox"
+                  checked={newDishAutoCo}
+                  onChange={(e) => setNewDishAutoCo(e.target.checked)}
+                  style={{ cursor: 'pointer' }}
+                />
+                ⚡ Tự động kích hoạt hiển thị món sang CO (Kalo = 100)
+              </label>
+            </div>
+
+            {/* Footer Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAddDishToGroupOpen(false)}
+                disabled={savingAddDishToGroup}
+              >
+                Hủy
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleSaveAddDishToGroup}
+                isLoading={savingAddDishToGroup}
+                disabled={savingAddDishToGroup || !newDishRk7.trim() || !newDishName.trim()}
+                style={{ backgroundColor: '#059669', borderColor: '#047857' }}
+                leftIcon={<Plus size={14} />}
+              >
+                Lưu & Thêm Món
               </Button>
             </div>
           </div>

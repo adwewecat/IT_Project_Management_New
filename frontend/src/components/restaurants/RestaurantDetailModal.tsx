@@ -10,27 +10,19 @@ import {
   Monitor,
   AlertTriangle,
   AlertCircle,
-  Database,
-  RefreshCw,
-  CheckCircle2,
-  XCircle,
-  ExternalLink,
   Lock,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { RestaurantItem } from '../../types/restaurant';
 import { IncidentItem } from '../../types/incident';
 import { incidentService } from '../../services/incidentService';
-import { mongoService, MongoConnectionCheckResponse } from '../../services/mongoService';
 import { VncKdsModal } from './VncKdsModal';
 import { CreateIncidentModal } from '../incidents/CreateIncidentModal';
 import { IncidentDetailModal } from '../incidents/IncidentDetailModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { copyToClipboard } from '../../utils/clipboard';
-import { checkIsSuperAdmin, checkIsAdmin, checkIsAppRole } from '../../utils/authUtils';
 
 interface RestaurantDetailModalProps {
   isOpen: boolean;
@@ -48,47 +40,9 @@ export const RestaurantDetailModal: React.FC<RestaurantDetailModalProps> = ({
   canEdit = true,
 }) => {
   const { user } = useAuth();
-  const canAccessMongo = checkIsAppRole(user) || checkIsAdmin(user) || checkIsSuperAdmin(user);
-  const navigate = useNavigate();
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [vncDetailOpen, setVncDetailOpen] = useState(false);
   const [createIncidentOpen, setCreateIncidentOpen] = useState(false);
-
-  // MongoDB checking state
-  const [isCheckingMongo, setIsCheckingMongo] = useState(false);
-  const [mongoModalOpen, setMongoModalOpen] = useState(false);
-  const [mongoCheckResult, setMongoCheckResult] = useState<MongoConnectionCheckResponse | null>(null);
-  const [mongoCheckError, setMongoCheckError] = useState<string | null>(null);
-  const [selectedMongoHost, setSelectedMongoHost] = useState<string>('');
-
-  const handleCheckMongo = async () => {
-    if (!restaurant) return;
-    setIsCheckingMongo(true);
-    setMongoModalOpen(true);
-    setMongoCheckResult(null);
-    setMongoCheckError(null);
-    setSelectedMongoHost('');
-    try {
-      const res = await mongoService.checkConnection(restaurant.id, restaurant.ip);
-      setMongoCheckResult(res);
-      const openIps = (res.candidates || []).filter(c => c.status === 'OPEN').map(c => c.ip);
-      if (openIps.length > 0) {
-        setSelectedMongoHost(openIps[0]);
-      }
-      if (!res.is_connected) {
-        setMongoCheckError(
-          res.error_message ||
-            'Nhà hàng chưa mở POS hoặc chưa được cài MongoDB hoặc chưa cài file bin kết nối IP, Vui lòng check lại cho Nhà này'
-        );
-      }
-    } catch (err: any) {
-      setMongoCheckError(
-        'Không thể thực hiện kiểm tra kết nối: ' + (err.response?.data?.detail || err.message)
-      );
-    } finally {
-      setIsCheckingMongo(false);
-    }
-  };
 
   const [pendingIncidents, setPendingIncidents] = useState<IncidentItem[]>([]);
   const [showPendingListModal, setShowPendingListModal] = useState(false);
@@ -578,34 +532,6 @@ export const RestaurantDetailModal: React.FC<RestaurantDetailModalProps> = ({
             })()}
             {restaurant.brand && <Badge variant="primary">{restaurant.brand}</Badge>}
             {restaurant.region && <Badge variant="neutral">{restaurant.region}</Badge>}
-
-            {/* Nút MongoDB Dò Tìm Kết Nối (Chỉ hiển thị cho Quyền App, Admin, Super Admin) */}
-            {canAccessMongo && (
-              <button
-                type="button"
-                onClick={handleCheckMongo}
-                disabled={isCheckingMongo}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '4px 12px',
-                  borderRadius: 'var(--radius-full)',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  backgroundColor: '#ECFDF5',
-                  color: '#047857',
-                  border: '1.5px solid #10B981',
-                  cursor: isCheckingMongo ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 1px 3px rgba(16, 185, 129, 0.2)',
-                }}
-                title="Dò tìm và kết nối MongoDB nhà hàng (quét cổng 27017 trên .11, .12, .41)"
-              >
-                <Database size={13} className={isCheckingMongo ? 'spin-animation' : ''} />
-                <span>{isCheckingMongo ? 'Đang dò...' : 'MongoDB'}</span>
-              </button>
-            )}
           </div>
         </div>
 
@@ -848,206 +774,6 @@ export const RestaurantDetailModal: React.FC<RestaurantDetailModalProps> = ({
       />
     )}
 
-    {/* Modal Dò Tìm & Kiểm Tra Kết Nối MongoDB */}
-    {mongoModalOpen && (
-      <Modal
-        isOpen={mongoModalOpen}
-        onClose={() => setMongoModalOpen(false)}
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Database size={18} style={{ color: 'var(--color-primary)' }} />
-            <span>Kiểm Tra Kết Nối MongoDB Nhà Hàng</span>
-          </div>
-        }
-        maxWidth="540px"
-        footer={
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCheckMongo}
-              isLoading={isCheckingMongo}
-              leftIcon={<RefreshCw size={14} />}
-            >
-              Dò lại
-            </Button>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <Button variant="secondary" size="sm" onClick={() => setMongoModalOpen(false)}>
-                Đóng
-              </Button>
-              {mongoCheckResult?.is_connected && (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  leftIcon={<ExternalLink size={14} />}
-                  onClick={() => {
-                    const chosenHost = selectedMongoHost || mongoCheckResult.connected_ip;
-                    setMongoModalOpen(false);
-                    onClose();
-                    navigate(`/app/restaurant-mongodb?restaurantId=${restaurant?.id}&host=${chosenHost}`);
-                  }}
-                >
-                  Vào Quản Lý MongoDB ({selectedMongoHost || mongoCheckResult.connected_ip})
-                </Button>
-              )}
-            </div>
-          </div>
-        }
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div>
-            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-              {restaurant?.res}
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-              Mã SAP: <strong>{restaurant?.sap || '—'}</strong> | Dải mạng Subnet:{' '}
-              <strong style={{ fontFamily: 'monospace' }}>
-                {mongoCheckResult?.subnet ? `${mongoCheckResult.subnet}x` : restaurant?.ip ? `${restaurant.ip.split('.').slice(0, 3).join('.')}.x` : '—'}
-              </strong>
-            </div>
-          </div>
-
-          {/* Loading state */}
-          {isCheckingMongo && (
-            <div style={{ textAlign: 'center', padding: '24px', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)' }}>
-              <RefreshCw size={28} className="spin-animation" style={{ color: 'var(--color-primary)', margin: '0 auto 10px' }} />
-              <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>
-                Đang dò tìm MongoDB trên các địa chỉ IP (.11, .12, .41)...
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Kiểm tra cổng TCP 27017
-              </div>
-            </div>
-          )}
-
-          {/* Prompt when multiple MongoDB servers are open */}
-          {!isCheckingMongo && mongoCheckResult && mongoCheckResult.candidates.filter(c => c.status === 'OPEN').length > 1 && (
-            <div
-              style={{
-                padding: '12px 14px',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: '#FFFBEA',
-                border: '1.5px solid #FCD34D',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px'
-              }}
-            >
-              <AlertTriangle size={18} style={{ color: '#D97706', flexShrink: 0 }} />
-              <div style={{ fontSize: '13px', color: '#92400E' }}>
-                <strong>Phát hiện {mongoCheckResult.candidates.filter(c => c.status === 'OPEN').length} máy chủ MongoDB đang mở!</strong> Vui lòng click chọn IP máy bạn muốn kết nối bên dưới:
-              </div>
-            </div>
-          )}
-
-          {/* Result list */}
-          {!isCheckingMongo && mongoCheckResult && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
-                KẾT QUẢ QUÉT CỔNG PORT 27017:
-              </div>
-              {mongoCheckResult.candidates.map((c) => {
-                const isOpen = c.status === 'OPEN';
-                const isSelected = isOpen && selectedMongoHost === c.ip;
-                const machineLabel = c.ip.endsWith('.11') ? 'Máy Thu Ngân 11' : c.ip.endsWith('.12') ? 'Máy Thu Ngân 12' : c.ip.endsWith('.41') ? 'Máy PC Quản Lý 41' : 'Máy POS';
-
-                return (
-                  <div
-                    key={c.ip}
-                    onClick={() => {
-                      if (isOpen) setSelectedMongoHost(c.ip);
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '12px 14px',
-                      borderRadius: 'var(--radius-md)',
-                      border: isSelected ? '2px solid var(--color-primary)' : `1.5px solid ${isOpen ? '#A7F3D0' : '#E5E7EB'}`,
-                      backgroundColor: isSelected ? '#FFFBEA' : (isOpen ? '#ECFDF5' : '#F9FAFB'),
-                      cursor: isOpen ? 'pointer' : 'default',
-                      transition: 'all 0.2s ease',
-                      boxShadow: isSelected ? '0 2px 8px rgba(245, 184, 0, 0.2)' : 'none'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      {isOpen ? (
-                        <input
-                          type="radio"
-                          name="selectedMongoHost"
-                          checked={selectedMongoHost === c.ip}
-                          onChange={() => setSelectedMongoHost(c.ip)}
-                          style={{ cursor: 'pointer' }}
-                        />
-                      ) : (
-                        <XCircle size={18} style={{ color: '#9CA3AF', flexShrink: 0 }} />
-                      )}
-                      <div>
-                        <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '13px', color: isOpen ? '#065F46' : 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span>{c.ip}:{c.port} ➔ {isOpen ? 'OPEN ✅' : 'CLOSED'}</span>
-                          {isOpen && <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>({machineLabel})</span>}
-                        </div>
-                        <div style={{ fontSize: '11px', color: isOpen ? '#047857' : 'var(--text-muted)' }}>
-                          {c.message}
-                        </div>
-                      </div>
-                    </div>
-                    {isSelected ? (
-                      <Badge variant="warning">Đang chọn kết nối</Badge>
-                    ) : isOpen ? (
-                      <Badge variant="success">Hoạt động (Click để chọn)</Badge>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Success Banner */}
-          {!isCheckingMongo && mongoCheckResult?.is_connected && (
-            <div
-              style={{
-                padding: '12px 14px',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: '#ECFDF5',
-                border: '1px solid #10B981',
-                color: '#065F46',
-                fontSize: '13px',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-              }}
-            >
-              <CheckCircle2 size={18} color="#059669" />
-              <span>Đang chọn kết nối tới: <strong>{selectedMongoHost || mongoCheckResult.connected_ip}:27017</strong>. Bấm nút dưới để truy cập.</span>
-            </div>
-          )}
-
-          {/* Error Banner when all candidate IPs failed */}
-          {!isCheckingMongo && mongoCheckError && (
-            <div
-              style={{
-                padding: '12px 14px',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: '#FEF2F2',
-                border: '1.5px solid #FCA5A5',
-                color: '#991B1B',
-                fontSize: '13px',
-                lineHeight: 1.5,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                <AlertTriangle size={18} style={{ color: '#DC2626', flexShrink: 0, marginTop: '2px' }} />
-                <div>
-                  <strong>{mongoCheckError}</strong>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </Modal>
-    )}
     </>
   );
 };

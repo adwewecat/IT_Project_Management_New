@@ -2341,6 +2341,28 @@ estaurant_service.py).
   4. *Build Lại `frontend/dist` Sạch Sẽ*:
      - Chạy `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.18s`).
 
+### [2026-10-14 - Ca Tối] - Nâng Cấp MongoDB, KDS, SO/CO, APP_PARAM & Quy Chuẩn TopScrollTable
+1. **Loại Bỏ Tính Năng MongoDB Trong Modal Nhà Hàng (`RestaurantDetailModal.tsx`)**:
+   - Xóa bỏ nút kiểm tra MongoDB và popup MongoDB khỏi chi tiết nhà hàng, dọn sạch code và imports thừa (`mongoService`, `MongoConnectionCheckResponse`...).
+2. **Sửa Lỗi Đè Giao Diện Header Phân Tích MongoDB (`RestaurantMongoAnalysisPage.tsx`)**:
+   - Khắc phục tình trạng dropdown Tác Vụ đè lên ô Mail báo cáo. Đặt flex co giãn linh hoạt (`flex: 1 1 360px`, `maxWidth: 680px`), ghim cố định khung email bên phải và chỉ hiện nút "Đồng Bộ SO ➔ CO" khi ở tác vụ Quản lý SO/CO.
+3. **Nghiệp Vụ SO/CO (`ManageMenuSoCoTask.tsx`)**:
+   - **Thêm món thẳng vào nhóm đang mở**: Nút `+ Thêm Món Vào Nhóm` ngay trên thanh tiêu đề của từng Nhóm món khi mở rộng. Mở modal nhập đầy đủ: Mã RK7, Tên món, Mã SAP, Đơn giá, Thứ tự, Hình ảnh, tùy chọn tự động kích hoạt CO.
+   - **Tắt kích hoạt CO ("Tắt CO")**: Bổ sung endpoint backend `/api/v1/mongodb/menu-so-co/deactivate-co` và nút "Tắt CO" (cả dạng đơn lẻ trên từng dòng và dạng thao tác hàng loạt). Gỡ món khỏi `CO_MENU_ITEM` và `CO_MENU_GROUP.details`, tăng `VERSION_MENU_CO`.
+   - **Thêm món hàng loạt dạng Sheets (Sheets matrix)**: Sắp xếp lại danh sách Menu theo chiều dọc, mở ra các nhóm hiện có của từng menu để chọn nhóm gán tương ứng trước khi dán danh sách món từ Excel/Sheets.
+4. **Phân Biệt & Xử Lý Nhóm Bếp vs Quầy Bếp (KDS)**:
+   - **Nhóm Bếp (`groupTypeKds`)**: Phân loại tính chất chế biến món ăn (NÓNG, SALAD, NƯỚNG, NƯỚC, LẨU...) trong `G_KITCHEN.CONFIG_COOKING`.
+   - **Quầy Bếp (`quays`/`placeIds`/`ACCOUNT`)**: Trạm thiết bị KDS & máy in nhận lệnh chế biến thực tế trong nhà hàng.
+   - Bổ sung banner giải thích chi tiết trong modal gán quầy, cho phép sửa đổi Nhóm Bếp (kèm các nút gợi ý nhanh: NÓNG, SALAD, NƯỚNG, NƯỚC...) và có checkbox **"⚡ Đồng bộ Nhóm Bếp theo tên Quầy Bếp đã chọn"** áp dụng cho 1 hoặc hàng loạt món.
+5. **Cải Tiến Bảng APP_PARAM (Task 9 - `MongoDbParamManagementTask.tsx`)**:
+   - Gộp cột Param Code và Tên Param thành 1 cột định danh phong phú (tên tiếng Việt, thẻ nhóm, mã mono kèm nút sao chép), hàng gọn gàng, trạng thái toggle trực quan, bọc trong `TopScrollTable`.
+6. **Quy Tắc Bất Di Bất Dịch Mới: Sticky Header & Top Horizontal Scrollbar (`TopScrollTable`)**:
+   - Tất cả các bảng danh sách đều phải cố định hàng tiêu đề (`position: 'sticky', top: 0, zIndex: 5`).
+   - Với bảng có chiều rộng vượt quá màn hình (phải cuộn ngang): Bắt buộc bọc trong `TopScrollTable` (`frontend/src/components/ui/TopScrollTable.tsx`) để hiển thị thanh cuộn ngang ngay trên đỉnh/kế tiêu đề, giúp người dùng cuộn ngang tức thì mà không cần kéo xuống đáy trang.
+7. **Kiểm Thử & Đóng Gói (Clean Code)**:
+   - Frontend build: `cmd /c "npm run build"` exit code 0 (`dist/` IIS ready).
+   - Backend: `python -m compileall app` và Smoke Test 100% Passed.
+
 ---
 
 ### [2026-10-04 và trước đó] - Nền Tảng & Quy Chuẩn Giao Diện Toàn Hệ Thống
