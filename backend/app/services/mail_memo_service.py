@@ -1,7 +1,9 @@
 import os
 import re
 import json
+import time
 import logging
+import threading
 from datetime import datetime, date
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
@@ -23,7 +25,11 @@ MAIL_MEMO_HISTORY_FILE = os.path.join(DATA_DIR, "mail_memo_history.json")
 class MailMemoService:
     def __init__(self):
         self._config = self._load_config()
-        self._last_agent_heartbeat: Optional[Dict[str, Any]] = None
+        self._agent_state: Optional[Dict[str, Any]] = None
+        self._scan_command_pending: bool = False
+        self._scan_command_time: float = 0
+        self._last_scan_result: Optional[Dict[str, Any]] = None
+        self._scan_done_event = threading.Event()
 
     def _load_config(self) -> Dict[str, Any]:
         default_cfg = {
@@ -69,41 +75,78 @@ class MailMemoService:
         except Exception as e:
             logger.error(f"[MAIL_MEMO] Lỗi lưu history: {e}")
 
-    def record_agent_heartbeat(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Ghi nhận tín hiệu heartbeat từ Local Agent máy cá nhân."""
+    def record_agent_poll(self, agent_data: Dict[str, Any], client_ip: str) -> Dict[str, Any]:
+        """Agent gọi định kỳ mỗi 2s để báo online và nhận lệnh quét nếu có."""
         now = datetime.now()
-        data["received_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
-        data["timestamp"] = now.timestamp()
-        self._last_agent_heartbeat = data
-        return {"status": "ok", "time": data["received_at"]}
+        agent_data["last_seen"] = now
+        agent_data["client_ip"] = client_ip
+        self._agent_state = agent_data
+
+        cmd = "idle"
+        # Nếu có lệnh quét được kích hoạt từ Web trong vòng 25s qua
+        if self._scan_command_pending and (time.time() - self._scan_command_time) < 25:
+            cmd = "scan"
+            self._scan_command_pending = False  # Reset lệnh sau khi đã giao cho agent
+
+        return {
+            "status": "ok",
+            "command": cmd,
+            "server_time": now.strftime("%Y-%m-%d %H:%M:%S")
+        }
 
     def is_agent_online(self) -> bool:
-        """Kiểm tra xem Agent có gửi tín hiệu trong vòng 75 giây qua không."""
-        if not self._last_agent_heartbeat:
+        """Agent được tính là Online nếu gửi tín hiệu trong vòng 8 giây qua."""
+        if not self._agent_state or "last_seen" not in self._agent_state:
             return False
-        ts = self._last_agent_heartbeat.get("timestamp", 0)
-        return (datetime.now().timestamp() - ts) < 75
+        return (datetime.now() - self._agent_state["last_seen"]).total_seconds() < 8
+
+    def get_agent_info(self) -> Dict[str, Any]:
+        online = self.is_agent_online()
+        if not online or not self._agent_state:
+            return {"online": False}
+        return {
+            "online": True,
+            "computer_name": self._agent_state.get("computer_name"),
+            "account": self._agent_state.get("account"),
+            "client_ip": self._agent_state.get("client_ip"),
+            "last_seen": self._agent_state["last_seen"].strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+    def request_agent_scan(self, timeout_sec: int = 25) -> Dict[str, Any]:
+        """Web kích hoạt quét: Gửi tín hiệu cho Agent và chờ Agent thực hiện."""
+        if not self.is_agent_online():
+            return {
+                "success": False,
+                "message": "Local Agent chưa bật trên máy tính cá nhân. Vui lòng mở file Chay_Outlook_Agent.bat trước!"
+            }
+        self._scan_done_event.clear()
+        self._last_scan_result = None
+        self._scan_command_time = time.time()
+        self._scan_command_pending = True
+
+        # Đợi Agent quét và đẩy kết quả qua /import-from-agent
+        finished = self._scan_done_event.wait(timeout=timeout_sec)
+        if finished and self._last_scan_result:
+            return self._last_scan_result
+        return {
+            "success": True,
+            "message": "Đã gửi lệnh quét tới Agent trên máy bạn. Quá trình quét đang diễn ra ngầm.",
+            "total_found": 0,
+            "total_imported": 0,
+        }
 
     def get_status(self) -> Dict[str, Any]:
         """Lấy trạng thái cấu hình và kết nối hòm thư."""
         cfg = self._load_config()
-        # Kiểm tra xem có Outlook Desktop đang kết nối được không
-        desktop_connected = False
-        try:
-            import win32com.client
-            outlook = win32com.client.Dispatch("Outlook.Application")
-            ns = outlook.GetNamespace("MAPI")
-            if ns and ns.Folders.Count > 0:
-                desktop_connected = True
-        except Exception:
-            desktop_connected = False
-
+        agent_info = self.get_agent_info()
         history = self._load_history()
         return {
             "email_account": cfg.get("email_account", "dung.nguyenanh@ggg.com.vn"),
             "folder_name": cfg.get("folder_name", "5. MKT"),
             "scan_keyword": cfg.get("scan_keyword", "Yêu cầu tạo nút RK cho Memo mới"),
-            "desktop_connected": desktop_connected,
+            "desktop_connected": False,
+            "agent_online": agent_info.get("online", False),
+            "agent_info": agent_info,
             "last_scan_at": cfg.get("last_scan_at"),
             "total_imported": cfg.get("total_imported", 0),
             "recent_items": history[:15],
@@ -575,7 +618,7 @@ class MailMemoService:
             f"Quét hoàn tất: Tìm thấy {len(emails_parsed)} email yêu cầu tạo nút RK. "
             f"Đã import thành công {len(new_imported_items)} Memo mới vào hệ thống (Bỏ qua {len(skipped_items)} mã đã tồn tại sẵn)."
         )
-        return {
+        result = {
             "success": True,
             "message": msg,
             "total_found": len(emails_parsed),
@@ -584,6 +627,9 @@ class MailMemoService:
             "new_items": new_imported_items,
             "skipped_items": skipped_items,
         }
+        self._last_scan_result = result
+        self._scan_done_event.set()
+        return result
 
 
 mail_memo_service = MailMemoService()

@@ -101,40 +101,39 @@ export const mailMemoService = {
 
   /**
    * Quét thông minh:
-   * 1. Ưu tiên gọi Local Agent trên máy bạn (để đọc Outlook Desktop máy bạn kể cả khi web chạy trên Server).
-   * 2. Nếu Agent online -> Quét Outlook máy bạn rồi đẩy kết quả lên Server lưu DB.
-   * 3. Nếu Agent offline -> Thử gọi Server (dành cho trường hợp đang dev trực tiếp trên máy).
+   * 1. Ưu tiên gọi qua Server Relay (Server ra lệnh cho Agent đang Online quét và trả kết quả về Web).
+   * 2. Hoàn toàn không bị Chrome chặn Private Network Access hay CORS loopback.
+   * 3. Fallback thử gọi trực tiếp Local Agent nếu người dùng chạy trên localhost.
    */
   async smartScan(maxItems: number = 400): Promise<MailMemoScanResponse> {
-    const agentStatus = await this.checkLocalAgent();
-    if (agentStatus.online) {
-      // 1. Quét từ Local Agent (dùng activeAgentUrl vừa dò được)
-      const scanRes = await fetch(`${this.activeAgentUrl}/scan?max_items=${maxItems}`, {
-        method: 'GET',
-      });
-      if (!scanRes.ok) {
-        throw new Error('Local Agent trả về lỗi khi đọc Outlook.');
+    try {
+      return await this.triggerScan(maxItems);
+    } catch (err: any) {
+      const detail = err.response?.data?.detail || err.message;
+      // Nếu Server báo lỗi (chưa có agent hoặc lỗi kết nối), thử gọi trực tiếp local agent
+      try {
+        const agentStatus = await this.checkLocalAgent();
+        if (agentStatus.online) {
+          const scanRes = await fetch(`${this.activeAgentUrl}/scan?max_items=${maxItems}`, {
+            method: 'GET',
+          });
+          if (scanRes.ok) {
+            const scanData = await scanRes.json();
+            if (scanData.success) {
+              const serverRes = await this.importFromAgent(scanData.items || []);
+              return {
+                ...serverRes,
+                source: 'local_agent',
+                message: `[Local Agent] Đã đọc ${scanData.total_found} email từ Outlook máy bạn. ${serverRes.message}`,
+              };
+            }
+          }
+        }
+      } catch {
+        // Bỏ qua lỗi local fallback
       }
-      const scanData = await scanRes.json();
-      if (!scanData.success) {
-        throw new Error(scanData.message || 'Lỗi khi đọc Outlook Desktop qua Agent');
-      }
-
-      // 2. Gửi dữ liệu đã bóc tách lên Server để lưu DB
-      const items = scanData.items || [];
-      const serverRes = await this.importFromAgent(items);
-      return {
-        ...serverRes,
-        source: 'local_agent',
-        message: `[Local Agent] Đã đọc ${scanData.total_found} email từ Outlook máy bạn. ${serverRes.message}`,
-      };
+      throw new Error(detail || 'Không thể quét Outlook: Vui lòng kiểm tra file Chay_Outlook_Agent.bat trên máy tính cá nhân của bạn!');
     }
-
-    // Nếu Agent không online trên máy này: Thông báo rõ ràng
-    throw new Error(
-      `Máy tính này chưa bật Local Agent (127.0.0.1:18890 / 18899). ` +
-      `Vui lòng nhấp đúp file "Chay_Outlook_Agent.bat" trên máy tính có cài đặt Outlook của bạn trước khi bấm Quét!`
-    );
   },
 
   /**

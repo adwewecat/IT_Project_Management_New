@@ -7389,13 +7389,13 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
                     borderRadius: '12px',
                     fontSize: '11px',
                     fontWeight: 700,
-                    backgroundColor: (localAgentStatus?.online || mailMemoStatus?.desktop_connected) ? '#DEF7EC' : '#FEF3C7',
-                    color: (localAgentStatus?.online || mailMemoStatus?.desktop_connected) ? '#03543F' : '#92400E',
-                    border: `1px solid ${(localAgentStatus?.online || mailMemoStatus?.desktop_connected) ? '#31C48D' : '#FCD34D'}`
+                    backgroundColor: (mailMemoStatus?.agent_online || localAgentStatus?.online) ? '#DEF7EC' : '#FEF3C7',
+                    color: (mailMemoStatus?.agent_online || localAgentStatus?.online) ? '#03543F' : '#92400E',
+                    border: `1px solid ${(mailMemoStatus?.agent_online || localAgentStatus?.online) ? '#31C48D' : '#FCD34D'}`
                   }}
                 >
-                  {localAgentStatus?.online 
-                    ? '🟢 Đã Kết Nối Qua Máy Cá Nhân' 
+                  {(mailMemoStatus?.agent_online || localAgentStatus?.online)
+                    ? `🟢 Đã Kết Nối Agent Máy Cá Nhân (${mailMemoStatus?.agent_info?.computer_name || 'Online'})`
                     : (mailMemoStatus?.desktop_connected ? '🟢 Đã Kết Nối Trực Tiếp' : '🟡 Chờ Bật Agent Máy Cá Nhân')}
                 </span>
               </div>
@@ -7420,12 +7420,14 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
                           borderRadius: '10px',
                           fontSize: '11px',
                           fontWeight: 700,
-                          backgroundColor: localAgentStatus?.online ? '#DEF7EC' : '#FEF3C7',
-                          color: localAgentStatus?.online ? '#03543F' : '#92400E',
-                          border: `1px solid ${localAgentStatus?.online ? '#31C48D' : '#FCD34D'}`
+                          backgroundColor: (mailMemoStatus?.agent_online || localAgentStatus?.online) ? '#DEF7EC' : '#FEF3C7',
+                          color: (mailMemoStatus?.agent_online || localAgentStatus?.online) ? '#03543F' : '#92400E',
+                          border: `1px solid ${(mailMemoStatus?.agent_online || localAgentStatus?.online) ? '#31C48D' : '#FCD34D'}`
                         }}
                       >
-                        {localAgentStatus?.online ? '🟢 Agent Đang Bật (Máy Này)' : '⚪ Agent Chưa Bật (Máy Này)'}
+                        {(mailMemoStatus?.agent_online || localAgentStatus?.online)
+                          ? `🟢 Agent Đang Bật (${mailMemoStatus?.agent_info?.computer_name || 'Online'})`
+                          : '⚪ Agent Chưa Bật'}
                       </span>
                       <Button
                         variant="outline"

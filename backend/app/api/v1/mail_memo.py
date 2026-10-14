@@ -59,14 +59,15 @@ def trigger_scan_mail_memos(
     current_user = Depends(require_super_admin_or_dung)
 ):
     """
-    Kích hoạt quét hòm thư Outlook và tự động import Memo vào database.
+    Kích hoạt quét hòm thư Outlook:
+    Gửi lệnh cho Agent trên máy cá nhân đang Online quét và chờ kết quả.
     (Chỉ dung.nguyenanh hoặc Super Admin)
     """
     if not check_is_dung_or_super_admin(current_user):
         raise HTTPException(status_code=403, detail="Chỉ dung.nguyenanh hoặc Super Admin mới có quyền thực hiện.")
-    res = mail_memo_service.scan_and_import_memos(max_items=max_items)
+    res = mail_memo_service.request_agent_scan(timeout_sec=30)
     if not res.get("success"):
-        raise HTTPException(status_code=500, detail=res.get("message", "Lỗi quét mail Memo"))
+        raise HTTPException(status_code=400, detail=res.get("message", "Lỗi quét mail Memo qua Agent"))
     return res
 
 
@@ -127,7 +128,29 @@ def agent_heartbeat(
         raise HTTPException(status_code=403, detail="X-Agent-Secret không hợp lệ.")
     data = req.dict()
     data["client_ip"] = request.client.host if request.client else "unknown"
-    return mail_memo_service.record_agent_heartbeat(data)
+    return mail_memo_service.record_agent_poll(data, data["client_ip"])
+
+
+class AgentPollRequest(BaseModel):
+    account: Optional[str] = None
+    computer_name: Optional[str] = None
+    version: Optional[str] = "1.0"
+    is_syncing: Optional[bool] = False
+
+
+@router.post("/agent-poll")
+def agent_poll_endpoint(
+    req: AgentPollRequest,
+    request: Request
+):
+    """
+    Agent gọi định kỳ 2s/lần để báo hiệu Online và nhận lệnh quét từ Server nếu có.
+    """
+    x_secret = request.headers.get("X-Agent-Secret")
+    if not x_secret or x_secret.strip() != AGENT_SHARED_SECRET:
+        raise HTTPException(status_code=403, detail="X-Agent-Secret không hợp lệ.")
+    client_ip = request.client.host if request.client else "unknown"
+    return mail_memo_service.record_agent_poll(req.dict(), client_ip)
 
 
 @router.get("/download-agent")
