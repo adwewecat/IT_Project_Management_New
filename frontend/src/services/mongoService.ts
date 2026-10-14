@@ -947,6 +947,20 @@ export const mongoService = {
     return res.data;
   },
 
+  transferKdsDishesQuay: async (
+    payload: KdsTransferQuayRequest
+  ): Promise<KdsTransferQuayResponse> => {
+    const res = await api.post<KdsTransferQuayResponse>('/mongodb/kds-dishes/transfer-quay', payload);
+    return res.data;
+  },
+
+  getKdsLogs: async (
+    payload: KdsLogQueryRequest
+  ): Promise<KdsLogQueryResponse> => {
+    const res = await api.post<KdsLogQueryResponse>('/mongodb/kds-logs', payload);
+    return res.data;
+  },
+
   updateKdsPlacePrinter: async (
     payload: KdsUpdatePlacePrinterRequest
   ): Promise<KdsUpdatePlacePrinterResponse> => {
@@ -1460,6 +1474,61 @@ export interface KdsAssignDishQuayResponse {
   success: boolean;
   modified_count: number;
   message: string;
+}
+
+export interface KdsTransferQuayRequest {
+  host: string;
+  port?: number;
+  from_place_id: number;
+  to_place_id: number;
+  menu_item_codes?: string[];
+  keep_source?: boolean;
+}
+
+export interface KdsTransferQuayResponse {
+  success: boolean;
+  modified_count: number;
+  from_place_name: string;
+  to_place_name: string;
+  message: string;
+}
+
+export interface KdsLogQueryRequest {
+  host: string;
+  port?: number;
+  date: string; // YYYY-MM-DD
+  table?: string;
+  query?: string;
+  from_time?: string;
+  to_time?: string;
+  limit?: number;
+}
+
+export interface KdsLogItem {
+  id: string;
+  table_name: string;
+  dish_name: string;
+  menu_item_code: string;
+  sap_code: string;
+  place_name: string;
+  account_name?: string | null;
+  order_time?: string | null;
+  done_time?: string | null;
+  actual_minutes: number;
+  config_minutes: number;
+  delay_minutes: number;
+  status_label: string;
+  source_collection: string;
+}
+
+export interface KdsLogQueryResponse {
+  success: boolean;
+  total: number;
+  date: string;
+  table_filter?: string | null;
+  query_filter?: string | null;
+  logs: KdsLogItem[];
+  message?: string;
 }
 
 export interface KdsUpdatePlacePrinterRequest {

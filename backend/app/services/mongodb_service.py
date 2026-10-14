@@ -177,6 +177,11 @@ from app.schemas.mongodb import (
     KdsCreateFoodControlResponse,
     KdsAssignDishQuayRequest,
     KdsAssignDishQuayResponse,
+    KdsTransferQuayRequest,
+    KdsTransferQuayResponse,
+    KdsLogQueryRequest,
+    KdsLogItem,
+    KdsLogQueryResponse,
     KdsUpdatePlacePrinterRequest,
     KdsUpdatePlacePrinterResponse,
     KdsPlaceDeleteRequest,
@@ -2496,6 +2501,304 @@ class MongoDBService:
                 success=True,
                 modified_count=modified_count,
                 message=f"Đã cập nhật quầy thành công cho {len(payload.menu_item_codes)} món!"
+            )
+        finally:
+            client.close()
+
+    @staticmethod
+    def transfer_kds_dishes_quay(
+        current_user: UserInfo,
+        payload: KdsTransferQuayRequest,
+        db: Optional[Session] = None
+    ) -> KdsTransferQuayResponse:
+        client = MongoClient(payload.host, payload.port, serverSelectionTimeoutMS=4000)
+        try:
+            db_kitchen = client["G_KITCHEN"]
+            cook_col = db_kitchen["CONFIG_COOKING"]
+
+            kds_cfg = db_kitchen["CONFIG_KDS"].find_one() or {}
+            place_names = {}
+            for p in (kds_cfg.get("places") or []):
+                if isinstance(p, dict) and p.get("id") is not None:
+                    place_names[int(p["id"])] = p.get("name", f"Quầy #{p['id']}")
+
+            from_name = place_names.get(payload.from_place_id, f"Quầy #{payload.from_place_id}")
+            to_name = place_names.get(payload.to_place_id, f"Quầy #{payload.to_place_id}")
+
+            match_filter: Dict[str, Any] = {"placeIds": payload.from_place_id}
+            if payload.menu_item_codes and len(payload.menu_item_codes) > 0:
+                clean_codes = [str(c).strip() for c in payload.menu_item_codes if str(c).strip()]
+                int_codes = [int(c) for c in clean_codes if c.isdigit()]
+                all_codes = list(set(clean_codes + int_codes))
+                match_filter = {
+                    "$and": [
+                        {"placeIds": payload.from_place_id},
+                        {"menuItemCode": {"$in": all_codes}}
+                    ]
+                }
+
+            matched_docs = list(cook_col.find(match_filter, {"_id": 1}))
+            if not matched_docs:
+                return KdsTransferQuayResponse(
+                    success=True,
+                    modified_count=0,
+                    from_place_name=from_name,
+                    to_place_name=to_name,
+                    message=f"Không tìm thấy món nào thuộc {from_name} để chuyển sang {to_name}."
+                )
+
+            doc_ids = [d["_id"] for d in matched_docs]
+
+            if not payload.keep_source:
+                cook_col.update_many(
+                    {"_id": {"$in": doc_ids}},
+                    {
+                        "$pull": {"placeIds": payload.from_place_id},
+                        "$addToSet": {"placeIds": payload.to_place_id}
+                    }
+                )
+            else:
+                cook_col.update_many(
+                    {"_id": {"$in": doc_ids}},
+                    {"$addToSet": {"placeIds": payload.to_place_id}}
+                )
+
+            if db:
+                try:
+                    action_desc = (
+                        f"Chuyển toàn bộ {len(doc_ids)} món từ {from_name} sang {to_name}"
+                        if not payload.menu_item_codes
+                        else f"Chuyển {len(doc_ids)} món chọn lọc từ {from_name} sang {to_name}"
+                    )
+                    log_entry = AuditLog(
+                        USER_ACTION=current_user.username,
+                        ACTION_TYPE="TRANSFER_KDS_QUAY",
+                        TARGET_OBJECT=f"CONFIG_COOKING:from_{payload.from_place_id}_to_{payload.to_place_id}",
+                        DESCRIPTION=f"{action_desc} trên {payload.host}:{payload.port}",
+                        DETAILS=json.dumps({
+                            "host": payload.host,
+                            "from_place_id": payload.from_place_id,
+                            "to_place_id": payload.to_place_id,
+                            "count": len(doc_ids),
+                            "keep_source": payload.keep_source
+                        }),
+                        DATE_ACTION=datetime.datetime.now(),
+                    )
+                    db.add(log_entry)
+                    db.commit()
+                except Exception:
+                    pass
+
+            return KdsTransferQuayResponse(
+                success=True,
+                modified_count=len(doc_ids),
+                from_place_name=from_name,
+                to_place_name=to_name,
+                message=f"Đã chuyển thành công {len(doc_ids)} món từ {from_name} sang {to_name}!"
+            )
+        finally:
+            client.close()
+
+    @staticmethod
+    def get_kds_logs(
+        payload: KdsLogQueryRequest,
+        current_user: UserInfo
+    ) -> KdsLogQueryResponse:
+        client = MongoClient(payload.host, payload.port, serverSelectionTimeoutMS=4000)
+        logs: List[KdsLogItem] = []
+        try:
+            date_str = payload.date.strip()
+            if "/" in date_str:
+                parts = date_str.split("/")
+                if len(parts) == 3:
+                    if len(parts[2]) == 4:
+                        date_str = f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
+                    elif len(parts[0]) == 4:
+                        date_str = f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
+
+            from_t = payload.from_time.strip() if payload.from_time else "00:00:00"
+            if len(from_t) == 5:
+                from_t += ":00"
+            to_t = payload.to_time.strip() if payload.to_time else "23:59:59"
+            if len(to_t) == 5:
+                to_t += ":59"
+
+            start_dt = datetime.datetime.strptime(f"{date_str} {from_t}", "%Y-%m-%d %H:%M:%S")
+            end_dt = datetime.datetime.strptime(f"{date_str} {to_t}", "%Y-%m-%d %H:%M:%S")
+            start_ms = int(start_dt.timestamp() * 1000)
+            end_ms = int(end_dt.timestamp() * 1000)
+
+            all_dbs = client.list_database_names()
+            db_kitchen = client["G_KITCHEN"] if "G_KITCHEN" in all_dbs else None
+            db_order = client["G_ORDER"] if "G_ORDER" in all_dbs else None
+
+            place_map: Dict[int, str] = {}
+            if db_kitchen:
+                cfg = db_kitchen["CONFIG_KDS"].find_one() or {}
+                for p in (cfg.get("places") or []):
+                    if isinstance(p, dict) and p.get("id") is not None:
+                        try:
+                            place_map[int(p["id"])] = p.get("name", f"Quầy #{p['id']}")
+                        except Exception:
+                            pass
+
+            table_filter = payload.table.strip().lower() if payload.table else None
+            query_filter = _remove_vietnamese_tones(payload.query.strip()) if payload.query else None
+
+            def parse_time_val(val: Any) -> Optional[datetime.datetime]:
+                if not val:
+                    return None
+                if isinstance(val, datetime.datetime):
+                    return val
+                if isinstance(val, (int, float)):
+                    if val > 1000000000000:
+                        return datetime.datetime.fromtimestamp(val / 1000.0)
+                    elif val > 1000000000:
+                        return datetime.datetime.fromtimestamp(val)
+                if isinstance(val, str):
+                    val_str = val.strip()
+                    for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %I:%M:%S %p", "%d/%m/%Y %I:%M:%S%p"]:
+                        try:
+                            return datetime.datetime.strptime(val_str.split(".")[0], fmt.split(".")[0])
+                        except Exception:
+                            pass
+                return None
+
+            # 1. Quét G_KITCHEN.LOG_DISH_FINISH_ITEM
+            if db_kitchen and "LOG_DISH_FINISH_ITEM" in db_kitchen.list_collection_names():
+                col_finish = db_kitchen["LOG_DISH_FINISH_ITEM"]
+                time_cond = {
+                    "$or": [
+                        {"submitTime": {"$gte": start_ms, "$lte": end_ms}},
+                        {"deliveryTime": {"$gte": start_ms, "$lte": end_ms}},
+                        {"submitTime": {"$gte": start_dt, "$lte": end_dt}},
+                        {"deliveryTime": {"$gte": start_dt, "$lte": end_dt}},
+                    ]
+                }
+                cursor = col_finish.find(time_cond).sort("submitTime", -1).limit(payload.limit)
+                for doc in cursor:
+                    m = doc.get("menuItem") or {}
+                    c = doc.get("configCooking") or {}
+                    m_code = str(m.get("code") or doc.get("menuItemCode") or "").strip()
+                    m_name = str(m.get("name") or doc.get("menuItemName") or "").strip()
+                    m_sap = str(m.get("sapCode") or doc.get("sapCode") or "").strip()
+                    tbl = str(doc.get("tableName") or doc.get("table") or doc.get("tableCode") or "-").strip()
+
+                    if table_filter and table_filter not in tbl.lower():
+                        continue
+
+                    if query_filter:
+                        combined = f"{_remove_vietnamese_tones(m_name)} {m_code.lower()} {m_sap.lower()}"
+                        if query_filter not in combined:
+                            continue
+
+                    sub_dt = parse_time_val(doc.get("submitTime"))
+                    deliv_dt = parse_time_val(doc.get("deliveryTime"))
+
+                    sub_ms = doc.get("submitTime") if isinstance(doc.get("submitTime"), (int, float)) else (int(sub_dt.timestamp() * 1000) if sub_dt else 0)
+                    deliv_ms = doc.get("deliveryTime") if isinstance(doc.get("deliveryTime"), (int, float)) else (int(deliv_dt.timestamp() * 1000) if deliv_dt else 0)
+
+                    actual_mins = 0.0
+                    if sub_ms and deliv_ms and deliv_ms >= sub_ms:
+                        actual_mins = round((deliv_ms - sub_ms) / 60000.0, 1)
+
+                    raw_cfg = c.get("singleCookingTime") or doc.get("singleCookingTime") or 0
+                    config_mins = round(float(raw_cfg) / 60.0, 1) if raw_cfg else 0.0
+
+                    delay_mins = round(max(0.0, actual_mins - config_mins), 1)
+                    if not deliv_dt:
+                        status_lbl = "Đang chế biến (Chưa Done)"
+                    elif config_mins > 0 and actual_mins > config_mins:
+                        status_lbl = f"Trễ {delay_mins:.1f}p"
+                    else:
+                        status_lbl = "Kịp giờ"
+
+                    pid = doc.get("placeId") or (c.get("placeIds", [None])[0] if c.get("placeIds") else None)
+                    p_name = str(doc.get("placeName") or place_map.get(pid) or (f"Quầy #{pid}" if pid else "Quầy Bếp"))
+
+                    logs.append(KdsLogItem(
+                        id=str(doc.get("_id")),
+                        table_name=tbl,
+                        dish_name=m_name or "Món ăn",
+                        menu_item_code=m_code,
+                        sap_code=m_sap,
+                        place_name=p_name,
+                        account_name=str(doc.get("accountName") or doc.get("accName") or doc.get("user") or "-"),
+                        order_time=sub_dt.strftime("%d/%m/%Y %H:%M:%S") if sub_dt else "-",
+                        done_time=deliv_dt.strftime("%d/%m/%Y %H:%M:%S") if deliv_dt else "Chưa Done",
+                        actual_minutes=actual_mins,
+                        config_minutes=config_mins,
+                        delay_minutes=delay_mins,
+                        status_label=status_lbl,
+                        source_collection="G_KITCHEN.LOG_DISH_FINISH_ITEM"
+                    ))
+
+            # 2. Quét G_ORDER.ORDER_DELIVERY_LOG
+            if db_order and "ORDER_DELIVERY_LOG" in db_order.list_collection_names() and len(logs) < payload.limit:
+                col_deliv = db_order["ORDER_DELIVERY_LOG"]
+                q_deliv = {
+                    "$or": [
+                        {"time": {"$gte": start_ms, "$lte": end_ms}},
+                        {"orderTime": {"$gte": start_ms, "$lte": end_ms}},
+                        {"time": {"$gte": start_dt, "$lte": end_dt}},
+                    ]
+                }
+                rem_limit = payload.limit - len(logs)
+                cursor2 = col_deliv.find(q_deliv).sort("time", -1).limit(rem_limit)
+                for doc in cursor2:
+                    m = doc.get("menuItem") or {}
+                    m_code = str(m.get("code") or doc.get("itemCode") or "").strip()
+                    m_name = str(m.get("name") or doc.get("itemName") or "").strip()
+                    m_sap = str(m.get("sapCode") or "").strip()
+                    tbl = str(doc.get("tableName") or doc.get("table") or "-").strip()
+
+                    if table_filter and table_filter not in tbl.lower():
+                        continue
+                    if query_filter:
+                        combined = f"{_remove_vietnamese_tones(m_name)} {m_code.lower()} {m_sap.lower()}"
+                        if query_filter not in combined:
+                            continue
+
+                    ord_dt = parse_time_val(doc.get("orderTime") or doc.get("submitTime"))
+                    deliv_dt = parse_time_val(doc.get("time") or doc.get("deliveryTime"))
+
+                    actual_raw = doc.get("actualCookTime") or 0
+                    actual_mins = round(float(actual_raw) / 60000.0, 1) if actual_raw else 0.0
+                    if actual_mins == 0.0 and ord_dt and deliv_dt:
+                        diff_sec = (deliv_dt - ord_dt).total_seconds()
+                        if diff_sec > 0:
+                            actual_mins = round(diff_sec / 60.0, 1)
+
+                    cfg_raw = doc.get("configCookTime") or 0
+                    config_mins = round(float(cfg_raw) / 60000.0, 1) if cfg_raw else 0.0
+                    delay_mins = round(max(0.0, actual_mins - config_mins), 1)
+                    status_lbl = f"Trễ {delay_mins:.1f}p" if (config_mins > 0 and actual_mins > config_mins) else "Kịp giờ"
+
+                    logs.append(KdsLogItem(
+                        id=str(doc.get("_id")),
+                        table_name=tbl,
+                        dish_name=m_name or "Món ăn",
+                        menu_item_code=m_code,
+                        sap_code=m_sap,
+                        place_name=str(doc.get("placeName") or "Quầy Bếp"),
+                        account_name=str(doc.get("accountName") or doc.get("user") or "-"),
+                        order_time=ord_dt.strftime("%d/%m/%Y %H:%M:%S") if ord_dt else "-",
+                        done_time=deliv_dt.strftime("%d/%m/%Y %H:%M:%S") if deliv_dt else "-",
+                        actual_minutes=actual_mins,
+                        config_minutes=config_mins,
+                        delay_minutes=delay_mins,
+                        status_label=status_lbl,
+                        source_collection="G_ORDER.ORDER_DELIVERY_LOG"
+                    ))
+
+            return KdsLogQueryResponse(
+                success=True,
+                total=len(logs),
+                date=date_str,
+                table_filter=payload.table,
+                query_filter=payload.query,
+                logs=logs,
+                message=f"Đã tìm thấy {len(logs)} bản ghi nhật ký KDS trong ngày {date_str}."
             )
         finally:
             client.close()

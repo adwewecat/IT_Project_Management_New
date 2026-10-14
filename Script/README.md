@@ -168,6 +168,36 @@ npm run dev
 
 ---
 
+### [2026-10-14] - Nâng Cấp KDS & Khắc Phục Lỗi Phân Tích MongoDB Nhà Hàng (Menu Rỗng & Kẹt Kết Nối & Logs KDS & Chuyển Quầy)
+- **Màn hình**: Phân Tích MongoDB Nhà Hàng (`RestaurantMongoAnalysisPage.tsx`, `KdsQuayModals.tsx`, `mongo_menu_so_co_service.py`, `mongodb_service.py`).
+- **Nội dung xử lý chi tiết theo yêu cầu**:
+  1. **Khắc phục lỗi Menu rỗng ở Tác vụ 3 (Xử Lý SO/CO)**:
+     - *Hiện tượng*: Kết nối `[4954] UNION DISTRICT PIZZA & GRILL Xuân Thủy` thì ô "Chọn Menu:" bị rỗng, chỉ khi tick "Tìm trong TẤT CẢ Menu" mới thấy hiện Menu 166. Trong khi các nhà hàng khác như Chixmax Vạn Hạnh Mall đều hiện menu bình thường.
+     - *Nguyên nhân*: Ở nhà hàng này, bảng `G_ORDER.RESTAURANT_CATEGORY` bị rỗng hoặc không liên kết category, trong khi menu lại nằm trong bảng cache `G_ORDER.ORDER_MENU_CACHE_CATEGORY`. Hàm `get_menu_categories` trước đó chỉ quét `RESTAURANT_CATEGORY`.
+     - *Giải pháp*: Trong [`mongo_menu_so_co_service.py`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/services/mongo_menu_so_co_service.py), bổ sung cơ chế quét đồng thời cả `ORDER_MENU_CACHE_CATEGORY` để lấy danh sách category/menu và tự động merge vào kết quả nếu thiếu trong `RESTAURANT_CATEGORY`. Đảm bảo menu luôn hiển thị đầy đủ ngay cả với các nhà hàng có cấu trúc dữ liệu đặc thù.
+  2. **Khắc phục lỗi kẹt nhà hàng cũ khi chọn nhà hàng mới ở Tác vụ 4 (Check / xử lý KDS)**:
+     - *Hiện tượng*: Khi chọn nhà hàng mới (VD: `[4394] Isushi Trường Sơn`), banner phía trên và dữ liệu bảng KDS vẫn kẹt kết nối tới nhà hàng cũ (Chixmax Vạn Hạnh Mall) với 184 món.
+     - *Nguyên nhân*: Trong `handleSelectRestaurant`, URL param `host` của nhà cũ không được xóa; khi nhà hàng mới kết nối thất bại (do chưa mở POS/chưa có Mongo), các state `connectedHost`, `restaurantGposInfo`, `kdsData`, `kdsPlaces` không được reset, khiến giao diện tiếp tục lấy dữ liệu cũ và banner GPOS ưu tiên hiển thị tên từ `restaurantGposInfo` cũ.
+     - *Giải pháp*: Reset triệt để `connectedHost`, `restaurantGposInfo`, `kdsData`, `kdsPlaces`, `availableCandidates`, `selectedKdsDishCodes` ngay khi người dùng chọn nhà hàng mới và trong các khối xử lý thất bại / catch của `connectMongo`. Đồng thời cập nhật URL param chỉ giữ `restaurantId`, loại bỏ ngay `host` cũ.
+  3. **Bổ sung tính năng Chuyển Quầy Bếp (Toàn bộ hoặc 1 phần món chọn lọc)**:
+     - *Yêu cầu*: Cho phép chuyển toàn bộ hoặc một số món chọn lọc từ quầy bếp này sang quầy bếp khác (Ví dụ: từ `BEP NONG 1` sang `BEP NONG 2`).
+     - *Triển khai*:
+       - Backend: Bổ sung endpoint `POST /api/v1/mongodb/kds-dishes/transfer-quay` và hàm `transfer_kds_dishes_quay` trong [`mongodb_service.py`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/services/mongodb_service.py). Hàm xử lý atomic cập nhật collection `CONFIG_COOKING`, hỗ trợ tùy chọn chuyển hẳn (rút khỏi quầy nguồn) hoặc thêm vào (giữ cả nguồn lẫn đích), đồng thời ghi vết vào `AUDIT_LOG_COLLECTION`.
+       - Frontend: Tạo modal [`KdsTransferQuayModal`](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/pages/app/KdsQuayModals.tsx), thêm nút chuyển nhanh trên thanh Quick Filters Quầy Bếp (ACCOUNT) `Chuyển Món Của Quầy [...] ➔`, nút trên toolbar KDS và nút hành động hàng loạt `🔄 Chuyển Quầy (X món)` khi tick chọn các món trong bảng.
+  4. **Di chuyển "🛡️ ✓ Đã có Food Control" vào bên trong popup "+ Thêm Quầy & Account"**:
+     - Kéo trạng thái Food Control vào bên trong modal [`KdsAddQuayModal`](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/pages/app/KdsQuayModals.tsx) với banner thông báo trạng thái rõ ràng (đã có trạm tổng điều phối, tránh tạo trùng lặp).
+  5. **Tính năng mới "Logs KDS (Order & Ra Món)" phục vụ kiểm tra khiếu nại trễ món**:
+     - *Vị trí*: Thế chỗ chữ "🛡️ ✓ Đã có Food Control" trên toolbar KDS bằng nút nổi bật `📋 Logs KDS (Order & Ra Món)`.
+     - *Chức năng*: Tra cứu chi tiết lịch sử món order từ CO/SO xuống KDS và thời gian bấm Done món trên KDS. Quét đồng thời `G_KITCHEN.LOG_DISH_FINISH_ITEM` và `G_ORDER.ORDER_DELIVERY_LOG`.
+     - *Bộ lọc chuyên sâu*: Tìm theo ngày, khoảng giờ (Từ giờ - Đến giờ), Bàn ăn (VD: `B14`), Tên món / Mã SAP (VD: `60022506`, `Mỳ Ý xốt kem vị Truffle`).
+     - *Phân tích chi tiết*: Tính toán chính xác thời gian ra món thực tế (`actual_minutes`), thời gian cấu hình (`config_minutes`), và độ trễ món (`delay_minutes`), phân loại trạng thái: 🟢 Đúng giờ, 🟡 Quá giờ, 🔴 Trễ món nghiêm trọng (> 30p), ⏳ Đang nấu.
+     - *Xuất báo cáo 1 chạm*: Có nút `📋 Copy Báo Cáo Gửi Nhà Hàng` định dạng văn bản chuẩn chỉnh để trả lời khiếu nại của nhà hàng ngay lập tức.
+  6. **Đóng gói & Kiểm thử**:
+     - Backend Smoke Test: `python -c "from app.main import app; print('>>> BACKEND SMOKE TEST: PASSED 100%')"` $\rightarrow$ Đạt 100%.
+     - Frontend Build: `cmd /c "npm run build"` $\rightarrow$ Exit code 0, tạo mới `dist/assets/index-C0nBNqRG.js`.
+
+---
+
 ### [2026-10-12] - Sửa Triệt Để Lỗi NameError Khởi Động Backend Trên IIS & Ban Hành Quy Tắc Bất Biến Về Thứ Tự Khai Báo & Smoke Test
 - **Bối cảnh & Yêu cầu người dùng**:
   - Khi khởi động backend trên IIS (qua file batch), hệ thống văng lỗi dừng server:

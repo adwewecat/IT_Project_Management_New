@@ -47,7 +47,6 @@ import {
   Mail,
   Info,
   ShieldCheck,
-  Shield,
   Power,
   ArrowRightLeft,
   Zap,
@@ -63,7 +62,14 @@ import { FixCpuMongoTask } from './FixCpuMongoTask';
 import { MongoDbTransferTask } from './MongoDbTransferTask';
 import { MongoDbParamManagementTask } from './MongoDbParamManagementTask';
 import { ManageMenuSoCoTask } from './ManageMenuSoCoTask';
-import { KdsAddQuayModal, KdsQuayListModal, KdsRoleUserModal, ModalCreateFoodControl } from './KdsQuayModals';
+import {
+  KdsAddQuayModal,
+  KdsQuayListModal,
+  KdsRoleUserModal,
+  ModalCreateFoodControl,
+  KdsTransferQuayModal,
+  KdsLogsModal
+} from './KdsQuayModals';
 import { BatchRoleUserModal } from './BatchRoleUserModal';
 import { AndroidEmulatorTab } from './AndroidEmulatorTab';
 
@@ -589,7 +595,11 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
         fetchRestaurantGposInfo(hostToUse, rest.id);
       } else {
         setConnectedHost('');
+        setRestaurantGposInfo(null);
+        setKdsData(null);
+        setKdsPlaces([]);
         setAvailableCandidates([]);
+        setSearchParams({ restaurantId: String(rest.id) });
         setConnectionError(
           res.error_message ||
             'Nhà hàng chưa mở POS hoặc chưa được cài MongoDB hoặc chưa cài file bin kết nối IP, Vui lòng check lại cho Nhà này'
@@ -597,7 +607,11 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
       }
     } catch (err: any) {
       setConnectedHost('');
+      setRestaurantGposInfo(null);
+      setKdsData(null);
+      setKdsPlaces([]);
       setAvailableCandidates([]);
+      setSearchParams({ restaurantId: String(rest.id) });
       setConnectionError('Lỗi kết nối máy chủ: ' + (err.response?.data?.detail || err.message));
     } finally {
       setIsConnecting(false);
@@ -639,13 +653,22 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
     setIsDropdownOpen(false);
     setRestaurantSearchQuery('');
     hasAutoSwitchedKdsRef.current = null;
+
+    // Reset toàn bộ trạng thái kết nối & dữ liệu cũ để tránh nhầm lẫn dữ liệu nhà hàng trước
+    setConnectedHost('');
+    setRestaurantGposInfo(null);
+    setAvailableCandidates([]);
+    setConnectionError(null);
+    setKdsData(null);
+    setKdsPlaces([]);
+    setTabletUsersData(null);
+    setLockStatus(null);
+    setSelectedKdsDishCodes([]);
+
     if (rest) {
+      setSearchParams({ restaurantId: String(rest.id) });
       connectMongo(rest);
     } else {
-      setConnectedHost('');
-      setAvailableCandidates([]);
-      setConnectionError(null);
-      setRestaurantGposInfo(null);
       setSearchParams({});
     }
   };
@@ -1326,9 +1349,10 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
   const [togglingKdsMaster, setTogglingKdsMaster] = useState<boolean>(false);
 
   const fetchKdsItems = async (hostOverride?: string) => {
-    const hostToUse = hostOverride || connectedHost || searchParams.get('host') || selectedRestaurant?.ip;
+    const hostToUse = hostOverride || connectedHost;
     if (!hostToUse) {
       setKdsData(null);
+      setLoadingKds(false);
       return;
     }
     setLoadingKds(true);
@@ -1358,7 +1382,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
   };
 
   const handleToggleKdsMaster = async () => {
-    const hostToUse = connectedHost || searchParams.get('host') || selectedRestaurant?.ip;
+    const hostToUse = connectedHost;
     if (!hostToUse) {
       showToast('Chưa xác định IP MongoDB của nhà hàng!', 'error');
       return;
@@ -1397,6 +1421,13 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
   const [batchRoleParamCode, setBatchRoleParamCode] = useState<string>('ROLE_SETUP_SHOW_HIDE_ITEM');
   const [showCreateFoodControlModal, setShowCreateFoodControlModal] = useState<boolean>(false);
 
+  // Modal: Chuyển toàn bộ hoặc 1 phần món giữa các Quầy Bếp (Transfer)
+  const [showTransferQuayModal, setShowTransferQuayModal] = useState<boolean>(false);
+  const [transferFromPlaceId, setTransferFromPlaceId] = useState<number | null>(null);
+
+  // Modal: Tra cứu Logs KDS (Order từ CO/SO & Bấm Done Món)
+  const [showKdsLogsModal, setShowKdsLogsModal] = useState<boolean>(false);
+
   // Kiểm tra xem nhà hàng đã có quầy / account Food Control chưa (nếu có rồi thì không cho tạo)
   const hasFoodControl = useMemo(() => {
     if (!kdsData?.accounts_summary || kdsData.accounts_summary.length === 0) return false;
@@ -1419,8 +1450,13 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
   const [selectedKdsDishCodes, setSelectedKdsDishCodes] = useState<string[]>([]);
 
   const fetchKdsPlaces = async (hostOverride?: string) => {
-    const hostToUse = hostOverride || connectedHost || searchParams.get('host') || selectedRestaurant?.ip;
-    if (!hostToUse) return;
+    const hostToUse = hostOverride || connectedHost;
+    if (!hostToUse) {
+      setKdsPlaces([]);
+      setKdsPrinters([]);
+      setLoadingKdsPlaces(false);
+      return;
+    }
     setLoadingKdsPlaces(true);
     try {
       const data = await mongoService.getKdsPlaces(hostToUse, 27017);
@@ -4801,37 +4837,42 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                     + Thêm Quầy &amp; Account
                   </Button>
 
-                  {/* Nút Tạo / Trạng thái Quầy Food Control (Theo yêu cầu: đã có thì không cho tạo, chưa có thì cho tạo bổ sung) */}
-                  {hasFoodControl ? (
-                    <span
-                      title="Nhà hàng này ĐÃ CÓ quầy và tài khoản Food Control (Trạm tổng). Không cho phép tạo trùng lặp."
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        padding: '5px 10px',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        backgroundColor: '#FEF3C7',
-                        color: '#92400E',
-                        border: '1px solid #FCD34D',
-                        cursor: 'default'
-                      }}
-                    >
-                      🛡️ ✓ Đã có Food Control
-                    </span>
-                  ) : (
-                    <Button
-                      size="sm"
-                      style={{ backgroundColor: '#D97706', color: '#fff', borderColor: '#B45309', fontWeight: 700 }}
-                      onClick={() => setShowCreateFoodControlModal(true)}
-                      leftIcon={<Shield size={14} />}
-                      title="Nhà hàng chưa có quầy / account Food Control. Bấm để tạo bổ sung trạm bếp trưởng điều phối tổng."
-                    >
-                      🛡️ + Tạo Food Control
-                    </Button>
-                  )}
+                  {/* Nút Chức năng Logs KDS (Order từ CO/SO & Bấm Done) */}
+                  <Button
+                    size="sm"
+                    style={{
+                      backgroundColor: '#4338CA',
+                      color: '#fff',
+                      borderColor: '#3730A3',
+                      fontWeight: 700,
+                      boxShadow: '0 1px 2px rgba(67, 56, 202, 0.2)'
+                    }}
+                    onClick={() => setShowKdsLogsModal(true)}
+                    leftIcon={<Clock size={14} />}
+                    title="Tra cứu lịch sử Order từ CO/SO vào KDS, thời gian bấm Done món và phân tích trễ món phục vụ khiếu nại nhà hàng"
+                  >
+                    📋 Logs KDS (Order &amp; Ra Món)
+                  </Button>
+
+                  {/* Nút Chuyển Món Giữa Các Quầy (Transfer) */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    style={{
+                      borderColor: '#3B82F6',
+                      color: '#1D4ED8',
+                      backgroundColor: '#EFF6FF',
+                      fontWeight: 700
+                    }}
+                    onClick={() => {
+                      setTransferFromPlaceId(null);
+                      setShowTransferQuayModal(true);
+                    }}
+                    leftIcon={<ArrowRightLeft size={14} />}
+                    title="Chuyển toàn bộ hoặc một số món chọn lọc từ Quầy Bếp này sang Quầy Bếp khác"
+                  >
+                    🔄 Chuyển Món Giữa Quầy
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -5114,6 +5155,37 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                         </button>
                       );
                     })}
+
+                    {kdsQuayFilter !== 'ALL' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const selectedAcc = kdsData.accounts_summary.find((a) => a.account_name === kdsQuayFilter);
+                          setTransferFromPlaceId(selectedAcc ? Number(selectedAcc.account_id) : null);
+                          setShowTransferQuayModal(true);
+                        }}
+                        style={{
+                          marginLeft: 'auto',
+                          padding: '6px 14px',
+                          borderRadius: '8px',
+                          backgroundColor: '#2563EB',
+                          color: '#fff',
+                          border: 'none',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 1px 3px rgba(37,99,235,0.25)',
+                          transition: 'all 0.15s ease'
+                        }}
+                        title={`Bấm để chuyển toàn bộ hoặc lọc món từ quầy ${kdsQuayFilter} sang quầy khác`}
+                      >
+                        <ArrowRightLeft size={13} />
+                        <span>Chuyển Món Của Quầy [{kdsQuayFilter}] ➔</span>
+                      </button>
+                    )}
                   </div>
                 </Card>
               )}
@@ -5341,6 +5413,18 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                         leftIcon={<Layers size={13} />}
                       >
                         Gán Quầy Hàng Loạt
+                      </Button>
+                      <Button
+                        size="sm"
+                        style={{ backgroundColor: '#2563EB', color: '#fff', fontWeight: 600 }}
+                        onClick={() => {
+                          setTransferFromPlaceId(null);
+                          setShowTransferQuayModal(true);
+                        }}
+                        leftIcon={<ArrowRightLeft size={13} />}
+                        title="Chuyển các món được chọn từ quầy hiện tại sang quầy bếp khác"
+                      >
+                        🔄 Chuyển Quầy ({selectedKdsDishCodes.length} món)
                       </Button>
                       <Button
                         variant="outline"
@@ -7538,16 +7622,50 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
       <KdsAddQuayModal
         isOpen={showAddQuayModal}
         onClose={() => setShowAddQuayModal(false)}
-        host={connectedHost || searchParams.get('host') || selectedRestaurant?.ip || ''}
+        host={connectedHost || ''}
         port={27017}
         availablePrinters={kdsPrinters}
+        hasFoodControl={hasFoodControl}
         onSuccess={() => {
-          const hostToUse = connectedHost || searchParams.get('host') || selectedRestaurant?.ip;
-          if (hostToUse) {
-            fetchKdsPlaces(hostToUse);
-            fetchKdsItems(hostToUse);
+          if (connectedHost) {
+            fetchKdsPlaces(connectedHost);
+            fetchKdsItems(connectedHost);
           }
         }}
+        showToast={showToast}
+      />
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* MODAL: CHUYỂN TOÀN BỘ HOẶC 1 PHẦN MÓN TỪ QUẦY BẾP NÀY SANG QUẦY BẾP KIA */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <KdsTransferQuayModal
+        isOpen={showTransferQuayModal}
+        onClose={() => setShowTransferQuayModal(false)}
+        host={connectedHost || ''}
+        port={27017}
+        places={kdsPlaces}
+        allDishes={kdsData?.items || []}
+        preselectedDishCodes={selectedKdsDishCodes}
+        initialFromPlaceId={transferFromPlaceId}
+        onSuccess={() => {
+          setSelectedKdsDishCodes([]);
+          if (connectedHost) {
+            fetchKdsPlaces(connectedHost);
+            fetchKdsItems(connectedHost);
+          }
+        }}
+        showToast={showToast}
+      />
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* MODAL: TRA CỨU LOGS KDS (ORDER TỪ CO/SO & BẤM DONE MÓN) */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <KdsLogsModal
+        isOpen={showKdsLogsModal}
+        onClose={() => setShowKdsLogsModal(false)}
+        host={connectedHost || ''}
+        port={27017}
+        restaurantName={restaurantGposInfo?.restaurant_name || selectedRestaurant?.res || undefined}
         showToast={showToast}
       />
 

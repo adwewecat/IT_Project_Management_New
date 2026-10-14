@@ -54,6 +54,10 @@ from app.schemas.mongodb import (
     KdsCreateFoodControlResponse,
     KdsAssignDishQuayRequest,
     KdsAssignDishQuayResponse,
+    KdsTransferQuayRequest,
+    KdsTransferQuayResponse,
+    KdsLogQueryRequest,
+    KdsLogQueryResponse,
     KdsUpdatePlacePrinterRequest,
     KdsUpdatePlacePrinterResponse,
     KdsPlaceDeleteRequest,
@@ -1120,6 +1124,49 @@ def assign_dish_kds_quay(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Lỗi khi gán món vào quầy ({payload.host}): {str(e)}"
+        )
+
+
+@router.post("/kds-dishes/transfer-quay", response_model=KdsTransferQuayResponse)
+def transfer_kds_dishes_quay(
+    payload: KdsTransferQuayRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Chuyển toàn bộ hoặc một phần món ăn từ quầy bếp này sang quầy bếp khác trong CONFIG_COOKING.
+    """
+    try:
+        return MongoDBService.transfer_kds_dishes_quay(
+            current_user=current_user,
+            payload=payload,
+            db=db
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Lỗi khi chuyển quầy món ăn ({payload.host}): {str(e)}"
+        )
+
+
+@router.post("/kds-logs", response_model=KdsLogQueryResponse)
+def get_kds_logs(
+    payload: KdsLogQueryRequest,
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Tra cứu nhật ký KDS: Thời gian order từ SO/CO vào bếp, thời gian bấm Done món trên KDS,
+    thời gian thực tế ra món, thời gian chuẩn cấu hình và độ trễ.
+    """
+    try:
+        return MongoDBService.get_kds_logs(
+            payload=payload,
+            current_user=current_user
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Lỗi khi tra cứu nhật ký KDS ({payload.host}): {str(e)}"
         )
 
 

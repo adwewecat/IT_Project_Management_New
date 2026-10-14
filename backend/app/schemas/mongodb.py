@@ -460,6 +460,61 @@ class KdsAssignDishQuayResponse(BaseModel):
     message: str
 
 
+class KdsTransferQuayRequest(BaseModel):
+    host: str
+    port: int = 27017
+    from_place_id: int
+    to_place_id: int
+    menu_item_codes: Optional[List[str]] = None  # None hoặc rỗng = chuyển tất cả món
+    keep_source: bool = False  # False: chuyển hẳn (rút quầy nguồn), True: giữ cả 2
+
+
+class KdsTransferQuayResponse(BaseModel):
+    success: bool
+    modified_count: int
+    from_place_name: str = ""
+    to_place_name: str = ""
+    message: str
+
+
+class KdsLogQueryRequest(BaseModel):
+    host: str
+    port: int = 27017
+    date: str  # YYYY-MM-DD
+    table: Optional[str] = None
+    query: Optional[str] = None
+    from_time: Optional[str] = None
+    to_time: Optional[str] = None
+    limit: int = 300
+
+
+class KdsLogItem(BaseModel):
+    id: str
+    table_name: str
+    dish_name: str
+    menu_item_code: str
+    sap_code: str
+    place_name: str
+    account_name: Optional[str] = None
+    order_time: Optional[str] = None
+    done_time: Optional[str] = None
+    actual_minutes: float = 0.0
+    config_minutes: float = 0.0
+    delay_minutes: float = 0.0
+    status_label: str = "Kịp giờ"
+    source_collection: str = "LOG_DISH_FINISH_ITEM"
+
+
+class KdsLogQueryResponse(BaseModel):
+    success: bool
+    total: int
+    date: str
+    table_filter: Optional[str] = None
+    query_filter: Optional[str] = None
+    logs: List[KdsLogItem]
+    message: str = ""
+
+
 class KdsUpdatePlacePrinterRequest(BaseModel):
     host: str
     port: int = 27017

@@ -17,14 +17,18 @@ import {
   Power,
   Copy,
   Check,
-  X
+  X,
+  ArrowRightLeft,
+  Layers
 } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import {
   mongoService,
   KdsPlaceItem,
-  KdsRoleUsersResponse
+  KdsRoleUsersResponse,
+  KdsItemDish,
+  KdsLogItem
 } from '../../services/mongoService';
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -316,6 +320,7 @@ interface KdsAddQuayModalProps {
   host: string;
   port?: number;
   availablePrinters: string[];
+  hasFoodControl?: boolean;
   onSuccess: () => void;
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
@@ -326,6 +331,7 @@ export const KdsAddQuayModal: React.FC<KdsAddQuayModalProps> = ({
   host,
   port = 27017,
   availablePrinters,
+  hasFoodControl = false,
   onSuccess,
   showToast
 }) => {
@@ -408,6 +414,43 @@ export const KdsAddQuayModal: React.FC<KdsAddQuayModalProps> = ({
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {/* Trạng thái Food Control bên trong popup */}
+        {hasFoodControl ? (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              backgroundColor: '#FEF3C7',
+              border: '1px solid #FCD34D',
+              fontSize: '12px',
+              color: '#92400E',
+              fontWeight: 700
+            }}
+          >
+            <span>🛡️ ✓ Nhà hàng này ĐÃ CÓ quầy và tài khoản Food Control (Trạm tổng điều phối).</span>
+          </div>
+        ) : (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              backgroundColor: '#EFF6FF',
+              border: '1px solid #BFDBFE',
+              fontSize: '12px',
+              color: '#1E40AF',
+              fontWeight: 600
+            }}
+          >
+            <span>ℹ️ Nhà hàng chưa có Food Control. Quầy mới sẽ được tạo như trạm bếp thông thường.</span>
+          </div>
+        )}
+
         <div
           style={{
             padding: '10px 14px',
@@ -2302,3 +2345,698 @@ export const ModalCreateFoodControl: React.FC<ModalCreateFoodControlProps> = ({
     </Modal>
   );
 };
+
+// ══════════════════════════════════════════════════════════════════════════
+// 7. MODAL CHUYỂN MÓN GIỮA CÁC QUẦY BẾP (TOÀN BỘ HOẶC CHỌN LỌC)
+// ══════════════════════════════════════════════════════════════════════════
+interface KdsTransferQuayModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  host: string;
+  port?: number;
+  places: KdsPlaceItem[];
+  preselectedFromPlaceId?: number | null;
+  initialFromPlaceId?: number | null;
+  selectedDishCodes?: string[];
+  preselectedDishCodes?: string[];
+  dishItems?: KdsItemDish[];
+  allDishes?: KdsItemDish[];
+  onSuccess: () => void;
+  showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
+}
+
+export const KdsTransferQuayModal: React.FC<KdsTransferQuayModalProps> = ({
+  isOpen,
+  onClose,
+  host,
+  port = 27017,
+  places,
+  preselectedFromPlaceId,
+  initialFromPlaceId,
+  selectedDishCodes,
+  preselectedDishCodes,
+  dishItems,
+  allDishes,
+  onSuccess,
+  showToast
+}) => {
+  const effectiveFromPlaceId = preselectedFromPlaceId ?? initialFromPlaceId ?? null;
+  const effectiveDishCodes = selectedDishCodes ?? preselectedDishCodes ?? [];
+  const effectiveDishes = dishItems ?? allDishes ?? [];
+
+  const [fromPlaceId, setFromPlaceId] = useState<number | null>(effectiveFromPlaceId);
+  const [toPlaceId, setToPlaceId] = useState<number | null>(null);
+  const [keepSource, setKeepSource] = useState<boolean>(false);
+  const [isTransferring, setIsTransferring] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (effectiveFromPlaceId) {
+      setFromPlaceId(effectiveFromPlaceId);
+    } else if (places.length > 0 && !fromPlaceId) {
+      setFromPlaceId(places[0].id);
+    }
+    // Gợi ý quầy đích là quầy khác quầy nguồn
+    if (places.length > 1) {
+      const other = places.find((p) => p.id !== (effectiveFromPlaceId || places[0].id));
+      if (other) setToPlaceId(other.id);
+    }
+  }, [effectiveFromPlaceId, places, isOpen]);
+
+  if (!isOpen) return null;
+
+  const isSelective = effectiveDishCodes.length > 0;
+  const fromPlace = places.find((p) => p.id === fromPlaceId);
+  const toPlace = places.find((p) => p.id === toPlaceId);
+
+  // Lấy tên các món đang chọn (nếu có)
+  const selectedDishes = effectiveDishes.filter((d) => effectiveDishCodes.includes(d.menu_item_code));
+
+  const handleExecuteTransfer = async () => {
+    if (!fromPlaceId) {
+      showToast('Vui lòng chọn quầy bếp nguồn!', 'error');
+      return;
+    }
+    if (!toPlaceId) {
+      showToast('Vui lòng chọn quầy bếp đích để chuyển đến!', 'error');
+      return;
+    }
+    if (fromPlaceId === toPlaceId) {
+      showToast('Quầy bếp đích phải khác với quầy bếp nguồn!', 'error');
+      return;
+    }
+
+    const actionText = isSelective
+      ? `chuyển ${effectiveDishCodes.length} món đã chọn`
+      : `chuyển TOÀN BỘ món (${fromPlace?.dish_count || 0} món)`;
+
+    const confirmMsg = `Bạn có chắc chắn muốn ${actionText} từ "${fromPlace?.name || fromPlaceId}" sang "${toPlace?.name || toPlaceId}" không?\n\n- Tùy chọn: ${keepSource ? 'Thêm quầy mới (Giữ cả quầy cũ)' : 'Chuyển hẳn (Rút khỏi quầy cũ, gán sang quầy mới)'}`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsTransferring(true);
+    try {
+      const res = await mongoService.transferKdsDishesQuay({
+        host,
+        port,
+        from_place_id: fromPlaceId,
+        to_place_id: toPlaceId,
+        menu_item_codes: isSelective ? effectiveDishCodes : undefined,
+        keep_source: keepSource
+      });
+      showToast(res.message, 'success');
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      showToast(
+        'Lỗi khi chuyển quầy món: ' + (err.response?.data?.detail || err.message),
+        'error'
+      );
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="🔄 Chuyển Món Giữa Các Quầy Bếp (KDS)"
+      maxWidth="620px"
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+          <Button variant="outline" onClick={onClose} disabled={isTransferring}>
+            Hủy bỏ
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleExecuteTransfer}
+            isLoading={isTransferring}
+            leftIcon={<ArrowRightLeft size={16} />}
+            style={{ backgroundColor: '#2563EB', borderColor: '#2563EB', color: '#fff', fontWeight: 600 }}
+          >
+            {isSelective
+              ? `Xác Nhận Chuyển (${effectiveDishCodes.length} Món)`
+              : `Chuyển Toàn Bộ Món`}
+          </Button>
+        </div>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* Banner chế độ chuyển */}
+        <div
+          style={{
+            padding: '12px 14px',
+            borderRadius: '8px',
+            backgroundColor: isSelective ? '#EFF6FF' : '#FEF3C7',
+            border: isSelective ? '1px solid #BFDBFE' : '1px solid #FCD34D',
+            fontSize: '13px',
+            color: isSelective ? '#1E40AF' : '#92400E',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '10px'
+          }}
+        >
+          <Layers size={18} style={{ marginTop: '2px', flexShrink: 0 }} />
+          <div>
+            <strong>
+              {isSelective
+                ? `Đang chuyển ${effectiveDishCodes.length} món ăn được tick chọn`
+                : `Chuyển TOÀN BỘ món ăn của quầy nguồn`}
+            </strong>
+            <div style={{ fontSize: '12px', marginTop: '3px', opacity: 0.9 }}>
+              {isSelective
+                ? 'Hệ thống sẽ cập nhật cấu hình CONFIG_COOKING cho danh sách các món bạn đã tick chọn.'
+                : 'Tất cả các món ăn đang thuộc quầy nguồn sẽ được chuyển sang quầy đích được chọn bên dưới.'}
+            </div>
+          </div>
+        </div>
+
+        {/* Danh sách món chọn tóm tắt (nếu chuyển chọn lọc) */}
+        {isSelective && selectedDishes.length > 0 && (
+          <div
+            style={{
+              maxHeight: '130px',
+              overflowY: 'auto',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              padding: '8px',
+              backgroundColor: 'var(--bg-secondary)',
+              fontSize: '12px',
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '6px'
+            }}
+          >
+            {selectedDishes.map((d) => (
+              <span
+                key={d.menu_item_code}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '4px',
+                  padding: '3px 8px',
+                  fontSize: '11px',
+                  color: 'var(--text-primary)'
+                }}
+              >
+                <strong>{d.menu_item_code}</strong>: {d.menu_item_name}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Hai ô chọn quầy: Nguồn & Đích */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '10px', alignItems: 'center' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#B45309', marginBottom: '6px' }}>
+              Quầy Bếp Nguồn (Từ):
+            </label>
+            <select
+              value={fromPlaceId || ''}
+              onChange={(e) => setFromPlaceId(Number(e.target.value))}
+              disabled={isSelective && !!preselectedFromPlaceId}
+              style={{
+                width: '100%',
+                padding: '9px 12px',
+                borderRadius: '6px',
+                border: '1.5px solid #FCD34D',
+                backgroundColor: '#FEF3C7',
+                color: '#92400E',
+                fontSize: '13px',
+                fontWeight: 600
+              }}
+            >
+              {places.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.dish_count} món) - ID: {p.id}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '22px' }}>
+            <ArrowRight size={22} style={{ color: '#2563EB' }} />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#1D4ED8', marginBottom: '6px' }}>
+              Quầy Bếp Đích (Sang):
+            </label>
+            <select
+              value={toPlaceId || ''}
+              onChange={(e) => setToPlaceId(Number(e.target.value))}
+              style={{
+                width: '100%',
+                padding: '9px 12px',
+                borderRadius: '6px',
+                border: '1.5px solid #93C5FD',
+                backgroundColor: '#EFF6FF',
+                color: '#1E40AF',
+                fontSize: '13px',
+                fontWeight: 600
+              }}
+            >
+              <option value="">-- Chọn quầy đích --</option>
+              {places
+                .filter((p) => p.id !== fromPlaceId)
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.dish_count} món) - ID: {p.id}
+                  </option>
+                ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Tùy chọn chuyển hẳn vs giữ nguồn */}
+        <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '8px' }}>
+            Phương Thức Chuyển:
+          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+              <input
+                type="radio"
+                name="keepSourceOption"
+                checked={!keepSource}
+                onChange={() => setKeepSource(false)}
+              />
+              <span>
+                <strong>Chuyển hẳn</strong> (Gỡ khỏi quầy cũ, chỉ hiển thị ở quầy mới - Khuyên dùng)
+              </span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+              <input
+                type="radio"
+                name="keepSourceOption"
+                checked={keepSource}
+                onChange={() => setKeepSource(true)}
+              />
+              <span>
+                <strong>Nhân bản thêm quầy mới</strong> (Món sẽ xuất hiện ở cả quầy cũ lẫn quầy mới)
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════════════════
+// 8. MODAL TRA CỨU LOGS KDS (ORDER TỪ SO/CO VÀO BẾP & GIỜ BẤM DONE MÓN)
+// ══════════════════════════════════════════════════════════════════════════
+interface KdsLogsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  host: string;
+  port?: number;
+  restaurantName?: string;
+  showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
+}
+
+export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
+  isOpen,
+  onClose,
+  host,
+  port = 27017,
+  restaurantName = '',
+  showToast
+}) => {
+  const [filterDate, setFilterDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [filterFromTime, setFilterFromTime] = useState<string>('');
+  const [filterToTime, setFilterToTime] = useState<string>('');
+  const [filterTable, setFilterTable] = useState<string>('');
+  const [filterQuery, setFilterQuery] = useState<string>('');
+  const [logs, setLogs] = useState<KdsLogItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [hasQueried, setHasQueried] = useState<boolean>(false);
+  const [copiedAll, setCopiedAll] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isOpen && host) {
+      handleSearch();
+    }
+  }, [isOpen, host]);
+
+  if (!isOpen) return null;
+
+  const handleSearch = async () => {
+    if (!host) {
+      showToast('Chưa xác định IP MongoDB của nhà hàng!', 'error');
+      return;
+    }
+    setLoading(true);
+    setHasQueried(true);
+    try {
+      const res = await mongoService.getKdsLogs({
+        host,
+        port,
+        date: filterDate,
+        table: filterTable.trim() || undefined,
+        query: filterQuery.trim() || undefined,
+        from_time: filterFromTime.trim() || undefined,
+        to_time: filterToTime.trim() || undefined,
+        limit: 400
+      });
+      setLogs(res.logs || []);
+      showToast(res.message || `Đã tải ${res.logs?.length || 0} bản ghi nhật ký KDS.`, 'success');
+    } catch (err: any) {
+      showToast(
+        'Lỗi khi tra cứu Logs KDS: ' + (err.response?.data?.detail || err.message),
+        'error'
+      );
+      setLogs([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopyTextReport = () => {
+    if (logs.length === 0) return;
+    let text = `BÁO CÁO NHẬT KÝ RA MÓN KDS (${restaurantName || host} - Ngày: ${filterDate})\n`;
+    text += `Tra cứu lúc: ${new Date().toLocaleString('vi-VN')}\n`;
+    text += `------------------------------------------------------------------------------------------------------------------------\n`;
+    text += `BÀN | TÊN MÓN | SAP | QUẦY | GIỜ ORDER (CO/SO) | GIỜ DONE (KDS) | THỰC TẾ | CHUẨN | TRẠNG THÁI\n`;
+    text += `------------------------------------------------------------------------------------------------------------------------\n`;
+    logs.forEach((l) => {
+      text += `${l.table_name} | ${l.dish_name} | ${l.sap_code} | ${l.place_name} | ${l.order_time} | ${l.done_time} | ${l.actual_minutes}p | ${l.config_minutes}p | ${l.status_label}\n`;
+    });
+    navigator.clipboard.writeText(text);
+    setCopiedAll(true);
+    showToast('Đã sao chép toàn bộ bảng đối soát logs KDS vào Clipboard!', 'success');
+    setTimeout(() => setCopiedAll(false), 2500);
+  };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="📋 Tra Cứu Nhật Ký KDS (Thời Gian Order & Bấm Done Món)"
+      maxWidth="1100px"
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+            Tổng số: <strong>{logs.length}</strong> bản ghi | Host: <code>{host}:{port}</code>
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyTextReport}
+              disabled={logs.length === 0}
+              leftIcon={copiedAll ? <Check size={14} color="#059669" /> : <Copy size={14} />}
+            >
+              {copiedAll ? 'Đã sao chép!' : 'Sao chép kết quả gửi NH'}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={onClose}>
+              Đóng
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {/* Hướng dẫn nghiệp vụ */}
+        <div
+          style={{
+            padding: '10px 14px',
+            borderRadius: '8px',
+            backgroundColor: '#EFF6FF',
+            border: '1px solid #BFDBFE',
+            fontSize: '12px',
+            color: '#1E40AF',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '8px'
+          }}
+        >
+          <div>
+            💡 Dữ liệu trích xuất từ <strong>G_KITCHEN.LOG_DISH_FINISH_ITEM</strong> và <strong>G_ORDER.ORDER_DELIVERY_LOG</strong>. Dùng để đối soát thời gian order và thời điểm nhân viên bếp thực tế bấm <strong>DONE</strong> món trên KDS.
+          </div>
+        </div>
+
+        {/* Bộ lọc tìm kiếm */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '150px 130px 130px 140px 1fr auto',
+            gap: '8px',
+            alignItems: 'flex-end',
+            padding: '12px',
+            backgroundColor: 'var(--bg-secondary)',
+            borderRadius: '8px',
+            border: '1px solid var(--border-color)'
+          }}
+        >
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+              Ngày Kiểm Tra: <span style={{ color: '#EF4444' }}>*</span>
+            </label>
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                fontSize: '12px',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)'
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+              Từ Giờ:
+            </label>
+            <input
+              type="text"
+              placeholder="VD: 10:00"
+              value={filterFromTime}
+              onChange={(e) => setFilterFromTime(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                fontSize: '12px',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)'
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+              Đến Giờ:
+            </label>
+            <input
+              type="text"
+              placeholder="VD: 12:30"
+              value={filterToTime}
+              onChange={(e) => setFilterToTime(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                fontSize: '12px',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)'
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+              Bàn Ăn:
+            </label>
+            <input
+              type="text"
+              placeholder="VD: B14, 05..."
+              value={filterTable}
+              onChange={(e) => setFilterTable(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                fontSize: '12px',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)'
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+              Món Ăn / Mã SAP / RK7:
+            </label>
+            <input
+              type="text"
+              placeholder="VD: 60022506, Truffle, Wagyu..."
+              value={filterQuery}
+              onChange={(e) => setFilterQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSearch();
+              }}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                fontSize: '12px',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)'
+              }}
+            />
+          </div>
+
+          <div>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSearch}
+              isLoading={loading}
+              leftIcon={<Search size={14} />}
+              style={{ backgroundColor: '#059669', borderColor: '#059669', color: '#fff', fontWeight: 700 }}
+            >
+              Tra Cứu
+            </Button>
+          </div>
+        </div>
+
+        {/* Bảng danh sách nhật ký */}
+        <div
+          style={{
+            maxHeight: '440px',
+            overflowY: 'auto',
+            border: '1px solid var(--border-color)',
+            borderRadius: '8px',
+            backgroundColor: '#FFFFFF'
+          }}
+        >
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #CBD5E1', color: '#475569', position: 'sticky', top: 0, zIndex: 10 }}>
+                <th style={{ padding: '9px 10px', textAlign: 'center', width: '70px' }}>Bàn</th>
+                <th style={{ padding: '9px 10px', textAlign: 'left', minWidth: '180px' }}>Món Ăn</th>
+                <th style={{ padding: '9px 10px', textAlign: 'center', width: '90px' }}>Mã SAP</th>
+                <th style={{ padding: '9px 10px', textAlign: 'left', width: '130px' }}>Quầy Bếp</th>
+                <th style={{ padding: '9px 10px', textAlign: 'center', width: '140px' }}>Giờ Order (CO/SO)</th>
+                <th style={{ padding: '9px 10px', textAlign: 'center', width: '140px' }}>Giờ Done (KDS)</th>
+                <th style={{ padding: '9px 10px', textAlign: 'center', width: '85px' }}>Thực Tế</th>
+                <th style={{ padding: '9px 10px', textAlign: 'center', width: '85px' }}>Chuẩn</th>
+                <th style={{ padding: '9px 10px', textAlign: 'center', width: '110px' }}>Trạng Thái</th>
+                <th style={{ padding: '9px 10px', textAlign: 'center', width: '80px' }}>Tài Khoản</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={10} style={{ padding: '30px', textAlign: 'center', color: '#6B7280' }}>
+                    <RefreshCw size={20} className="animate-spin" style={{ display: 'inline', marginRight: '8px' }} />
+                    Đang tra cứu dữ liệu nhật ký KDS từ MongoDB...
+                  </td>
+                </tr>
+              ) : logs.length === 0 ? (
+                <tr>
+                  <td colSpan={10} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF' }}>
+                    {hasQueried ? 'Không tìm thấy bản ghi nào phù hợp với bộ lọc trong ngày đã chọn.' : 'Vui lòng nhấn nút Tra Cứu để tải dữ liệu.'}
+                  </td>
+                </tr>
+              ) : (
+                logs.map((item, idx) => {
+                  const isDelayed = item.delay_minutes > 0;
+                  return (
+                    <tr
+                      key={`${item.id}_${idx}`}
+                      style={{
+                        borderBottom: '1px solid #E2E8F0',
+                        backgroundColor: isDelayed ? '#FFFBEB' : idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'
+                      }}
+                    >
+                      <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, color: '#1E293B' }}>
+                        <span
+                          style={{
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: '#E2E8F0',
+                            fontFamily: 'monospace'
+                          }}
+                        >
+                          {item.table_name || '-'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '8px 10px', fontWeight: 600, color: '#0F172A' }}>
+                        <div>{item.dish_name}</div>
+                        <div style={{ fontSize: '10px', color: '#64748B' }}>Mã RK7: {item.menu_item_code}</div>
+                      </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: 'monospace', color: '#475569' }}>
+                        {item.sap_code || '—'}
+                      </td>
+                      <td style={{ padding: '8px 10px', color: '#334155' }}>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: '#F1F5F9',
+                            fontSize: '11px',
+                            fontWeight: 600
+                          }}
+                        >
+                          {item.place_name}
+                        </span>
+                      </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center', color: '#1E40AF', fontFamily: 'monospace', fontSize: '11px' }}>
+                        {item.order_time}
+                      </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center', color: '#047857', fontFamily: 'monospace', fontSize: '11px' }}>
+                        {item.done_time}
+                      </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, color: isDelayed ? '#DC2626' : '#059669' }}>
+                        {item.actual_minutes > 0 ? `${item.actual_minutes}p` : '—'}
+                      </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>
+                        {item.config_minutes > 0 ? `${item.config_minutes}p` : '—'}
+                      </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            backgroundColor: isDelayed ? '#FEE2E2' : '#DCFCE7',
+                            color: isDelayed ? '#DC2626' : '#15803D',
+                            border: isDelayed ? '1px solid #FECACA' : '1px solid #BBF7D0'
+                          }}
+                        >
+                          {item.status_label}
+                        </span>
+                      </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: '11px', color: '#64748B' }}>
+                        {item.account_name || '—'}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+

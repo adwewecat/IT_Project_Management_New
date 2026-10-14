@@ -103,6 +103,35 @@ def get_menu_categories(host: str, port: int = 27017) -> List[Dict[str, Any]]:
                 "group_count": stats["group_count"],
                 "dish_count": stats["dish_count"],
             })
+
+        # Bổ sung các Menu có trong ORDER_MENU_CACHE_CATEGORY nhưng chưa có trong RESTAURANT_CATEGORY
+        seen_codes = {r["code"] for r in results if r.get("code")}
+        for cc, stats in cache_map.items():
+            if cc and cc not in seen_codes:
+                # Tìm tên menu nếu có trong doc ORDER_MENU_CACHE_CATEGORY
+                doc_omc = db["ORDER_MENU_CACHE_CATEGORY"].find_one({"category-code": cc}, {"name": 1, "category-name": 1, "main-menu.name": 1})
+                menu_name = ""
+                if doc_omc:
+                    menu_name = (
+                        doc_omc.get("name")
+                        or doc_omc.get("category-name")
+                        or doc_omc.get("main-menu", {}).get("name")
+                        or ""
+                    )
+                if not menu_name:
+                    menu_name = f"Menu {cc}"
+
+                results.append({
+                    "code": cc,
+                    "id": int(cc) if cc.isdigit() else len(results) + 1,
+                    "name": menu_name,
+                    "show_in_so": True,
+                    "show_in_co": True,
+                    "show_in_qr_order": True,
+                    "auto_delivery_in_so": False,
+                    "group_count": stats["group_count"],
+                    "dish_count": stats["dish_count"],
+                })
         return results
     finally:
         client.close()
