@@ -13,7 +13,14 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8000 ^| findstr LISTENING') 
 
 start "Backend FastAPI" cmd /k "cd /d %~dp0\backend && .venv\Scripts\python.exe run.py"
 timeout /t 2 /nobreak >nul
-start "Frontend Vite" cmd /k "cd /d %~dp0\frontend && pnpm run dev"
+
+where pnpm >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    start "Frontend Vite" cmd /k "cd /d %~dp0\frontend && pnpm run dev"
+) else (
+    echo [INFO] Chua co pnpm trong PATH, tu dong khoi chay Frontend bang npm...
+    start "Frontend Vite" cmd /k "cd /d %~dp0\frontend && npm run dev"
+)
 
 echo Da khoi dong ca Backend va Frontend!
 pause
