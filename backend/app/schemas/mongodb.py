@@ -1124,6 +1124,13 @@ class MongoTransferSettingsUpdateRequest(BaseModel):
 # MENU SO/CO MANAGEMENT SCHEMAS
 # ══════════════════════════════════════════════════════════════════════════════
 
+class MenuGroupBrief(BaseModel):
+    code: str
+    name: str
+    level: int = -1
+    count: int = 0
+
+
 class MenuCategoryItem(BaseModel):
     code: str
     id: Optional[int] = None
@@ -1134,6 +1141,7 @@ class MenuCategoryItem(BaseModel):
     auto_delivery_in_so: bool = False
     group_count: int = 0
     dish_count: int = 0
+    groups: Optional[List[MenuGroupBrief]] = None
 
 
 class MenuCategoriesResponse(BaseModel):

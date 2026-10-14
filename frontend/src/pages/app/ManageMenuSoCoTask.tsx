@@ -805,7 +805,14 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   const groupsByMenuCode = useMemo(() => {
     const map: Record<string, Array<{ code: string; name: string; level: number; count: number }>> = {};
     menus.forEach((m) => {
-      map[m.code] = [];
+      map[m.code] = (m.groups && m.groups.length > 0)
+        ? m.groups.map((g) => ({
+            code: g.code,
+            name: g.name,
+            level: g.level ?? -1,
+            count: g.count ?? 0
+          }))
+        : [];
     });
     dishItems.forEach((d) => {
       if (!map[d.menu_code]) {
@@ -820,7 +827,9 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
           count: 1
         });
       } else {
-        existing.count += 1;
+        if (existing.count === 0) {
+          existing.count = 1;
+        }
       }
     });
     return map;
@@ -840,12 +849,14 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     } else {
       setBulkAddTargetMenus([...bulkAddTargetMenus, menuCode]);
       if (!bulkAddMenuGroupMap[menuCode]) {
-        const groupsInMenu = groupsByMenuCode[menuCode] || [];
+        const groupsInMenu = (groupsByMenuCode[menuCode] && groupsByMenuCode[menuCode].length > 0)
+          ? groupsByMenuCode[menuCode]
+          : (menus.find((m) => m.code === menuCode)?.groups || []);
         const firstGroup = groupsInMenu[0];
         setBulkAddMenuGroupMap((prev) => ({
           ...prev,
           [menuCode]: firstGroup
-            ? { group_mode: 'existing', group_code: firstGroup.code, group_name: firstGroup.name, level: firstGroup.level }
+            ? { group_mode: 'existing', group_code: firstGroup.code, group_name: firstGroup.name, level: firstGroup.level ?? -1 }
             : { group_mode: 'new', group_name: 'Nhóm Món Mới', level: -1 }
         }));
       }
@@ -853,7 +864,9 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   };
 
   const handleChangeMenuGroupMode = (menuCode: string, mode: 'existing' | 'new') => {
-    const groupsInMenu = groupsByMenuCode[menuCode] || [];
+    const groupsInMenu = (groupsByMenuCode[menuCode] && groupsByMenuCode[menuCode].length > 0)
+      ? groupsByMenuCode[menuCode]
+      : (menus.find((m) => m.code === menuCode)?.groups || []);
     const firstGroup = groupsInMenu[0];
     setBulkAddMenuGroupMap((prev) => ({
       ...prev,
@@ -868,7 +881,9 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   };
 
   const handleSelectExistingGroupForMenu = (menuCode: string, groupCode: string) => {
-    const groupsInMenu = groupsByMenuCode[menuCode] || [];
+    const groupsInMenu = (groupsByMenuCode[menuCode] && groupsByMenuCode[menuCode].length > 0)
+      ? groupsByMenuCode[menuCode]
+      : (menus.find((m) => m.code === menuCode)?.groups || []);
     const grp = groupsInMenu.find((g) => g.code === groupCode);
     if (!grp) return;
     setBulkAddMenuGroupMap((prev) => ({
@@ -877,7 +892,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
         group_mode: 'existing',
         group_code: grp.code,
         group_name: grp.name,
-        level: grp.level
+        level: grp.level ?? -1
       }
     }));
   };
@@ -908,11 +923,13 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     const newMap = { ...bulkAddMenuGroupMap };
     bulkAddTargetMenus.forEach((mCode) => {
       if (mCode === sourceMenuCode) return;
-      const groupsInM = groupsByMenuCode[mCode] || [];
+      const groupsInM = (groupsByMenuCode[mCode] && groupsByMenuCode[mCode].length > 0)
+        ? groupsByMenuCode[mCode]
+        : (menus.find((m) => m.code === mCode)?.groups || []);
       if (config.group_mode === 'existing') {
         const match = groupsInM.find((g) => g.name.toLowerCase() === config.group_name.toLowerCase() || g.code === config.group_code);
         if (match) {
-          newMap[mCode] = { group_mode: 'existing', group_code: match.code, group_name: match.name, level: match.level };
+          newMap[mCode] = { group_mode: 'existing', group_code: match.code, group_name: match.name, level: match.level ?? -1 };
         } else {
           newMap[mCode] = { group_mode: 'new', group_name: config.group_name, level: config.level };
         }
@@ -927,6 +944,20 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   // Danh sách các nhóm hiện có trong các menu được chọn
   const existingGroupsInMenus = useMemo(() => {
     const gMap: Map<string, { code: string; name: string; level: number; menuCodes: Set<string> }> = new Map();
+    menus.forEach((m) => {
+      (m.groups || []).forEach((g) => {
+        if (!gMap.has(g.code)) {
+          gMap.set(g.code, {
+            code: g.code,
+            name: g.name,
+            level: g.level ?? -1,
+            menuCodes: new Set([m.code])
+          });
+        } else {
+          gMap.get(g.code)?.menuCodes.add(m.code);
+        }
+      });
+    });
     dishItems.forEach((d) => {
       if (!gMap.has(d.group_code)) {
         gMap.set(d.group_code, {
@@ -940,7 +971,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
       }
     });
     return Array.from(gMap.values());
-  }, [dishItems]);
+  }, [menus, dishItems]);
 
   // Tự động nhận diện Level theo Nhóm món đã chọn (Level 0: Đồ uống/Nước, Level -1: Món ăn/Thường mặc định)
   const currentGroupLevel = useMemo(() => {
@@ -1043,14 +1074,20 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   }, [currentGroupLevel]);
 
   const openBulkAddModal = () => {
+    // Nếu danh sách menu hiện tại chưa có thông tin groups (ví dụ nạp từ cache cũ), tự động tải lại
+    if (menus.length > 0 && menus.some((m) => !m.groups || m.groups.length === 0)) {
+      fetchMenus();
+    }
     const initTarget = selectedMenuCodes.length > 0 ? selectedMenuCodes : (menus[0] ? [menus[0].code] : []);
     setBulkAddTargetMenus(initTarget);
     const initialMap: Record<string, { group_mode: 'existing' | 'new'; group_code?: string; group_name: string; level: number }> = {};
     initTarget.forEach((mCode) => {
-      const gList = groupsByMenuCode[mCode] || [];
+      const gList = (groupsByMenuCode[mCode] && groupsByMenuCode[mCode].length > 0)
+        ? groupsByMenuCode[mCode]
+        : (menus.find((m) => m.code === mCode)?.groups || []);
       const first = gList[0];
       if (first) {
-        initialMap[mCode] = { group_mode: 'existing', group_code: first.code, group_name: first.name, level: first.level };
+        initialMap[mCode] = { group_mode: 'existing', group_code: first.code, group_name: first.name, level: first.level ?? -1 };
       } else {
         initialMap[mCode] = { group_mode: 'new', group_name: 'Nhóm Món Mới', level: -1 };
       }
@@ -3096,10 +3133,12 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                       setBulkAddTargetMenus(menus.map(m => m.code));
                       const newMap: Record<string, any> = {};
                       menus.forEach(m => {
-                        const gList = groupsByMenuCode[m.code] || [];
+                        const gList = (groupsByMenuCode[m.code] && groupsByMenuCode[m.code].length > 0)
+                          ? groupsByMenuCode[m.code]
+                          : (m.groups || []);
                         const first = gList[0];
                         newMap[m.code] = first
-                          ? { group_mode: 'existing', group_code: first.code, group_name: first.name, level: first.level }
+                          ? { group_mode: 'existing', group_code: first.code, group_name: first.name, level: first.level ?? -1 }
                           : { group_mode: 'new', group_name: 'Nhóm Món Mới', level: -1 };
                       });
                       setBulkAddMenuGroupMap(newMap);
@@ -3125,7 +3164,9 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '250px', overflowY: 'auto', padding: '6px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: '#F8FAFC' }}>
                 {menus.map((m) => {
                   const isChecked = bulkAddTargetMenus.includes(m.code);
-                  const groupsInMenu = groupsByMenuCode[m.code] || [];
+                  const groupsInMenu = (groupsByMenuCode[m.code] && groupsByMenuCode[m.code].length > 0)
+                    ? groupsByMenuCode[m.code]
+                    : (m.groups || []);
                   const currentConfig = bulkAddMenuGroupMap[m.code] || {
                     group_mode: 'existing',
                     group_code: groupsInMenu[0]?.code || '',

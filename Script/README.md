@@ -188,6 +188,28 @@ npm run dev
 
 ---
 
+### [2026-10-15] - Khắc Phục Lỗi Không Load Được Danh Sách Nhóm Trong Modal "Thêm Món Ăn Hàng Loạt Vào Menu (Dạng Bảng Tính Sheets)"
+- **Màn hình**: Phân Tích Thực Đơn SO/CO - Thêm Món Hàng Loạt (`ManageMenuSoCoTask.tsx`, `mongo_menu_so_co_service.py`, `mongoService.ts`, `mongodb.py`).
+- **Hiện tượng**:
+  - Khi mở modal *"Thêm Món Ăn Hàng Loạt Vào Menu (Dạng Bảng Tính Sheets)"*, ở các Menu khác chưa được chọn ở màn hình chính ngoài thực đơn (VD: Menu 176 `Buffet Xeo Xeo_2026`), dropdown Nhóm món báo `0 nhóm có sẵn` và `-- Menu này chưa có nhóm nào (hãy chọn Tạo nhóm mới) --`, mặc dù ngoài màn hình chính khi click chọn Menu 176 thì danh sách nhóm vẫn hiển thị bình thường.
+- **Nguyên nhân cốt lõi**:
+  - `groupsByMenuCode` và `existingGroupsInMenus` trên giao diện frontend được trích xuất hoàn toàn từ state `dishItems` (`dishItems.forEach(...)`).
+  - Do cơ chế tối ưu hiệu năng trang web, hệ thống ngoài màn hình chính chỉ tải dữ liệu `dishItems` cho Menu đang được chọn (VD: Menu 177). Các Menu chưa được chọn (VD: Menu 176) có 0 bản ghi trong `dishItems`, dẫn đến `groupsByMenuCode['176'] = []` (0 nhóm).
+- **Giải pháp xử lý triệt để**:
+  1. **Backend (`mongo_menu_so_co_service.py` & `schemas/mongodb.py`)**:
+     - Bổ sung schema `MenuGroupBrief` (`code`, `name`, `level`, `count`) và trường `groups: Optional[List[MenuGroupBrief]]` trong `MenuCategoryItem`.
+     - Trong hàm `get_menu_categories`, nạp và trích xuất danh sách tất cả các nhóm (bao gồm cả nhóm cha và nhóm con đồ uống `main-menu.items`) trực tiếp từ `ORDER_MENU_CACHE_CATEGORY` cho từng Menu (tính sẵn số lượng món `count` trong từng nhóm). Không tốn thêm bất kỳ query DB nào.
+  2. **Frontend (`mongoService.ts` & `ManageMenuSoCoTask.tsx`)**:
+     - Khai báo kiểu `MenuGroupBrief` và cập nhật `MenuCategoryItem` có thuộc tính `groups?: MenuGroupBrief[]`.
+     - Trong `groupsByMenuCode`: Khởi tạo sẵn danh sách nhóm cho tất cả các Menu từ `m.groups` do backend trả về, sau đó bổ sung thêm các nhóm từ `dishItems` (nếu có).
+     - Trong `existingGroupsInMenus`: Quét toàn bộ `m.groups` của tất cả Menu để tổng hợp danh sách nhóm dùng chung (phục vụ cả chức năng chuyển/nhân bản món).
+     - Cập nhật các hàm xử lý: `openBulkAddModal` (tự động làm mới Menu nếu dữ liệu cũ chưa có `groups`), `handleToggleMenuInBulkAdd`, `handleChangeMenuGroupMode`, `handleSelectExistingGroupForMenu`, `handleApplyGroupToAllCheckedMenus`, và các nút chọn tất cả Menu trong modal để luôn ưu tiên lấy nhóm từ `groupsByMenuCode` và fallback về `m.groups`.
+- **Kiểm thử & Đóng gói**:
+  - Backend: `python -m compileall app` và Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
+  - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 3.57s`), đóng gói bản build sạch sẽ vào `frontend/dist/`.
+
+---
+
 ### [2026-10-14] - Nâng Cấp KDS & Khắc Phục Lỗi Phân Tích MongoDB Nhà Hàng (Menu Rỗng & Kẹt Kết Nối & Logs KDS & Chuyển Quầy)
 - **Màn hình**: Phân Tích MongoDB Nhà Hàng (`RestaurantMongoAnalysisPage.tsx`, `KdsQuayModals.tsx`, `mongo_menu_so_co_service.py`, `mongodb_service.py`).
 - **Nội dung xử lý chi tiết theo yêu cầu**:

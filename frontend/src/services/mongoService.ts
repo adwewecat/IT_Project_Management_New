@@ -1733,6 +1733,13 @@ export interface MongoTransferSettingsResponse {
   default_tails: string[];
 }
 
+export interface MenuGroupBrief {
+  code: string;
+  name: string;
+  level: number;
+  count: number;
+}
+
 export interface MenuCategoryItem {
   code: string;
   id?: number;
@@ -1743,6 +1750,7 @@ export interface MenuCategoryItem {
   auto_delivery_in_so: boolean;
   group_count: number;
   dish_count: number;
+  groups?: MenuGroupBrief[];
 }
 
 export interface MenuCategoriesResponse {

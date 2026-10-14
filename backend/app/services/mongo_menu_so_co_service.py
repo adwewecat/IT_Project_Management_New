@@ -74,24 +74,59 @@ def get_menu_categories(host: str, port: int = 27017) -> List[Dict[str, Any]]:
         rc_cursor = db["RESTAURANT_CATEGORY"].find().sort("id", 1)
         results = []
 
-        # Đọc trước tất cả documents trong ORDER_MENU_CACHE_CATEGORY để tính tổng nhóm và món
+        # Đọc trước tất cả documents trong ORDER_MENU_CACHE_CATEGORY để tính tổng nhóm, món và trích xuất danh sách nhóm
         cache_map = {}
         for omc in db["ORDER_MENU_CACHE_CATEGORY"].find():
             cc = str(omc.get("category-code", "")).strip()
             if cc:
-                groups = omc.get("main-menu", {}).get("items", []) or []
+                raw_groups = omc.get("main-menu", {}).get("items", []) or []
                 total_dishes = 0
-                for g in groups:
-                    total_dishes += len(_flatten_group_items(g))
+                menu_groups = []
+                seen_g_codes = set()
+                for g in raw_groups:
+                    flattened = _flatten_group_items(g)
+                    total_dishes += len(flattened)
+                    g_code = str(g.get("code", "")).strip()
+                    g_name = str(g.get("name", "")).strip()
+                    g_level = int(g.get("level", -1))
+
+                    sub_map = {}
+                    for it, it_g_code, it_g_name, it_g_lvl, _ in flattened:
+                        if it_g_code not in sub_map:
+                            sub_map[it_g_code] = {
+                                "code": it_g_code,
+                                "name": it_g_name,
+                                "level": it_g_lvl,
+                                "count": 0
+                            }
+                        sub_map[it_g_code]["count"] += 1
+
+                    if sub_map:
+                        for grp in sub_map.values():
+                            if grp["code"] not in seen_g_codes:
+                                seen_g_codes.add(grp["code"])
+                                menu_groups.append(grp)
+                    else:
+                        fallback_code = g_code or f"{cc}_{len(menu_groups)+1}"
+                        if fallback_code not in seen_g_codes:
+                            seen_g_codes.add(fallback_code)
+                            menu_groups.append({
+                                "code": fallback_code,
+                                "name": g_name or f"Nhóm {len(menu_groups)+1}",
+                                "level": g_level,
+                                "count": 0
+                            })
+
                 cache_map[cc] = {
-                    "group_count": len(groups),
+                    "group_count": len(menu_groups),
                     "dish_count": total_dishes,
+                    "groups": menu_groups
                 }
 
         for rc in rc_cursor:
             code = str(rc.get("code", "")).strip()
             name = rc.get("name", "")
-            stats = cache_map.get(code, {"group_count": 0, "dish_count": 0})
+            stats = cache_map.get(code, {"group_count": 0, "dish_count": 0, "groups": []})
             results.append({
                 "code": code,
                 "id": rc.get("id"),
@@ -102,6 +137,7 @@ def get_menu_categories(host: str, port: int = 27017) -> List[Dict[str, Any]]:
                 "auto_delivery_in_so": bool(rc.get("autoDeliveryInSo", False)),
                 "group_count": stats["group_count"],
                 "dish_count": stats["dish_count"],
+                "groups": stats.get("groups", []),
             })
 
         # Bổ sung các Menu có trong ORDER_MENU_CACHE_CATEGORY nhưng chưa có trong RESTAURANT_CATEGORY
@@ -131,6 +167,7 @@ def get_menu_categories(host: str, port: int = 27017) -> List[Dict[str, Any]]:
                     "auto_delivery_in_so": False,
                     "group_count": stats["group_count"],
                     "dish_count": stats["dish_count"],
+                    "groups": stats.get("groups", []),
                 })
         return results
     finally:
