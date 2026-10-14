@@ -2105,6 +2105,43 @@ estaurant_service.py).
   6. *Đẩy code ngay lên GitHub (`origin/main`)*: Bất kỳ lúc nào thêm tính năng hoặc chỉnh sửa xong, BẮT BUỘC phải commit và push lên GitHub ngay lập tức.
   7. *Build sạch `backend/app` và `frontend/dist` để đẩy lên Server (Copy Là Chạy Ngay)*: Sau khi xử lý xong, bắt buộc build frontend ra `dist/` sạch và kiểm tra cú pháp backend `app/` để người dùng chỉ cần copy 2 thư mục này đẩy lên server là chạy ngay mà không cần cấu hình thủ công.
 
+### [2026-10-14] - Xử Lý Triệt Để Lỗi 3CX Hotline Máy Mới / User Khác Không Nhận Được Thông Báo Cuộc Gọi & Tích Hợp Quản Trị Phân Quyền
+- **Màn hình**: [Quản Lý Cuộc Gọi Hotline 3CX](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/components/restaurants/HotlineMissedCallsModal.tsx), [Hướng Dẫn Cài 3CX PWA](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/components/hotline/Hotline3cxGuideModal.tsx), [Phân Quyền Trực Hotline](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/components/restaurants/HotlinePermissionsModal.tsx) và [HotlineContext.tsx](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/contexts/HotlineContext.tsx).
+- **Hiện tượng lỗi**:
+  - Khi cài đặt thử trên máy tính mới hoặc user khác cài tương tự như máy anh Dũng (`dung.nguyenanh`):
+  - Khi có cuộc gọi reo chuông, **chỉ duy nhất máy của user `dung.nguyenanh` nhận được thông báo**, còn máy mới / user khác dù đã cài đặt và cấp quyền trình duyệt (`Notifications: Allow`, `Pop-ups: Allow`) vẫn hoàn toàn im lặng, không thấy popup VNC kết nối nhà hàng cũng như thông báo.
+- **Nguyên nhân cốt lõi phát hiện qua điều tra**:
+  1. *Tham số `&Agent=dung.nguyenanh` bị dán cứng trên 3CX PWA (Nguyên nhân trực tiếp)*:
+     - Trong ứng dụng 3CX Settings -> Integration -> Open Contact in Custom CRM, đường dẫn URL được cài đặt là:
+       `http://14.161.33.122:5001/api/v1/hotline/3cx-webhook?Number=%CallerNumber%&Agent=dung.nguyenanh`
+     - Khi máy mới hoặc user khác copy đường dẫn từ tài khoản `dung.nguyenanh` dán vào 3CX của họ, khi máy họ đổ chuông, 3CX gửi webhook kèm `Agent=dung.nguyenanh`.
+     - Server nhận và gán cuộc gọi cho `duty_user = "dung.nguyenanh"`.
+     - Trình duyệt của user khác (đang đăng nhập bằng username của họ) nhận event và kiểm tra `isAgentMatch(curDuty, user)`. Vì `curDuty` là `dung.nguyenanh` không khớp với user hiện tại, hệ thống web trên máy đó **lập tức bỏ qua cuộc gọi** (không reo chuông, không bung VNC). Trong khi đó máy anh Dũng (`dung.nguyenanh`) lại nhận được thông báo!
+  2. *Chặn phân quyền ngầm trong `backend/data/hotline_permissions.json`*:
+     - File cấu hình phân quyền hotline đặt `allow_all: false` và `allowed_users: ["dung.nguyenanh", "admin"]`.
+     - Nếu tài khoản của user khác không thuộc nhóm `admin`, `helpdesk`, `app` hoặc chưa được gán quyền trong `dbo.PHANQUYEN_DETAIL`, API `/check-permission` trả về `can_access: false`.
+     - Hệ thống web tự động ẩn nút Hotline trên Header và vô hiệu hóa kết nối Server-Sent Events (SSE) cũng như Polling.
+     - Đồng thời, modal quản trị phân quyền [`HotlinePermissionsModal.tsx`](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/components/restaurants/HotlinePermissionsModal.tsx) trước đó chưa được gắn nút mở vào bất kỳ đâu trên giao diện, khiến Super Admin không thể xem hoặc cấu hình mở quyền cho nhân viên.
+  3. *Trạng thái Hotline mặc định trên máy mới là TẮT*:
+     - Trình duyệt/máy mới chưa lưu `localStorage.getItem('hotline_duty_active')`, nút Hotline trên Header mặc định ở trạng thái màu xám `🎧 Hotline: TẮT`. Nếu user chưa click chuyển sang màu xanh `🎧 Hotline: BẬT`, hệ thống sẽ không bung modal VNC.
+- **Các bước khắc phục triệt để**:
+  1. *Nâng cấp [`Hotline3cxGuideModal.tsx`](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/components/hotline/Hotline3cxGuideModal.tsx) hỗ trợ 2 Chế Độ Trực linh hoạt*:
+     - **Chế độ 1 - Tổng Đài Chung (Khuyên dùng)**: URL `http://14.161.33.122:5001/api/v1/hotline/3cx-webhook?Number=%CallerNumber%` (không gán cứng `&Agent=`). Khi có cuộc gọi, **TẤT CẢ** nhân viên đang bật nút Hotline trên Web đều sẽ nhận chuông và bung popup VNC. Tránh 100% tình trạng cài sai hoặc kẹt tên user.
+     - **Chế độ 2 - Máy Nhánh Riêng**: URL kèm `&Agent=${username}` dành cho trường hợp muốn chỉ máy cá nhân nhận chuông. Đi kèm hộp cảnh báo đỏ nổi bật: *TUYỆT ĐỐI KHÔNG copy link có chứa tên của bạn sang máy đồng nghiệp khác*.
+     - Bổ sung hướng dẫn 3 yếu tố bắt buộc: Bật nút Hotline Header, cấp quyền Pop-up cho trang 3CX, và phân quyền tài khoản.
+  2. *Gắn nút "Phân Quyền Trực Hotline" vào [`HotlineMissedCallsModal.tsx`](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/components/restaurants/HotlineMissedCallsModal.tsx)*:
+     - Tích hợp [`HotlinePermissionsModal`](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/components/restaurants/HotlinePermissionsModal.tsx) trực tiếp vào Footer của modal Quản Lý Cuộc Gọi Hotline 3CX dành riêng cho Super Admin / `dung.nguyenanh`.
+     - Cho phép Super Admin bật nhanh `allow_all` hoặc quản lý whitelist nhân viên/nhóm quyền trực hotline trực quan 1-click.
+  3. *Cập nhật cấu hình phân quyền*:
+     - Chuyển `allow_all: true` trong [`backend/data/hotline_permissions.json`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/data/hotline_permissions.json) và `DEFAULT_HOTLINE_PERMISSIONS` trong [`hotline_3cx_service.py`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/services/hotline_3cx_service.py) để máy mới và mọi tài khoản IT khi đăng nhập đều tự động được phép trực hotline.
+  4. *Bổ sung cảnh báo Console rõ ràng trong [`HotlineContext.tsx`](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/contexts/HotlineContext.tsx)*:
+     - Khi cuộc gọi bị bỏ qua do lệch username gán đích danh, hệ thống tự in `console.warn` giải thích nguyên nhân và hướng dẫn đổi URL.
+  5. *Đóng gói & Kiểm thử*:
+     - Build Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.74s`).
+     - Backend: `python -m compileall app` và Smoke Test đạt 100% PASSED.
+
+---
+
 ### [2026-10-14] - Xử Lý Triệt Để Lỗi Outlook Memo Agent Báo "🟡 Chờ Bật Agent Máy Cá Nhân" & "⚪ Agent Chưa Bật"
 - **Màn hình**: Quét Mail Memo AUTO (Outlook / Salesforce) trên `JobManagementPage.tsx` ([`mailMemoService.ts`](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/services/mailMemoService.ts) và `D:\Setup\Outlook_Memo_Agent_Full`).
 - **Hiện tượng lỗi**: Người dùng đã chạy file bat nhưng trên giao diện web modal Mail Memo vẫn báo: `⚪ Agent Chưa Bật` và `🟡 Chờ Bật Agent Máy Cá Nhân`.

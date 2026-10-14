@@ -12,9 +12,11 @@ import {
   Hash,
   Search,
   Star,
+  Shield,
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { HotlinePermissionsModal } from './HotlinePermissionsModal';
 import { useHotline } from '../../contexts/HotlineContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { checkIsDungOrSuperAdmin } from '../../utils/authUtils';
@@ -52,6 +54,9 @@ export const HotlineMissedCallsModal: React.FC<HotlineMissedCallsModalProps> = (
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isResolvingAll, setIsResolvingAll] = useState<boolean>(false);
   const [resolvingId, setResolvingId] = useState<number | null>(null);
+
+  // State mở modal phân quyền hotline
+  const [isPermissionsModalOpen, setIsPermissionsModalOpen] = useState<boolean>(false);
 
   // Search filter inside modal
   const [filterQuery, setFilterQuery] = useState<string>('');
@@ -173,7 +178,8 @@ export const HotlineMissedCallsModal: React.FC<HotlineMissedCallsModalProps> = (
   const unresolvedCount = missedCalls.length;
 
   return (
-    <Modal
+    <>
+      <Modal
       isOpen={isOpen}
       onClose={onClose}
       title={
@@ -262,6 +268,30 @@ export const HotlineMissedCallsModal: React.FC<HotlineMissedCallsModalProps> = (
             >
               <Star size={13} style={{ color: '#EAB308', fill: '#FACC15' }} /> Hướng dẫn cài 3CX (PWA)
             </button>
+
+            {checkIsDungOrSuperAdmin(user) && (
+              <button
+                type="button"
+                onClick={() => setIsPermissionsModalOpen(true)}
+                style={{
+                  fontSize: '12px',
+                  color: '#1E40AF',
+                  background: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '4px 10px',
+                  fontWeight: 600,
+                  transition: 'all 0.15s ease',
+                }}
+                title="Cài đặt nhóm quyền và danh sách nhân viên được phép trực Hotline 3CX"
+              >
+                <Shield size={13} style={{ color: '#2563EB' }} /> Phân Quyền Trực Hotline
+              </button>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -1057,5 +1087,12 @@ export const HotlineMissedCallsModal: React.FC<HotlineMissedCallsModalProps> = (
         )}
       </div>
     </Modal>
+
+    {/* Modal Phân Quyền Trực Hotline 3CX (Dành riêng cho Super Admin / dung.nguyenanh) */}
+    <HotlinePermissionsModal
+      isOpen={isPermissionsModalOpen}
+      onClose={() => setIsPermissionsModalOpen(false)}
+    />
+  </>
   );
 };

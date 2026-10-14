@@ -8,6 +8,6 @@
     "dung.nguyenanh",
     "admin"
   ],
-  "allow_all": false,
+  "allow_all": true,
   "agent_server_url": "http://14.161.33.122:5001"
 }

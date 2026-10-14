@@ -273,6 +273,10 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
             const isForMe = hasSpecificAgent ? isAgentMatch(curDuty, user) : true;
             const shouldAutoOpenVnc = isHotlineActive && isForMe;
 
+            if (hasSpecificAgent && !isForMe && isHotlineActive) {
+              console.warn(`[Hotline-3CX Polling] Bỏ qua cuộc gọi ${cur.ext} vì được 3CX gửi riêng cho Agent "${curDuty}", tài khoản hiện tại "${user?.username}" không khớp. Để nhận cuộc gọi, hãy sửa URL trên 3CX thành Tổng Đài Chung (bỏ &Agent=) hoặc đúng username của bạn!`);
+            }
+
             if (shouldAutoOpenVnc && lastHandledVncCallIdRef.current !== cur.call_id) {
               lastHandledVncCallIdRef.current = cur.call_id;
               playHotlineBeep();
@@ -399,6 +403,8 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
             }
 
             showToast(`📞 Cuộc gọi đến từ ${r.res} (Line: ${callData.ext}) — Đang kết nối VNC/KDS`, 'success', 10000);
+          } else {
+            console.warn(`[Hotline-3CX SSE] Bỏ qua cuộc gọi từ ${callData.ext} vì được 3CX gửi riêng cho Agent "${curDuty}", tài khoản hiện tại "${user?.username}" không khớp. Hãy sửa URL trên 3CX thành Tổng Đài Chung (bỏ &Agent=) hoặc đúng username của bạn!`);
           }
         } else {
           // KHÔNG PHẢI NHÀ HÀNG (CUỘC GỌI NỘI BỘ):

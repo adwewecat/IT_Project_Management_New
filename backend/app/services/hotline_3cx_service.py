@@ -1147,7 +1147,7 @@ HOTLINE_PERMISSIONS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "
 DEFAULT_HOTLINE_PERMISSIONS: Dict[str, Any] = {
     "enabled_roles": ["admin", "helpdesk", "app"],
     "allowed_users": ["dung.nguyenanh", "admin"],
-    "allow_all": False,
+    "allow_all": True,
     "agent_server_url": "",
 }
 
