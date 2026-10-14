@@ -876,6 +876,11 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     level: number;
   }>>({});
 
+  // Tìm kiếm nhóm món trong modal Thêm món hàng loạt & Di chuyển/Nhân bản
+  const [globalGroupSearch, setGlobalGroupSearch] = useState<string>('');
+  const [bulkGroupSearchByMenu, setBulkGroupSearchByMenu] = useState<Record<string, string>>({});
+  const [moveGroupSearch, setMoveGroupSearch] = useState<string>('');
+
   const handleToggleMenuInBulkAdd = (menuCode: string) => {
     if (bulkAddTargetMenus.includes(menuCode)) {
       setBulkAddTargetMenus(bulkAddTargetMenus.filter((c) => c !== menuCode));
@@ -1132,6 +1137,8 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     setBulkAddNewGroupLevel(-1);
     setBulkAddPasteText('');
     setBulkAddRows([]);
+    setGlobalGroupSearch('');
+    setBulkGroupSearchByMenu({});
     setIsBulkAddOpen(true);
   };
 
@@ -1213,6 +1220,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     }
     setMoveTargetMenu(selectedDishesList[0]?.menu_code || (menus[0]?.code || ''));
     setMoveTargetGroup(existingGroupsInMenus[0]?.code || '');
+    setMoveGroupSearch('');
     setIsMoveCloneOpen(true);
   };
 
@@ -3193,6 +3201,85 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                 </div>
               </div>
 
+              {/* Thanh tìm kiếm nhanh nhóm món dùng chung cho tất cả Menu */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: '380px' }}>
+                  <Search size={13} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#64748B' }} />
+                  <input
+                    type="text"
+                    placeholder="🔍 Gõ tìm nhanh nhóm cho TẤT CẢ Menu (VD: SALAD, THỊT, BÒ...)"
+                    value={globalGroupSearch}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setGlobalGroupSearch(val);
+                      const newSearchMap: Record<string, string> = {};
+                      menus.forEach(m => {
+                        newSearchMap[m.code] = val;
+                      });
+                      setBulkGroupSearchByMenu(newSearchMap);
+
+                      const q = val.trim().toLowerCase();
+                      if (q) {
+                        const newConfigMap = { ...bulkAddMenuGroupMap };
+                        bulkAddTargetMenus.forEach(mCode => {
+                          const gList = (groupsByMenuCode[mCode] && groupsByMenuCode[mCode].length > 0)
+                            ? groupsByMenuCode[mCode]
+                            : (menus.find(m => m.code === mCode)?.groups || []);
+                          const match = gList.find(g => g.name.toLowerCase().includes(q) || g.code.toLowerCase().includes(q));
+                          if (match) {
+                            newConfigMap[mCode] = {
+                              group_mode: 'existing',
+                              group_code: match.code,
+                              group_name: match.name,
+                              level: match.level ?? -1
+                            };
+                          }
+                        });
+                        setBulkAddMenuGroupMap(newConfigMap);
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '5px 24px 5px 26px',
+                      fontSize: '11.5px',
+                      borderRadius: '5px',
+                      border: '1px solid #93C5FD',
+                      backgroundColor: '#FFFFFF',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  {globalGroupSearch && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGlobalGroupSearch('');
+                        setBulkGroupSearchByMenu({});
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: '6px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        border: 'none',
+                        background: 'none',
+                        cursor: 'pointer',
+                        padding: 0,
+                        color: '#94A3B8'
+                      }}
+                      title="Xóa tìm kiếm"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+                {globalGroupSearch && (
+                  <span style={{ fontSize: '11px', color: '#1D4ED8', fontWeight: 600 }}>
+                    ⚡ Đang lọc tất cả menu theo: "{globalGroupSearch}"
+                  </span>
+                )}
+              </div>
+
               {/* Danh Sách Dọc Các Menu */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '250px', overflowY: 'auto', padding: '6px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: '#F8FAFC' }}>
                 {menus.map((m) => {
@@ -3270,57 +3357,132 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                             </label>
                           </div>
 
-                          {currentConfig.group_mode === 'existing' ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                              <select
-                                value={currentConfig.group_code || ''}
-                                onChange={(e) => handleSelectExistingGroupForMenu(m.code, e.target.value)}
-                                style={{
-                                  flex: '1 1 320px',
-                                  padding: '5px 8px',
-                                  fontSize: '11.5px',
-                                  borderRadius: '5px',
-                                  border: '1px solid #93C5FD',
-                                  backgroundColor: '#FFFFFF',
-                                  outline: 'none',
-                                  cursor: 'pointer',
-                                  fontWeight: 600,
-                                  color: '#1E293B'
-                                }}
-                              >
-                                {groupsInMenu.length === 0 ? (
-                                  <option value="">-- Menu này chưa có nhóm nào (hãy chọn Tạo nhóm mới) --</option>
-                                ) : (
-                                  groupsInMenu.map((g) => (
-                                    <option key={g.code} value={g.code}>
-                                      📂 {g.name} (Mã: {g.code}) &bull; {g.level === 0 ? '🥤 Đồ uống (Level 0)' : '🍛 Món ăn (Level -1)'} [{g.count} món]
-                                    </option>
-                                  ))
-                                )}
-                              </select>
+                          {currentConfig.group_mode === 'existing' ? (() => {
+                            const searchQuery = (bulkGroupSearchByMenu[m.code] || '').trim().toLowerCase();
+                            const filteredGroupsInMenu = searchQuery
+                              ? groupsInMenu.filter((g) => g.name.toLowerCase().includes(searchQuery) || g.code.toLowerCase().includes(searchQuery))
+                              : groupsInMenu;
 
-                              {bulkAddTargetMenus.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleApplyGroupToAllCheckedMenus(m.code, currentConfig)}
-                                  title="Tìm và gán nhóm có cùng tên/loại sang tất cả các Menu đang được chọn khác"
-                                  style={{
-                                    fontSize: '10.5px',
-                                    fontWeight: 600,
-                                    color: '#2563EB',
-                                    backgroundColor: '#FFFFFF',
-                                    border: '1px solid #93C5FD',
-                                    borderRadius: '4px',
-                                    padding: '4px 8px',
-                                    cursor: 'pointer',
-                                    whiteSpace: 'nowrap'
-                                  }}
-                                >
-                                  ⚡ Gán nhóm này cho các Menu khác
-                                </button>
-                              )}
-                            </div>
-                          ) : (
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                  {/* Ô input tìm kiếm nhóm riêng cho Menu này */}
+                                  <div style={{ position: 'relative', flex: '0 0 210px', minWidth: '160px' }}>
+                                    <Search size={12} style={{ position: 'absolute', left: '7px', top: '50%', transform: 'translateY(-50%)', color: '#64748B' }} />
+                                    <input
+                                      type="text"
+                                      placeholder="🔍 Lọc nhóm menu này..."
+                                      value={bulkGroupSearchByMenu[m.code] || ''}
+                                      onChange={(e) => {
+                                        const text = e.target.value;
+                                        setBulkGroupSearchByMenu((prev) => ({ ...prev, [m.code]: text }));
+                                        const q = text.trim().toLowerCase();
+                                        if (q) {
+                                          const match = groupsInMenu.find(
+                                            (g) => g.name.toLowerCase().includes(q) || g.code.toLowerCase().includes(q)
+                                          );
+                                          if (match) {
+                                            handleSelectExistingGroupForMenu(m.code, match.code);
+                                          }
+                                        }
+                                      }}
+                                      style={{
+                                        width: '100%',
+                                        padding: '5px 22px 5px 24px',
+                                        fontSize: '11px',
+                                        borderRadius: '5px',
+                                        border: '1px solid #93C5FD',
+                                        backgroundColor: '#F8FAFC',
+                                        outline: 'none',
+                                        boxSizing: 'border-box'
+                                      }}
+                                    />
+                                    {bulkGroupSearchByMenu[m.code] && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setBulkGroupSearchByMenu((prev) => ({ ...prev, [m.code]: '' }))}
+                                        style={{
+                                          position: 'absolute',
+                                          right: '6px',
+                                          top: '50%',
+                                          transform: 'translateY(-50%)',
+                                          border: 'none',
+                                          background: 'none',
+                                          cursor: 'pointer',
+                                          padding: 0,
+                                          color: '#94A3B8'
+                                        }}
+                                        title="Xóa lọc"
+                                      >
+                                        <X size={11} />
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Dropdown nhóm món đã được lọc */}
+                                  <select
+                                    value={currentConfig.group_code || ''}
+                                    onChange={(e) => handleSelectExistingGroupForMenu(m.code, e.target.value)}
+                                    style={{
+                                      flex: '1 1 280px',
+                                      padding: '5px 8px',
+                                      fontSize: '11.5px',
+                                      borderRadius: '5px',
+                                      border: '1px solid #93C5FD',
+                                      backgroundColor: '#FFFFFF',
+                                      outline: 'none',
+                                      cursor: 'pointer',
+                                      fontWeight: 600,
+                                      color: '#1E293B'
+                                    }}
+                                  >
+                                    {filteredGroupsInMenu.length === 0 ? (
+                                      <option value="">
+                                        {groupsInMenu.length === 0
+                                          ? '-- Menu này chưa có nhóm nào (hãy chọn Tạo nhóm mới) --'
+                                          : `-- Không tìm thấy nhóm nào khớp "${bulkGroupSearchByMenu[m.code]}" --`}
+                                      </option>
+                                    ) : (
+                                      filteredGroupsInMenu.map((g) => (
+                                        <option key={g.code} value={g.code}>
+                                          📂 {g.name} (Mã: {g.code}) &bull; {g.level === 0 ? '🥤 Đồ uống (Level 0)' : '🍛 Món ăn (Level -1)'} [{g.count} món]
+                                        </option>
+                                      ))
+                                    )}
+                                  </select>
+
+                                  {bulkAddTargetMenus.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleApplyGroupToAllCheckedMenus(m.code, currentConfig)}
+                                      title="Tìm và gán nhóm có cùng tên/loại sang tất cả các Menu đang được chọn khác"
+                                      style={{
+                                        fontSize: '10.5px',
+                                        fontWeight: 600,
+                                        color: '#2563EB',
+                                        backgroundColor: '#FFFFFF',
+                                        border: '1px solid #93C5FD',
+                                        borderRadius: '4px',
+                                        padding: '4px 8px',
+                                        cursor: 'pointer',
+                                        whiteSpace: 'nowrap'
+                                      }}
+                                    >
+                                      ⚡ Gán nhóm này cho các Menu khác
+                                    </button>
+                                  )}
+                                </div>
+
+                                {searchQuery && (
+                                  <div style={{ fontSize: '10.5px', color: filteredGroupsInMenu.length > 0 ? '#0284C7' : '#DC2626' }}>
+                                    {filteredGroupsInMenu.length > 0
+                                      ? `✓ Tìm thấy ${filteredGroupsInMenu.length} / ${groupsInMenu.length} nhóm khớp "${bulkGroupSearchByMenu[m.code]}"`
+                                      : `⚠️ Không tìm thấy nhóm nào khớp "${bulkGroupSearchByMenu[m.code]}" trong ${groupsInMenu.length} nhóm`}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })() : (
                             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px' }}>
                               <input
                                 type="text"
@@ -3483,18 +3645,55 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
 
             <div>
               <label style={{ fontSize: '11px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
-                Chọn Nhóm Món Đích:
+                Chọn Nhóm Món Đích ({existingGroupsInMenus.length} nhóm):
               </label>
+              <div style={{ position: 'relative', marginBottom: '6px' }}>
+                <Search size={12} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#64748B' }} />
+                <input
+                  type="text"
+                  placeholder="🔍 Gõ tìm nhanh nhóm đích (VD: SALAD, THỊT...)"
+                  value={moveGroupSearch}
+                  onChange={(e) => {
+                    const txt = e.target.value;
+                    setMoveGroupSearch(txt);
+                    const q = txt.trim().toLowerCase();
+                    if (q) {
+                      const match = existingGroupsInMenus.find(g => g.name.toLowerCase().includes(q) || g.code.toLowerCase().includes(q));
+                      if (match) setMoveTargetGroup(match.code);
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '5px 22px 5px 26px',
+                    fontSize: '11.5px',
+                    borderRadius: '5px',
+                    border: '1px solid #CBD5E1',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+                {moveGroupSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setMoveGroupSearch('')}
+                    style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#94A3B8' }}
+                  >
+                    <X size={11} />
+                  </button>
+                )}
+              </div>
               <select
                 value={moveTargetGroup}
                 onChange={(e) => setMoveTargetGroup(e.target.value)}
                 style={{ width: '100%', padding: '6px 10px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: '#FFFFFF', outline: 'none' }}
               >
-                {existingGroupsInMenus.map((g) => (
-                  <option key={g.code} value={g.code}>
-                    {g.name} (Mã: {g.code})
-                  </option>
-                ))}
+                {existingGroupsInMenus
+                  .filter((g) => !moveGroupSearch.trim() || g.name.toLowerCase().includes(moveGroupSearch.trim().toLowerCase()) || g.code.toLowerCase().includes(moveGroupSearch.trim().toLowerCase()))
+                  .map((g) => (
+                    <option key={g.code} value={g.code}>
+                      {g.name} (Mã: {g.code})
+                    </option>
+                  ))}
               </select>
             </div>
 

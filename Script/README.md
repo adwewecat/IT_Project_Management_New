@@ -226,8 +226,14 @@ npm run dev
        + Làm rõ kiến trúc luồng dữ liệu: Tên món và Đơn giá thực tế được máy chủ RK7 MID của nhà hàng đồng bộ trực tiếp vào MongoDB máy trạm (`host:27017`) qua các bảng `DISH_CACHE`, `CO_MENU_ITEM`, `ORDER_MENU_CACHE_CATEGORY`, `SHOW_HIDE_ITEMS`, `OUT_OF_DISH`. Dữ liệu Master gốc nằm tại SQL Server RK7 Central (`172.16.8.26`).
        + Xây dựng API tra cứu tự động: Endpoint `GET /api/v1/mongodb/menu-so-co/lookup-dish?host={host}&rk7_code={code}` trong [`backend/app/services/mongo_menu_so_co_service.py`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/services/mongo_menu_so_co_service.py) và [`backend/app/api/v1/mongodb.py`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/api/v1/mongodb.py). Tự động quét từ MongoDB nhà hàng (kết quả đồng bộ từ MID) và fallback về RK7 Central SQL Server để lấy chính xác Tên Món, Mã SAP và Đơn Giá.
        + Tích hợp Frontend: Trong modal *"Thêm Món Ăn Vào Nhóm"* (`ManageMenuSoCoTask.tsx`), bổ sung nút `⚡ Lấy từ MID / Server` và tự động kích hoạt tra cứu khi người dùng nhập xong Mã RK7 (onBlur), tự động điền Tên Món, Mã SAP và Giá gợi ý.
+  3. *Bổ sung ô Input Search danh sách nhóm món trong modal "Thêm Món Hàng Loạt Vào Menu"*:
+     - **Vấn đề**: Khi Menu có nhiều nhóm (20 - 50 nhóm, ví dụ `Buffet Xeo Xeo Plus_2026` có 26 nhóm), việc cuộn tìm nhóm trong thẻ `<select>` rất khó khăn và mất thời gian.
+     - **Giải pháp**:
+       + Bổ sung thanh tìm kiếm nhanh dùng chung ở đầu Bước 1 (`globalGroupSearch`): Cho phép gõ tìm nhóm (VD: `SALAD`, `THỊT`...) áp dụng lọc đồng loạt cho tất cả các Menu đang được tick chọn, tự động tìm và chọn nhóm khớp đầu tiên.
+       + Bổ sung ô input tìm kiếm độc lập cho từng Menu (`bulkGroupSearchByMenu[m.code]`): Đặt ngay trước dropdown nhóm với icon kính lúp và nút xóa nhanh `✕`. Khi người dùng gõ từ khóa, danh sách `<select>` lập tức co gọn chỉ còn các nhóm phù hợp kèm thông báo số lượng nhóm tìm thấy `✓ Tìm thấy X / Y nhóm`.
+       + Nâng cấp tương tự cho modal *"Chuyển / Nhân Bản Món Ăn Sang Nhóm Khác"* (`isMoveCloneOpen`): Bổ sung ô tìm kiếm nhóm đích `moveGroupSearch` giúp tra cứu nhanh chóng trong toàn bộ các nhóm hiện có.
 - **Kiểm thử & Đóng gói**:
-  - Frontend Build: `cmd /c "npm run build"` tại `frontend/` $\rightarrow$ Exit code 0 (`✓ built in 3.67s`), bundle sạch sẽ trong `frontend/dist/`.
+  - Frontend Build: `cmd /c "npm run build"` tại `frontend/` $\rightarrow$ Exit code 0 (`✓ built in 3.80s`), bundle sạch sẽ trong `frontend/dist/`.
   - Backend Smoke Test: `python -m compileall app` và `python -c "from app.main import app; print('>>> PASSED 100%')"` $\rightarrow$ Đạt 100%.
 
 ---
