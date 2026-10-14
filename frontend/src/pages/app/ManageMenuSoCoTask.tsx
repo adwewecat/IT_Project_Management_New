@@ -650,11 +650,13 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   const [newDishRk7, setNewDishRk7] = useState<string>('');
   const [newDishName, setNewDishName] = useState<string>('');
   const [newDishSap, setNewDishSap] = useState<string>('');
-  const [newDishPrice, setNewDishPrice] = useState<number>(0);
+  const [newDishPrice, setNewDishPrice] = useState<number | string>(''); // Mặc định bỏ trống theo yêu cầu user
   const [newDishSortOrder, setNewDishSortOrder] = useState<number>(1);
   const [newDishImg, setNewDishImg] = useState<string>('');
   const [newDishAutoCo, setNewDishAutoCo] = useState<boolean>(true);
   const [savingAddDishToGroup, setSavingAddDishToGroup] = useState<boolean>(false);
+  const [lookingUpDish, setLookingUpDish] = useState<boolean>(false);
+  const [lookupFeedback, setLookupFeedback] = useState<{ text: string; type: 'success' | 'warning' } | null>(null);
 
   const openAddDishToGroupModal = (
     menuCode: string,
@@ -667,11 +669,40 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     setNewDishRk7('');
     setNewDishName('');
     setNewDishSap('');
-    setNewDishPrice(0);
+    setNewDishPrice(''); // Bỏ trống mặc định, hệ thống tự động đồng bộ giá từ MID/Server
     setNewDishSortOrder(existingCount + 1);
     setNewDishImg('');
     setNewDishAutoCo(true);
+    setLookupFeedback(null);
     setIsAddDishToGroupOpen(true);
+  };
+
+  // Tra cứu tự động tên món, mã SAP, giá bán từ MID/MongoDB nhà hàng hoặc RK7 Central Master DB
+  const handleLookupDish = async (codeToLookup?: string) => {
+    const code = (codeToLookup !== undefined ? codeToLookup : newDishRk7).trim();
+    if (!code || !activeHost) return;
+    setLookingUpDish(true);
+    setLookupFeedback(null);
+    try {
+      const res = await mongoService.lookupDishInfo(activeHost, code);
+      if (res.found) {
+        if (res.name) setNewDishName(res.name);
+        if (res.sap_code) setNewDishSap(res.sap_code);
+        if (res.price !== undefined && res.price !== null && Number(res.price) > 0) {
+          setNewDishPrice(Number(res.price));
+        }
+        if (res.image_url) setNewDishImg(res.image_url);
+        const fbText = `✓ Tìm thấy từ [${res.source || 'Server'}]: ${res.name || code}${res.price ? ` (${Number(res.price).toLocaleString()} đ)` : ''}`;
+        setLookupFeedback({ text: fbText, type: 'success' });
+        showToast(fbText, 'info');
+      } else {
+        setLookupFeedback({ text: res.message || `Không tìm thấy món với mã RK7 ${code}`, type: 'warning' });
+      }
+    } catch (err: any) {
+      console.warn('Lỗi tra cứu món:', err);
+    } finally {
+      setLookingUpDish(false);
+    }
   };
 
   const handleSaveAddDishToGroup = async () => {
@@ -686,6 +717,8 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     }
 
     setSavingAddDishToGroup(true);
+    const parsedPrice = (newDishPrice === '' || isNaN(Number(newDishPrice))) ? 0 : Number(newDishPrice);
+
     try {
       const res = await mongoService.bulkAddMenuDishes({
         host: activeHost,
@@ -698,7 +731,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
           rk7_code: newDishRk7.trim(),
           name: newDishName.trim(),
           sap_code: newDishSap.trim() || undefined,
-          price: Number(newDishPrice) || 0,
+          price: parsedPrice,
           sort_order: Number(newDishSortOrder) || 1,
           image_url: newDishImg.trim() || undefined,
           level: targetGroupForAdd.level
@@ -713,7 +746,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
               rk7_code: newDishRk7.trim(),
               name: newDishName.trim(),
               sap_code: newDishSap.trim() || undefined,
-              price: Number(newDishPrice) || 0,
+              price: parsedPrice,
               image_url: newDishImg.trim() || undefined
             }]
           });
@@ -2442,11 +2475,11 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
 
                               {/* GROUP DISHES TABLE */}
                               {isGroupExpanded && (
-                                <TopScrollTable>
+                                <TopScrollTable maxHeight="520px">
                                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                                     <thead>
                                       <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: '#4B5563', position: 'sticky', top: 0, zIndex: 5 }}>
-                                        <th style={{ padding: '7px 10px', width: '36px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>
+                                        <th style={{ padding: '7px 10px', width: '36px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>
                                           <input
                                             type="checkbox"
                                             checked={isGroupSelected}
@@ -2454,17 +2487,17 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                                             style={{ cursor: 'pointer' }}
                                           />
                                         </th>
-                                        <th style={{ padding: '7px 10px', width: '45px' }}>STT</th>
-                                        <th style={{ padding: '7px 10px', width: '90px' }}>Loại</th>
-                                        <th style={{ padding: '7px 10px', width: '90px' }}>Mã RK7</th>
-                                        <th style={{ padding: '7px 10px', minWidth: '180px' }}>Tên Món</th>
-                                        <th style={{ padding: '7px 10px', width: '100px' }}>Mã SAP</th>
-                                        <th style={{ padding: '7px 10px', width: '60px', textAlign: 'center' }}>Thứ Tự</th>
-                                        <th style={{ padding: '7px 10px', width: '90px', textAlign: 'right' }}>Giá (VNĐ)</th>
-                                        <th style={{ padding: '7px 10px', width: '80px', textAlign: 'center' }}>Hình Ảnh</th>
-                                        <th style={{ padding: '7px 10px', width: '70px', textAlign: 'center' }}>SO</th>
-                                        <th style={{ padding: '7px 10px', width: '120px', textAlign: 'center' }}>CO</th>
-                                        <th style={{ padding: '7px 10px', width: '110px', textAlign: 'center' }}>Thao Tác</th>
+                                        <th style={{ padding: '7px 10px', width: '45px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>STT</th>
+                                        <th style={{ padding: '7px 10px', width: '90px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Loại</th>
+                                        <th style={{ padding: '7px 10px', width: '90px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Mã RK7</th>
+                                        <th style={{ padding: '7px 10px', minWidth: '180px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Tên Món</th>
+                                        <th style={{ padding: '7px 10px', width: '100px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Mã SAP</th>
+                                        <th style={{ padding: '7px 10px', width: '60px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Thứ Tự</th>
+                                        <th style={{ padding: '7px 10px', width: '90px', textAlign: 'right', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Giá (VNĐ)</th>
+                                        <th style={{ padding: '7px 10px', width: '80px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Hình Ảnh</th>
+                                        <th style={{ padding: '7px 10px', width: '70px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>SO</th>
+                                        <th style={{ padding: '7px 10px', width: '120px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>CO</th>
+                                        <th style={{ padding: '7px 10px', width: '110px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Thao Tác</th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -2705,11 +2738,11 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
             /* ───────────────────────────────────────────────────────────── */
             /* CHẾ ĐỘ 2: BẢNG DANH SÁCH PHẲNG (FLAT TABLE VIEW)              */
             /* ───────────────────────────────────────────────────────────── */
-            <TopScrollTable>
+            <TopScrollTable maxHeight="calc(100vh - 280px)">
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: '#4B5563', position: 'sticky', top: 0, zIndex: 5 }}>
-                    <th style={{ padding: '8px 10px', width: '36px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>
+                    <th style={{ padding: '8px 10px', width: '36px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>
                       <input
                         type="checkbox"
                         checked={isAllSelected}
@@ -2717,21 +2750,21 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                         style={{ cursor: 'pointer' }}
                       />
                     </th>
-                    <th style={{ padding: '8px 10px', width: '50px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>STT</th>
+                    <th style={{ padding: '8px 10px', width: '50px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>STT</th>
                     {searchAllMenus && (
-                      <th style={{ padding: '8px 10px', minWidth: '150px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Menu (Tên - Mã)</th>
+                      <th style={{ padding: '8px 10px', minWidth: '150px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Menu (Tên - Mã)</th>
                     )}
-                    <th style={{ padding: '8px 10px', minWidth: '130px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Nhóm Món</th>
-                    <th style={{ padding: '8px 10px', width: '90px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Loại</th>
-                    <th style={{ padding: '8px 10px', width: '90px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Mã RK7</th>
-                    <th style={{ padding: '8px 10px', minWidth: '180px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Tên Món</th>
-                    <th style={{ padding: '8px 10px', width: '100px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Mã SAP</th>
-                    <th style={{ padding: '8px 10px', width: '60px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Thứ Tự</th>
-                    <th style={{ padding: '8px 10px', width: '90px', textAlign: 'right', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Giá (VNĐ)</th>
-                    <th style={{ padding: '8px 10px', width: '80px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Hình Ảnh</th>
-                    <th style={{ padding: '8px 10px', width: '70px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>SO</th>
-                    <th style={{ padding: '8px 10px', width: '130px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>CO</th>
-                    <th style={{ padding: '8px 10px', width: '110px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB' }}>Thao Tác</th>
+                    <th style={{ padding: '8px 10px', minWidth: '130px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Nhóm Món</th>
+                    <th style={{ padding: '8px 10px', width: '90px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Loại</th>
+                    <th style={{ padding: '8px 10px', width: '90px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Mã RK7</th>
+                    <th style={{ padding: '8px 10px', minWidth: '180px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Tên Món</th>
+                    <th style={{ padding: '8px 10px', width: '100px', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Mã SAP</th>
+                    <th style={{ padding: '8px 10px', width: '60px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Thứ Tự</th>
+                    <th style={{ padding: '8px 10px', width: '90px', textAlign: 'right', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Giá (VNĐ)</th>
+                    <th style={{ padding: '8px 10px', width: '80px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Hình Ảnh</th>
+                    <th style={{ padding: '8px 10px', width: '70px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>SO</th>
+                    <th style={{ padding: '8px 10px', width: '130px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>CO</th>
+                    <th style={{ padding: '8px 10px', width: '110px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F9FAFB', zIndex: 5 }}>Thao Tác</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3350,15 +3383,15 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                 </span>
                 <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
-                    <thead>
+                    <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#F3F4F6' }}>
                       <tr style={{ backgroundColor: '#F3F4F6', borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
-                        <th style={{ padding: '4px 8px', width: '30px' }}>#</th>
-                        <th style={{ padding: '4px 8px', width: '70px' }}>Mã RK7</th>
-                        <th style={{ padding: '4px 8px' }}>Tên Món</th>
-                        <th style={{ padding: '4px 8px', width: '80px' }}>Mã SAP</th>
-                        <th style={{ padding: '4px 8px', width: '50px' }}>STT</th>
-                        <th style={{ padding: '4px 8px', width: '70px' }}>Giá</th>
-                        <th style={{ padding: '4px 8px', width: '60px' }}>Level</th>
+                        <th style={{ padding: '4px 8px', width: '30px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 2 }}>#</th>
+                        <th style={{ padding: '4px 8px', width: '70px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 2 }}>Mã RK7</th>
+                        <th style={{ padding: '4px 8px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 2 }}>Tên Món</th>
+                        <th style={{ padding: '4px 8px', width: '80px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 2 }}>Mã SAP</th>
+                        <th style={{ padding: '4px 8px', width: '50px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 2 }}>STT</th>
+                        <th style={{ padding: '4px 8px', width: '70px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 2 }}>Giá</th>
+                        <th style={{ padding: '4px 8px', width: '60px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 2 }}>Level</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -4293,15 +4326,15 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                  <TopScrollTable maxHeight="400px">
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                      <thead>
+                      <thead style={{ position: 'sticky', top: 0, zIndex: 5, backgroundColor: '#F9FAFB' }}>
                         <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid var(--border-color)', color: '#4B5563', textAlign: 'left' }}>
-                          <th style={{ padding: '8px 10px' }}>Tên Bản Snapshot</th>
-                          <th style={{ padding: '8px 10px' }}>Nhà Hàng Nguồn</th>
-                          <th style={{ padding: '8px 10px' }}>Quy Mô Thực Đơn</th>
-                          <th style={{ padding: '8px 10px' }}>Thời Gian Lưu</th>
-                          <th style={{ padding: '8px 10px', textAlign: 'center' }}>Thao Tác</th>
+                          <th style={{ padding: '8px 10px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: '#F9FAFB' }}>Tên Bản Snapshot</th>
+                          <th style={{ padding: '8px 10px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: '#F9FAFB' }}>Nhà Hàng Nguồn</th>
+                          <th style={{ padding: '8px 10px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: '#F9FAFB' }}>Quy Mô Thực Đơn</th>
+                          <th style={{ padding: '8px 10px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: '#F9FAFB' }}>Thời Gian Lưu</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 5, backgroundColor: '#F9FAFB' }}>Thao Tác</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -4351,7 +4384,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </TopScrollTable>
                 )}
               </div>
             )}
@@ -4561,14 +4594,53 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
             {/* Mã RK7 & Mã SAP */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
-                  Mã RK7 <span style={{ color: '#DC2626' }}>*</span>
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151' }}>
+                    Mã RK7 <span style={{ color: '#DC2626' }}>*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => handleLookupDish()}
+                    disabled={lookingUpDish || !newDishRk7.trim()}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      color: lookingUpDish || !newDishRk7.trim() ? '#9CA3AF' : '#2563EB',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: lookingUpDish || !newDishRk7.trim() ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '3px'
+                    }}
+                    title="Tra cứu tên, mã SAP và giá từ MID/GPOS hoặc RK7 Master"
+                  >
+                    {lookingUpDish ? (
+                      <>
+                        <RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} />
+                        <span>Đang tìm...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap size={11} />
+                        <span>Lấy từ MID / Server</span>
+                      </>
+                    )}
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={newDishRk7}
-                  onChange={(e) => setNewDishRk7(e.target.value)}
-                  placeholder="VD: 33162"
+                  onChange={(e) => {
+                    setNewDishRk7(e.target.value);
+                    if (lookupFeedback) setLookupFeedback(null);
+                  }}
+                  onBlur={() => {
+                    if (newDishRk7.trim() && !newDishName.trim()) {
+                      handleLookupDish(newDishRk7.trim());
+                    }
+                  }}
+                  placeholder="VD: 33162 (Gõ xong tự dò tên & giá)"
                   style={{
                     width: '100%',
                     padding: '8px 10px',
@@ -4580,6 +4652,21 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                   }}
                   autoFocus
                 />
+                {lookupFeedback && (
+                  <div
+                    style={{
+                      marginTop: '4px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      color: lookupFeedback.type === 'success' ? '#059669' : '#D97706',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    {lookupFeedback.text}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -4629,12 +4716,13 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
-                  Đơn Giá (VNĐ)
+                  Đơn Giá (VNĐ) <span style={{ fontSize: '11px', fontWeight: 400, color: '#6B7280' }}>(Bỏ trống để tự đồng bộ từ MID)</span>
                 </label>
                 <input
                   type="number"
                   value={newDishPrice}
-                  onChange={(e) => setNewDishPrice(Number(e.target.value))}
+                  onChange={(e) => setNewDishPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="Bỏ trống (Tự đồng bộ từ MID / Server)"
                   min={0}
                   step={1000}
                   style={{

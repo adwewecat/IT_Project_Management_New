@@ -109,7 +109,8 @@ from app.schemas.mongodb import (
     DeployMenuSnapshotRequest,
     DeployMenuSnapshotResponse,
     DirectSyncMenuRequest,
-    DirectSyncMenuResponse
+    DirectSyncMenuResponse,
+    DishLookupResponse
 )
 from app.services.mongodb_service import (
     MongoDBService,
@@ -1698,6 +1699,28 @@ def get_menu_so_co_categories(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Lỗi khi tải danh sách Menu: {str(e)}"
+        )
+
+
+@router.get("/menu-so-co/lookup-dish", response_model=DishLookupResponse)
+def lookup_dish(
+    host: str = Query(..., description="IP máy trạm MongoDB nhà hàng"),
+    rk7_code: str = Query(..., description="Mã món RK7 cần tra cứu"),
+    port: int = Query(27017, description="Port MongoDB"),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Tra cứu thông tin Tên món, Mã SAP, Đơn giá và Hình ảnh theo Mã RK7:
+    Ưu tiên quét từ MongoDB GPOS tại nhà hàng (DISH_CACHE, CO_MENU_ITEM, ORDER_MENU_CACHE_CATEGORY),
+    nếu không có sẽ đối soát từ CSDL Master RK7 tập trung.
+    """
+    try:
+        res = mongo_menu_so_co_service.lookup_dish_info(host=host, rk7_code=rk7_code, port=port)
+        return DishLookupResponse(**res)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi tra cứu thông tin món ăn: {str(e)}"
         )
 
 

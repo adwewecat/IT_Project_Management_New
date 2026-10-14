@@ -1130,6 +1130,13 @@ export const mongoService = {
     return res.data;
   },
 
+  lookupDishInfo: async (host: string, rk7Code: string, port: number = 27017): Promise<DishLookupResponse> => {
+    const res = await api.get<DishLookupResponse>('/mongodb/menu-so-co/lookup-dish', {
+      params: { host, rk7_code: rk7Code, port }
+    });
+    return res.data;
+  },
+
   loadMenuSoCoItems: async (payload: LoadMenuItemsRequest): Promise<LoadMenuItemsResponse> => {
     const res = await api.post<LoadMenuItemsResponse>('/mongodb/menu-so-co/load-items', payload);
     return res.data;
@@ -1738,6 +1745,17 @@ export interface MenuGroupBrief {
   name: string;
   level: number;
   count: number;
+}
+
+export interface DishLookupResponse {
+  found: boolean;
+  rk7_code: string;
+  name?: string | null;
+  sap_code?: string | null;
+  price?: number | null;
+  image_url?: string | null;
+  source?: string | null;
+  message?: string | null;
 }
 
 export interface MenuCategoryItem {

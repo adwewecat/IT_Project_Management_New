@@ -3754,17 +3754,17 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                     </p>
                   </div>
                 ) : (
-                  <div style={{ overflowX: 'auto' }}>
+                  <TopScrollTable maxHeight="calc(100vh - 280px)">
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                       <thead>
-                        <tr style={{ backgroundColor: '#F3F4F6', color: '#374151', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
-                          <th style={{ padding: '10px 12px', width: '50px' }}>STT</th>
-                          <th style={{ padding: '10px 12px', width: '110px' }}>Tên Bàn</th>
-                          <th style={{ padding: '10px 12px', width: '160px' }}>Trạng Thái Đơn</th>
-                          <th style={{ padding: '10px 12px' }}>User Tablet Đang Chiếm Giữ</th>
-                          <th style={{ padding: '10px 12px', width: '180px' }}>Cờ Khóa Hệ Thống</th>
-                          <th style={{ padding: '10px 12px', width: '150px' }}>Giờ Mở Bàn</th>
-                          <th style={{ padding: '10px 12px', width: '130px', textAlign: 'center' }}>Thao Tác</th>
+                        <tr style={{ backgroundColor: '#F3F4F6', color: '#374151', textAlign: 'left', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 5 }}>
+                          <th style={{ padding: '10px 12px', width: '50px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>STT</th>
+                          <th style={{ padding: '10px 12px', width: '110px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Tên Bàn</th>
+                          <th style={{ padding: '10px 12px', width: '160px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Trạng Thái Đơn</th>
+                          <th style={{ padding: '10px 12px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>User Tablet Đang Chiếm Giữ</th>
+                          <th style={{ padding: '10px 12px', width: '180px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Cờ Khóa Hệ Thống</th>
+                          <th style={{ padding: '10px 12px', width: '150px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Giờ Mở Bàn</th>
+                          <th style={{ padding: '10px 12px', width: '130px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Thao Tác</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3986,7 +3986,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                         })}
                       </tbody>
                     </table>
-                  </div>
+                  </TopScrollTable>
                 )}
               </div>
             </Card>
@@ -4273,23 +4273,23 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                         </p>
                       </div>
                     ) : (
-                      <div style={{ overflowX: 'auto' }}>
+                      <TopScrollTable maxHeight="calc(100vh - 280px)">
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                           <thead>
-                            <tr style={{ backgroundColor: '#F3F4F6', color: '#374151', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
-                              <th style={{ padding: '10px 10px', width: '40px', textAlign: 'center' }}>STT</th>
-                              <th style={{ padding: '10px 10px', width: '90px' }}>Tên Bàn</th>
-                              <th style={{ padding: '10px 10px', width: '100px' }}>Trạng Thái</th>
-                              <th style={{ padding: '10px 10px', width: '110px', textAlign: 'right' }}>Số Tiền</th>
-                              <th style={{ padding: '10px 10px', width: '140px' }}>Khách Hàng</th>
-                              <th style={{ padding: '10px 10px', width: '150px' }}>Thanh Toán</th>
-                              <th style={{ padding: '10px 10px', width: '80px', textAlign: 'center' }}>Xuất VAT?</th>
-                              <th style={{ padding: '10px 10px', width: '80px', textAlign: 'center' }}>Voucher</th>
-                              <th style={{ padding: '10px 10px', width: '110px' }}>Nhân Viên</th>
-                              <th style={{ padding: '10px 10px', width: '100px' }}>Log & Apps</th>
-                              <th style={{ padding: '10px 10px', width: '90px' }}>Giờ Gần Nhất</th>
-                              <th style={{ padding: '10px 10px', width: '150px' }}>Mã GUID</th>
-                              <th style={{ padding: '10px 10px', width: '90px', textAlign: 'center' }}>Thao Tác</th>
+                            <tr style={{ backgroundColor: '#F3F4F6', color: '#374151', textAlign: 'left', borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 5 }}>
+                              <th style={{ padding: '10px 10px', width: '40px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>STT</th>
+                              <th style={{ padding: '10px 10px', width: '90px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Tên Bàn</th>
+                              <th style={{ padding: '10px 10px', width: '100px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Trạng Thái</th>
+                              <th style={{ padding: '10px 10px', width: '110px', textAlign: 'right', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Số Tiền</th>
+                              <th style={{ padding: '10px 10px', width: '140px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Khách Hàng</th>
+                              <th style={{ padding: '10px 10px', width: '150px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Thanh Toán</th>
+                              <th style={{ padding: '10px 10px', width: '80px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Xuất VAT?</th>
+                              <th style={{ padding: '10px 10px', width: '80px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Voucher</th>
+                              <th style={{ padding: '10px 10px', width: '110px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Nhân Viên</th>
+                              <th style={{ padding: '10px 10px', width: '100px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Log & Apps</th>
+                              <th style={{ padding: '10px 10px', width: '90px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Giờ Gần Nhất</th>
+                              <th style={{ padding: '10px 10px', width: '150px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Mã GUID</th>
+                              <th style={{ padding: '10px 10px', width: '90px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 5 }}>Thao Tác</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -4533,7 +4533,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                             })}
                           </tbody>
                         </table>
-                      </div>
+                      </TopScrollTable>
                     )}
                   </div>
                 </Card>
@@ -4659,16 +4659,16 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                       </p>
                     </div>
                   ) : (
-                    <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                    <TopScrollTable maxHeight="calc(100vh - 280px)">
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                        <thead>
+                        <thead style={{ position: 'sticky', top: 0, zIndex: 5, backgroundColor: '#F8FAFC' }}>
                           <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: '#475569', fontWeight: 700 }}>
-                            <th style={{ padding: '10px 12px', width: '40px' }}>#</th>
-                            <th style={{ padding: '10px 12px', width: '120px' }}>Mã Nhân Viên</th>
-                            <th style={{ padding: '10px 12px' }}>Họ Và Tên</th>
-                            <th style={{ padding: '10px 12px', width: '220px' }}>Trạng Thái isLogin</th>
-                            <th style={{ padding: '10px 12px', width: '220px' }}>Khóa Tablet (LOCK_ORDER)</th>
-                            <th style={{ padding: '10px 12px', width: '160px', textAlign: 'center' }}>Thao Tác</th>
+                            <th style={{ padding: '10px 12px', width: '40px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>#</th>
+                            <th style={{ padding: '10px 12px', width: '120px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>Mã Nhân Viên</th>
+                            <th style={{ padding: '10px 12px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>Họ Và Tên</th>
+                            <th style={{ padding: '10px 12px', width: '220px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>Trạng Thái isLogin</th>
+                            <th style={{ padding: '10px 12px', width: '220px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>Khóa Tablet (LOCK_ORDER)</th>
+                            <th style={{ padding: '10px 12px', width: '160px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>Thao Tác</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -4791,7 +4791,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                           })}
                         </tbody>
                       </table>
-                    </div>
+                    </TopScrollTable>
                   )}
                 </div>
               </Card>
@@ -5460,11 +5460,11 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                   )}
                 </div>
 
-                <TopScrollTable>
+                <TopScrollTable maxHeight="calc(100vh - 280px)">
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid var(--border-color)', textAlign: 'left', position: 'sticky', top: 0, zIndex: 5 }}>
-                        <th style={{ padding: '10px 10px', width: '38px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>
+                        <th style={{ padding: '10px 10px', width: '38px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>
                           <input
                             type="checkbox"
                             checked={filteredKdsItems.length > 0 && selectedKdsDishCodes.length === filteredKdsItems.length}
@@ -5477,17 +5477,17 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                             }}
                           />
                         </th>
-                        <th style={{ padding: '10px 8px', width: '45px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>STT</th>
-                        <th style={{ padding: '10px 12px', width: '110px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Mã Món</th>
-                        <th style={{ padding: '10px 12px', width: '110px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Mã SAP</th>
-                        <th style={{ padding: '10px 12px', minWidth: '200px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Tên Món Ăn</th>
-                        <th style={{ padding: '10px 12px', width: '110px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Nhóm Bếp</th>
-                        <th style={{ padding: '10px 12px', minWidth: '150px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Quầy Bếp (ACCOUNT)</th>
-                        <th style={{ padding: '10px 12px', minWidth: '130px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Máy In</th>
-                        <th style={{ padding: '10px 12px', width: '130px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>TG Chế Biến KDS</th>
-                        <th style={{ padding: '10px 12px', width: '120px', textAlign: 'right', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Giá Bán</th>
-                        <th style={{ padding: '10px 12px', minWidth: '220px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Đối Chiếu Giá Giữa Các Bảng</th>
-                        <th style={{ padding: '10px 10px', width: '160px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F8FAFC' }}>Thao Tác</th>
+                        <th style={{ padding: '10px 8px', width: '45px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>STT</th>
+                        <th style={{ padding: '10px 12px', width: '110px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>Mã Món</th>
+                        <th style={{ padding: '10px 12px', width: '110px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>Mã SAP</th>
+                        <th style={{ padding: '10px 12px', minWidth: '200px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>Tên Món Ăn</th>
+                        <th style={{ padding: '10px 12px', width: '110px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>Nhóm Bếp</th>
+                        <th style={{ padding: '10px 12px', minWidth: '150px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>Quầy Bếp (ACCOUNT)</th>
+                        <th style={{ padding: '10px 12px', minWidth: '130px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>Máy In</th>
+                        <th style={{ padding: '10px 12px', width: '130px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>TG Chế Biến KDS</th>
+                        <th style={{ padding: '10px 12px', width: '120px', textAlign: 'right', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>Giá Bán</th>
+                        <th style={{ padding: '10px 12px', minWidth: '220px', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>Đối Chiếu Giá Giữa Các Bảng</th>
+                        <th style={{ padding: '10px 10px', width: '160px', textAlign: 'center', position: 'sticky', top: 0, backgroundColor: '#F8FAFC', zIndex: 5 }}>Thao Tác</th>
                       </tr>
                     </thead>
                     <tbody>

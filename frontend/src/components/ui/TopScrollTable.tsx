@@ -15,7 +15,7 @@ interface TopScrollTableProps {
  */
 export const TopScrollTable: React.FC<TopScrollTableProps> = ({
   children,
-  maxHeight,
+  maxHeight = 'calc(100vh - 280px)',
   className,
   style
 }) => {
@@ -105,8 +105,8 @@ export const TopScrollTable: React.FC<TopScrollTableProps> = ({
         onScroll={handleBottomScroll}
         style={{
           overflowX: 'auto',
-          maxHeight: maxHeight || undefined,
-          overflowY: maxHeight ? 'auto' : undefined,
+          maxHeight: maxHeight !== 'none' ? (maxHeight || 'calc(100vh - 280px)') : undefined,
+          overflowY: maxHeight !== 'none' ? 'auto' : undefined,
           width: '100%',
           WebkitOverflowScrolling: 'touch'
         }}

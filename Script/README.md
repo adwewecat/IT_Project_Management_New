@@ -210,6 +210,28 @@ npm run dev
 
 ---
 
+### [2026-10-15] - Sửa Lỗi Header Cố Định (Sticky Header) & Bổ Sung Tự Động Tra Cứu Tên / Mã SAP / Giá Từ MID & Central DB
+- **Màn hình**: Phân Tích MongoDB Nhà Hàng (`RestaurantMongoAnalysisPage.tsx`, `RestaurantMongoPage.tsx`), Phân Tích Thực Đơn SO/CO (`ManageMenuSoCoTask.tsx`), Component bảng cuộn `TopScrollTable.tsx`.
+- **Yêu cầu & Vấn đề xử lý**:
+  1. *Lỗi Header biến mất khi cuộn xuống ở Bảng KDS & các bảng tương tự*:
+     - **Nguyên nhân**: `TopScrollTable` thiếu `maxHeight` mặc định và thuộc tính `overflowY: 'auto'`, khiến bảng bung dài vô tận và sự kiện cuộn xảy ra ở cấp độ cửa sổ (`window`). Theo chuẩn CSS, khi thẻ cha có `overflow-x: auto`, nó tạo thành bối cảnh cắt (clipping context), ngăn cản các phần tử con có `position: sticky; top: 0` cố định theo cửa sổ trình duyệt.
+     - **Giải pháp**:
+       + Cập nhật [`TopScrollTable.tsx`](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/components/ui/TopScrollTable.tsx): Bổ sung `maxHeight = 'calc(100vh - 280px)'` mặc định và xử lý `overflowY: maxHeight !== 'none' ? 'auto' : 'visible'` để tự động biến mọi bảng được bọc thành container cuộn dọc nội bộ.
+       + Đồng bộ tất cả các bảng trong `RestaurantMongoAnalysisPage.tsx`: Bảng KDS (Task 4), Bảng Table Locks (Task 1), Bảng Tablet Users (Task 2), Bảng Action Logs Sessions (Checklogs) đều được bọc trong `TopScrollTable` kèm `position: sticky, top: 0, zIndex: 5` trên từng thẻ `th`.
+       + Kiểm tra và khắc phục toàn bộ các trang tương tự: `RestaurantMongoPage.tsx` (Bảng Params, Bảng KDS, Bảng Sync Log), `ManageMenuSoCoTask.tsx` (Bảng nhóm món, Bảng xem trước thêm hàng loạt, Bảng snapshot thực đơn).
+  2. *Thêm Món Mới Vào Nhóm (VD: `SALAD - SAENGCHAE`)*:
+     - Giá mặc định để trống `''` (thay vì gán mặc định `0`) với placeholder rõ ràng: *"Bỏ trống (Tự đồng bộ từ MID / Server)"*.
+     - Nghiên cứu cơ chế lấy Tên & Giá:
+       + Kiểm tra địa chỉ `192.168.201.116:8080`: Đây là cổng Web Portal nội bộ yêu cầu đăng nhập Spring Security (`/login`), không mở API công khai.
+       + Làm rõ kiến trúc luồng dữ liệu: Tên món và Đơn giá thực tế được máy chủ RK7 MID của nhà hàng đồng bộ trực tiếp vào MongoDB máy trạm (`host:27017`) qua các bảng `DISH_CACHE`, `CO_MENU_ITEM`, `ORDER_MENU_CACHE_CATEGORY`, `SHOW_HIDE_ITEMS`, `OUT_OF_DISH`. Dữ liệu Master gốc nằm tại SQL Server RK7 Central (`172.16.8.26`).
+       + Xây dựng API tra cứu tự động: Endpoint `GET /api/v1/mongodb/menu-so-co/lookup-dish?host={host}&rk7_code={code}` trong [`backend/app/services/mongo_menu_so_co_service.py`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/services/mongo_menu_so_co_service.py) và [`backend/app/api/v1/mongodb.py`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/api/v1/mongodb.py). Tự động quét từ MongoDB nhà hàng (kết quả đồng bộ từ MID) và fallback về RK7 Central SQL Server để lấy chính xác Tên Món, Mã SAP và Đơn Giá.
+       + Tích hợp Frontend: Trong modal *"Thêm Món Ăn Vào Nhóm"* (`ManageMenuSoCoTask.tsx`), bổ sung nút `⚡ Lấy từ MID / Server` và tự động kích hoạt tra cứu khi người dùng nhập xong Mã RK7 (onBlur), tự động điền Tên Món, Mã SAP và Giá gợi ý.
+- **Kiểm thử & Đóng gói**:
+  - Frontend Build: `cmd /c "npm run build"` tại `frontend/` $\rightarrow$ Exit code 0 (`✓ built in 3.67s`), bundle sạch sẽ trong `frontend/dist/`.
+  - Backend Smoke Test: `python -m compileall app` và `python -c "from app.main import app; print('>>> PASSED 100%')"` $\rightarrow$ Đạt 100%.
+
+---
+
 ### [2026-10-14] - Nâng Cấp KDS & Khắc Phục Lỗi Phân Tích MongoDB Nhà Hàng (Menu Rỗng & Kẹt Kết Nối & Logs KDS & Chuyển Quầy)
 - **Màn hình**: Phân Tích MongoDB Nhà Hàng (`RestaurantMongoAnalysisPage.tsx`, `KdsQuayModals.tsx`, `mongo_menu_so_co_service.py`, `mongodb_service.py`).
 - **Nội dung xử lý chi tiết theo yêu cầu**:

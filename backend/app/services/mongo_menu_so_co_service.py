@@ -1889,3 +1889,187 @@ def direct_sync_restaurant_menu(
         "details": deploy_res,
     }
 
+
+def lookup_dish_info(host: str, rk7_code: str, port: int = 27017) -> Dict[str, Any]:
+    """
+    Tra cứu thông tin tên món, mã SAP, đơn giá và hình ảnh theo mã RK7:
+    1. Quét từ MongoDB GPOS tại nhà hàng (host): DISH_CACHE, CO_MENU_ITEM, ORDER_MENU_CACHE_CATEGORY, SHOW_HIDE_ITEMS, OUT_OF_DISH, CONFIG_COOKING
+    2. Nếu không tìm thấy, quét tiếp từ CSDL Master RK7 tập trung (get_rk7_engine)
+    """
+    clean_code = str(rk7_code).strip()
+    if not clean_code:
+        return {
+            "found": False,
+            "rk7_code": clean_code,
+            "name": None,
+            "sap_code": None,
+            "price": None,
+            "image_url": None,
+            "source": None,
+            "message": "Mã RK7 trống"
+        }
+
+    # 1. Thử tìm trong MongoDB nhà hàng (host)
+    try:
+        client = get_mongo_client(host, port, timeout_ms=3000)
+        db_order = client["G_ORDER"]
+        db_kitchen = client["G_KITCHEN"]
+
+        dish_name = ""
+        sap_code = ""
+        price: Optional[float] = None
+        image_url = ""
+
+        # A. DISH_CACHE trong G_ORDER (chứa món và giá từ MID)
+        try:
+            for doc in db_order["DISH_CACHE"].find():
+                for d in (doc.get("dishs") or []):
+                    mi = d.get("menuItem") or {}
+                    c = str(mi.get("code") or "").strip()
+                    if c == clean_code:
+                        dish_name = mi.get("name") or dish_name
+                        sap_code = str(mi.get("sapCode") or "").strip() or sap_code
+                        p = d.get("price")
+                        if p is not None and price is None:
+                            try:
+                                price = float(p)
+                            except (ValueError, TypeError):
+                                pass
+                        break
+                if dish_name and price is not None:
+                    break
+        except Exception as e:
+            logger.warning("Lỗi quét DISH_CACHE: %s", e)
+
+        # B. CO_MENU_ITEM trong G_ORDER (chứa nameVn, sapCode, urlImgQr/srcImg)
+        try:
+            co_doc = db_order["CO_MENU_ITEM"].find_one({"code": clean_code})
+            if co_doc:
+                if not dish_name:
+                    dish_name = co_doc.get("nameVn") or co_doc.get("name") or ""
+                if not sap_code:
+                    sap_code = str(co_doc.get("sapCode") or "").strip()
+                url_img_qr = str(co_doc.get("urlImgQr") or "").strip()
+                src_img = str(co_doc.get("srcImg") or co_doc.get("srcImgThumbnail") or co_doc.get("srcImgSquare") or "").strip()
+                image_url = url_img_qr if (url_img_qr.startswith("http://") or url_img_qr.startswith("https://")) else (src_img or url_img_qr)
+        except Exception as e:
+            logger.warning("Lỗi quét CO_MENU_ITEM: %s", e)
+
+        # C. ORDER_MENU_CACHE_CATEGORY trong G_ORDER (chứa thực đơn hiện hữu)
+        if not dish_name or price is None or not sap_code:
+            try:
+                for omc in db_order["ORDER_MENU_CACHE_CATEGORY"].find():
+                    groups = omc.get("main-menu", {}).get("items", []) or []
+                    for g in groups:
+                        for it, _, _, _, _ in _flatten_group_items(g):
+                            mi = it.get("menu-item") or {}
+                            if str(mi.get("code") or "").strip() == clean_code:
+                                if not dish_name:
+                                    dish_name = mi.get("name") or ""
+                                if not sap_code:
+                                    sap_code = str(mi.get("sap-code") or mi.get("sapCode") or "").strip()
+                                if price is None and it.get("price") is not None:
+                                    try:
+                                        price = float(it.get("price"))
+                                    except (ValueError, TypeError):
+                                        pass
+                                break
+                        if dish_name and price is not None and sap_code:
+                            break
+                    if dish_name and price is not None and sap_code:
+                        break
+            except Exception as e:
+                logger.warning("Lỗi quét ORDER_MENU_CACHE_CATEGORY: %s", e)
+
+        # D. SHOW_HIDE_ITEMS / OUT_OF_DISH trong G_ORDER
+        if not dish_name or price is None or not sap_code:
+            try:
+                sh_doc = db_order["SHOW_HIDE_ITEMS"].find_one({"itemCode": clean_code})
+                if sh_doc:
+                    if not dish_name:
+                        dish_name = sh_doc.get("name") or ""
+                    if not sap_code:
+                        sap_code = str(sh_doc.get("sapCode") or "").strip()
+                    if price is None and sh_doc.get("price") is not None:
+                        try:
+                            price = float(sh_doc.get("price"))
+                        except (ValueError, TypeError):
+                            pass
+            except Exception as e:
+                logger.warning("Lỗi quét SHOW_HIDE_ITEMS: %s", e)
+
+        # E. CONFIG_COOKING trong G_KITCHEN
+        if not dish_name:
+            try:
+                cook_doc = db_kitchen["CONFIG_COOKING"].find_one({"menuItem.code": clean_code})
+                if cook_doc:
+                    mi = cook_doc.get("menuItem") or {}
+                    dish_name = mi.get("name") or ""
+            except Exception as e:
+                logger.warning("Lỗi quét CONFIG_COOKING: %s", e)
+
+        client.close()
+
+        if dish_name:
+            return {
+                "found": True,
+                "rk7_code": clean_code,
+                "name": dish_name,
+                "sap_code": sap_code or None,
+                "price": price,
+                "image_url": image_url or None,
+                "source": "MID / GPOS Cache (Nhà hàng)",
+                "message": f"Tìm thấy món '{dish_name}' từ MID / GPOS Cache"
+            }
+    except Exception as e:
+        logger.warning("Không thể kết nối hoặc quét MongoDB nhà hàng (%s): %s", host, e)
+
+    # 2. Quét tiếp từ CSDL Master RK7 tập trung
+    try:
+        from app.core.database import get_rk7_engine
+        from sqlalchemy import text
+        engine = get_rk7_engine()
+        sql = """
+            SELECT TOP 1
+                MI.CODE AS RK7_CODE,
+                MI.NAME AS ITEMNAME,
+                GPD.PROPERTYVAL AS SAPCODE,
+                PR.VALUE AS PRICE
+            FROM MENUITEMS MI
+            LEFT JOIN PRICES PR ON PR.OBJECTID = MI.SIFR AND PR.SPECIES = 1 AND PR.VALUE IS NOT NULL
+            LEFT JOIN GENERATEDPROPDATAS GPD ON GPD.RKTYPEIDENT = 1000008 AND GPD.OBJECTREFNO = 10 AND GPD.OBJECTIDENT = MI.SIFR
+            WHERE (MI.CODE = :code OR CAST(MI.SIFR AS VARCHAR(50)) = :code)
+            ORDER BY PR.VALUE DESC
+        """
+        with engine.connect() as conn:
+            row = conn.execute(text(sql), {"code": clean_code}).fetchone()
+            if row:
+                r_rk7 = str(row[0] or clean_code)
+                r_name = str(row[1] or "")
+                r_sap = str(row[2] or "").strip()
+                r_price = float(row[3]) if row[3] is not None else None
+                return {
+                    "found": True,
+                    "rk7_code": r_rk7,
+                    "name": r_name,
+                    "sap_code": r_sap or None,
+                    "price": r_price,
+                    "image_url": None,
+                    "source": "RK7 Central Master DB",
+                    "message": f"Tìm thấy món '{r_name}' từ CSDL Master RK7 tập trung"
+                }
+    except Exception as e:
+        logger.warning("Lỗi tra cứu CSDL Master RK7: %s", e)
+
+    return {
+        "found": False,
+        "rk7_code": clean_code,
+        "name": None,
+        "sap_code": None,
+        "price": None,
+        "image_url": None,
+        "source": None,
+        "message": f"Không tìm thấy món với mã RK7 '{clean_code}' trong MID/GPOS và CSDL Master RK7"
+    }
+
+

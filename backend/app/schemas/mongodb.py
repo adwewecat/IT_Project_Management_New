@@ -1396,6 +1396,18 @@ class DirectSyncMenuResponse(BaseModel):
     details: Dict[str, Any]
 
 
+class DishLookupResponse(BaseModel):
+    found: bool
+    rk7_code: str
+    name: Optional[str] = None
+    sap_code: Optional[str] = None
+    price: Optional[float] = None
+    image_url: Optional[str] = None
+    source: Optional[str] = None
+    message: Optional[str] = None
+
+
+
 
 
 

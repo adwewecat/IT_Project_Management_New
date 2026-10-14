@@ -25,6 +25,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
+import { TopScrollTable } from '../../components/ui/TopScrollTable';
 import { getRestaurants } from '../../services/restaurantService';
 import {
   mongoService,
@@ -1718,20 +1719,20 @@ export const RestaurantMongoPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div style={{ overflowX: 'auto' }}>
+                  <TopScrollTable maxHeight="calc(100vh - 280px)">
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                      <thead>
+                      <thead style={{ position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>
                         <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
-                          <th style={{ padding: '10px 8px', width: '44px', textAlign: 'center' }} title="Đánh sao để ưu tiên dòng lên trên đầu">
+                          <th style={{ padding: '10px 8px', width: '44px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }} title="Đánh sao để ưu tiên dòng lên trên đầu">
                             <Star size={15} fill="#F59E0B" color="#D97706" style={{ verticalAlign: 'middle' }} />
                           </th>
-                          <th style={{ padding: '10px 12px', width: '210px' }}>Param Code</th>
-                          <th style={{ padding: '10px 12px', width: '210px' }}>Tên Param</th>
-                          <th style={{ padding: '10px 12px', width: '110px' }}>Kiểu</th>
-                          <th style={{ padding: '10px 12px', width: '110px' }}>Trạng Thái</th>
-                          <th style={{ padding: '10px 12px', width: '240px' }}>Giá Trị Cấu Hình</th>
-                          <th style={{ padding: '10px 12px' }}>Diễn Giải Nghiệp Vụ</th>
-                          <th style={{ padding: '10px 12px', width: '85px', textAlign: 'center' }}>Thao Tác</th>
+                          <th style={{ padding: '10px 12px', width: '210px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Param Code</th>
+                          <th style={{ padding: '10px 12px', width: '210px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Tên Param</th>
+                          <th style={{ padding: '10px 12px', width: '110px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Kiểu</th>
+                          <th style={{ padding: '10px 12px', width: '110px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Trạng Thái</th>
+                          <th style={{ padding: '10px 12px', width: '240px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Giá Trị Cấu Hình</th>
+                          <th style={{ padding: '10px 12px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Diễn Giải Nghiệp Vụ</th>
+                          <th style={{ padding: '10px 12px', width: '85px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Thao Tác</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1977,7 +1978,7 @@ export const RestaurantMongoPage: React.FC = () => {
                       )}
                     </tbody>
                   </table>
-                </div>
+                </TopScrollTable>
               </Card>
             </div>
           )}
@@ -2357,20 +2358,20 @@ export const RestaurantMongoPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div style={{ overflowX: 'auto' }}>
+                <TopScrollTable maxHeight="calc(100vh - 280px)">
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                    <thead>
+                    <thead style={{ position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>
                       <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
-                        <th style={{ padding: '10px 10px', width: '50px', textAlign: 'center' }}>STT</th>
-                        <th style={{ padding: '10px 12px', width: '130px' }}>Mã Món</th>
-                        <th style={{ padding: '10px 12px', width: '130px' }}>Mã SAP</th>
-                        <th style={{ padding: '10px 12px', minWidth: '220px' }}>Tên Món Ăn</th>
-                        <th style={{ padding: '10px 12px', width: '120px' }}>Nhóm Bếp</th>
-                        <th style={{ padding: '10px 12px', minWidth: '160px' }}>Quầy Bếp (ACCOUNT)</th>
-                        <th style={{ padding: '10px 12px', width: '150px', textAlign: 'center' }}>TG Chế Biến KDS</th>
-                        <th style={{ padding: '10px 12px', width: '130px', textAlign: 'right' }}>Giá Bán</th>
-                        <th style={{ padding: '10px 12px', minWidth: '260px' }}>Đối Chiếu Giá Giữa Các Bảng</th>
-                        <th style={{ padding: '10px 10px', width: '100px', textAlign: 'center' }}>Thao Tác</th>
+                        <th style={{ padding: '10px 10px', width: '50px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>STT</th>
+                        <th style={{ padding: '10px 12px', width: '130px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Mã Món</th>
+                        <th style={{ padding: '10px 12px', width: '130px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Mã SAP</th>
+                        <th style={{ padding: '10px 12px', minWidth: '220px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Tên Món Ăn</th>
+                        <th style={{ padding: '10px 12px', width: '120px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Nhóm Bếp</th>
+                        <th style={{ padding: '10px 12px', minWidth: '160px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Quầy Bếp (ACCOUNT)</th>
+                        <th style={{ padding: '10px 12px', width: '150px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>TG Chế Biến KDS</th>
+                        <th style={{ padding: '10px 12px', width: '130px', textAlign: 'right', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Giá Bán</th>
+                        <th style={{ padding: '10px 12px', minWidth: '260px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Đối Chiếu Giá Giữa Các Bảng</th>
+                        <th style={{ padding: '10px 10px', width: '100px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Thao Tác</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2703,7 +2704,7 @@ export const RestaurantMongoPage: React.FC = () => {
                       )}
                     </tbody>
                   </table>
-                </div>
+                </TopScrollTable>
               </Card>
             </div>
           )}
@@ -3014,16 +3015,16 @@ export const RestaurantMongoPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div style={{ overflowX: 'auto' }}>
+                <TopScrollTable maxHeight="calc(100vh - 280px)">
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                    <thead>
+                    <thead style={{ position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>
                       <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
-                        <th style={{ padding: '10px 10px', width: '50px', textAlign: 'center' }}>STT</th>
-                        <th style={{ padding: '10px 12px', minWidth: '180px' }}>Thời Gian Đồng Bộ</th>
-                        <th style={{ padding: '10px 12px', minWidth: '180px' }}>Hạng Mục / Bảng Đồng Bộ</th>
-                        <th style={{ padding: '10px 12px', width: '160px', textAlign: 'center' }}>Trạng Thái Kết Quả</th>
-                        <th style={{ padding: '10px 12px', width: '150px', textAlign: 'right' }}>Thời Gian Xử Lý</th>
-                        <th style={{ padding: '10px 12px', width: '120px', textAlign: 'center' }}>ID Bản Ghi</th>
+                        <th style={{ padding: '10px 10px', width: '50px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>STT</th>
+                        <th style={{ padding: '10px 12px', minWidth: '180px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Thời Gian Đồng Bộ</th>
+                        <th style={{ padding: '10px 12px', minWidth: '180px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Hạng Mục / Bảng Đồng Bộ</th>
+                        <th style={{ padding: '10px 12px', width: '160px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Trạng Thái Kết Quả</th>
+                        <th style={{ padding: '10px 12px', width: '150px', textAlign: 'right', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Thời Gian Xử Lý</th>
+                        <th style={{ padding: '10px 12px', width: '120px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>ID Bản Ghi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3151,7 +3152,7 @@ export const RestaurantMongoPage: React.FC = () => {
                       )}
                     </tbody>
                   </table>
-                </div>
+                </TopScrollTable>
               </Card>
             </div>
           )}
