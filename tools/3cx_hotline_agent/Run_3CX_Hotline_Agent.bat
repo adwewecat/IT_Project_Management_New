@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 title 3CX Hotline Client Agent
 cls
 echo ==================================================================
@@ -12,7 +13,7 @@ set "PS1_FILE=%SCRIPT_DIR%3CX_Hotline_Agent.ps1"
 
 if not exist "%PS1_FILE%" (
     echo [LOI] Khong tim thay file 3CX_Hotline_Agent.ps1!
-    echo Vui long GIAI NEN (Extract) toan bo file .zip ra thu muc truoc khi chay.
+    echo Vui long GIAI NEN toan bo file .zip ra thu muc truoc khi chay.
     echo Khong mo va nhap dup file truc tiep ben trong file nen .zip!
     echo.
     pause

@@ -331,6 +331,7 @@ def update_agent_config(
 
 
 CLIENT_AGENT_BAT_TEMPLATE = """@echo off
+chcp 65001 >nul
 title 3CX Hotline Client Agent
 cls
 echo ==================================================================
@@ -344,7 +345,7 @@ set "PS1_FILE=%SCRIPT_DIR%3CX_Hotline_Agent.ps1"
 
 if not exist "%PS1_FILE%" (
     echo [LOI] Khong tim thay file 3CX_Hotline_Agent.ps1!
-    echo Vui long GIAI NEN (Extract) toan bo file .zip ra thu muc truoc khi chay.
+    echo Vui long GIAI NEN toan bo file .zip ra thu muc truoc khi chay.
     echo Khong mo va nhap dup file truc tiep ben trong file nen .zip!
     echo.
     pause
@@ -644,7 +645,7 @@ chcp 65001 >nul
 title Dung toan bo tien trinh 3CX Hotline Client Agent
 
 echo ==================================================================
-echo   DON DEP & DUNG TOAN BO TIEN TRINH 3CX HOTLINE CLIENT AGENT
+echo   DON DEP VA DUNG TOAN BO TIEN TRINH 3CX HOTLINE CLIENT AGENT
 echo ==================================================================
 echo.
 
@@ -679,7 +680,7 @@ if not exist "%PS1_FILE%" (
     echo.
     echo ==================================================================
     echo [LOI] Khong tim thay file 3CX_Hotline_Agent.ps1!
-    echo Vui long GIAI NEN (Extract All) toan bo file .zip ra thu muc truoc khi chay!
+    echo Vui long GIAI NEN toan bo file .zip ra thu muc truoc khi chay!
     echo ==================================================================
     echo.
     pause

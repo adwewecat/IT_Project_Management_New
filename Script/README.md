@@ -2240,6 +2240,26 @@ estaurant_service.py).
      - Bỏ nút `[Cấu hình 3CX]` khỏi thanh Header ngoài cùng để Header giữ 2 nút chuẩn: `[Hotline: BẬT]` và `[Cuộc Gọi]`.
      - Đổi tên và làm nổi bật nút `[⭐ Cấu hình 3CX Hotline]` bên trong popup "Quản Lý Cuộc Gọi Hotline 3CX" (`HotlineMissedCallsModal`), người dùng chỉ cần bấm vào nút `Cuộc Gọi` là có thể mở ngay cấu hình và hướng dẫn.
 
+### [2026-10-14] - Khắc Phục Lỗi Run_3CX_Hotline_Agent.bat Tự Tắt Đột Ngột & Tinh Gọn Modal Hướng Dẫn 3CX (Gộp Làm 1 View Duy Nhất)
+- **Màn hình & Thành phần**: `Run_3CX_Hotline_Agent.bat`, `Khoi_Dong_Lai_Agent.bat`, `Dung_Toan_Bo_Agent.bat`, `Hotline3cxGuideModal.tsx`, `hotline.py`.
+- **Hiện tượng lỗi**:
+  - Người dùng tải gói zip mới về, nhấp đúp vào `Run_3CX_Hotline_Agent.bat` thì cửa sổ Command Prompt tự động tắt ngay lập tức, không biết thành công hay thất bại.
+  - Modal Hướng dẫn 3CX có quá nhiều Tab rườm rà (Tab 2 Webhook PBX, Tab 3 Tool bổ trợ).
+- **Nguyên nhân cốt lõi**:
+  - Trong file `.bat`, dòng lệnh `echo Vui long GIAI NEN (Extract) toan bo file .zip ra thu muc truoc khi chay.` nằm trong khối `if not exist "%PS1_FILE%" (...)`. Trình thông dịch `cmd.exe` gặp dấu ngoặc đơn `(Extract)` đã hiểu nhầm dấu `)` là đóng khối lệnh `if`, làm phát sinh lỗi cú pháp `toan was unexpected at this time.` và cmd lập tức thoát mà không kịp chạy PowerShell.
+  - Trong `Dung_Toan_Bo_Agent.bat`, dòng `echo   DON DEP & DUNG TOAN BO...` có dấu `&` làm cmd hiểu là lệnh kép, báo lỗi `'DUNG' is not recognized as an internal or external command`.
+- **Giải pháp xử lý toàn diện**:
+  1. *Khắc phục triệt để lỗi Batch script*:
+     - Bỏ toàn bộ dấu ngoặc đơn lồng trong các câu lệnh `echo` thuộc khối `if (...)` trong `Run_3CX_Hotline_Agent.bat`, `Khoi_Dong_Lai_Agent.bat`.
+     - Thay `&` thành `VA` và bổ sung `chcp 65001 >nul` để hiển thị tiếng Việt chuẩn UTF-8.
+     - Cập nhật đồng bộ vào `backend/app/api/v1/hotline.py` (tất cả các template zip in-memory) và thư mục `tools/3cx_hotline_agent/`.
+     - Kiểm thử chạy thực tế bằng `cmd.exe`: Script chạy ổn định 100%, in đầy đủ nhật ký kết nối Windows UserNotificationListener và kiểm tra server OK.
+  2. *Tinh gọn Modal Hướng dẫn 3CX*:
+     - Xóa hoàn toàn Tab 2 `⚡ Webhook PBX Server (Quản Trị Viên)`.
+     - Xóa hoàn toàn Tab 3 `🔧 Tool Bổ Trợ (Extension / Agent)`.
+     - Gộp mục **"Lựa chọn 2: Ứng dụng Client Agent Windows (Đã sửa sạch lỗi Font)"** trực tiếp vào chung 1 giao diện bên dưới **Lựa chọn 1: Cấu hình trực tiếp trên 3CX PWA (30 Giây)**.
+     - Tự động gắn mã Agent hiện tại vào link tải Client Agent zip để file giải nén ra đã có sẵn tên KTV.
+
 ### [2026-10-14] - Khắc Phục Lỗi 3CX Hotline Client Agent Không Chạy Trên Máy User Khác (Lỗi Thiếu Log & Lỗi Quyền Notifications)
 - **Màn hình & Thành phần**: `Khoi_Dong_Lai_Agent.bat`, `3CX_Hotline_Agent.ps1`, `Run_3CX_Hotline_Agent.bat`, `Header.tsx`, `hotline.py`.
 - **Hiện tượng lỗi**:
