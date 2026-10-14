@@ -2220,5 +2220,18 @@ estaurant_service.py).
   - Cấu hình qua biến môi trường: `DB_BACKUP_ZIP_PASSWORD=Abc0102009@` trong [backend/.env](file:///d:/LAPTRINH/IT_Project_Management_New/backend/.env).
   - Định dạng nén: Mã hóa WinZip AES-256 (`WZ_AES`) kết hợp thuật toán nén `LZMA` (quản lý bởi [maintenance_service.py](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/services/maintenance_service.py) và [job_scheduler_service.py](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/services/job_scheduler_service.py)).
   - Khuyến nghị giải nén: Dùng WinRAR hoặc 7-Zip.
+- **Tối ưu Mobile Responsive Toàn Diện (Ngày 14/10/2026)**:
+  - Modal core: `maxWidth: min(100%, maxWidth)`, `overflowX: auto`, `-webkit-overflow-scrolling: touch`, nút đóng to `36x36px`.
+  - Mọi table tự động hỗ trợ cuộn ngang trên thiết bị di động, không bị vỡ hay cắt xén cột.
+  - Tabs bar hỗ trợ vuốt ngang (`.tabs-nav-scrollable`), Filter grid KDS tự chia 2 cột trên điện thoại.
+- **QUY TẮC BẮT BUỘC: AUTO-COMMIT & PUSH LÊN GITHUB**:
+  - Mỗi khi kết thúc chỉnh sửa code, sửa lỗi hoặc hoàn thành tính năng mới, AI/Developer **BẮT BUỘC PHẢI CHẠY NGAY**:
+    ```cmd
+    git add .
+    git commit -m "Mô tả chi tiết"
+    git push origin main
+    ```
+  - Tuyệt đối không để đọng code chưa commit/push trước khi kết thúc lượt phản hồi.
+
 
 
