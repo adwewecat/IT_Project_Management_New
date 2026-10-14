@@ -1429,6 +1429,9 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
   // Modal: Tra cứu Logs KDS (Order từ CO/SO & Bấm Done Món)
   const [showKdsLogsModal, setShowKdsLogsModal] = useState<boolean>(false);
 
+  // Modal: Popup tổng hợp Các Tính Năng KDS
+  const [showKdsFeaturesModal, setShowKdsFeaturesModal] = useState<boolean>(false);
+
   // Kiểm tra xem nhà hàng đã có quầy / account Food Control chưa (nếu có rồi thì không cho tạo)
   const hasFoodControl = useMemo(() => {
     if (!kdsData?.accounts_summary || kdsData.accounts_summary.length === 0) return false;
@@ -4851,13 +4854,21 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  {/* Nút Các tính năng: Mở popup chứa toàn bộ các tác vụ cấu hình KDS */}
                   <Button
                     size="sm"
-                    style={{ backgroundColor: '#059669', color: '#fff' }}
-                    onClick={() => setShowAddQuayModal(true)}
-                    leftIcon={<PlusCircle size={14} />}
+                    variant="outline"
+                    style={{
+                      borderColor: '#2563EB',
+                      backgroundColor: '#EFF6FF',
+                      color: '#1D4ED8',
+                      fontWeight: 700,
+                      boxShadow: '0 1px 2px rgba(37, 99, 235, 0.1)'
+                    }}
+                    onClick={() => setShowKdsFeaturesModal(true)}
+                    leftIcon={<Settings size={14} color="#2563EB" />}
                   >
-                    + Thêm Quầy &amp; Account
+                    ⚙️ Các Tính Năng KDS ▾
                   </Button>
 
                   {/* Nút Chức năng Logs KDS (Order từ CO/SO & Bấm Done) */}
@@ -4872,123 +4883,10 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                     }}
                     onClick={() => setShowKdsLogsModal(true)}
                     leftIcon={<Clock size={14} />}
-                    title="Tra cứu lịch sử Order từ CO/SO vào KDS, thời gian bấm Done món và phân tích trễ món phục vụ khiếu nại nhà hàng"
+                    title="Tra cứu lịch sử Order từ CO/SO vào KDS, thời gian bấm Done món và máy in KDS"
                   >
                     📋 Logs KDS (Order &amp; Ra Món)
                   </Button>
-
-                  {/* Nút Chuyển Món Giữa Các Quầy (Transfer) */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    style={{
-                      borderColor: '#3B82F6',
-                      color: '#1D4ED8',
-                      backgroundColor: '#EFF6FF',
-                      fontWeight: 700
-                    }}
-                    onClick={() => {
-                      setTransferFromPlaceId(null);
-                      setShowTransferQuayModal(true);
-                    }}
-                    leftIcon={<ArrowRightLeft size={14} />}
-                    title="Chuyển toàn bộ hoặc một số món chọn lọc từ Quầy Bếp này sang Quầy Bếp khác"
-                  >
-                    🔄 Chuyển Món Giữa Quầy
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      fetchKdsPlaces();
-                      setShowQuayListModal(true);
-                    }}
-                    isLoading={loadingKdsPlaces}
-                    leftIcon={<Printer size={14} color="#D97706" />}
-                  >
-                    Cấu Hình Quầy &amp; Máy In ({kdsPlaces.length})
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowKdsRoleModal(true)}
-                    style={{ borderColor: '#BAE6FD', color: '#0284C7', backgroundColor: '#F0F9FF' }}
-                    leftIcon={<ShieldCheck size={14} color="#0284C7" />}
-                  >
-                    Phân Quyền User KDS
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setBatchRoleParamCode('ROLE_SETUP_CONFIG_COOKING');
-                      setShowBatchRoleModal(true);
-                    }}
-                    style={{ borderColor: '#BAE6FD', color: '#0369A1', backgroundColor: '#E0F2FE', fontWeight: 700 }}
-                    leftIcon={<Zap size={14} color="#0284C7" />}
-                  >
-                    ⚡ Phân Quyền Hàng Loạt (Nhiều NH)
-                  </Button>
-
-                  {/* Nút Bật / Tắt Hoàn Toàn KDS (SHOW_KDS) */}
-                  <button
-                    type="button"
-                    disabled={togglingKdsMaster}
-                    onClick={handleToggleKdsMaster}
-                    title={
-                      kdsMasterStatus && !kdsMasterStatus.is_enabled
-                        ? 'KDS đang bị TẮT hoàn toàn (SHOW_KDS = 0). Bấm để Bật lại'
-                        : 'KDS đang BẬT (SHOW_KDS = 1). Bấm để Tắt hoàn toàn'
-                    }
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '5px 13px',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      backgroundColor: kdsMasterStatus && !kdsMasterStatus.is_enabled ? '#FEF2F2' : '#F0FDF4',
-                      color: kdsMasterStatus && !kdsMasterStatus.is_enabled ? '#DC2626' : '#15803D',
-                      border: `1.5px solid ${kdsMasterStatus && !kdsMasterStatus.is_enabled ? '#FCA5A5' : '#86EFAC'}`,
-                      cursor: togglingKdsMaster ? 'not-allowed' : 'pointer',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                      transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (kdsMasterStatus && !kdsMasterStatus.is_enabled) {
-                        e.currentTarget.style.backgroundColor = '#DC2626';
-                        e.currentTarget.style.color = '#FFFFFF';
-                        e.currentTarget.style.borderColor = '#B91C1C';
-                      } else {
-                        e.currentTarget.style.backgroundColor = '#16A34A';
-                        e.currentTarget.style.color = '#FFFFFF';
-                        e.currentTarget.style.borderColor = '#15803D';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (kdsMasterStatus && !kdsMasterStatus.is_enabled) {
-                        e.currentTarget.style.backgroundColor = '#FEF2F2';
-                        e.currentTarget.style.color = '#DC2626';
-                        e.currentTarget.style.borderColor = '#FCA5A5';
-                      } else {
-                        e.currentTarget.style.backgroundColor = '#F0FDF4';
-                        e.currentTarget.style.color = '#15803D';
-                        e.currentTarget.style.borderColor = '#86EFAC';
-                      }
-                    }}
-                  >
-                    {togglingKdsMaster ? (
-                      <RefreshCw size={13} className="animate-spin" />
-                    ) : (
-                      <Power size={13} />
-                    )}
-                    <span>
-                      {kdsMasterStatus && !kdsMasterStatus.is_enabled
-                        ? 'KDS: ĐANG TẮT (SHOW_KDS: 0)'
-                        : 'KDS: ĐANG BẬT (SHOW_KDS: 1)'}
-                    </span>
-                  </button>
                 </div>
               </div>
 
@@ -7691,6 +7589,408 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
         restaurantName={restaurantGposInfo?.restaurant_name || selectedRestaurant?.res || undefined}
         showToast={showToast}
       />
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* MODAL: POPUP TỔNG HỢP CÁC TÍNH NĂNG QUẢN TRỊ KDS */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <Modal
+        isOpen={showKdsFeaturesModal}
+        onClose={() => setShowKdsFeaturesModal(false)}
+        title="⚙️ Các Tính Năng Quản Trị KDS"
+        maxWidth="680px"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+            <Button variant="secondary" size="sm" onClick={() => setShowKdsFeaturesModal(false)}>
+              Đóng
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div
+            style={{
+              padding: '10px 14px',
+              borderRadius: '8px',
+              backgroundColor: '#F8FAFC',
+              border: '1px solid #E2E8F0',
+              fontSize: '12px',
+              color: '#475569',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <Info size={16} color="#3B82F6" style={{ flexShrink: 0 }} />
+            <div>
+              Chọn tính năng bạn cần thao tác trên hệ thống KDS nhà hàng <strong>{selectedRestaurant?.res || selectedRestaurant?.restaurant_name || connectedHost}</strong>:
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: '12px'
+            }}
+          >
+            {/* 1. Thêm quầy và account */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowKdsFeaturesModal(false);
+                setShowAddQuayModal(true);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                padding: '14px',
+                borderRadius: '10px',
+                border: '1.5px solid #A7F3D0',
+                backgroundColor: '#F0FDF4',
+                textAlign: 'left',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(5, 150, 105, 0.15)';
+                e.currentTarget.style.borderColor = '#059669';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)';
+                e.currentTarget.style.borderColor = '#A7F3D0';
+              }}
+            >
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '8px',
+                  backgroundColor: '#059669',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <PlusCircle size={20} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '13px', color: '#065F46', marginBottom: '3px' }}>
+                  Thêm Quầy &amp; Account
+                </div>
+                <div style={{ fontSize: '11px', color: '#047857', lineHeight: '1.4' }}>
+                  Khởi tạo quầy bếp mới, gán account trạm KDS và mapping danh sách món nấu.
+                </div>
+              </div>
+            </button>
+
+            {/* 2. Chuyển món giữa quầy */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowKdsFeaturesModal(false);
+                setTransferFromPlaceId(null);
+                setShowTransferQuayModal(true);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                padding: '14px',
+                borderRadius: '10px',
+                border: '1.5px solid #BFDBFE',
+                backgroundColor: '#EFF6FF',
+                textAlign: 'left',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.15)';
+                e.currentTarget.style.borderColor = '#2563EB';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)';
+                e.currentTarget.style.borderColor = '#BFDBFE';
+              }}
+            >
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '8px',
+                  backgroundColor: '#2563EB',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <ArrowRightLeft size={20} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '13px', color: '#1E40AF', marginBottom: '3px' }}>
+                  🔄 Chuyển Món Giữa Quầy
+                </div>
+                <div style={{ fontSize: '11px', color: '#1D4ED8', lineHeight: '1.4' }}>
+                  Chuyển toàn bộ hoặc món chọn lọc từ quầy này sang quầy khác tức thì.
+                </div>
+              </div>
+            </button>
+
+            {/* 3. Cấu hình quầy & máy in */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowKdsFeaturesModal(false);
+                fetchKdsPlaces();
+                setShowQuayListModal(true);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                padding: '14px',
+                borderRadius: '10px',
+                border: '1.5px solid #FDE68A',
+                backgroundColor: '#FFFBEB',
+                textAlign: 'left',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(217, 119, 6, 0.15)';
+                e.currentTarget.style.borderColor = '#D97706';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)';
+                e.currentTarget.style.borderColor = '#FDE68A';
+              }}
+            >
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '8px',
+                  backgroundColor: '#D97706',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                {loadingKdsPlaces ? <RefreshCw size={20} className="animate-spin" /> : <Printer size={20} />}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '13px', color: '#92400E', marginBottom: '3px' }}>
+                  Cấu Hình Quầy &amp; Máy In ({kdsPlaces.length})
+                </div>
+                <div style={{ fontSize: '11px', color: '#B45309', lineHeight: '1.4' }}>
+                  Đổi tên quầy, gán máy in/driver, bật/tắt in món và xóa quầy 2 bước an toàn.
+                </div>
+              </div>
+            </button>
+
+            {/* 4. Phân quyền User KDS */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowKdsFeaturesModal(false);
+                setShowKdsRoleModal(true);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                padding: '14px',
+                borderRadius: '10px',
+                border: '1.5px solid #BAE6FD',
+                backgroundColor: '#F0F9FF',
+                textAlign: 'left',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(2, 132, 199, 0.15)';
+                e.currentTarget.style.borderColor = '#0284C7';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)';
+                e.currentTarget.style.borderColor = '#BAE6FD';
+              }}
+            >
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '8px',
+                  backgroundColor: '#0284C7',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <ShieldCheck size={20} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '13px', color: '#075985', marginBottom: '3px' }}>
+                  Phân Quyền User KDS
+                </div>
+                <div style={{ fontSize: '11px', color: '#0369A1', lineHeight: '1.4' }}>
+                  Cấp quyền truy cập cấu hình bếp trên máy POS trạm (ROLE_SETUP_CONFIG_COOKING).
+                </div>
+              </div>
+            </button>
+
+            {/* 5. Phân quyền hàng loạt */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowKdsFeaturesModal(false);
+                setBatchRoleParamCode('ROLE_SETUP_CONFIG_COOKING');
+                setShowBatchRoleModal(true);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                padding: '14px',
+                borderRadius: '10px',
+                border: '1.5px solid #DDD6FE',
+                backgroundColor: '#F5F3FF',
+                textAlign: 'left',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(124, 58, 237, 0.15)';
+                e.currentTarget.style.borderColor = '#7C3AED';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)';
+                e.currentTarget.style.borderColor = '#DDD6FE';
+              }}
+            >
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '8px',
+                  backgroundColor: '#7C3AED',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <Zap size={20} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '13px', color: '#5B21B6', marginBottom: '3px' }}>
+                  ⚡ Phân Quyền Hàng Loạt (Nhiều NH)
+                </div>
+                <div style={{ fontSize: '11px', color: '#6D28D9', lineHeight: '1.4' }}>
+                  Áp dụng đồng bộ cấu hình phân quyền KDS tới danh sách nhiều nhà hàng cùng lúc.
+                </div>
+              </div>
+            </button>
+
+            {/* 6. Bật / Tắt master SHOW_KDS */}
+            <button
+              type="button"
+              disabled={togglingKdsMaster}
+              onClick={handleToggleKdsMaster}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                padding: '14px',
+                borderRadius: '10px',
+                border: `1.5px solid ${kdsMasterStatus && !kdsMasterStatus.is_enabled ? '#FECACA' : '#BBF7D0'}`,
+                backgroundColor: kdsMasterStatus && !kdsMasterStatus.is_enabled ? '#FEF2F2' : '#F0FDF4',
+                textAlign: 'left',
+                cursor: togglingKdsMaster ? 'not-allowed' : 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)';
+              }}
+            >
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '8px',
+                  backgroundColor: kdsMasterStatus && !kdsMasterStatus.is_enabled ? '#DC2626' : '#16A34A',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                {togglingKdsMaster ? (
+                  <RefreshCw size={20} className="animate-spin" />
+                ) : (
+                  <Power size={20} />
+                )}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    color: kdsMasterStatus && !kdsMasterStatus.is_enabled ? '#991B1B' : '#14532D',
+                    marginBottom: '3px'
+                  }}
+                >
+                  {kdsMasterStatus && !kdsMasterStatus.is_enabled
+                    ? 'KDS: ĐANG TẮT (SHOW_KDS: 0)'
+                    : 'KDS: ĐANG BẬT (SHOW_KDS: 1)'}
+                </div>
+                <div
+                  style={{
+                    fontSize: '11px',
+                    color: kdsMasterStatus && !kdsMasterStatus.is_enabled ? '#DC2626' : '#15803D',
+                    lineHeight: '1.4'
+                  }}
+                >
+                  {kdsMasterStatus && !kdsMasterStatus.is_enabled
+                    ? 'Bấm vào để kích hoạt BẬT chức năng KDS toàn nhà hàng.'
+                    : 'Bấm vào để TẮT hoàn toàn chức năng KDS toàn nhà hàng.'}
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* MODAL: TẠO BỔ SUNG QUẦY & ACCOUNT FOOD CONTROL (ROLE: 2) */}

@@ -1532,6 +1532,9 @@ export interface KdsLogItem {
   delay_minutes: number;
   status_label: string;
   source_collection: string;
+  printer_name?: string | null;
+  print_status?: string | null;
+  print_message?: string | null;
 }
 
 export interface KdsLogQueryResponse {

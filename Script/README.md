@@ -2458,5 +2458,34 @@ estaurant_service.py).
     ```
   - Tuyệt đối không để đọng code chưa commit/push trước khi kết thúc lượt phản hồi.
 
+---
+
+### [2026-10-15] - Cập Nhật Nhật Ký In KDS & Gom Gọn Thanh Công Cụ KDS
+1. **Tra Cứu Nhật Ký KDS & Kiểm Tra Lệnh In Máy In (`KdsLogsModal` & Backend `mongodb_service.py`)**:
+   - **Thêm cột mới "Lệnh In / Máy In KDS"**: Hiển thị rõ ràng máy in đích được cấu hình cho quầy bếp của món ăn (`IN THIT`, `IN NONG`, `IN SALAD`...) và trạng thái phát lệnh in khi nhân viên bấm **DONE** món.
+   - **Cơ chế bóc tách lệnh in**:
+     + Backend truy xuất `G_KITCHEN.LOG_DISH_FINISH_ITEM` lấy thời điểm `deliveryTime` (thời điểm bấm Done) và danh sách quầy phụ trách `configCooking.placeIds`.
+     + Đối soát với cấu hình máy in trong `G_KITCHEN.CONFIG_KDS.places` (`printer` / `driverName`) và tài khoản trạm `G_KITCHEN.ACCOUNT.listPlace`.
+     + Kiểm tra trạng thái cờ `isDisablePrint`: Nếu đang bật tắt in KDS thì hiển thị nhãn cảnh báo `⛔ Tắt in KDS`.
+     + Các trạng thái hiển thị trực quan:
+       * `✓ Đã phát lệnh in` kèm badge máy in `🖨️ [Tên máy in]`.
+       * `⛔ Tắt in KDS` khi `isDisablePrint = true`.
+       * `⚠️ Chưa gán máy in` khi quầy chưa được cấu hình tên máy in/driver.
+       * `⏳ Chờ Done món` khi món chưa hoàn tất chế biến.
+   - **Cập nhật tính năng Sao chép gửi NH**: Bản copy đối soát tự động bổ sung cột thông tin máy in và trạng thái in để IT gửi ngay cho nhà hàng đối soát khi có sự vụ "bấm done mà không in".
+2. **Gom Gọn Thanh Công Cụ KDS & Popup "Các Tính Năng KDS" (`RestaurantMongoAnalysisPage.tsx`)**:
+   - Tối giản triệt để thanh công cụ Task 4 KDS: Thay vì hiển thị dàn trải 7 nút dài gây rối mắt, gom lại chỉ còn **2 nút bấm trọng tâm**:
+     1. **`⚙️ Các Tính Năng KDS ▾`**: Bấm vào mở popup modal tổng hợp các tác vụ quản trị KDS dưới dạng lưới thẻ tương tác cao cấp (hover effect, icon màu trực quan, diễn giải nghiệp vụ):
+        - `+ Thêm Quầy & Account`
+        - `🔄 Chuyển Món Giữa Quầy`
+        - `🖨️ Cấu Hình Quầy & Máy In (X)`
+        - `🛡️ Phân Quyền User KDS`
+        - `⚡ Phân Quyền Hàng Loạt (Nhiều NH)`
+        - `⚡ KDS: ĐANG BẬT / ĐANG TẮT (SHOW_KDS: 1 / 0)`
+     2. **`📋 Logs KDS (Order & Ra Món)`**: Đặt nổi bật ngay cạnh nút tính năng để kỹ thuật viên mở tra cứu logs 1 chạm nhanh chóng.
+3. **Build & Đóng Gói Chuẩn**:
+   - Frontend `cmd /c "npm run build"` chạy thành công, tạo gói `frontend/dist/` sạch sẽ, zero warnings/errors.
+   - Backend `python -m compileall app` và Smoke Test kiểm tra cú pháp 100% Passed.
+
 
 

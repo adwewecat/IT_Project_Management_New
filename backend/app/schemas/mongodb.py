@@ -504,6 +504,9 @@ class KdsLogItem(BaseModel):
     delay_minutes: float = 0.0
     status_label: str = "Kịp giờ"
     source_collection: str = "LOG_DISH_FINISH_ITEM"
+    printer_name: Optional[str] = None
+    print_status: Optional[str] = None
+    print_message: Optional[str] = None
 
 
 class KdsLogQueryResponse(BaseModel):

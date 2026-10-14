@@ -225,6 +225,8 @@
      - Đã xóa 5 ô stat cards thống kê ở đầu.
      - Modal "Cấu Hình Quầy Bếp & Driver Máy In KDS": **Đã ẩn hoàn toàn cột "Tài Khoản KDS"**.
      - **Đổi Tên Quầy (Place)**: Cho phép đổi tên trực tiếp (bút chì). Khi đổi tên, backend tự động sinh mã quầy viết hoa không dấu (`placeCode`), cập nhật đồng thời trong `CONFIG_KDS.places`, `ACCOUNT.listPlace` và `accName` của trạm con (`role: 3`).
+     - **Gom Gọn Toolbar KDS**: Chỉ giữ lại 2 nút: `⚙️ Các Tính Năng KDS ▾` (mở popup chứa Thêm quầy, Chuyển món, Cấu hình quầy & máy in, Phân quyền, Phân quyền hàng loạt, Toggle KDS Master) và `📋 Logs KDS (Order & Ra Món)`.
+     - **Bổ Sung Cột Lệnh In / Máy In KDS (`KdsLogsModal`)**: Bắt logs từ `G_KITCHEN.LOG_DISH_FINISH_ITEM`, đối soát `placeIds` với `CONFIG_KDS.places` để hiển thị máy in đích và trạng thái phát lệnh in (`✓ Đã phát lệnh in`, `⛔ Tắt in KDS`, `⚠️ Chưa gán máy in`).
   4. **4. Cấu hình Ẩn Hiện Món (`dish_show_hide`)**: Ẩn/hiện trên QrOrder, CO, SO.
   5. **5. Cấu hình Ẩn Hiện Menu (`menu_show_hide`)**: Bật tắt hiển thị menu và KDS Auto (`autoDeliveryInSo`).
   6. **6. Xử Lý Full CPU 100% (`fix_full_cpu`)**: Tạo index tối ưu cho `DISH_KDS`, `ORDER`, `CO_MENU_ITEM` triệt tiêu COLLSCAN.

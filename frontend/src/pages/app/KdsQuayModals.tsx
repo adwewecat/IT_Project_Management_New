@@ -2721,10 +2721,17 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
     let text = `BÁO CÁO NHẬT KÝ RA MÓN KDS (${restaurantName || host} - Ngày: ${filterDate})\n`;
     text += `Tra cứu lúc: ${new Date().toLocaleString('vi-VN')}\n`;
     text += `------------------------------------------------------------------------------------------------------------------------\n`;
-    text += `BÀN | TÊN MÓN | SAP | QUẦY | GIỜ ORDER (CO/SO) | GIỜ DONE (KDS) | THỰC TẾ | CHUẨN | TRẠNG THÁI\n`;
+    text += `BÀN | TÊN MÓN | SAP | QUẦY | GIỜ ORDER (CO/SO) | GIỜ DONE (KDS) | LỆNH IN / MÁY IN | THỰC TẾ | CHUẨN | TRẠNG THÁI\n`;
     text += `------------------------------------------------------------------------------------------------------------------------\n`;
     logs.forEach((l) => {
-      text += `${l.table_name} | ${l.dish_name} | ${l.sap_code} | ${l.place_name} | ${l.order_time} | ${l.done_time} | ${l.actual_minutes}p | ${l.config_minutes}p | ${l.status_label}\n`;
+      const printInfo = l.print_status === 'PRINTED'
+        ? `[ĐÃ IN -> ${l.printer_name}]`
+        : l.print_status === 'DISABLED'
+        ? `[TẮT IN (${l.printer_name || 'KDS'})]`
+        : l.print_status === 'NO_PRINTER'
+        ? '[CHƯA GÁN MÁY IN]'
+        : '[CHỜ DONE]';
+      text += `${l.table_name} | ${l.dish_name} | ${l.sap_code} | ${l.place_name} | ${l.order_time} | ${l.done_time} | ${printInfo} | ${l.actual_minutes}p | ${l.config_minutes}p | ${l.status_label}\n`;
     });
     navigator.clipboard.writeText(text);
     setCopiedAll(true);
@@ -2737,7 +2744,7 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="📋 Tra Cứu Nhật Ký KDS (Thời Gian Order & Bấm Done Món)"
-      maxWidth="1100px"
+      maxWidth="1200px"
       footer={
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
@@ -2778,7 +2785,7 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
           }}
         >
           <div>
-            💡 Dữ liệu trích xuất từ <strong>G_KITCHEN.LOG_DISH_FINISH_ITEM</strong> và <strong>G_ORDER.ORDER_DELIVERY_LOG</strong>. Dùng để đối soát thời gian order và thời điểm nhân viên bếp thực tế bấm <strong>DONE</strong> món trên KDS.
+            💡 Dữ liệu trích xuất từ <strong>G_KITCHEN.LOG_DISH_FINISH_ITEM</strong> và <strong>G_ORDER.ORDER_DELIVERY_LOG</strong>. Dùng để đối soát thời gian order, thời điểm nhân viên bếp thực tế bấm <strong>DONE</strong> món trên KDS, và máy in nhận lệnh in hoàn thành.
           </div>
         </div>
 
@@ -2927,17 +2934,18 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
             maxWidth: '100%'
           }}
         >
-          <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '12px' }}>
+          <table style={{ width: '100%', minWidth: '1080px', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #CBD5E1', color: '#475569', position: 'sticky', top: 0, zIndex: 10 }}>
                 <th style={{ padding: '9px 10px', textAlign: 'center', width: '70px' }}>Bàn</th>
-                <th style={{ padding: '9px 10px', textAlign: 'left', minWidth: '180px' }}>Món Ăn</th>
+                <th style={{ padding: '9px 10px', textAlign: 'left', minWidth: '170px' }}>Món Ăn</th>
                 <th style={{ padding: '9px 10px', textAlign: 'center', width: '90px' }}>Mã SAP</th>
-                <th style={{ padding: '9px 10px', textAlign: 'left', width: '130px' }}>Quầy Bếp</th>
-                <th style={{ padding: '9px 10px', textAlign: 'center', width: '140px' }}>Giờ Order (CO/SO)</th>
-                <th style={{ padding: '9px 10px', textAlign: 'center', width: '140px' }}>Giờ Done (KDS)</th>
-                <th style={{ padding: '9px 10px', textAlign: 'center', width: '85px' }}>Thực Tế</th>
-                <th style={{ padding: '9px 10px', textAlign: 'center', width: '85px' }}>Chuẩn</th>
+                <th style={{ padding: '9px 10px', textAlign: 'left', width: '120px' }}>Quầy Bếp</th>
+                <th style={{ padding: '9px 10px', textAlign: 'center', width: '135px' }}>Giờ Order (CO/SO)</th>
+                <th style={{ padding: '9px 10px', textAlign: 'center', width: '135px' }}>Giờ Done (KDS)</th>
+                <th style={{ padding: '9px 10px', textAlign: 'center', width: '155px' }}>Lệnh In / Máy In KDS</th>
+                <th style={{ padding: '9px 10px', textAlign: 'center', width: '80px' }}>Thực Tế</th>
+                <th style={{ padding: '9px 10px', textAlign: 'center', width: '80px' }}>Chuẩn</th>
                 <th style={{ padding: '9px 10px', textAlign: 'center', width: '110px' }}>Trạng Thái</th>
                 <th style={{ padding: '9px 10px', textAlign: 'center', width: '80px' }}>Tài Khoản</th>
               </tr>
@@ -2945,14 +2953,14 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={10} style={{ padding: '30px', textAlign: 'center', color: '#6B7280' }}>
+                  <td colSpan={11} style={{ padding: '30px', textAlign: 'center', color: '#6B7280' }}>
                     <RefreshCw size={20} className="animate-spin" style={{ display: 'inline', marginRight: '8px' }} />
                     Đang tra cứu dữ liệu nhật ký KDS từ MongoDB...
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF' }}>
+                  <td colSpan={11} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF' }}>
                     {hasQueried ? 'Không tìm thấy bản ghi nào phù hợp với bộ lọc trong ngày đã chọn.' : 'Vui lòng nhấn nút Tra Cứu để tải dữ liệu.'}
                   </td>
                 </tr>
@@ -3005,6 +3013,85 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
                       </td>
                       <td style={{ padding: '8px 10px', textAlign: 'center', color: '#047857', fontFamily: 'monospace', fontSize: '11px' }}>
                         {item.done_time}
+                      </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                        {item.print_status === 'PRINTED' ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                backgroundColor: '#DCFCE7',
+                                color: '#15803D',
+                                border: '1px solid #BBF7D0'
+                              }}
+                              title={item.print_message || ''}
+                            >
+                              <Printer size={12} />
+                              {item.printer_name || 'Máy in'}
+                            </span>
+                            <span style={{ fontSize: '10px', color: '#059669', fontWeight: 600 }}>
+                              ✓ Đã phát lệnh in
+                            </span>
+                          </div>
+                        ) : item.print_status === 'DISABLED' ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                backgroundColor: '#FEF3C7',
+                                color: '#B45309',
+                                border: '1px solid #FDE68A'
+                              }}
+                              title={item.print_message || 'Tắt in KDS'}
+                            >
+                              ⛔ Tắt in KDS
+                            </span>
+                            {item.printer_name && (
+                              <span style={{ fontSize: '10px', color: '#92400E' }}>
+                                ({item.printer_name})
+                              </span>
+                            )}
+                          </div>
+                        ) : item.print_status === 'NO_PRINTER' ? (
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              color: '#64748B',
+                              backgroundColor: '#F1F5F9',
+                              border: '1px solid #E2E8F0'
+                            }}
+                            title="Quầy này chưa được cấu hình máy in trong CONFIG_KDS"
+                          >
+                            ⚠️ Chưa gán máy in
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '10px',
+                              color: '#94A3B8'
+                            }}
+                          >
+                            ⏳ Chờ Done món
+                          </span>
+                        )}
                       </td>
                       <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, color: isDelayed ? '#DC2626' : '#059669' }}>
                         {item.actual_minutes > 0 ? `${item.actual_minutes}p` : '—'}

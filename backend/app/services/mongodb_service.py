@@ -2637,14 +2637,31 @@ class MongoDBService:
             db_order = client["G_ORDER"] if "G_ORDER" in all_dbs else None
 
             place_map: Dict[int, str] = {}
+            place_printer_map: Dict[int, str] = {}
+            is_disable_print: bool = False
             if db_kitchen is not None:
                 cfg = db_kitchen["CONFIG_KDS"].find_one() or {}
+                is_disable_print = bool(cfg.get("isDisablePrint", False))
                 for p in (cfg.get("places") or []):
                     if isinstance(p, dict) and p.get("id") is not None:
                         try:
-                            place_map[int(p["id"])] = p.get("name", f"Quầy #{p['id']}")
+                            pid_int = int(p["id"])
+                            place_map[pid_int] = p.get("name", f"Quầy #{p['id']}")
+                            place_printer_map[pid_int] = str(p.get("printer") or p.get("driverName") or "").strip()
                         except Exception:
                             pass
+                if "ACCOUNT" in db_kitchen.list_collection_names():
+                    for acc in db_kitchen["ACCOUNT"].find():
+                        for lp in (acc.get("listPlace") or []):
+                            if isinstance(lp, dict) and lp.get("id") is not None:
+                                try:
+                                    lp_pid = int(lp["id"])
+                                    if lp_pid not in place_printer_map or not place_printer_map[lp_pid]:
+                                        lp_prn = str(lp.get("printer") or lp.get("driverName") or "").strip()
+                                        if lp_prn:
+                                            place_printer_map[lp_pid] = lp_prn
+                                except Exception:
+                                    pass
 
             table_filter = payload.table.strip().lower() if payload.table else None
             query_filter = _remove_vietnamese_tones(payload.query.strip()) if payload.query else None
@@ -2719,6 +2736,22 @@ class MongoDBService:
 
                     pid = doc.get("placeId") or (c.get("placeIds", [None])[0] if c.get("placeIds") else None)
                     p_name = str(doc.get("placeName") or place_map.get(pid) or (f"Quầy #{pid}" if pid else "Quầy Bếp"))
+                    assigned_prn = str(doc.get("printer") or (place_printer_map.get(pid, "") if pid is not None else "")).strip()
+
+                    # Bắt logs và kiểm tra phát lệnh in khi Done món
+                    if not deliv_dt:
+                        p_status = "NOT_DONE"
+                        p_msg = "Chưa Done (Chờ bếp bấm để phát lệnh in)"
+                    elif is_disable_print:
+                        p_status = "DISABLED"
+                        p_msg = "Tắt in KDS (Cấu hình isDisablePrint: BẬT)"
+                    elif not assigned_prn:
+                        p_status = "NO_PRINTER"
+                        p_msg = f"Quầy {p_name} chưa gán máy in/driver"
+                    else:
+                        p_status = "PRINTED"
+                        done_str = deliv_dt.strftime("%H:%M:%S")
+                        p_msg = f"Đã phát lệnh in ra [{assigned_prn}] lúc {done_str}"
 
                     logs.append(KdsLogItem(
                         id=str(doc.get("_id")),
@@ -2734,7 +2767,10 @@ class MongoDBService:
                         config_minutes=config_mins,
                         delay_minutes=delay_mins,
                         status_label=status_lbl,
-                        source_collection="G_KITCHEN.LOG_DISH_FINISH_ITEM"
+                        source_collection="G_KITCHEN.LOG_DISH_FINISH_ITEM",
+                        printer_name=assigned_prn or None,
+                        print_status=p_status,
+                        print_message=p_msg
                     ))
 
             # 2. Quét G_ORDER.ORDER_DELIVERY_LOG
@@ -2792,7 +2828,10 @@ class MongoDBService:
                         config_minutes=config_mins,
                         delay_minutes=delay_mins,
                         status_label=status_lbl,
-                        source_collection="G_ORDER.ORDER_DELIVERY_LOG"
+                        source_collection="G_ORDER.ORDER_DELIVERY_LOG",
+                        printer_name=str(doc.get("printer") or "").strip() or None,
+                        print_status="PRINTED" if deliv_dt else "NOT_DONE",
+                        print_message=f"Đã giao món lúc {deliv_dt.strftime('%H:%M:%S')}" if deliv_dt else "Chưa Done"
                     ))
 
             return KdsLogQueryResponse(
