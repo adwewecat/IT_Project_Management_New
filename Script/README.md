@@ -2487,5 +2487,33 @@ estaurant_service.py).
    - Frontend `cmd /c "npm run build"` chạy thành công, tạo gói `frontend/dist/` sạch sẽ, zero warnings/errors.
    - Backend `python -m compileall app` và Smoke Test kiểm tra cú pháp 100% Passed.
 
+---
+
+### [2026-10-15] - Tối Ưu Toàn Diện Khung Giao Diện & Thanh Cuộn (Single-Screen Layout & Table Scroll Riêng)
+1. **Ẩn hoàn toàn thanh cuộn dọc (Scroll) ở Sidebar Menu bên trái**:
+   - Áp dụng CSS `scrollbar-width: none !important; -ms-overflow-style: none !important; ::-webkit-scrollbar { display: none !important; }` trên `.app-sidebar` và inner navigation list.
+   - Tinh chỉnh padding (`6.5px 10px`), gap (`2px`), font-size (`13.5px`) các menu item và footer "IT MIỀN NAM" (`10px 14px`) để thanh menu hiển thị vừa vặn, toàn diện trong 1 khung nhìn (viewport), không có thanh cuộn dọc làm rối mắt.
+2. **Bỏ hoàn toàn thanh cuộn dọc ngoài cùng bên phải toàn màn hình**:
+   - Gỡ bỏ `scrollbar-gutter: stable;` khỏi `html, body`.
+   - Cố định layout chính `MainLayout`: `height: 100vh, overflow: hidden`, biến toàn bộ ứng dụng thành kiến trúc Single-Screen App (giống hệt trang "Danh Sách Nhà Hàng").
+3. **Tất cả các bảng / list danh sách hiển thị đều có thanh cuộn riêng (Independent Table Scroll)**:
+   - Áp dụng chuẩn `.page-container-fullheight` (`height: 100%, overflow: hidden, display: flex, flexDirection: column`):
+     - Header trang, tabs bar, thanh công cụ filter đều giữ cố định ở đỉnh (`flexShrink: 0`).
+     - Thẻ Card chứa bảng chiếm trọn không gian còn lại (`flex: 1, minHeight: 0, overflow: hidden`).
+     - Bảng danh sách cuộn dọc độc lập bên trong (`overflowY: auto, overflowX: auto`) với hàng tiêu đề `thead` ghim cố định trên đỉnh (`position: sticky, top: 0, zIndex: 10`), không bao giờ đẩy dài cả trang web hay làm mất các thanh lọc phía trên.
+   - Đã đồng bộ trên các trang:
+     * `ViolationAndLeavePage.tsx` (Ghi nhận lỗi & Nghỉ phép - cả 2 tab Lỗi làm việc & Nghỉ phép đều có khung cuộn riêng).
+     * `CentralizedLogsPage.tsx` (Báo cáo logs tập trung: `TopScrollTable maxHeight="100%"`).
+     * `RestaurantListPage.tsx` (Danh sách nhà hàng: chuẩn mẫu `height: 100%`).
+     * `RestaurantAuditLogsPage.tsx` (Logs nhà hàng: `height: 100%`, `flex: 1, minHeight: 0`).
+     * `IncidentListPage.tsx` (Báo cáo sự vụ: Card chứa table `flex: 1, minHeight: 0`, cuộn riêng, thead sticky).
+     * `CheckMonRk7Page.tsx` (Check món RK7: Tab 1, Tab 2, Tab 3 cuộn riêng có sticky thead).
+     * `UsersPage.tsx` (Quản lý tài khoản: Card table `flex: 1, minHeight: 0`, cuộn riêng, thead sticky).
+     * `TopScrollTable.tsx` (Component dùng chung: nâng cấp hỗ trợ `flex: 1, minHeight: 0`, co giãn linh hoạt theo thẻ cha).
+4. **Kiểm tra & Đóng gói**:
+   - Frontend `cmd /c "npm run build"` thành công 100% (exit code 0), thư mục `frontend/dist/` sẵn sàng deploy IIS.
+   - Backend `python -m compileall app` và Smoke Test 100% PASSED.
+
+
 
 

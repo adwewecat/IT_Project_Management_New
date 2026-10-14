@@ -14,12 +14,12 @@ export const MainLayout: React.FC = () => {
   }, [location.pathname]);
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-secondary)' }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-secondary)', overflow: 'hidden' }}>
       <Header
         mobileSidebarOpen={mobileSidebarOpen}
         onToggleMobileSidebar={() => setMobileSidebarOpen((prev) => !prev)}
       />
-      <div style={{ display: 'flex', flex: 1, minHeight: 'calc(100vh - 64px)', position: 'relative', width: '100%', maxWidth: '100vw', overflowX: 'hidden' }}>
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative', width: '100%', maxWidth: '100vw', overflow: 'hidden' }}>
         <Sidebar
           mobileOpen={mobileSidebarOpen}
           onCloseMobile={() => setMobileSidebarOpen(false)}
@@ -28,10 +28,15 @@ export const MainLayout: React.FC = () => {
           className="app-main-content"
           style={{
             flex: 1,
-            padding: '24px',
+            padding: 0,
             minWidth: 0,
             width: '100%',
             maxWidth: '100%',
+            height: '100%',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
             boxSizing: 'border-box',
           }}
         >

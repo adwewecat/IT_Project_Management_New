@@ -122,16 +122,16 @@ export const IncidentListPage: React.FC = () => {
   };
 
   return (
-    <div style={{ width: '100%' }}>
+    <div className="page-container-fullheight" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px', height: '100%', overflow: 'hidden' }}>
       {/* Header */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: '20px',
           flexWrap: 'wrap',
           gap: '12px',
+          flexShrink: 0,
         }}
       >
         <div>
@@ -182,8 +182,8 @@ export const IncidentListPage: React.FC = () => {
         style={{
           display: 'flex',
           borderBottom: '2px solid var(--border-color)',
-          marginBottom: '16px',
           gap: '8px',
+          flexShrink: 0,
         }}
       >
         <button
@@ -288,14 +288,14 @@ export const IncidentListPage: React.FC = () => {
       {/* Filter Toolbar */}
       <div
         style={{
-          padding: '16px',
+          padding: '12px 16px',
           backgroundColor: 'var(--bg-primary)',
           border: '1px solid var(--border-color)',
           borderRadius: 'var(--radius-md)',
-          marginBottom: '16px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '12px',
+          gap: '10px',
+          flexShrink: 0,
         }}
       >
         <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -436,15 +436,19 @@ export const IncidentListPage: React.FC = () => {
       {/* Table Data */}
       <div
         style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
           backgroundColor: 'var(--bg-primary)',
           border: '1px solid var(--border-color)',
           borderRadius: 'var(--radius-md)',
           overflow: 'hidden',
         }}
       >
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto', width: '100%' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-            <thead>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-secondary)' }}>
               <tr
                 style={{
                   backgroundColor: 'var(--bg-secondary)',

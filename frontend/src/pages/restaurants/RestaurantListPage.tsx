@@ -390,7 +390,7 @@ export const RestaurantListPage: React.FC = () => {
   }, []);
 
   return (
-    <div className="page-container-fullheight" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px', height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
+    <div className="page-container-fullheight" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px', height: '100%', overflow: 'hidden' }}>
       {/* Header Section */}
       <div
         style={{

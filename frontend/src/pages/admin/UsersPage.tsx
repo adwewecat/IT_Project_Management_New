@@ -484,10 +484,10 @@ export const UsersPage: React.FC = () => {
   ];
 
   return (
-    <div>
+    <div className="page-container-fullheight" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px', height: '100%', overflow: 'hidden' }}>
       {/* Alert notification */}
       {alertInfo && (
-        <div style={{ marginBottom: '18px' }}>
+        <div style={{ flexShrink: 0 }}>
           <Alert
             type={alertInfo.type}
             message={alertInfo.message}
@@ -497,7 +497,7 @@ export const UsersPage: React.FC = () => {
       )}
 
       {/* Top Toolbar */}
-      <Card style={{ marginBottom: '20px' }}>
+      <Card style={{ flexShrink: 0 }}>
         <div
           style={{
             display: 'flex',
@@ -563,10 +563,10 @@ export const UsersPage: React.FC = () => {
       </Card>
 
       {/* Users Table */}
-      <Card padding="none">
-        <div style={{ overflowX: 'auto' }}>
+      <Card padding="none" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto', width: '100%' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-            <thead>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-secondary)' }}>
               <tr
                 style={{
                   backgroundColor: 'var(--bg-secondary)',
@@ -713,6 +713,7 @@ export const UsersPage: React.FC = () => {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
+            flexShrink: 0,
           }}
         >
           <span>Tổng số tài khoản: <strong>{total}</strong></span>

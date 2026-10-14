@@ -2209,7 +2209,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', paddingBottom: '50px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px 20px', width: '100%', boxSizing: 'border-box' }}>
       {/* Toast Notification */}
       {toast && (
         <div

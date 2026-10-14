@@ -110,34 +110,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
     top: '64px',
     height: 'calc(100vh - 64px)',
     zIndex: 50,
+    scrollbarWidth: 'none',
+    msOverflowStyle: 'none',
   };
 
   const navListStyle: React.CSSProperties = {
     listStyle: 'none',
-    padding: '16px 12px',
+    padding: '10px 8px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '2px',
     margin: 0,
   };
 
   const sectionTitleStyle: React.CSSProperties = {
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: 800,
     textTransform: 'uppercase',
-    color: '#374151',
+    color: '#4B5563',
     letterSpacing: '0.06em',
-    padding: '14px 12px 6px',
+    padding: '8px 10px 3px',
   };
 
   const getLinkStyle = (isActive: boolean): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    padding: '9px 12px',
+    gap: '9px',
+    padding: '6.5px 10px',
     borderRadius: 'var(--radius-md)',
-    fontSize: '14.5px',
-    fontWeight: isActive ? 800 : 700,
+    fontSize: '13.5px',
+    fontWeight: isActive ? 800 : 600,
     color: isActive ? 'var(--color-primary-text)' : '#111827',
     backgroundColor: isActive ? 'var(--color-primary-subtle)' : 'transparent',
     borderLeft: isActive ? '4px solid var(--color-primary)' : '4px solid transparent',
@@ -227,7 +229,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }
         }}
       >
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <ul style={navListStyle}>
         {/* ================= PHẦN 1: MÀN HÌNH TẤT CẢ CÁC QUYỀN DÙNG CHUNG ================= */}
         <li style={sectionTitleStyle}>Chức Năng Dùng Chung</li>
@@ -613,20 +615,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {/* ================= PHẦN DƯỚI CÙNG THANH NAV: IT MIỀN NAM ================= */}
     <div
       style={{
-        padding: '16px 20px',
-        borderTop: '2px solid var(--border-color)',
+        padding: '10px 14px',
+        borderTop: '1px solid var(--border-color)',
         backgroundColor: 'var(--bg-secondary)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '10px',
+        gap: '8px',
         flexShrink: 0,
       }}
     >
       <div
         style={{
-          width: '10px',
-          height: '10px',
+          width: '8px',
+          height: '8px',
           borderRadius: '50%',
           backgroundColor: 'var(--color-primary)',
           boxShadow: '0 0 8px var(--color-primary)',
@@ -634,7 +636,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       />
       <span
         style={{
-          fontSize: '18px',
+          fontSize: '15px',
           fontWeight: 800,
           color: 'var(--text-primary)',
           letterSpacing: '0.06em',

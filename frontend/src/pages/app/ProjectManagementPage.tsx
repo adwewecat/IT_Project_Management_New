@@ -915,7 +915,7 @@ export const ProjectManagementPage: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', padding: '16px 20px', boxSizing: 'border-box' }}>
       {/* Alert */}
       {alertInfo && (
         <Alert

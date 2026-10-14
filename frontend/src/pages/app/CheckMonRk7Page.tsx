@@ -561,9 +561,9 @@ export const CheckMonRk7Page: React.FC = () => {
                   </div>
                 </div>
 
-                <div style={{ overflowX: 'auto' }}>
+                <div style={{ overflowX: 'auto', maxHeight: '60vh', overflowY: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-                    <thead>
+                    <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: 'var(--bg-secondary)' }}>
                       <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)' }}>
                         <th style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-secondary)', width: '60px' }}>STT</th>
                         <th style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-secondary)' }}>Mã SAP</th>
@@ -807,9 +807,9 @@ export const CheckMonRk7Page: React.FC = () => {
                   </div>
                 </div>
 
-                <div style={{ overflowX: 'auto' }}>
+                <div style={{ overflowX: 'auto', maxHeight: '60vh', overflowY: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-                    <thead>
+                    <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: 'var(--bg-secondary)' }}>
                       <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)' }}>
                         <th style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-secondary)', width: '50px' }}>STT</th>
                         <th style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-secondary)' }}>Mã SAP</th>

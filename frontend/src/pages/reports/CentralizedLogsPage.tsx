@@ -232,7 +232,7 @@ export const CentralizedLogsPage: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1600px', margin: '0 auto', width: '100%' }}>
+    <div className="page-container-fullheight" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px', height: '100%', overflow: 'hidden' }}>
       {/* Toast Notification */}
       {toastMessage && (
         <div
@@ -260,8 +260,8 @@ export const CentralizedLogsPage: React.FC = () => {
       )}
 
       {/* ── HEADER CARD ── */}
-      <Card>
-        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <Card style={{ flexShrink: 0 }}>
+        <div style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
               <div
@@ -588,8 +588,8 @@ export const CentralizedLogsPage: React.FC = () => {
       </Card>
 
       {/* ── BẢNG DỮ LIỆU LOGS ── */}
-      <Card style={{ padding: 0, overflow: 'hidden' }}>
-        <TopScrollTable maxHeight="calc(100vh - 280px)">
+      <Card style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <TopScrollTable maxHeight="100%">
           <table style={{ width: '100%', minWidth: '1080px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 5, backgroundColor: '#F8FAFC' }}>
               <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1.5px solid var(--border-color)', color: '#475569' }}>
@@ -697,14 +697,15 @@ export const CentralizedLogsPage: React.FC = () => {
         {/* Phân trang */}
         <div
           style={{
-            padding: '12px 18px',
+            padding: '10px 18px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             borderTop: '1px solid var(--border-color)',
             flexWrap: 'wrap',
             gap: '10px',
-            fontSize: '13px'
+            fontSize: '13px',
+            flexShrink: 0,
           }}
         >
           <div style={{ color: '#64748B' }}>

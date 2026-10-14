@@ -157,9 +157,9 @@ export const RestaurantAuditLogsPage: React.FC = () => {
   };
 
   return (
-    <div className="page-container-fullheight" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px', height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
+    <div className="page-container-fullheight" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px', height: '100%', overflow: 'hidden' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <Button
             variant="secondary"
@@ -211,7 +211,7 @@ export const RestaurantAuditLogsPage: React.FC = () => {
       </div>
 
       {/* Filter Bar */}
-      <Card style={{ padding: '12px 16px' }}>
+      <Card style={{ padding: '12px 16px', flexShrink: 0 }}>
         <div
           style={{
             display: 'grid',
@@ -282,8 +282,8 @@ export const RestaurantAuditLogsPage: React.FC = () => {
       </Card>
 
       {/* Table */}
-      <Card style={{ padding: 0, overflow: 'hidden', flex: 1, minHeight: 0 }}>
-        <TopScrollTable maxHeight="calc(100vh - 290px)">
+      <Card style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <TopScrollTable maxHeight="100%">
           <table
             style={{
               width: '100%',

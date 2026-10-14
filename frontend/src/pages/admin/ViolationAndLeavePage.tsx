@@ -752,16 +752,16 @@ export const ViolationAndLeavePage: React.FC = () => {
   };
 
   return (
-    <div style={{ width: '100%' }}>
+    <div className="page-container-fullheight" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px', height: '100%', overflow: 'hidden' }}>
       {/* Header */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: '20px',
           flexWrap: 'wrap',
           gap: '12px',
+          flexShrink: 0,
         }}
       >
         <div>
@@ -811,8 +811,8 @@ export const ViolationAndLeavePage: React.FC = () => {
         style={{
           display: 'flex',
           borderBottom: '2px solid var(--border-color)',
-          marginBottom: '20px',
           gap: '8px',
+          flexShrink: 0,
         }}
       >
         <button
@@ -890,15 +890,19 @@ export const ViolationAndLeavePage: React.FC = () => {
       {activeTab === 'violations' && (
         <div
           style={{
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
             backgroundColor: 'var(--bg-primary)',
             border: '1px solid var(--border-color)',
             borderRadius: 'var(--radius-md)',
             overflow: 'hidden',
           }}
         >
-          <div style={{ overflowX: 'auto' }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto', width: '100%' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-              <thead>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-secondary)' }}>
                 <tr
                   style={{
                     backgroundColor: 'var(--bg-secondary)',
@@ -1047,7 +1051,7 @@ export const ViolationAndLeavePage: React.FC = () => {
 
       {/* Content for Tab 2: Leaves */}
       {activeTab === 'leaves' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {/* Toolbar Lọc Nghỉ Phép Theo Tháng / Ngày / Tìm Kiếm */}
           <div
             style={{
@@ -1060,6 +1064,7 @@ export const ViolationAndLeavePage: React.FC = () => {
               justifyContent: 'space-between',
               flexWrap: 'wrap',
               gap: '12px',
+              flexShrink: 0,
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -1392,15 +1397,19 @@ export const ViolationAndLeavePage: React.FC = () => {
 
           <div
             style={{
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
               backgroundColor: 'var(--bg-primary)',
               border: '1px solid var(--border-color)',
               borderRadius: 'var(--radius-md)',
               overflow: 'hidden',
             }}
           >
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto', width: '100%' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-                <thead>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-secondary)' }}>
                 <tr
                   style={{
                     backgroundColor: 'var(--bg-secondary)',

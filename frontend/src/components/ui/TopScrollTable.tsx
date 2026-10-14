@@ -75,7 +75,7 @@ export const TopScrollTable: React.FC<TopScrollTableProps> = ({
   };
 
   return (
-    <div style={{ width: '100%', position: 'relative', ...style }} className={className}>
+    <div style={{ width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, ...style }} className={className}>
       {/* Thanh cuộn ngang phụ ở đỉnh bảng - Chỉ hiện khi bảng bị tràn ngang (overflowX) */}
       {hasOverflow && (
         <div
@@ -91,7 +91,8 @@ export const TopScrollTable: React.FC<TopScrollTableProps> = ({
             borderBottom: '1px solid var(--border-color, #E2E8F0)',
             position: 'sticky',
             top: 0,
-            zIndex: 15
+            zIndex: 15,
+            flexShrink: 0
           }}
           title="Thanh cuộn ngang phụ ở đỉnh bảng (Kéo để xem các cột bên phải/trái mà không cần cuộn xuống đáy)"
         >
@@ -105,7 +106,9 @@ export const TopScrollTable: React.FC<TopScrollTableProps> = ({
         onScroll={handleBottomScroll}
         style={{
           overflowX: 'auto',
-          maxHeight: maxHeight !== 'none' ? (maxHeight || 'calc(100vh - 280px)') : undefined,
+          flex: 1,
+          minHeight: 0,
+          maxHeight: maxHeight !== 'none' ? (maxHeight || '100%') : undefined,
           overflowY: maxHeight !== 'none' ? 'auto' : undefined,
           width: '100%',
           WebkitOverflowScrolling: 'touch'
