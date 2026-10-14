@@ -2221,6 +2221,45 @@ estaurant_service.py).
      - Đồng bộ file `outlook_agent.py` và tạo mới gói `Outlook_Memo_Agent_Full.zip`.
      - Build lại `frontend/dist` sạch sẽ (`cmd /c "npm run build"`, exit code 0). Cú pháp `backend/app` đạt 0 lỗi.
 
+### [2026-10-14] - Chuẩn Hóa 100% Cấu Hình 3CX Hotline Đích Danh Từng Kỹ Thuật Viên & Khắc Phục Lỗi Máy Mới Không Nhận Thông Báo
+- **Màn hình**: Toàn bộ hệ thống Web (`HotlineContext.tsx`, `GlobalHotlineOverlay.tsx`, `Hotline3cxGuideModal.tsx`, `hotline_3cx_service.py`).
+- **Bối cảnh & Yêu cầu người dùng**:
+  1. *Trực Hotline theo ca 2 người*: Bỏ hoàn toàn Cách 1 (Tổng Đài Chung reo chuông tất cả). Duyệt và chuẩn hóa 100% **Cách 2: Cấu hình đích danh từng người** (`&Agent=<username>`). Điện thoại máy nào reo thì chỉ máy đó bung popup, máy đồng nghiệp cùng ca trực không bị làm phiền.
+  2. *Hiện tượng lỗi kiểm thử*: Máy user / máy mới cài đặt thử không thấy thay đổi gì, không nhận thông báo cũng không hiện popup.
+- **Nguyên nhân cốt lõi phát hiện**:
+  1. *Modal hướng dẫn vẫn mặc định Chế độ 1*: Khi mở modal hướng dẫn, hệ thống vẫn hiển thị link Chế độ 1 làm mặc định.
+  2. *Trạng thái Hotline mặc định TẮT trên máy mới*: Trên máy mới hoặc profile mới, `localStorage.getItem('hotline_duty_active')` là `null` dẫn đến `isHotlineActive = false`. Khi tắt, SSE không kết nối và Polling không bung modal.
+  3. *Cuộc gọi thử nghiệm không phải Nhà Hàng bị nuốt popup*: Khi kiểm thử (gọi từ số máy di động hoặc máy nhánh nội bộ `8345`), số không nằm trong danh bạ Nhà Hàng. Mã cũ chỉ hiển thị card tĩnh trên trang `RestaurantListPage`, không kích hoạt `incomingCall` toàn cục, dẫn tới trên các trang khác hoàn toàn im lặng.
+  4. *Khớp Agent quá cứng nhắc trong Backend*: `call_duty == clean_user` (so sánh bằng chuỗi tuyệt đối). Nếu 3CX gửi mã có khoảng trắng, hoa thường, bỏ dấu chấm (`tri` vs `tri.tnm`) thì backend trả về `current_call = None`.
+- **Giải pháp xử lý toàn diện**:
+  1. *Chuẩn hóa Modal Hướng dẫn 3CX*:
+     - Loại bỏ hoàn toàn Chế độ 1 (Tổng Đài Chung).
+     - Đặt Chế độ 2 (Đích danh từng người) làm chuẩn duy nhất với link:
+       `http://14.161.33.122:5001/api/v1/hotline/3cx-webhook?Number=%CallerNumber%&Agent=<username>`
+     - Bổ sung ô nhập/chỉnh sửa mã Agent và nút Sao chép URL 1-chạm.
+     - Tích hợp 2 nút **Thử Nghiệm Cuộc Gọi Trực Tiếp (1-Click Test)** ngay trong Modal:
+       - *Thử Cuộc Gọi Nhà Hàng (Mã 4391 - Ashima)*: Tự kích hoạt chuông reo và bung modal VNC/KDS từ xa.
+       - *Thử Cuộc Gọi Nội Bộ (Line 8345)*: Tự kích hoạt chuông reo và bung popup thông báo đích danh.
+  2. *Mặc định BẬT Trực Hotline trên Máy Mới*:
+     - Khởi tạo `isHotlineActive = true` khi chưa có dữ liệu lưu trong `localStorage`.
+     - Nếu có cuộc gọi đích danh gửi tới (`isForMe = true`), hệ thống tự động BẬT hotline ngay lập tức.
+  3. *Popup Modal Toàn Cục Cho Cả Cuộc Gọi Nhà Hàng & Cuộc Gọi Thử Nghiệm*:
+     - Khi có cuộc gọi đến cho mình, LUÔN LUÔN kích hoạt `setIncomingCall(cur)` và phát chuông báo `playHotlineBeep()`.
+     - Nếu là Nhà Hàng ➔ Tự động bung modal VNC/KDS.
+     - Nếu là Cuộc gọi Thử nghiệm / Nội bộ ➔ Tự động bung modal trung tâm **"🔴 ĐANG CÓ CUỘC GỌI ĐẾN (ĐÍCH DANH)"** với đầy đủ thông tin máy nhánh, người gọi và kỹ thuật viên tiếp nhận.
+  4. *Thuật Toán Khớp Agent Mềm Dẻo Thông Minh (`is_agent_match`)*:
+     - Đồng bộ cả Backend Python (`hotline_3cx_service.py`) và Frontend TypeScript (`HotlineContext.tsx`):
+       - Khớp chính xác (case-insensitive).
+       - Hỗ trợ danh sách nhiều agent ngăn cách bằng dấu phẩy (vd: `dung.nguyenanh,tri.tnm`).
+       - Chuẩn hóa loại bỏ dấu chấm, gạch ngang (`tri.tnm` khớp `tri`).
+       - Khớp chuỗi con $\ge 3$ ký tự (`tuan` khớp `tuan.pham`, `dung` khớp `dung.nguyenanh`).
+       - Khớp theo mã nhân viên / máy nhánh EXT (`manv`).
+       - Khớp bí danh Super Admin / IT Admin (`admin`, `administrator`, `dungnguyenanh`, `dung`).
+  5. *Đóng Gói & Triển Khai*:
+     - Chạy `cmd /c "npm run build"` tạo bản build `frontend/dist` mới nhất sạch sẽ 100% (exit code 0).
+     - Kiểm thử logic Python backend smoke test đạt 100% PASS.
+     - Đẩy toàn bộ source code lên GitHub (`origin/main`).
+
 ---
 
 ### [2026-10-13] - Khắc Phục Triệt Để Lỗi Outlook Memo Agent Báo "Chưa Sẵn Sàng / Chưa Bật" Trên Giao Diện Web

@@ -7,10 +7,9 @@ import {
   Download,
   Settings,
   Save,
-  Users,
-  User,
   AlertTriangle,
-  Info,
+  PhoneCall,
+  Play,
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -32,13 +31,17 @@ export const Hotline3cxGuideModal: React.FC<Hotline3cxGuideModalProps> = ({
   const isSuperAdmin = checkIsDungOrSuperAdmin(user);
 
   const [activeTab, setActiveTab] = useState<'pwa' | 'extension' | 'webhook'>('pwa');
-  const [pwaMode, setPwaMode] = useState<'shared' | 'personal'>('shared');
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedPwaUrl, setCopiedPwaUrl] = useState(false);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [serverUrl, setServerUrl] = useState('');
   const [isSavingUrl, setIsSavingUrl] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Trạng thái thử nghiệm cuộc gọi
+  const [testResLoading, setTestResLoading] = useState(false);
+  const [testNonResLoading, setTestNonResLoading] = useState(false);
+  const [testFeedback, setTestFeedback] = useState<string | null>(null);
 
   const loginUrl = 'https://ggg.ringbot.co:5001/#/login';
   const effectiveBaseUrl = serverUrl || window.location.origin;
@@ -52,11 +55,9 @@ export const Hotline3cxGuideModal: React.FC<Hotline3cxGuideModalProps> = ({
   }, [user?.username]);
 
   const effectiveAgent = customAgent.trim() || currentUsername;
-  const pwaSharedUrl = `${effectiveBaseUrl}/api/v1/hotline/3cx-webhook?Number=%CallerNumber%`;
-  const pwaPersonalUrl = effectiveAgent
+  const activePwaUrl = effectiveAgent
     ? `${effectiveBaseUrl}/api/v1/hotline/3cx-webhook?Number=%CallerNumber%&Agent=${encodeURIComponent(effectiveAgent)}`
     : `${effectiveBaseUrl}/api/v1/hotline/3cx-webhook?Number=%CallerNumber%`;
-  const activePwaUrl = pwaMode === 'shared' ? pwaSharedUrl : pwaPersonalUrl;
   const webhookUrl = `${effectiveBaseUrl}/api/v1/hotline/3cx-webhook`;
 
   const handleCopyLink = async () => {
@@ -75,6 +76,36 @@ export const Hotline3cxGuideModal: React.FC<Hotline3cxGuideModalProps> = ({
     await copyToClipboard(webhookUrl);
     setCopiedWebhook(true);
     setTimeout(() => setCopiedWebhook(false), 2500);
+  };
+
+  // Giả lập cuộc gọi Nhà Hàng
+  const handleTestRestaurantCall = async () => {
+    setTestResLoading(true);
+    setTestFeedback(null);
+    try {
+      await hotlineService.simulateCall('4391', 'Ashima Nguyễn Trãi (Thử nghiệm)', effectiveAgent);
+      setTestFeedback('✅ Đã gửi cuộc gọi giả lập Nhà Hàng! Hãy quan sát chuông reo và popup VNC/KDS.');
+      setTimeout(() => setTestFeedback(null), 6000);
+    } catch (err: any) {
+      setTestFeedback(`❌ Lỗi gửi cuộc gọi thử: ${err?.message || err}`);
+    } finally {
+      setTestResLoading(false);
+    }
+  };
+
+  // Giả lập cuộc gọi Nội bộ / Máy nhánh
+  const handleTestInternalCall = async () => {
+    setTestNonResLoading(true);
+    setTestFeedback(null);
+    try {
+      await hotlineService.simulateCall('8345', `Cuộc gọi thử nghiệm máy ${effectiveAgent}`, effectiveAgent);
+      setTestFeedback('✅ Đã gửi cuộc gọi giả lập Nội Bộ! Hãy quan sát chuông reo và popup thông báo đích danh.');
+      setTimeout(() => setTestFeedback(null), 6000);
+    } catch (err: any) {
+      setTestFeedback(`❌ Lỗi gửi cuộc gọi thử: ${err?.message || err}`);
+    } finally {
+      setTestNonResLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -302,67 +333,42 @@ export const Hotline3cxGuideModal: React.FC<Hotline3cxGuideModalProps> = ({
             </div>
 
             {/* Bước 3 */}
-            <div style={{ display: 'flex', gap: '12px', padding: '12px 14px', borderRadius: '8px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
-              <div style={{ width: '26px', height: '26px', borderRadius: '50%', backgroundColor: '#16A34A', color: '#FFF', fontWeight: 700, fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>3</div>
+            <div style={{ display: 'flex', gap: '12px', padding: '14px 16px', borderRadius: '10px', backgroundColor: '#F0FDF4', border: '1.5px solid #86EFAC' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#16A34A', color: '#FFF', fontWeight: 700, fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>3</div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, color: '#15803D', marginBottom: '6px' }}>
-                  Bước 3: Chọn Chế Độ Trực & Dán Đường Dẫn Vào 3CX (Custom Contact URL)
+                <div style={{ fontWeight: 700, color: '#15803D', fontSize: '14px', marginBottom: '6px' }}>
+                  Bước 3: Dán Đường Dẫn Đích Danh Vào 3CX (Custom Contact URL)
                 </div>
 
-                {/* Bộ chọn 2 chế độ PWA */}
-                <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setPwaMode('shared')}
+                <div style={{ color: '#166534', fontSize: '13px', marginBottom: '8px', lineHeight: 1.5 }}>
+                  Trong 3CX PWA (mục Integration), tích chọn <strong>"Auto launch a Custom Contact URL using variables"</strong>, sau đó dán đường dẫn đích danh của bạn vào:
+                </div>
+
+                {/* Ô định danh tài khoản */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#1D4ED8', marginBottom: '10px', flexWrap: 'wrap' }}>
+                  <span>👤 <strong>Định danh Kỹ thuật viên (Agent):</strong></span>
+                  <input
+                    type="text"
+                    value={customAgent}
+                    onChange={(e) => setCustomAgent(e.target.value)}
+                    placeholder="Username của bạn"
                     style={{
-                      flex: 1,
-                      padding: '6px 10px',
+                      padding: '4px 10px',
                       borderRadius: '6px',
-                      border: pwaMode === 'shared' ? '1.5px solid #16A34A' : '1px solid #86EFAC',
-                      backgroundColor: pwaMode === 'shared' ? '#DCFCE7' : '#FFFFFF',
-                      color: pwaMode === 'shared' ? '#15803D' : '#4B5563',
-                      fontWeight: pwaMode === 'shared' ? 700 : 500,
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '5px',
+                      border: '1.5px solid #93C5FD',
+                      fontSize: '12.5px',
+                      color: '#1E40AF',
+                      fontWeight: 700,
+                      width: '180px',
+                      backgroundColor: '#FFFFFF',
                     }}
-                  >
-                    <Users size={14} />
-                    <span>🌟 Chế độ 1: Tổng Đài Chung (Khuyên dùng)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPwaMode('personal')}
-                    style={{
-                      flex: 1,
-                      padding: '6px 10px',
-                      borderRadius: '6px',
-                      border: pwaMode === 'personal' ? '1.5px solid #2563EB' : '1px solid #BFDBFE',
-                      backgroundColor: pwaMode === 'personal' ? '#EFF6FF' : '#FFFFFF',
-                      color: pwaMode === 'personal' ? '#1D4ED8' : '#4B5563',
-                      fontWeight: pwaMode === 'personal' ? 700 : 500,
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '5px',
-                    }}
-                  >
-                    <User size={14} />
-                    <span>👤 Chế độ 2: Máy Nhánh Riêng</span>
-                  </button>
+                  />
+                  <span style={{ color: '#2563EB', fontSize: '11.5px' }}>(Đang lấy theo tài khoản đăng nhập của bạn)</span>
                 </div>
 
-                <div style={{ color: '#166534', fontSize: '13px', marginBottom: '8px' }}>
-                  Tích chọn <strong>"Auto launch a Custom Contact URL using variables"</strong>, sau đó dán URL sau:
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: '6px', backgroundColor: '#FFFFFF', border: '1px solid #86EFAC', width: 'fit-content', maxWidth: '100%', marginBottom: '8px' }}>
-                  <code style={{ fontSize: '12.5px', color: pwaMode === 'shared' ? '#15803D' : '#1D4ED8', fontWeight: 700, wordBreak: 'break-all' }}>
+                {/* Box URL Copy */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderRadius: '8px', backgroundColor: '#FFFFFF', border: '1.5px solid #16A34A', width: 'fit-content', maxWidth: '100%', marginBottom: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                  <code style={{ fontSize: '13px', color: '#15803D', fontWeight: 700, wordBreak: 'break-all' }}>
                     {activePwaUrl}
                   </code>
                   <button
@@ -370,76 +376,121 @@ export const Hotline3cxGuideModal: React.FC<Hotline3cxGuideModalProps> = ({
                     onClick={handleCopyPwaUrl}
                     title="Sao chép URL"
                     style={{
-                      background: pwaMode === 'shared' ? '#16A34A' : '#2563EB',
+                      background: '#16A34A',
                       color: '#FFF',
                       border: 'none',
-                      borderRadius: '4px',
+                      borderRadius: '6px',
                       cursor: 'pointer',
-                      padding: '4px 8px',
+                      padding: '6px 12px',
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '4px',
-                      fontSize: '11px',
-                      fontWeight: 600,
+                      gap: '5px',
+                      fontSize: '12px',
+                      fontWeight: 700,
                       flexShrink: 0,
+                      boxShadow: '0 2px 4px rgba(22, 163, 74, 0.3)',
                     }}
                   >
-                    {copiedPwaUrl ? <Check size={13} /> : <Copy size={13} />}
-                    {copiedPwaUrl ? 'Đã sao chép' : 'Sao chép'}
+                    {copiedPwaUrl ? <Check size={14} /> : <Copy size={14} />}
+                    {copiedPwaUrl ? 'Đã sao chép!' : 'Sao Chép URL'}
                   </button>
                 </div>
 
-                {pwaMode === 'shared' ? (
-                  <div style={{ fontSize: '12px', color: '#166534', lineHeight: 1.5, backgroundColor: '#DCFCE7', padding: '8px 10px', borderRadius: '6px', border: '1px solid #86EFAC' }}>
-                    <div style={{ fontWeight: 700, marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Info size={14} /> Ưu điểm của Chế Độ Tổng Đài Chung:
-                    </div>
-                    Đường dẫn <strong>không gắn mã Agent cố định</strong>. Bất kỳ ai trong team IT đang bật nút <strong>🎧 Hotline: BẬT</strong> trên Web đều sẽ nhận được chuông reo và tự động bung popup VNC khi có cuộc gọi tới. Tránh 100% tình trạng cài nhầm username của người khác khiến máy mình không nhận được thông báo!
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#1D4ED8' }}>
-                      <span>👤 Định danh tài khoản nhận:</span>
-                      <input
-                        type="text"
-                        value={customAgent}
-                        onChange={(e) => setCustomAgent(e.target.value)}
-                        placeholder="Username của chính bạn"
-                        style={{
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          border: '1px solid #93C5FD',
-                          fontSize: '12px',
-                          color: '#1E40AF',
-                          fontWeight: 600,
-                          width: '180px',
-                        }}
-                      />
-                      <span style={{ color: '#2563EB', fontSize: '11.5px' }}>(Mặc định theo tài khoản của bạn)</span>
-                    </div>
-
-                    <div style={{ fontSize: '12px', color: '#991B1B', lineHeight: 1.5, backgroundColor: '#FEF2F2', padding: '8px 10px', borderRadius: '6px', border: '1px solid #FECACA' }}>
-                      <div style={{ fontWeight: 700, marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <AlertTriangle size={14} color="#DC2626" /> ⚠️ CẢNH BÁO QUAN TRỌNG KHI CÀI CHO MÁY MỚI / USER KHÁC:
-                      </div>
-                      Đường dẫn này có chứa tham số <code>&Agent={effectiveAgent}</code>. <strong>TUYỆT ĐỐI KHÔNG COPY link này sang máy người khác</strong>! Nếu máy của đồng nghiệp dán link có tên tài khoản của bạn, thì khi máy họ reo chuông, <strong>CHỈ MÁY CỦA BẠN</strong> nhận được thông báo, còn máy họ sẽ hoàn toàn im lặng. Mỗi người phải mở Web bằng tài khoản của chính mình để lấy link riêng!
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ fontSize: '12px', color: '#166534', marginTop: '10px', lineHeight: 1.6 }}>
+                <div style={{ fontSize: '12px', color: '#166534', lineHeight: 1.6, marginBottom: '12px' }}>
                   • <strong>Notify When (Khi nào kích hoạt):</strong> Chọn <strong>Ringing</strong> (khi chuông reo).<br />
-                  • Bấm <strong>Save (Lưu)</strong> trên 3CX PWA là hoàn tất!
+                  • Bấm <strong>Save (Lưu)</strong> trên 3CX PWA là hoàn tất cài đặt!
+                </div>
+
+                {/* ══════════════════════════════════════════════════════════════ */}
+                {/* KHU VỰC TEST THỬ NGHIỆM CHUÔNG & POPUP 1-CHẠM TRỰC TIẾP */}
+                {/* ══════════════════════════════════════════════════════════════ */}
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    backgroundColor: '#EFF6FF',
+                    border: '1.5px solid #93C5FD',
+                    marginTop: '8px',
+                    marginBottom: '10px',
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: '13px', color: '#1E40AF', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Play size={15} color="#2563EB" /> 🧪 THỬ NGHIỆM CHUÔNG REO & POPUP TRỰC TIẾP TRÊN MÁY NÀY:
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#3B82F6', marginBottom: '10px' }}>
+                    Bấm các nút dưới đây để kiểm tra hệ thống có tự động reo chuông và bung popup đích danh cho tài khoản <strong>{effectiveAgent}</strong> hay không:
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      disabled={testResLoading}
+                      onClick={handleTestRestaurantCall}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        backgroundColor: '#2563EB',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <PhoneCall size={14} />
+                      {testResLoading ? 'Đang gửi...' : '1. Thử Cuộc Gọi Nhà Hàng (Mở VNC/KDS)'}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={testNonResLoading}
+                      onClick={handleTestInternalCall}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        backgroundColor: '#D97706',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <PhoneCall size={14} />
+                      {testNonResLoading ? 'Đang gửi...' : '2. Thử Cuộc Gọi Nội Bộ (Bung Popup Đích Danh)'}
+                    </button>
+                  </div>
+
+                  {testFeedback && (
+                    <div
+                      style={{
+                        marginTop: '8px',
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        backgroundColor: testFeedback.startsWith('✅') ? '#DCFCE7' : '#FEE2E2',
+                        color: testFeedback.startsWith('✅') ? '#15803D' : '#DC2626',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {testFeedback}
+                    </div>
+                  )}
                 </div>
 
                 {/* Hộp lưu ý quan trọng cho máy mới */}
-                <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '8px', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', fontSize: '12px', color: '#1E40AF', lineHeight: 1.6 }}>
+                <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: '#FEF3C7', border: '1px solid #FDE68A', fontSize: '12px', color: '#92400E', lineHeight: 1.6 }}>
                   <div style={{ fontWeight: 700, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Info size={14} color="#2563EB" /> 💡 3 YẾU TỐ BẮT BUỘC ĐỂ MÁY MỚI / USER MỚI NHẬN ĐƯỢC THÔNG BÁO:
+                    <AlertTriangle size={15} color="#D97706" /> 💡 2 ĐIỀU KIỆN ĐỂ TRÌNH DUYỆT TỰ BUNG POPUP KHI CÓ CUỘC GỌI:
                   </div>
-                  1. <strong>Bật nút "🎧 Hotline: BẬT" trên Header</strong>: Máy mới mặc định nút là màu xám (TẮT). Bạn phải click vào để chuyển sang màu xanh (BẬT).<br />
-                  2. <strong>Cấp quyền Pop-up cho trang 3CX</strong>: Trên cửa sổ 3CX PWA (<code>{loginUrl}</code>), bấm icon bên trái thanh địa chỉ ➔ Site settings ➔ Chọn <strong>Pop-ups and redirects: Allow</strong> (Cho phép) để 3CX có quyền kích hoạt link khi có cuộc gọi.<br />
-                  3. <strong>Kiểm tra phân quyền Hotline</strong>: Tài khoản phải thuộc nhóm IT hoặc được cấp quyền trực Hotline. Super Admin có thể bấm nút <strong>Phân Quyền Trực Hotline</strong> trong bảng Cuộc Gọi để kiểm tra hoặc bật quyền cho toàn bộ nhân viên.
+                  1. <strong>Cấp quyền Pop-up cho 3CX PWA</strong>: Trên cửa sổ 3CX PWA (<code>{loginUrl}</code>), bấm icon bên trái thanh địa chỉ URL ➔ Site settings ➔ Chọn <strong>Pop-ups and redirects: Allow (Cho phép)</strong>.<br />
+                  2. <strong>Mỗi Kỹ Thuật Viên Dùng Link Riêng</strong>: URL trên gắn mã <code>&Agent={effectiveAgent}</code>. Điện thoại máy nào reo thì chỉ máy người đó hiện popup, người cùng ca trực không bị làm phiền!
                 </div>
               </div>
             </div>

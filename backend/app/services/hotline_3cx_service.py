@@ -1002,6 +1002,60 @@ def stop_scanner() -> bool:
     return True
 
 
+def is_agent_match(duty_user: Optional[str], current_username: Optional[str]) -> bool:
+    """
+    Kiểm tra xem cuộc gọi 3CX (với duty_user) có khớp với tài khoản kỹ thuật viên đang trực (current_username) không.
+    Hỗ trợ:
+    - Nếu cuộc gọi chung (không gắn Agent) -> Trả về True cho tất cả
+    - Khớp chính xác (case-insensitive)
+    - Danh sách nhiều agent phân tách bằng dấu phẩy/chấm phẩy (vd: 'dung.nguyenanh,tri.tnm')
+    - Khớp sau khi loại bỏ dấu chấm, gạch ngang, khoảng trắng (vd 'tri.tnm' khớp 'tri')
+    - Khớp chuỗi con nếu độ dài >= 3 ký tự (vd 'dung' khớp 'dung.nguyenanh', 'tuan' khớp 'tuan.pham')
+    - Khớp bí danh quản trị viên (admin, administrator, dungnguyenanh, dung)
+    """
+    if not duty_user:
+        return True
+    if not current_username:
+        return False
+
+    d_raw = duty_user.strip().lower()
+    u_raw = current_username.strip().lower()
+    if not d_raw or not u_raw:
+        return False
+
+    if d_raw in ["3cx pwa client", "pbx server", "ring group"]:
+        return True
+
+    # 1. Khớp chính xác
+    if d_raw == u_raw:
+        return True
+
+    # 2. Hỗ trợ danh sách nhiều agent ngăn cách bằng dấu phẩy hoặc chấm phẩy
+    agents = [a.strip() for a in re.split(r"[,;|]", d_raw) if a.strip()]
+    if u_raw in agents:
+        return True
+
+    # 3. Chuẩn hóa loại bỏ ký tự đặc biệt
+    clean_u = re.sub(r"[^a-z0-9]", "", u_raw)
+    for a in agents:
+        clean_a = re.sub(r"[^a-z0-9]", "", a)
+        if clean_a == clean_u:
+            return True
+        if len(clean_a) >= 3 and len(clean_u) >= 3:
+            if clean_a in clean_u or clean_u in clean_a:
+                return True
+
+    # 4. Bí danh Quản trị viên
+    admin_aliases = {"admin", "administrator", "dungnguyenanh", "dung"}
+    if clean_u in admin_aliases:
+        for a in agents:
+            clean_a = re.sub(r"[^a-z0-9]", "", a)
+            if clean_a in admin_aliases:
+                return True
+
+    return False
+
+
 def get_status(current_username: Optional[str] = None) -> Dict[str, Any]:
     """Lấy trạng thái hệ thống trực hotline (chỉ tính cuộc gọi nhỡ chưa giải quyết trong 3 ngày gần nhất)"""
     db = SessionLocal()
@@ -1023,6 +1077,7 @@ def get_status(current_username: Optional[str] = None) -> Dict[str, Any]:
             count_query = count_query.filter(
                 or_(
                     func.lower(HotlineCallLog.duty_user) == clean_user,
+                    func.lower(HotlineCallLog.duty_user).like(f"%{clean_user}%"),
                     and_(
                         HotlineCallLog.restaurant_id != None,
                         or_(
@@ -1078,16 +1133,16 @@ def get_status(current_username: Optional[str] = None) -> Dict[str, Any]:
 
             if is_restaurant:
                 # Cuộc gọi nhà hàng:
-                # Nếu có agent cụ thể -> chỉ hiển thị mở VNC cho chính agent đó
-                # Nếu không có agent cụ thể (cuộc gọi chung) -> hiển thị cho tất cả kỹ thuật viên đang trực
-                if not has_specific_agent or (clean_user and call_duty == clean_user):
+                # Nếu có agent cụ thể -> chỉ hiển thị cho chính agent đó (hoặc đồng nghiệp cùng ca)
+                # Nếu không có agent cụ thể (cuộc gọi chung) -> hiển thị cho tất cả kỹ thuật viên
+                if not has_specific_agent or (clean_user and is_agent_match(call_duty, clean_user)):
                     call_to_return = _current_active_call
                 elif not clean_user and not has_specific_agent:
                     call_to_return = _current_active_call
             else:
-                # Cuộc gọi nội bộ (đồng nghiệp IT, không phải nhà hàng):
-                # TUYỆT ĐỐI chỉ hiển thị cho chính agent nhận cuộc gọi!
-                if clean_user and has_specific_agent and call_duty == clean_user:
+                # Cuộc gọi nội bộ / ngoài danh mục nhà hàng (cuộc gọi thử nghiệm / đồng nghiệp):
+                # Hiển thị cho chính agent nhận cuộc gọi hoặc khi thử nghiệm không gắn agent
+                if not has_specific_agent or (clean_user and is_agent_match(call_duty, clean_user)):
                     call_to_return = _current_active_call
                 else:
                     call_to_return = None

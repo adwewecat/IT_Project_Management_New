@@ -17,37 +17,52 @@ function getIpPrefix(ip?: string | null): string {
 }
 
 function isAgentMatch(dutyUser?: string | null, curUser?: UserInfo | null): boolean {
-  if (!dutyUser || !curUser) return false;
+  if (!curUser) return false;
+  if (!dutyUser) return true; // Cuộc gọi chung cho cả team
   const d = dutyUser.trim().toLowerCase();
   const u = (curUser.username || '').trim().toLowerCase();
-  if (!d || !u) return false;
-  if (d === u) return true;
+  if (!d) return true;
+  if (!u) return false;
+  if (d === '3cx pwa client' || d === 'pbx server' || d === 'ring group') return true;
 
-  // So sánh sau khi loại bỏ dấu chấm, gạch ngang, gạch dưới, khoảng trắng
-  const cleanD = d.replace(/[^a-z0-9]/g, '');
+  // 1. Hỗ trợ danh sách nhiều agent ngăn cách bằng dấu phẩy, chấm phẩy hoặc sổ đứng (vd 'dung.nguyenanh,tri.tnm')
+  const agents = d.split(/[,;|]/).map((a) => a.trim().toLowerCase()).filter(Boolean);
+  if (agents.includes(u)) return true;
+
+  // 2. Chuẩn hóa loại bỏ ký tự đặc biệt để so sánh
   const cleanU = u.replace(/[^a-z0-9]/g, '');
-  if (cleanD === cleanU) return true;
-  if (cleanD.length >= 4 && (cleanU.includes(cleanD) || cleanD.includes(cleanU))) return true;
+  for (const agent of agents) {
+    if (agent === u) return true;
+    const cleanD = agent.replace(/[^a-z0-9]/g, '');
+    if (cleanD === cleanU) return true;
+    if (cleanD.length >= 3 && cleanU.length >= 3 && (cleanU.includes(cleanD) || cleanD.includes(cleanU))) return true;
 
-  // So sánh email prefix nếu có
-  if (curUser.email) {
-    const emailPrefix = curUser.email.split('@')[0].trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (emailPrefix === cleanD || (cleanD.length >= 4 && (emailPrefix.includes(cleanD) || cleanD.includes(emailPrefix)))) return true;
-  }
+    // So sánh với mã nhân viên / máy nhánh EXT (manv) nếu có
+    if (curUser.manv) {
+      const cleanManv = curUser.manv.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanManv && (cleanManv === cleanD || cleanD.includes(cleanManv))) return true;
+    }
 
-  // So sánh họ tên không dấu (ví dụ: "Nguyen Anh Dung" -> "nguyenanhdung" match với "nguyenanh")
-  if (curUser.full_name) {
-    const cleanName = curUser.full_name
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '');
-    if (cleanName.includes(cleanD) && cleanD.length >= 4) return true;
-  }
+    // So sánh email prefix nếu có
+    if (curUser.email) {
+      const emailPrefix = curUser.email.split('@')[0].trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (emailPrefix === cleanD || (cleanD.length >= 3 && (emailPrefix.includes(cleanD) || cleanD.includes(emailPrefix)))) return true;
+    }
 
-  // Nếu là Super Admin (dung.nguyenanh / admin) và mã máy tính gửi nguyenanh hoặc admin
-  if (curUser.is_super_admin && (cleanD.includes('dung') || cleanD.includes('nguyenanh') || cleanD.includes('admin'))) {
-    return true;
+    // So sánh họ tên không dấu (ví dụ: "Nguyen Anh Dung" -> "nguyenanhdung" match với "nguyenanh")
+    if (curUser.full_name) {
+      const cleanName = curUser.full_name
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+      if (cleanName.includes(cleanD) && cleanD.length >= 3) return true;
+    }
+
+    // Quản trị viên / Super Admin bí danh
+    if (curUser.is_super_admin && (cleanD.includes('dung') || cleanD.includes('nguyenanh') || cleanD.includes('admin'))) {
+      return true;
+    }
   }
 
   return false;
@@ -92,9 +107,11 @@ const HotlineContext = createContext<HotlineContextType | undefined>(undefined);
 export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
 
-  // Trạng thái bật/tắt trực hotline
+  // Trạng thái bật/tắt trực hotline (mặc định BẬT cho người có quyền để máy mới không bị mất thông báo)
   const [isHotlineActive, setIsHotlineActive] = useState<boolean>(() => {
-    return localStorage.getItem('hotline_duty_active') === 'true';
+    const saved = localStorage.getItem('hotline_duty_active');
+    if (saved !== null) return saved === 'true';
+    return true;
   });
 
   // Số lượng cuộc gọi nhỡ (Badge)
@@ -267,44 +284,46 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
             curDuty !== 'ring group'
           );
 
-          if (cur.restaurant && cur.restaurant.id) {
-            // LÀ NHÀ HÀNG: Chỉ tự động bung modal VNC nếu đang bật trực hotline
-            // VÀ cuộc gọi dành cho chính mình (nếu có chỉ định Agent cụ thể) hoặc là cuộc gọi chung
-            const isForMe = hasSpecificAgent ? isAgentMatch(curDuty, user) : true;
-            const shouldAutoOpenVnc = isHotlineActive && isForMe;
+          // Kiểm tra xem cuộc gọi này có dành cho máy của tôi không
+          const isForMe = hasSpecificAgent ? isAgentMatch(curDuty, user) : true;
 
-            if (hasSpecificAgent && !isForMe && isHotlineActive) {
-              console.warn(`[Hotline-3CX Polling] Bỏ qua cuộc gọi ${cur.ext} vì được 3CX gửi riêng cho Agent "${curDuty}", tài khoản hiện tại "${user?.username}" không khớp. Để nhận cuộc gọi, hãy sửa URL trên 3CX thành Tổng Đài Chung (bỏ &Agent=) hoặc đúng username của bạn!`);
+          if (isForMe) {
+            // Đảm bảo nút trực Hotline tự động BẬT khi có cuộc gọi gửi tới mình
+            if (!isHotlineActive) {
+              setIsHotlineActive(true);
+              localStorage.setItem('hotline_duty_active', 'true');
             }
 
-            if (shouldAutoOpenVnc && lastHandledVncCallIdRef.current !== cur.call_id) {
-              lastHandledVncCallIdRef.current = cur.call_id;
-              playHotlineBeep();
-              const r = cur.restaurant;
-              const formattedTitle = `${r.sap ? r.sap + ' ' : ''}${r.res || ''}${r.rk7 ? ' (RK7: ' + r.rk7 + ')' : ''}${r.ip ? ' ' + r.ip : ''}`.trim();
-              const prefix = getIpPrefix(r.ip);
-              if (prefix) {
-                setVncRestaurantName(formattedTitle);
-                setVncIpPrefix(prefix);
-                setVncModalOpen(true);
-                hotlineService.markCallAnswered(cur.call_id, user?.username).catch(() => {});
+            // LUÔN LUÔN set incomingCall để GlobalHotlineOverlay hiển thị banner nổi bật trên mọi màn hình!
+            setIncomingCall(cur);
+
+            if (cur.restaurant && cur.restaurant.id) {
+              // LÀ NHÀ HÀNG: Tự động bung modal VNC/KDS
+              if (lastHandledVncCallIdRef.current !== cur.call_id) {
+                lastHandledVncCallIdRef.current = cur.call_id;
+                playHotlineBeep();
+                const r = cur.restaurant;
+                const formattedTitle = `${r.sap ? r.sap + ' ' : ''}${r.res || ''}${r.rk7 ? ' (RK7: ' + r.rk7 + ')' : ''}${r.ip ? ' ' + r.ip : ''}`.trim();
+                const prefix = getIpPrefix(r.ip);
+                if (prefix) {
+                  setVncRestaurantName(formattedTitle);
+                  setVncIpPrefix(prefix);
+                  setVncModalOpen(true);
+                  hotlineService.markCallAnswered(cur.call_id, user?.username).catch(() => {});
+                }
+                const searchKeyword = (r.sap && r.sap.length >= 2 ? r.sap : (r.res || '')).trim();
+                if (searchKeyword) {
+                  window.dispatchEvent(new CustomEvent('hotline_filter_restaurant', { detail: { keyword: searchKeyword } }));
+                }
+                showToast(`📞 Cuộc gọi đến từ ${r.res} (Line: ${cur.ext}) — Đang kết nối VNC/KDS`, 'success', 10000);
               }
-              const searchKeyword = (r.sap && r.sap.length >= 2 ? r.sap : (r.res || '')).trim();
-              if (searchKeyword) {
-                window.dispatchEvent(new CustomEvent('hotline_filter_restaurant', { detail: { keyword: searchKeyword } }));
+            } else {
+              // KHÔNG PHẢI NHÀ HÀNG (CUỘC GỌI NỘI BỘ / TEST THỬ NGHIỆM):
+              if ((dismissedCallId && cur.call_id === dismissedCallId) || dismissedCallIdsRef.current.has(cur.call_id)) {
+                setLatestNonRestaurantCall(null);
+                return;
               }
-              showToast(`📞 Cuộc gọi đến từ ${r.res} (Line: ${cur.ext}) — Đang kết nối VNC/KDS`, 'success', 10000);
-            }
-          } else {
-            // KHÔNG PHẢI NHÀ HÀNG (CUỘC GỌI NỘI BỘ):
-            // NẾU ĐÃ BẤM ĐÓNG THÌ TUYỆT ĐỐI KHÔNG HIỂN THỊ LẠI!
-            if ((dismissedCallId && cur.call_id === dismissedCallId) || dismissedCallIdsRef.current.has(cur.call_id)) {
-              setLatestNonRestaurantCall(null);
-              return;
-            }
 
-            const isForMe = hasSpecificAgent ? isAgentMatch(curDuty, user) : isHotlineActive;
-            if (isForMe) {
               if (lastAlertedNonResCallIdRef.current !== cur.call_id) {
                 lastAlertedNonResCallIdRef.current = cur.call_id;
                 playHotlineBeep();
@@ -322,14 +341,14 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 call_status: 'INCOMING',
                 created_at: cur.created_at,
               });
-            } else {
-              setLatestNonRestaurantCall(null);
             }
           }
         } else {
-          // Không có cuộc gọi đang reo -> kiểm tra latest_call_info
+          // Không có cuộc gọi đang reo -> Đóng incomingCall nếu trước đó đang hiển thị
+          setIncomingCall((prev) => (prev ? null : prev));
+
+          // Kiểm tra latest_call_info
           if (res.latest_call_info && !res.latest_call_info.is_restaurant && !res.latest_call_info.is_resolved) {
-            // NẾU ĐÃ BẤM ĐÓNG THÌ BỎ QUA!
             if ((dismissedCallId && res.latest_call_info.id === dismissedCallId) || dismissedCallIdsRef.current.has(res.latest_call_info.id)) {
               setLatestNonRestaurantCall(null);
               return;
@@ -362,11 +381,11 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       isMounted = false;
       clearInterval(interval);
     };
-  }, [canAccessHotline, isHotlineActive, dismissedCallId, playHotlineBeep, showToast, user?.username]);
+  }, [canAccessHotline, isHotlineActive, dismissedCallId, playHotlineBeep, showToast, user]);
 
   // Lắng nghe sự kiện SSE 3CX Toàn Ứng Dụng (Global)
   useEffect(() => {
-    if (!isHotlineActive || !canAccessHotline) return;
+    if (!canAccessHotline) return;
 
     const unsubscribe = hotlineService.connectEvents(
       (callData) => {
@@ -379,53 +398,55 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
           curDuty !== 'ring group'
         );
 
+        const isForMe = hasSpecificAgent ? isAgentMatch(curDuty, user) : true;
+        if (!isForMe) {
+          console.warn(`[Hotline-3CX SSE] Bỏ qua cuộc gọi từ ${callData.ext} vì được 3CX gửi riêng cho Agent "${curDuty}", tài khoản hiện tại "${user?.username}" không khớp.`);
+          return;
+        }
+
+        // Tự động bật hotline khi có cuộc gọi đến
+        if (!isHotlineActive) {
+          setIsHotlineActive(true);
+          localStorage.setItem('hotline_duty_active', 'true');
+        }
+
+        playHotlineBeep();
+        // LUÔN LUÔN set incomingCall để GlobalHotlineOverlay hiển thị banner nổi bật!
+        setIncomingCall(callData);
+
         if (callData.restaurant && callData.restaurant.id) {
           // LÀ NHÀ HÀNG: Tự động mở popup modal kết nối từ xa VNC/KDS
-          // Chỉ mở nếu là cuộc gọi cho chính mình hoặc cuộc gọi chung
-          const isForMe = hasSpecificAgent ? isAgentMatch(curDuty, user) : true;
-          if (isForMe) {
-            playHotlineBeep();
-            setIncomingCall(callData);
-            const r = callData.restaurant;
-            const formattedTitle = `${r.sap ? r.sap + ' ' : ''}${r.res || ''}${r.rk7 ? ' (RK7: ' + r.rk7 + ')' : ''}${r.ip ? ' ' + r.ip : ''}`.trim();
-            const prefix = getIpPrefix(r.ip);
-            if (prefix) {
-              setVncRestaurantName(formattedTitle);
-              setVncIpPrefix(prefix);
-              setVncModalOpen(true);
-              hotlineService.markCallAnswered(callData.call_id, user?.username).catch(() => {});
-            }
-
-            // Bắn event để trang Danh sách Nhà Hàng (nếu đang mở) tự động lọc nhà hàng
-            const searchKeyword = (r.sap && r.sap.length >= 2 ? r.sap : (r.res || '')).trim();
-            if (searchKeyword) {
-              window.dispatchEvent(new CustomEvent('hotline_filter_restaurant', { detail: { keyword: searchKeyword } }));
-            }
-
-            showToast(`📞 Cuộc gọi đến từ ${r.res} (Line: ${callData.ext}) — Đang kết nối VNC/KDS`, 'success', 10000);
-          } else {
-            console.warn(`[Hotline-3CX SSE] Bỏ qua cuộc gọi từ ${callData.ext} vì được 3CX gửi riêng cho Agent "${curDuty}", tài khoản hiện tại "${user?.username}" không khớp. Hãy sửa URL trên 3CX thành Tổng Đài Chung (bỏ &Agent=) hoặc đúng username của bạn!`);
+          const r = callData.restaurant;
+          const formattedTitle = `${r.sap ? r.sap + ' ' : ''}${r.res || ''}${r.rk7 ? ' (RK7: ' + r.rk7 + ')' : ''}${r.ip ? ' ' + r.ip : ''}`.trim();
+          const prefix = getIpPrefix(r.ip);
+          if (prefix) {
+            setVncRestaurantName(formattedTitle);
+            setVncIpPrefix(prefix);
+            setVncModalOpen(true);
+            hotlineService.markCallAnswered(callData.call_id, user?.username).catch(() => {});
           }
+
+          const searchKeyword = (r.sap && r.sap.length >= 2 ? r.sap : (r.res || '')).trim();
+          if (searchKeyword) {
+            window.dispatchEvent(new CustomEvent('hotline_filter_restaurant', { detail: { keyword: searchKeyword } }));
+          }
+
+          showToast(`📞 Cuộc gọi đến từ ${r.res} (Line: ${callData.ext}) — Đang kết nối VNC/KDS`, 'success', 10000);
         } else {
-          // KHÔNG PHẢI NHÀ HÀNG (CUỘC GỌI NỘI BỘ):
-          // HIỂN THỊ NẾU ĐÍCH DANH MÁY CỦA TÔI HOẶC TÔI ĐANG TRỰC
-          const isForMe = hasSpecificAgent ? isAgentMatch(curDuty, user) : isHotlineActive;
-          if (isForMe) {
-            playHotlineBeep();
-            setLatestNonRestaurantCall({
-              id: callData.call_id,
-              ext: callData.ext,
-              caller_raw_text: callData.caller_raw_text || null,
-              restaurant_name: callData.restaurant_name || null,
-              call_status: 'INCOMING',
-              created_at: callData.created_at,
-            });
-            showToast(
-              `📞 Cuộc gọi đến từ: ${callData.ext}${callData.caller_raw_text ? ' (' + callData.caller_raw_text + ')' : ''} — ⚠️ Cuộc gọi nội bộ / Không thuộc Nhà Hàng`,
-              'warning',
-              12000
-            );
-          }
+          // KHÔNG PHẢI NHÀ HÀNG (CUỘC GỌI NỘI BỘ / THỬ NGHIỆM):
+          setLatestNonRestaurantCall({
+            id: callData.call_id,
+            ext: callData.ext,
+            caller_raw_text: callData.caller_raw_text || null,
+            restaurant_name: callData.restaurant_name || null,
+            call_status: 'INCOMING',
+            created_at: callData.created_at,
+          });
+          showToast(
+            `📞 Cuộc gọi đến từ: ${callData.ext}${callData.caller_raw_text ? ' (' + callData.caller_raw_text + ')' : ''} — ⚠️ Cuộc gọi nội bộ / Không thuộc Nhà Hàng`,
+            'warning',
+            12000
+          );
         }
       },
       (callData) => {

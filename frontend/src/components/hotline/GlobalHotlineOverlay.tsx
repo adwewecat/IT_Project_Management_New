@@ -164,6 +164,122 @@ export const GlobalHotlineOverlay: React.FC = () => {
         </div>
       )}
 
+      {/* 1.1 MODAL POPUP TRUNG TÂM KHI CÓ CUỘC GỌI NỘI BỘ / THỬ NGHIỆM ĐẾN (KHÔNG PHẢI NHÀ HÀNG) */}
+      {incomingCall && !incomingCall.restaurant && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            zIndex: 9998,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            backdropFilter: 'blur(4px)',
+            animation: 'fadeIn 0.2s ease',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              maxWidth: '460px',
+              width: '100%',
+              padding: '24px 26px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              textAlign: 'center',
+              border: '2px solid #F59E0B',
+              animation: 'hotlineSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+            }}
+          >
+            {/* Icon chuông reo */}
+            <div
+              style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '50%',
+                backgroundColor: '#FEF3C7',
+                color: '#D97706',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px auto',
+                animation: 'hotlinePulse 1.1s infinite',
+                border: '3px solid #FDE68A',
+              }}
+            >
+              <PhoneCall size={32} />
+            </div>
+
+            <div style={{ fontSize: '13px', fontWeight: 700, color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+              🔴 ĐANG CÓ CUỘC GỌI ĐẾN (ĐÍCH DANH)
+            </div>
+
+            <div style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', marginBottom: '8px' }}>
+              Máy Nhánh: {incomingCall.ext}
+            </div>
+
+            <div style={{ fontSize: '14px', color: '#475569', marginBottom: '16px', padding: '10px 14px', borderRadius: '8px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', lineHeight: 1.5 }}>
+              <div>👤 <strong>Người gọi:</strong> {incomingCall.caller_raw_text || 'Chưa rõ danh tính'}</div>
+              {incomingCall.duty_user && (
+                <div style={{ marginTop: '4px', color: '#2563EB', fontWeight: 600 }}>
+                  🎯 <strong>Kỹ thuật viên tiếp nhận:</strong> {incomingCall.duty_user}
+                </div>
+              )}
+              <div style={{ marginTop: '6px', fontSize: '12px', color: '#B45309' }}>
+                ⚠️ Số này không thuộc danh bạ Nhà Hàng (Cuộc gọi nội bộ / Thử nghiệm)
+              </div>
+            </div>
+
+            {/* Các nút hành động */}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('hotline_filter_restaurant', { detail: { keyword: incomingCall.ext } }));
+                  dismissIncomingCall();
+                }}
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  backgroundColor: '#2563EB',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                }}
+              >
+                🔍 Tìm Trong Danh Sách NH
+              </button>
+
+              <button
+                type="button"
+                onClick={dismissIncomingCall}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '8px',
+                  backgroundColor: '#F1F5F9',
+                  color: '#475569',
+                  border: '1px solid #CBD5E1',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                ✕ Đã Nghe & Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 2. MODAL QUẢN LÝ CUỘC GỌI NHỠ & LỊCH SỬ ĐÃ NGHE (2 TAB) */}
       <HotlineMissedCallsModal
         isOpen={isMissedCallsModalOpen}
