@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LogOut, Shield, KeyRound, Sun, Moon, Menu, X as CloseIcon, Headphones, PhoneCall } from 'lucide-react';
+import { LogOut, Shield, KeyRound, Sun, Moon, Menu, X as CloseIcon, Headphones, PhoneCall, HelpCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useHotline } from '../../contexts/HotlineContext';
@@ -23,6 +23,7 @@ export const Header: React.FC<HeaderProps> = ({
     toggleHotlineDuty,
     missedHotlineCount,
     openMissedCallsModal,
+    openGuideModal,
     canAccessHotline,
   } = useHotline();
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -203,6 +204,32 @@ export const Header: React.FC<HeaderProps> = ({
                   {missedHotlineCount}
                 </span>
               )}
+            </button>
+
+            {/* Nút Hướng Dẫn & Cấu Hình 3CX */}
+            <button
+              type="button"
+              onClick={openGuideModal}
+              className="header-hotline-guide-btn"
+              title="Cấu hình 3CX & Hướng Dẫn Nhận Cuộc Gọi Tự Động"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                height: '34px',
+                padding: '0 10px',
+                borderRadius: 'var(--radius-full)',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-secondary)',
+                color: 'var(--text-secondary)',
+                fontSize: '12px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <HelpCircle size={14} style={{ color: 'var(--color-primary)' }} />
+              <span className="header-hotline-text">Cấu hình 3CX</span>
             </button>
           </div>
         )}

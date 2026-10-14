@@ -2221,6 +2221,22 @@ estaurant_service.py).
      - Đồng bộ file `outlook_agent.py` và tạo mới gói `Outlook_Memo_Agent_Full.zip`.
      - Build lại `frontend/dist` sạch sẽ (`cmd /c "npm run build"`, exit code 0). Cú pháp `backend/app` đạt 0 lỗi.
 
+### [2026-10-14] - Khắc Phục Lỗi 3CX Hotline Client Agent Không Chạy Trên Máy User Khác (Lỗi Thiếu Log & Lỗi Quyền Notifications)
+- **Màn hình & Thành phần**: `Khoi_Dong_Lai_Agent.bat`, `3CX_Hotline_Agent.ps1`, `Run_3CX_Hotline_Agent.bat`, `Header.tsx`, `hotline.py`.
+- **Hiện tượng lỗi**:
+  - Trên máy chính (`dung.nguyenanh`) tool chạy tốt và in ra 6 dòng nhật ký kết nối Server thành công.
+  - Trên máy các user khác, khi chạy `Khoi_Dong_Lai_Agent.bat` chỉ hiển thị `HOAN TAT! Tien trinh dang chay ngam on dinh.` nhưng không hề có các dòng nhật ký. Khi nhà hàng gọi tới, Web hoàn toàn không có phản ứng gì.
+- **Nguyên nhân cốt lõi**:
+  1. *Lỗi treo biến đường dẫn trong PowerShell*: File `3CX_Hotline_Agent.ps1` cũ dùng `$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path`. Khi chạy ngầm qua VBScript, `$MyInvocation.MyCommand.Path` bị `$null`, dẫn tới lệnh `Split-Path -Parent $null` yêu cầu nhập từ bàn phím (stdin prompt), làm tiến trình PowerShell bị đơ vĩnh viễn ở chế độ ngầm và không bao giờ tạo được file `agent_activity.log`.
+  2. *Quyền Windows Notifications bị tắt mặc định*: Trên nhiều máy Windows 10/11 của công ty, tính năng cho phép ứng dụng đọc thông báo Toast (`UserNotificationListener`) mặc định là `Denied`. Khi bị Denied, script PowerShell ngầm tự thoát (`exit 1`) mà user không hề biết.
+  3. *Chính sách bảo mật chặn VBScript*: Một số máy chặn file `.vbs` khiến lệnh `wscript.exe` không thể kích hoạt được PowerShell.
+  4. *File `.bat` in thông báo giả*: Do `Khoi_Dong_Lai_Agent.bat` cũ kiểm tra log sau 2s, nếu không thấy log vẫn in "HOAN TAT! Tien trinh dang chay ngam on dinh.", gây hiểu lầm cho người dùng.
+- **Giải pháp xử lý triệt để**:
+  1. *Sửa `3CX_Hotline_Agent.ps1`*: Nhận diện `$scriptDir` an toàn bằng `$PSScriptRoot`, không bao giờ gọi `Split-Path` trên `$null`. Nếu quyền Notification bị Denied, tự động bung Windows MessageBox cảnh báo trực quan.
+  2. *Nâng cấp `Khoi_Dong_Lai_Agent.bat`*: Tự động kích hoạt cơ chế dự phòng PowerShell Hidden nếu VBScript bị chặn; kiểm tra PID thực tế của tiến trình trong bộ nhớ; chỉ báo "HOAN TAT" khi tiến trình thực sự đang sống, nếu tiến trình chết sẽ cảnh báo đỏ và hướng dẫn mở `Run_3CX_Hotline_Agent.bat`.
+  3. *Bổ sung nút "Cấu hình 3CX" trên Header*: Giúp mọi user dễ dàng mở modal xem URL tích hợp Custom CRM và chỉnh mã máy nhánh 1 chạm.
+  4. *Khuyến cáo ưu tiên*: Hướng dẫn user dùng **Phương Án 1 (3CX Native Integration)**: dán URL Custom Contact vào 3CX là 100% không cần tải hay chạy bất kỳ file `.bat` nào!
+
 ### [2026-10-14] - Chuẩn Hóa 100% Cấu Hình 3CX Hotline Đích Danh Từng Kỹ Thuật Viên & Khắc Phục Lỗi Máy Mới Không Nhận Thông Báo
 - **Màn hình**: Toàn bộ hệ thống Web (`HotlineContext.tsx`, `GlobalHotlineOverlay.tsx`, `Hotline3cxGuideModal.tsx`, `hotline_3cx_service.py`).
 - **Bối cảnh & Yêu cầu người dùng**:

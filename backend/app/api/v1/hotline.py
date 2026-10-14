@@ -358,6 +358,10 @@ if not exist "%CONFIG_FILE%" (
 
 echo Dang khoi dong tien trinh ket noi 3CX...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PS1_FILE%"
+echo.
+echo ==================================================================
+echo Tien trinh da dung hoac ket thuc.
+echo ==================================================================
 pause
 """
 
@@ -397,9 +401,25 @@ if (-not $AgentUser -and $embeddedAgent -and -not ($embeddedAgent -like "*__*"))
 }
 
 # Doc file config.txt cung thu muc neu co (uu tien config.txt khi nguoi dung can sua)
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$scriptDir = if ($PSScriptRoot) { 
+    $PSScriptRoot 
+} elseif ($MyInvocation -and $MyInvocation.MyCommand -and $MyInvocation.MyCommand.Path) { 
+    Split-Path -Parent $MyInvocation.MyCommand.Path 
+} else { 
+    (Get-Location).Path 
+}
+if (-not $scriptDir) {
+    $scriptDir = [System.AppDomain]::CurrentDomain.BaseDirectory
+}
 $configFile = Join-Path $scriptDir "config.txt"
 $logFile = Join-Path $scriptDir "agent_activity.log"
+
+Function Log-Activity($msg) {
+    $t = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    $line = "[$t] $msg"
+    Write-Host $line
+    try { Add-Content -Path $logFile -Value $line -Encoding UTF8 -ErrorAction SilentlyContinue } catch {}
+}
 
 if (Test-Path $configFile) {
     Get-Content $configFile | ForEach-Object {
@@ -436,13 +456,6 @@ if (-not $ServerUrl) {
     $ServerUrl = $ServerUrl.Trim().TrimEnd('/')
 }
 
-Function Log-Activity($msg) {
-    $t = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-    $line = "[$t] $msg"
-    Write-Host $line
-    try { Add-Content -Path $logFile -Value $line -Encoding UTF8 -ErrorAction SilentlyContinue } catch {}
-}
-
 try { Clear-Host } catch {}
 Log-Activity "=================================================================="
 Log-Activity "   3CX HOTLINE CLIENT AGENT — TỰ ĐỘNG BẮT CUỘC GỌI TỪ 3CX PWA    "
@@ -469,6 +482,15 @@ try {
     $access = Await ($listener.RequestAccessAsync()) ([Windows.UI.Notifications.Management.UserNotificationListenerAccessStatus])
 } catch {
     Log-Activity "[LỖI KHỞI TẠO] Không thể kích hoạt Windows Notification API: $_"
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        [System.Windows.Forms.MessageBox]::Show(
+            "KHÔNG THỂ KÍCH HOẠT WINDOWS NOTIFICATION API:`n`n$_`n`nVui lòng đảm bảo bạn đang dùng Windows 10/11.",
+            "3CX Hotline Agent - Lỗi Khởi Tạo",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        ) | Out-Null
+    } catch {}
     Start-Sleep -Seconds 3
     exit 1
 }
@@ -476,6 +498,15 @@ try {
 if ($access -ne "Allowed") {
     Log-Activity "[CẢNH BÁO] Quyền truy cập thông báo Windows bị từ chối ($access)."
     Log-Activity "Vui lòng mở Windows Settings -> Privacy & security -> Notifications và BẬT 'ON'."
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        [System.Windows.Forms.MessageBox]::Show(
+            "CẢNH BÁO: Quyền truy cập thông báo Windows đang bị TẮT ($access)!`n`nĐể 3CX Agent nhận được cuộc gọi, vui lòng vào:`nWindows Settings -> Privacy & security -> Notifications và BẬT 'ON'.",
+            "3CX Hotline Agent - Cảnh Báo Quyền",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        ) | Out-Null
+    } catch {}
     Start-Sleep -Seconds 3
     exit 1
 }
@@ -595,16 +626,16 @@ CLIENT_AGENT_README_TEMPLATE = """HƯỚNG DẪN SỬ DỤNG 3CX HOTLINE CLIENT 
 - Toàn bộ các máy tính đang mở Web sẽ lập tức nhận được popup kết nối VNC/KDS từ xa!
 
 2. CÁCH SỬ DỤNG:
-- Bước 1: Nhấp đúp chuột vào file: "Run_3CX_Hotline_Agent.bat"
+- Bước 1: Nhấp đúp chuột vào file: "Run_3CX_Hotline_Agent.bat" (hoặc "Khoi_Dong_Lai_Agent.bat" để chạy ngầm).
 - Bước 2: File đã được cấu hình sẵn kết nối tới Server {SERVER_URL}.
 - Bước 3: Cửa sổ thông báo "KẾT NỐI THÀNH CÔNG" và chuyển sang chế độ "ĐANG CHẠY NGẦM".
 - Bạn chỉ cần thu nhỏ (Minimize) cửa sổ này xuống thanh Taskbar và làm việc bình thường.
 
-3. LƯU Ý:
-- Không cần cài đặt Python.
+3. LƯU Ý QUAN TRỌNG:
 - Yêu cầu Windows 10 hoặc Windows 11.
 - Đảm bảo trong Windows Settings: Settings -> Privacy & security -> Notifications đang ở chế độ BẬT (ON).
-- Để đổi Server URL, bạn chỉ cần mở file "config.txt" cùng thư mục để sửa lại.
+- Nếu không thấy popup khi có cuộc gọi: Hãy chạy trực tiếp file "Run_3CX_Hotline_Agent.bat" để xem báo lỗi cụ thể.
+- ĐẶC BIỆT: Nếu bạn đã cấu hình URL trực tiếp trong 3CX (Custom CRM), bạn KHÔNG CẦN chạy tool này nữa!
 """
 
 
@@ -642,24 +673,40 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$procs = Get-CimInst
 echo 2. Dang khoi chay tien trinh Agent moi...
 set "SCRIPT_DIR=%~dp0"
 set "VBS_FILE=%SCRIPT_DIR%Run_Silent_Agent.vbs"
+set "PS1_FILE=%SCRIPT_DIR%3CX_Hotline_Agent.ps1"
 
+if not exist "%PS1_FILE%" (
+    echo.
+    echo ==================================================================
+    echo [LOI] Khong tim thay file 3CX_Hotline_Agent.ps1!
+    echo Vui long GIAI NEN (Extract All) toan bo file .zip ra thu muc truoc khi chay!
+    echo ==================================================================
+    echo.
+    pause
+    exit /b 1
+)
+
+REM Khoi chay ngam qua VBScript hoac truc tiep qua PowerShell Hidden
 if exist "%VBS_FILE%" (
     wscript.exe "%VBS_FILE%"
-    echo 3. Da kich hoat chay ngam thanh cong!
-    timeout /t 2 >nul
-    if exist "%SCRIPT_DIR%agent_activity.log" (
-        echo.
-        echo Nhat ky khoi dong gan nhat:
-        powershell.exe -NoProfile -Command "Get-Content '%SCRIPT_DIR%agent_activity.log' -Tail 6"
-    )
-) else (
-    echo [LOI] Khong tim thay file Run_Silent_Agent.vbs!
+)
+
+timeout /t 2 >nul
+
+REM Du phong: Neu he thong chan VBScript, khoi chay truc tiep bang PowerShell Hidden
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$p = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*3CX_Hotline_Agent*' }; if (-not $p) { Start-Process powershell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""%PS1_FILE%""' -WindowStyle Hidden }"
+
+timeout /t 2 >nul
+
+echo 3. Kiem tra trang thai khoi dong...
+if exist "%SCRIPT_DIR%agent_activity.log" (
+    echo.
+    echo Nhat ky khoi dong gan nhat:
+    powershell.exe -NoProfile -Command "Get-Content '%SCRIPT_DIR%agent_activity.log' -Tail 6"
 )
 
 echo.
-echo ==================================================================
-echo HOAN TAT! Tien trinh dang chay ngam on dinh.
-echo ==================================================================
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$p = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*3CX_Hotline_Agent*' }; if ($p) { Write-Host '==================================================================' -ForegroundColor Green; Write-Host 'HOAN TAT! Tien trinh dang chay ngam on dinh (PID ' $p.ProcessId ').' -ForegroundColor Green; Write-Host '==================================================================' -ForegroundColor Green } else { Write-Host '==================================================================' -ForegroundColor Red; Write-Host '[CANH BAO] TIEN TRINH CHAY NGAM CHUA KHOI DONG THANH CONG!' -ForegroundColor Red; Write-Host '-> Nguyen nhan: Co the do Windows chan Notifications hoac thieu quyen.' -ForegroundColor Yellow; Write-Host '-> HUONG DAN: Vui long nhap dup vao file Run_3CX_Hotline_Agent.bat de xem loi chi tiet!' -ForegroundColor Yellow; Write-Host '==================================================================' -ForegroundColor Red }"
 echo.
 pause
 """
