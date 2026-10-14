@@ -5,6 +5,8 @@ export interface MailMemoStatusResponse {
   folder_name: string;
   scan_keyword: string;
   desktop_connected: boolean;
+  agent_online?: boolean;
+  agent_info?: any;
   last_scan_at: string | null;
   total_imported: number;
   recent_items: Array<{

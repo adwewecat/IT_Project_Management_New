@@ -2084,6 +2084,27 @@ estaurant_service.py).
 
 ---
 
+### [2026-10-14] - Hoàn Thiện Cơ Chế Kết Nối Kép (Double Guarantee) & Tự Động Polling Cho Outlook Memo Agent
+- **Bối cảnh & Vấn đề**:
+  - Người dùng mở modal Web lúc 07:02:28 (khi Agent chưa bật) nên giao diện ghi nhận trạng thái offline.
+  - Người dùng bật file `Chay_Outlook_Agent.bat` lúc 07:03:20, Agent quét 318 mail và đồng bộ lên Server thành công lúc 07:03:22.
+  - Tuy nhiên trên giao diện Web vẫn hiển thị `🟡 Chờ Bật Agent Máy Cá Nhân` và `🟡 Agent Chưa Bật` do Web không tự động làm mới trạng thái nếu người dùng chưa nhấn nút "Làm Mới" hoặc tải lại trang.
+  - Ngoài ra, khi người dùng truy cập web qua IP Public (`14.161.33.122`) hoặc mở từ máy khác, cơ chế Private Network Access (PNA) của trình duyệt Chromium có thể hạn chế gọi thẳng vào `127.0.0.1`.
+- **Giải pháp tối ưu & nâng cấp**:
+  1. *Cơ Chế Tự Động Dò Trạng Thái Khi Mở Modal (Auto-Polling)*:
+     - Thêm `useEffect` interval 3.5s trong `JobManagementPage.tsx` khi modal mở (`showMailMemoModal = true`).
+     - Khi người dùng bật file Agent, giao diện tự động nhảy sang màu xanh 🟢 trong vòng 3.5 giây mà không cần người dùng phải bấm nút "Làm Mới".
+  2. *Cơ Chế Báo Hiệu Hai Chiều Qua Server (Agent Heartbeat & Double Guarantee)*:
+     - Thêm luồng `heartbeat_thread` trong `outlook_agent.py` tự động gửi heartbeat định kỳ 20 giây lên Server qua `POST /api/v1/mail-memo/heartbeat`.
+     - Backend FastAPI ghi nhận `_last_agent_heartbeat` và cung cấp cờ `agent_online` trong `/api/v1/mail-memo/status`.
+     - Frontend kiểm tra song song: `localAgentStatus?.online || mailMemoStatus?.agent_online`. Nhờ đó, dù trình duyệt có chặn CORS hay PNA, Web vẫn nhận diện Agent Online 100%.
+  3. *Đồng bộ mã nguồn Agent & Build Production*:
+     - Đồng bộ `outlook_agent.py` sang cả 3 thư mục: `tools/outlook_agent/`, `backend/tools/outlook_agent/`, và `D:\Setup\Outlook_Memo_Agent_Full\`.
+     - Chạy `npm run build` tạo bundle sạch trong `frontend/dist` (`✓ built in 3.91s`, exit code 0).
+     - Kiểm tra toàn bộ cú pháp backend qua `python -m compileall app` (0 lỗi).
+
+---
+
 ### [2026-10-13] - Khắc Phục Triệt Để Lỗi Outlook Memo Agent Báo "Chưa Sẵn Sàng / Chưa Bật" Trên Giao Diện Web
 - **Màn hình**: Quét Mail Memo AUTO (Outlook / Salesforce) trên `JobManagementPage.tsx` ([`mailMemoService.ts`](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/services/mailMemoService.ts) và `D:\Setup\Outlook_Memo_Agent_Full`).
 - **Hiện tượng lỗi**: Người dùng đã chạy Agent tại `D:\Setup\Outlook_Memo_Agent_Full`, nhưng trên giao diện web modal Mail Memo vẫn báo: `⚪ Agent Chưa Bật` và `🟡 Chờ Bật Agent Máy Cá Nhân`.

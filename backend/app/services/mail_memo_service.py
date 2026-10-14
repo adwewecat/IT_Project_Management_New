@@ -23,6 +23,7 @@ MAIL_MEMO_HISTORY_FILE = os.path.join(DATA_DIR, "mail_memo_history.json")
 class MailMemoService:
     def __init__(self):
         self._config = self._load_config()
+        self._last_agent_heartbeat: Optional[Dict[str, Any]] = None
 
     def _load_config(self) -> Dict[str, Any]:
         default_cfg = {
@@ -62,12 +63,26 @@ class MailMemoService:
 
     def _save_history(self, history: List[Dict[str, Any]]):
         try:
-            # Giữ tối đa 500 bản ghi lịch sử gần nhất
             trimmed = history[:500]
             with open(MAIL_MEMO_HISTORY_FILE, "w", encoding="utf-8") as f:
                 json.dump(trimmed, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f"[MAIL_MEMO] Lỗi lưu history: {e}")
+
+    def record_agent_heartbeat(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Ghi nhận tín hiệu heartbeat từ Local Agent máy cá nhân."""
+        now = datetime.now()
+        data["received_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
+        data["timestamp"] = now.timestamp()
+        self._last_agent_heartbeat = data
+        return {"status": "ok", "time": data["received_at"]}
+
+    def is_agent_online(self) -> bool:
+        """Kiểm tra xem Agent có gửi tín hiệu trong vòng 75 giây qua không."""
+        if not self._last_agent_heartbeat:
+            return False
+        ts = self._last_agent_heartbeat.get("timestamp", 0)
+        return (datetime.now().timestamp() - ts) < 75
 
     def get_status(self) -> Dict[str, Any]:
         """Lấy trạng thái cấu hình và kết nối hòm thư."""
@@ -83,12 +98,17 @@ class MailMemoService:
         except Exception:
             desktop_connected = False
 
+        agent_online = self.is_agent_online()
+        agent_info = self._last_agent_heartbeat if agent_online else None
+
         history = self._load_history()
         return {
             "email_account": cfg.get("email_account", "dung.nguyenanh@ggg.com.vn"),
             "folder_name": cfg.get("folder_name", "5. MKT"),
             "scan_keyword": cfg.get("scan_keyword", "Yêu cầu tạo nút RK cho Memo mới"),
             "desktop_connected": desktop_connected,
+            "agent_online": agent_online,
+            "agent_info": agent_info,
             "last_scan_at": cfg.get("last_scan_at"),
             "total_imported": cfg.get("total_imported", 0),
             "recent_items": history[:15],
@@ -296,6 +316,7 @@ class MailMemoService:
         """
         now = datetime.now()
         now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+        self.record_agent_heartbeat({"status": "sync_received", "source": "import_from_agent", "count": len(emails_parsed)})
 
         if not emails_parsed:
             self._config["last_scan_at"] = now_str

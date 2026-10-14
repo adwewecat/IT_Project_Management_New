@@ -1602,6 +1602,20 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
     fetchMailMemoStatus();
   };
 
+  useEffect(() => {
+    if (!showMailMemoModal) return;
+    const intervalId = setInterval(() => {
+      Promise.all([
+        mailMemoService.getStatus(),
+        mailMemoService.checkLocalAgent()
+      ]).then(([res, agent]) => {
+        setMailMemoStatus(res);
+        setLocalAgentStatus(agent);
+      }).catch(() => {});
+    }, 3500);
+    return () => clearInterval(intervalId);
+  }, [showMailMemoModal]);
+
   const handleRunMailMemoScan = async () => {
     try {
       setScanningMailMemo(true);
@@ -7375,12 +7389,12 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
                     borderRadius: '12px',
                     fontSize: '11px',
                     fontWeight: 700,
-                    backgroundColor: (localAgentStatus?.online || mailMemoStatus?.desktop_connected) ? '#DEF7EC' : '#FEF3C7',
-                    color: (localAgentStatus?.online || mailMemoStatus?.desktop_connected) ? '#03543F' : '#92400E',
-                    border: `1px solid ${(localAgentStatus?.online || mailMemoStatus?.desktop_connected) ? '#31C48D' : '#FCD34D'}`
+                    backgroundColor: (localAgentStatus?.online || mailMemoStatus?.agent_online || mailMemoStatus?.desktop_connected) ? '#DEF7EC' : '#FEF3C7',
+                    color: (localAgentStatus?.online || mailMemoStatus?.agent_online || mailMemoStatus?.desktop_connected) ? '#03543F' : '#92400E',
+                    border: `1px solid ${(localAgentStatus?.online || mailMemoStatus?.agent_online || mailMemoStatus?.desktop_connected) ? '#31C48D' : '#FCD34D'}`
                   }}
                 >
-                  {localAgentStatus?.online 
+                  {(localAgentStatus?.online || mailMemoStatus?.agent_online)
                     ? '🟢 Đã Kết Nối Qua Máy Cá Nhân' 
                     : (mailMemoStatus?.desktop_connected ? '🟢 Đã Kết Nối Trực Tiếp' : '🟡 Chờ Bật Agent Máy Cá Nhân')}
                 </span>
@@ -7406,12 +7420,12 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
                           borderRadius: '10px',
                           fontSize: '11px',
                           fontWeight: 700,
-                          backgroundColor: localAgentStatus?.online ? '#DEF7EC' : '#FEF3C7',
-                          color: localAgentStatus?.online ? '#03543F' : '#92400E',
-                          border: `1px solid ${localAgentStatus?.online ? '#31C48D' : '#FCD34D'}`
+                          backgroundColor: (localAgentStatus?.online || mailMemoStatus?.agent_online) ? '#DEF7EC' : '#FEF3C7',
+                          color: (localAgentStatus?.online || mailMemoStatus?.agent_online) ? '#03543F' : '#92400E',
+                          border: `1px solid ${(localAgentStatus?.online || mailMemoStatus?.agent_online) ? '#31C48D' : '#FCD34D'}`
                         }}
                       >
-                        {localAgentStatus?.online ? '🟢 Agent Đang Bật (Online)' : '⚪ Agent Chưa Bật'}
+                        {(localAgentStatus?.online || mailMemoStatus?.agent_online) ? '🟢 Agent Đang Bật (Online)' : '⚪ Agent Chưa Bật'}
                       </span>
                       <Button
                         variant="outline"

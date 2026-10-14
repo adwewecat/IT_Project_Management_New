@@ -105,6 +105,31 @@ def import_memos_from_agent(
     return res
 
 
+class AgentHeartbeatRequest(BaseModel):
+    status: Optional[str] = "online"
+    account: Optional[str] = None
+    folder: Optional[str] = None
+    computer_name: Optional[str] = None
+    port: Optional[int] = 18890
+    version: Optional[str] = "1.0"
+
+
+@router.post("/heartbeat")
+def agent_heartbeat(
+    req: AgentHeartbeatRequest,
+    request: Request
+):
+    """
+    Nhận tín hiệu nhịp tim (heartbeat) định kỳ từ Local Agent máy cá nhân.
+    """
+    x_secret = request.headers.get("X-Agent-Secret")
+    if not x_secret or x_secret.strip() != AGENT_SHARED_SECRET:
+        raise HTTPException(status_code=403, detail="X-Agent-Secret không hợp lệ.")
+    data = req.dict()
+    data["client_ip"] = request.client.host if request.client else "unknown"
+    return mail_memo_service.record_agent_heartbeat(data)
+
+
 @router.get("/download-agent")
 def download_outlook_agent(
     current_user = Depends(require_super_admin_or_dung)

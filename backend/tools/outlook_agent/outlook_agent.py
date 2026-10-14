@@ -397,6 +397,42 @@ class AgentHandler(BaseHTTPRequestHandler):
         logger.info("%s - [%s] %s" % (self.client_address[0], self.log_date_time_string(), format % args))
 
 
+def heartbeat_thread():
+    """Luồng định kỳ gửi heartbeat lên Server mỗi 20s để Server luôn biết Agent đang Online."""
+    computer_name = socket.gethostname()
+    server_url = CONFIG.get("server_url", "http://172.16.8.25:8000")
+    heartbeat_url = f"{server_url.rstrip('/')}/api/v1/mail-memo/heartbeat"
+    headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        "X-Agent-Secret": CONFIG.get("agent_secret", "dung_memo_agent_secret_2026"),
+    }
+    payload = json.dumps({
+        "status": "online",
+        "account": "dung.nguyenanh@ggg.com.vn",
+        "folder": CONFIG.get("folder_name", "5. MKT"),
+        "computer_name": computer_name,
+        "port": AGENT_PORT,
+        "version": "1.0",
+    }).encode("utf-8")
+
+    # Gửi ngay 1 lần khi vừa khởi động
+    try:
+        req = Request(heartbeat_url, data=payload, headers=headers, method="POST")
+        with urlopen(req, timeout=5) as resp:
+            pass
+    except Exception:
+        pass
+
+    while True:
+        time.sleep(20)
+        try:
+            req = Request(heartbeat_url, data=payload, headers=headers, method="POST")
+            with urlopen(req, timeout=5) as resp:
+                pass
+        except Exception:
+            pass
+
+
 def schedule_watcher_thread():
     """Luồng chạy ngầm tự động quét theo các khung giờ (09:30, 14:00, 19:00)."""
     try:
@@ -495,6 +531,10 @@ def main():
     print(f"   ⏰ Lịch tự động: {', '.join(CONFIG.get('auto_sync_times', []))} & Startup")
     print("   💡 Cửa sổ chạy ngầm phục vụ Web & Scheduler tự động")
     print("=" * 68)
+
+    # Khởi động luồng gửi heartbeat lên Server
+    t_hb = threading.Thread(target=heartbeat_thread, daemon=True)
+    t_hb.start()
 
     # Khởi động luồng hẹn giờ
     t = threading.Thread(target=schedule_watcher_thread, daemon=True)
