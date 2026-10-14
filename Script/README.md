@@ -2215,4 +2215,10 @@ estaurant_service.py).
 - **Giới hạn Logs Tập Trung**: Giới hạn tối đa 2000 bản ghi log gần nhất (`MAX_LOAD_LIMIT = 2000`) để bảo vệ hiệu năng.
 - **Tương thích Python 3.10**: Bắt buộc `from __future__ import annotations` ở đầu file backend; import đầy đủ model/schema Pydantic.
 - **TypeScript Strict Mode**: Lỗi TS6133 (biến thừa không dùng) là lỗi cấm, phải giữ code sạch 100% khi build.
+- **Quy chuẩn Mật khẩu Nén Sao Lưu Database (SQL Server Backup ZIP)**:
+  - Mật khẩu nén chuẩn kể từ ngày **14/10/2026**: `Abc0102009@` (các file cũ trước đó dùng `Ggg@2025!`).
+  - Cấu hình qua biến môi trường: `DB_BACKUP_ZIP_PASSWORD=Abc0102009@` trong [backend/.env](file:///d:/LAPTRINH/IT_Project_Management_New/backend/.env).
+  - Định dạng nén: Mã hóa WinZip AES-256 (`WZ_AES`) kết hợp thuật toán nén `LZMA` (quản lý bởi [maintenance_service.py](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/services/maintenance_service.py) và [job_scheduler_service.py](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/services/job_scheduler_service.py)).
+  - Khuyến nghị giải nén: Dùng WinRAR hoặc 7-Zip.
+
 

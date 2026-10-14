@@ -2338,8 +2338,8 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
           )}
 
           {/* Searchable Combobox Selector */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <div ref={dropdownRef} style={{ position: 'relative', width: '360px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: '100%' }}>
+            <div ref={dropdownRef} style={{ position: 'relative', width: 'min(360px, 100%)', maxWidth: '360px', flex: '1 1 auto' }}>
               <div
                 onClick={() => setIsDropdownOpen((prev) => !prev)}
                 style={{
@@ -2597,7 +2597,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
       </div>
 
       {/* Main Navigation Tabs */}
-      <div style={{ display: 'flex', borderBottom: '2px solid var(--border-color)', gap: '8px' }}>
+      <div className="tabs-nav-scrollable" style={{ display: 'flex', borderBottom: '2px solid var(--border-color)', gap: '8px', overflowX: 'auto', flexWrap: 'nowrap', WebkitOverflowScrolling: 'touch' }}>
         <button
           type="button"
           onClick={() => setActiveTab('task_actions')}

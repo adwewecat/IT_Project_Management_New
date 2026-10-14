@@ -2376,7 +2376,9 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
           style={{
             position: 'fixed',
             bottom: '24px',
-            right: '24px',
+            right: '16px',
+            maxWidth: 'calc(100vw - 32px)',
+            boxSizing: 'border-box',
             zIndex: 9999,
             display: 'flex',
             alignItems: 'center',

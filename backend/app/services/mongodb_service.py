@@ -2633,7 +2633,7 @@ class MongoDBService:
             db_order = client["G_ORDER"] if "G_ORDER" in all_dbs else None
 
             place_map: Dict[int, str] = {}
-            if db_kitchen:
+            if db_kitchen is not None:
                 cfg = db_kitchen["CONFIG_KDS"].find_one() or {}
                 for p in (cfg.get("places") or []):
                     if isinstance(p, dict) and p.get("id") is not None:
@@ -2665,7 +2665,7 @@ class MongoDBService:
                 return None
 
             # 1. Quét G_KITCHEN.LOG_DISH_FINISH_ITEM
-            if db_kitchen and "LOG_DISH_FINISH_ITEM" in db_kitchen.list_collection_names():
+            if db_kitchen is not None and "LOG_DISH_FINISH_ITEM" in db_kitchen.list_collection_names():
                 col_finish = db_kitchen["LOG_DISH_FINISH_ITEM"]
                 time_cond = {
                     "$or": [
@@ -2734,7 +2734,7 @@ class MongoDBService:
                     ))
 
             # 2. Quét G_ORDER.ORDER_DELIVERY_LOG
-            if db_order and "ORDER_DELIVERY_LOG" in db_order.list_collection_names() and len(logs) < payload.limit:
+            if db_order is not None and "ORDER_DELIVERY_LOG" in db_order.list_collection_names() and len(logs) < payload.limit:
                 col_deliv = db_order["ORDER_DELIVERY_LOG"]
                 q_deliv = {
                     "$or": [

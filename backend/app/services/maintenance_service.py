@@ -3,6 +3,7 @@ import time
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
+from app.core.config import settings
 
 logger = logging.getLogger("app.maintenance")
 
@@ -10,11 +11,17 @@ class MaintenanceService:
     DEFAULT_BACKUP_FOLDER = "C:/DUNGIT/Backup_Data_SQL"
     DEFAULT_RETENTION_DAYS = 30
 
+    @property
+    def default_zip_password(self) -> str:
+        return getattr(settings, "DB_BACKUP_ZIP_PASSWORD", "Abc0102009@")
 
-    def compress_local_bak_files(self, folder_path: str, password: str = "Ggg@2025!") -> Dict[str, Any]:
+
+    def compress_local_bak_files(self, folder_path: str, password: Optional[str] = None) -> Dict[str, Any]:
         """
         Nén trực tiếp các file .bak trong thư mục local thành file .zip mã hóa AES.
         """
+        actual_password = password if password is not None else self.default_zip_password
+
         if not os.path.exists(folder_path):
             return {"success": False, "count": 0, "message": f"Thư mục '{folder_path}' không tồn tại trên máy này.", "details": []}
 
@@ -43,7 +50,7 @@ class MaintenanceService:
                             compression=pyzipper.ZIP_LZMA,
                             encryption=pyzipper.WZ_AES
                         ) as zf:
-                            zf.setpassword(password.encode("utf-8"))
+                            zf.setpassword(actual_password.encode("utf-8"))
                             zf.write(file_path, arcname=file)
                     else:
                         import zipfile
@@ -69,10 +76,12 @@ class MaintenanceService:
         self,
         folder_path: Optional[str] = None,
         retention_days: int = DEFAULT_RETENTION_DAYS,
-        timeout: int = 180
+        timeout: int = 180,
+        password: Optional[str] = None
     ) -> Dict[str, Any]:
         start_time = datetime.now()
         backup_dir = folder_path or self.DEFAULT_BACKUP_FOLDER
+        actual_password = password if password is not None else self.default_zip_password
 
         compress_status = "success"
         compress_message = ""
@@ -80,7 +89,7 @@ class MaintenanceService:
         # Chạy trực tiếp trên Server (không gọi qua HTTP 5001)
         if os.path.exists(backup_dir):
             logger.info(f"Phat hien thu muc local '{backup_dir}', tien hanh nen truc tiep.")
-            local_res = self.compress_local_bak_files(backup_dir)
+            local_res = self.compress_local_bak_files(backup_dir, password=actual_password)
             compress_status = "success" if local_res["success"] else "warning"
             compress_message = local_res["message"]
         else:
@@ -104,7 +113,7 @@ class MaintenanceService:
         detail_lines = [
             f"- Thư mục sao lưu: {backup_dir}",
             f"- Trạng thái nén: {compress_message}",
-            f"- Mật khẩu nén chuẩn: Ggg@2025! (Mã hóa AES WZ_AES, thuật toán LZMA)",
+            f"- Mật khẩu nén chuẩn: {actual_password} (Mã hóa AES WZ_AES, thuật toán LZMA)",
             f"- Chính sách lưu trữ (Retention): {retention_days} ngày",
             f"- Số tệp cũ quá {retention_days} ngày đã xóa: {total_deleted}",
             f"- Dung lượng ổ cứng đã giải phóng: {freed_mb:.2f} MB ({freed_mb/1024:.2f} GB)",

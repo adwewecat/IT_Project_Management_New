@@ -4454,6 +4454,7 @@ export const ProjectManagementPage: React.FC = () => {
       {/* Floating Bulk Action Bar */}
       {selectedTaskIds.size > 0 && (
         <div
+          className="floating-bulk-bar"
           style={{
             position: 'fixed',
             bottom: '24px',

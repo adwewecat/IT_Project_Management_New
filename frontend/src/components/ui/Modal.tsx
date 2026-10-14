@@ -46,11 +46,12 @@ export const Modal: React.FC<ModalProps> = ({
     border: '1px solid var(--border-color)',
     boxShadow: 'var(--shadow-lg)',
     width: '100%',
-    maxWidth,
+    maxWidth: maxWidth ? `min(100%, ${maxWidth})` : '560px',
     maxHeight: 'min(92vh, calc(100vh - 32px))',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
+    boxSizing: 'border-box',
   };
 
   const headerStyle: React.CSSProperties = {
@@ -59,12 +60,16 @@ export const Modal: React.FC<ModalProps> = ({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: '12px',
+    boxSizing: 'border-box',
   };
 
   const titleStyle: React.CSSProperties = {
     fontSize: '18px',
     fontWeight: 700,
     color: 'var(--text-primary)',
+    lineHeight: 1.35,
+    wordBreak: 'break-word',
   };
 
   const closeButtonStyle: React.CSSProperties = {
@@ -72,19 +77,25 @@ export const Modal: React.FC<ModalProps> = ({
     border: 'none',
     color: 'var(--text-muted)',
     cursor: 'pointer',
-    padding: '4px',
+    padding: '6px',
+    minWidth: '36px',
+    minHeight: '36px',
     borderRadius: 'var(--radius-sm)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     transition: 'color var(--transition-fast)',
+    flexShrink: 0,
   };
 
   const bodyStyle: React.CSSProperties = {
     padding: '24px',
     overflowY: 'auto',
+    overflowX: 'auto',
+    WebkitOverflowScrolling: 'touch',
     flex: 1,
     minHeight: 0,
+    boxSizing: 'border-box',
   };
 
   const footerStyle: React.CSSProperties = {
@@ -95,6 +106,8 @@ export const Modal: React.FC<ModalProps> = ({
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: '12px',
+    boxSizing: 'border-box',
+    flexWrap: 'wrap',
   };
 
   return (

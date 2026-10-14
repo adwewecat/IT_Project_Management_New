@@ -97,7 +97,7 @@ export const KdsDeleteQuayModal: React.FC<KdsDeleteQuayModalProps> = ({
           : '🛑 XÁC NHẬN CUỐI CÙNG ĐỂ XÓA VĨNH VIỄN (BƯỚC 2/2)'
       }
       footer={
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
           {step === 1 ? (
             <>
               <Button variant="outline" onClick={handleResetAndClose}>
@@ -834,7 +834,8 @@ export const KdsQuayListModal: React.FC<KdsQuayListModalProps> = ({
             </span>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+          <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', minWidth: '780px', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
               <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
                 <th style={{ padding: '8px 10px', width: '55px' }}>ID</th>
@@ -1209,7 +1210,8 @@ export const KdsQuayListModal: React.FC<KdsQuayListModalProps> = ({
                 );
               })}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       </Modal>
 
@@ -1793,7 +1795,7 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
               e.preventDefault();
               handleAddUser(manualCode);
             }}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}
           >
             <input
               type="text"
@@ -1833,12 +1835,12 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
 
         {/* Danh Sách User Của Nhà Hàng Hiện Có */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
             <div style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>
               Danh sách nhân viên nhà hàng hiện có ({restaurantUsers.length} nhân viên):
             </div>
 
-            <div style={{ position: 'relative', width: '220px' }}>
+            <div style={{ position: 'relative', width: '220px', minWidth: '180px', flex: '1 1 auto', maxWidth: '320px' }}>
               <Search size={14} style={{ position: 'absolute', left: '10px', top: '8px', color: '#94A3B8' }} />
               <input
                 type="text"
@@ -1912,14 +1914,14 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
             </div>
           )}
 
-          <div style={{ maxHeight: '340px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+          <div style={{ maxHeight: '340px', overflowY: 'auto', overflowX: 'auto', WebkitOverflowScrolling: 'touch', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
             {loading ? (
               <div style={{ padding: '36px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
                 <RefreshCw size={22} className="animate-spin" style={{ margin: '0 auto 8px', color: '#0284C7' }} />
                 Đang tải thông tin nhân viên nhà hàng...
               </div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+              <table style={{ width: '100%', minWidth: '580px', borderCollapse: 'collapse', fontSize: '12.5px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
                     <th style={{ padding: '9px 10px', width: '40px', textAlign: 'center' }}>
@@ -2548,7 +2550,7 @@ export const KdsTransferQuayModal: React.FC<KdsTransferQuayModalProps> = ({
         )}
 
         {/* Hai ô chọn quầy: Nguồn & Đích */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '10px', alignItems: 'center' }}>
+        <div className="kds-transfer-grid" style={{ gap: '10px', alignItems: 'center' }}>
           <div>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#B45309', marginBottom: '6px' }}>
               Quầy Bếp Nguồn (Từ):
@@ -2737,7 +2739,7 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
       title="📋 Tra Cứu Nhật Ký KDS (Thời Gian Order & Bấm Done Món)"
       maxWidth="1100px"
       footer={
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
             Tổng số: <strong>{logs.length}</strong> bản ghi | Host: <code>{host}:{port}</code>
           </div>
@@ -2782,11 +2784,8 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
 
         {/* Bộ lọc tìm kiếm */}
         <div
+          className="kds-logs-filter-grid"
           style={{
-            display: 'grid',
-            gridTemplateColumns: '150px 130px 130px 140px 1fr auto',
-            gap: '8px',
-            alignItems: 'flex-end',
             padding: '12px',
             backgroundColor: 'var(--bg-secondary)',
             borderRadius: '8px',
@@ -2919,12 +2918,16 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
           style={{
             maxHeight: '440px',
             overflowY: 'auto',
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
             border: '1px solid var(--border-color)',
             borderRadius: '8px',
-            backgroundColor: '#FFFFFF'
+            backgroundColor: '#FFFFFF',
+            width: '100%',
+            maxWidth: '100%'
           }}
         >
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+          <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #CBD5E1', color: '#475569', position: 'sticky', top: 0, zIndex: 10 }}>
                 <th style={{ padding: '9px 10px', textAlign: 'center', width: '70px' }}>Bàn</th>

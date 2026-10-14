@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
 
+    # Database Backup Zip Password
+    DB_BACKUP_ZIP_PASSWORD: str = "Abc0102009@"
+
     @staticmethod
     def build_database_uri(
         server: str,

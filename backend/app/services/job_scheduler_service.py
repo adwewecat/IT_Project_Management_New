@@ -140,7 +140,7 @@ DEFAULT_JOBS = [
         "job_name": "Nén Zip Database Backup & Dọn dẹp File cũ quá 30 ngày",
         "category": "maintenance",
         "category_name": "Sao Lưu & Bảo Trì Hệ Thống",
-        "description": "Tự động quét thư mục C:/DUNGIT/Backup_Data_SQL trực tiếp trên Server này, nén các file .bak thành .zip mã hóa AES bảo mật (mật khẩu Ggg@2025!), đồng thời xóa sạch các file sao lưu cũ quá 30 ngày để giải phóng dung lượng đĩa cứng.",
+        "description": "Tự động quét thư mục C:/DUNGIT/Backup_Data_SQL trực tiếp trên Server này, nén các file .bak thành .zip mã hóa AES bảo mật (mật khẩu Abc0102009@), đồng thời xóa sạch các file sao lưu cũ quá 30 ngày để giải phóng dung lượng đĩa cứng.",
         "source_reference": "maintenance_service.py: compress_and_cleanup_db_backup (chạy local trên server)",
         "is_enabled": True,
         "schedule": {
