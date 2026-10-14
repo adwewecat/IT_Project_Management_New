@@ -2084,20 +2084,18 @@ estaurant_service.py).
 
 ---
 
-### [2026-10-14] - Hoàn Thiện Cơ Chế Kiểm Tra Trung Thực Agent Máy Cá Nhân & Auto-Polling
+### [2026-10-14] - Chuyển Đổi Sang Kiến Trúc Server-Mediated Relay (Khắc Phục Triệt Để Lỗi Chrome PNA Chặn Loopback)
 - **Bối cảnh & Vấn đề**:
-  - Người dùng mở modal Web lúc 07:02:28 (khi Agent chưa bật) nên giao diện ghi nhận trạng thái offline.
-  - Người dùng bật file `Chay_Outlook_Agent.bat` lúc 07:03:20, Agent quét 318 mail và đồng bộ lên Server thành công lúc 07:03:22.
-  - Sau đó, khi thử nghiệm thêm cơ chế heartbeat từ Server vào badge `Local Agent Máy Cá Nhân`: dẫn tới tác dụng phụ là **một máy bất kỳ (máy của Dev/Anh Dũng) đang bật Agent gửi heartbeat lên Server thì tất cả các máy khác trong công ty mở web đều bị sáng xanh theo**, dù máy đó không hề cài Agent. Khi bấm nút quét trên máy không cài Agent thì văng lỗi `No module named win32com`.
-- **Giải pháp xử lý triệt để & trung thực**:
-  1. *Kiểm Tra Trung Thực Theo Từng Máy (Strict Local Machine Verification)*:
-     - Badge `Local Agent Máy Cá Nhân` và thanh kết nối MAPI bắt buộc chỉ kiểm tra trực tiếp qua loopback `http://127.0.0.1:18890` (hoặc `18899`) của chính trình duyệt đang mở.
-     - Loại bỏ hoàn toàn việc dùng cờ chung từ Server cho badge này. Máy nào không cài hoặc chưa bật Agent thì **bắt buộc hiển thị màu xám/vàng: `⚪ Agent Chưa Bật (Máy Này)` và `🟡 Chờ Bật Agent Máy Cá Nhân`**.
-  2. *Thông Báo Lỗi Rõ Ràng Khi Bấm Quét Mà Chưa Bật Agent*:
-     - Nếu máy hiện tại chưa bật Agent mà bấm `[Quét & Tự Động Import Memo]`: Hệ thống hiện ngay toast cảnh báo thân thiện: *"Máy tính này chưa bật Local Agent (127.0.0.1:18890). Vui lòng nhấp đúp file Chay_Outlook_Agent.bat trên máy tính có cài đặt Outlook của bạn trước khi bấm Quét!"*, không gọi fallback lên server gây lỗi `win32com`.
-  3. *Tự Động Làm Mới Khi Đang Mở Modal (Auto-Polling 3.5s)*:
-     - Giữ nguyên `useEffect` polling 3.5s để khi người dùng vừa bật Agent trên máy mình, giao diện máy đó tự động chuyển sang xanh 🟢 ngay mà không cần bấm "Làm Mới".
-  4. *Đóng gói và kiểm thử*:
+  - Giao diện Web được truy cập qua IP Public/Server (`http://14.161.33.122:5001`).
+  - Google Chrome kích hoạt chính sách bảo mật **Private Network Access (PNA)**: Chặn toàn bộ các request từ trang Web chạy trên IP ngoài kết nối thẳng vào `http://127.0.0.1:18890` (loopback). Trình duyệt chặn ngay tại tầng network engine, không gửi bất kỳ byte nào ra ngoài, khiến `agent.log` không có request nào và Web luôn báo `Agent Chưa Bật` dù Agent đang chạy.
+- **Giải pháp chuyển đổi kiến trúc Server-Mediated Relay**:
+  1. *Nguyên lý hoạt động*:
+     - Không để Trình duyệt gọi trực tiếp vào `127.0.0.1:18890` nữa (tránh 100% lỗi Chrome PNA, CORS và Mixed Content).
+     - Agent trên máy cá nhân kết nối Outbound lên Server `172.16.8.25:8000` định kỳ mỗi 2s (`POST /api/v1/mail-memo/agent-poll`) để báo Online (kèm tên máy `computer_name`, tài khoản `account`) và nhận lệnh quét nếu có.
+     - Server quản trị trạng thái: Khi Agent đang gửi poll đều đặn, Server báo `agent_online: true` kèm thông tin tên máy (ví dụ: `PC_CTY`). Web hiển thị rõ: `🟢 Agent Đang Bật (PC_CTY)` và `🟢 Đã Kết Nối Agent Máy Cá Nhân (PC_CTY)`.
+     - Khi người dùng bấm nút `[Quét & Tự Động Import Memo]` trên Web: Web gọi Server `POST /api/v1/mail-memo/scan`. Server ra lệnh cho Agent quét Outlook -> Agent bóc tách 318 mail -> Đẩy DB Server -> Server trả kết quả về Web hiển thị Toast thành công!
+  2. *Đóng gói & Triển khai*:
+     - Đồng bộ file `outlook_agent.py` và tạo mới gói `Outlook_Memo_Agent_Full.zip`.
      - Build lại `frontend/dist` sạch sẽ (`cmd /c "npm run build"`, exit code 0). Cú pháp `backend/app` đạt 0 lỗi.
 
 ---
