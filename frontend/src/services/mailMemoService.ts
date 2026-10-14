@@ -130,16 +130,11 @@ export const mailMemoService = {
       };
     }
 
-    // Nếu Agent không online, fallback thử gọi Server
-    try {
-      return await this.triggerScan(maxItems);
-    } catch (err: any) {
-      const detail = err.response?.data?.detail || err.message;
-      throw new Error(
-        `Không thể kết nối Outlook Desktop trên máy bạn (Local Agent 127.0.0.1:18890 / 18899 đang TẮT).\n` +
-        `Vui lòng bấm chạy file "Chay_Outlook_Agent.bat" trên máy tính của bạn trước khi quét!\n(Chi tiết: ${detail})`
-      );
-    }
+    // Nếu Agent không online trên máy này: Thông báo rõ ràng
+    throw new Error(
+      `Máy tính này chưa bật Local Agent (127.0.0.1:18890 / 18899). ` +
+      `Vui lòng nhấp đúp file "Chay_Outlook_Agent.bat" trên máy tính có cài đặt Outlook của bạn trước khi bấm Quét!`
+    );
   },
 
   /**

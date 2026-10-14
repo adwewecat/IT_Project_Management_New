@@ -98,17 +98,12 @@ class MailMemoService:
         except Exception:
             desktop_connected = False
 
-        agent_online = self.is_agent_online()
-        agent_info = self._last_agent_heartbeat if agent_online else None
-
         history = self._load_history()
         return {
             "email_account": cfg.get("email_account", "dung.nguyenanh@ggg.com.vn"),
             "folder_name": cfg.get("folder_name", "5. MKT"),
             "scan_keyword": cfg.get("scan_keyword", "Yêu cầu tạo nút RK cho Memo mới"),
             "desktop_connected": desktop_connected,
-            "agent_online": agent_online,
-            "agent_info": agent_info,
             "last_scan_at": cfg.get("last_scan_at"),
             "total_imported": cfg.get("total_imported", 0),
             "recent_items": history[:15],
