@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("CẢNH BÁO: Chưa kết nối được tới SQL Server!")
     
-    # Tự động tạo bảng OVERNIGHT_DEVICES_LOG, USER_SSO_CONFIG và SOFTWARE_VERSIONS nếu chưa tồn tại
+    # Tự động tạo bảng OVERNIGHT_DEVICES_LOG, USER_SSO_CONFIG, SOFTWARE_VERSIONS, STAFF_LEAVE_LOGS, STAFF_LEAVE_TYPES nếu chưa tồn tại
     try:
         from app.core.database import engine, Base
         from app.models.overnight_device import OvernightDeviceLog
@@ -50,16 +50,41 @@ async def lifespan(app: FastAPI):
         from app.models.software_version import SoftwareVersion
         from app.models.standard_app_param import StandardAppParam
         from app.models.scheduled_param_job import ScheduledParamPushJob
+        from app.models.violation import StaffLeaveLog, StaffLeaveType
         from sqlalchemy import text
         Base.metadata.create_all(engine, tables=[
             OvernightDeviceLog.__table__,
             UserSSOConfig.__table__,
             SoftwareVersion.__table__,
             StandardAppParam.__table__,
-            ScheduledParamPushJob.__table__
+            ScheduledParamPushJob.__table__,
+            StaffLeaveLog.__table__,
+            StaffLeaveType.__table__,
         ], checkfirst=True)
-        # Đảm bảo các cột cần thiết tồn tại trong MEMO và SOFTWARE_VERSIONS
+        # Đảm bảo các cột cần thiết tồn tại trong MEMO, SOFTWARE_VERSIONS và GHINHAN_SAIPHAM
         with engine.connect() as _c:
+            try:
+                _c.execute(text("""
+                    IF OBJECT_ID('dbo.GHINHAN_SAIPHAM', 'U') IS NOT NULL
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GHINHAN_SAIPHAM' AND COLUMN_NAME='LOAI_SAIPHAM')
+                            ALTER TABLE dbo.GHINHAN_SAIPHAM ADD LOAI_SAIPHAM NVARCHAR(100) NULL;
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GHINHAN_SAIPHAM' AND COLUMN_NAME='HO_TEN')
+                            ALTER TABLE dbo.GHINHAN_SAIPHAM ADD HO_TEN NVARCHAR(150) NULL;
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GHINHAN_SAIPHAM' AND COLUMN_NAME='IMAGES')
+                            ALTER TABLE dbo.GHINHAN_SAIPHAM ADD IMAGES NVARCHAR(MAX) NULL;
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GHINHAN_SAIPHAM' AND COLUMN_NAME='FILES')
+                            ALTER TABLE dbo.GHINHAN_SAIPHAM ADD FILES NVARCHAR(MAX) NULL;
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GHINHAN_SAIPHAM' AND COLUMN_NAME='DATE_UPDATE')
+                            ALTER TABLE dbo.GHINHAN_SAIPHAM ADD DATE_UPDATE DATETIME NULL;
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GHINHAN_SAIPHAM' AND COLUMN_NAME='USER_UPDATE')
+                            ALTER TABLE dbo.GHINHAN_SAIPHAM ADD USER_UPDATE NVARCHAR(150) NULL;
+                    END
+                """))
+                _c.commit()
+            except Exception as _ex_gh:
+                logger.warning("Lỗi tự động kiểm tra cột GHINHAN_SAIPHAM: %s", _ex_gh)
+
             _col_chk = _c.execute(text("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='MEMO' AND COLUMN_NAME='noidung_mail'")).fetchone()
             if not _col_chk:
                 _c.execute(text("ALTER TABLE MEMO ADD noidung_mail NVARCHAR(MAX) NULL"))

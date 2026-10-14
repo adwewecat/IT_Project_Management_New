@@ -2084,6 +2084,42 @@ estaurant_service.py).
 
 ---
 
+### [2026-10-14] - Khắc Phục Triệt Để Lỗi Không Lưu Được Vi Phạm Trên Màn Hình Quản Trị Ghi Nhận Lỗi & Nghỉ Phép Team App
+- **Màn hình**: [Quản Trị Ghi Nhận Lỗi & Nghỉ Phép Team App](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/pages/admin/ViolationAndLeavePage.tsx) (`/admin/violations-leaves`).
+- **Hiện tượng lỗi**:
+  - Khi người dùng điền thông tin vi phạm (chọn 1 nhân viên hoặc nhiều nhân viên, loại vi phạm, ngày vi phạm, nội dung ghi chú và đính kèm ảnh bằng chứng), sau đó bấm nút **Lưu Vi Phạm**:
+  - Nút chuyển sang trạng thái `Đang Lưu...` và trình duyệt hiện popup alert: `14.161.33.122:5001 says: Lỗi khi lưu vi phạm!`, form không thể lưu được vào cơ sở dữ liệu.
+- **Nguyên nhân cốt lõi**:
+  1. *Lỗi Truy Cập Thuộc Tính Sai trong Backend Audit Log (`AttributeError`)*:
+     - Tại router [`violations.py`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/api/v1/violations.py) (dòng 78 và dòng 101), sau khi insert bản ghi vào database thành công, backend thực hiện ghi Audit Log:
+       - `mo_ta=f"Ghi nhận lỗi sai phạm: {payload.username} - {payload.tieu_de or payload.loai_saipham}"`
+       - `mo_ta=f"Ghi nhận vi phạm hàng loạt cho {len(payload.usernames)} nhân viên: {payload.tieu_de or payload.loai_saipham}"`
+     - Trong khi Pydantic schema [`ViolationCreate`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/schemas/violation.py) chỉ định nghĩa `nguoi_saipham`, không có `username` hay `tieu_de`. Schema [`ViolationBatchCreate`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/schemas/violation.py) chỉ định nghĩa `nguoi_saiphams`, không có `usernames` hay `tieu_de`.
+     - Khi Python chạy tới câu lệnh này, nó lập tức ném exception `AttributeError: 'ViolationCreate' object has no attribute 'username'`, khiến API trả về HTTP 500 Internal Server Error và frontend bắt lỗi hiển thị `Lỗi khi lưu vi phạm!`.
+  2. *Thiếu Auto-Migration Cột Cho Bảng `dbo.GHINHAN_SAIPHAM` Khi Khởi Động Backend*:
+     - Nếu cơ sở dữ liệu production trên SQL Server chưa chạy câu lệnh `ALTER TABLE` bổ sung các cột mới (`LOAI_SAIPHAM`, `HO_TEN`, `IMAGES`, `FILES`, `DATE_UPDATE`, `USER_UPDATE`), câu lệnh INSERT sẽ bị lỗi `Invalid column name`.
+     - Backend trước đó chưa đưa đoạn kiểm tra/bổ sung tự động vào hàm startup `lifespan` trong [`main.py`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/main.py).
+  3. *Frontend Thông Báo Lỗi Chung Chung*:
+     - Trong [`ViolationAndLeavePage.tsx`](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/pages/admin/ViolationAndLeavePage.tsx), khối `catch` chỉ hiển thị `err.response?.data?.detail || 'Lỗi khi lưu vi phạm!'`. Khi detail là array/object hoặc lỗi server thì thông báo không chỉ rõ nguyên nhân cụ thể.
+- **Các bước khắc phục triệt để**:
+  1. *Sửa triệt để thuộc tính trong [`violations.py`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/api/v1/violations.py)*:
+     - Sửa thành `payload.nguoi_saipham` và `payload.loai_saipham or 'other'`.
+     - Sửa hàm batch thành `len(payload.nguoi_saiphams)` và `payload.loai_saipham or 'other'`.
+  2. *Bổ sung Property Alias & Field an toàn trong [`violation.py`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/schemas/violation.py)*:
+     - Thêm property `@property username` và `@property tieu_de` vào `ViolationBase` / `ViolationCreate`.
+     - Thêm property `@property usernames` và `@property tieu_de` vào `ViolationBatchCreate`.
+     - Bổ sung `nguoi_saipham: Optional[str] = None` vào `ViolationUpdate`.
+  3. *Tự Động Kiểm Tra & Cập Nhật Cột Trong [`main.py`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/main.py)*:
+     - Thêm cơ chế tự động kiểm tra `INFORMATION_SCHEMA.COLUMNS` và chạy `ALTER TABLE dbo.GHINHAN_SAIPHAM ADD LOAI_SAIPHAM, HO_TEN, IMAGES, FILES, DATE_UPDATE, USER_UPDATE` ngay khi backend khởi động.
+     - Tự động tạo bảng `STAFF_LEAVE_LOGS` và `STAFF_LEAVE_TYPES` nếu chưa có.
+  4. *Nâng cấp hiển thị lỗi trong [`ViolationAndLeavePage.tsx`](file:///d:/LAPTRINH/IT_Project_Management_New/frontend/src/pages/admin/ViolationAndLeavePage.tsx)*:
+     - Trích xuất thông điệp chi tiết từ response (string, mảng validation error, message hoặc network error) giúp hiển thị chính xác nguyên nhân nếu có sự cố.
+  5. *Đóng gói & Kiểm thử*:
+     - Biên dịch Python (`py_compile`): 0 lỗi.
+     - Build Frontend (`cmd /c "npm run build"`): Exit code 0, tạo mới `dist/assets/index-CVleHAt8.js`.
+
+---
+
 ### [2026-10-14] - Chuyển Đổi Sang Kiến Trúc Server-Mediated Relay (Khắc Phục Triệt Để Lỗi Chrome PNA Chặn Loopback)
 - **Bối cảnh & Vấn đề**:
   - Giao diện Web được truy cập qua IP Public/Server (`http://14.161.33.122:5001`).

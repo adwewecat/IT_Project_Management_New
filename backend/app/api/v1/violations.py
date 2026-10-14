@@ -75,7 +75,7 @@ def create_violation(
         nhom_quyen="HELPDESK",
         man_hinh="CHI_NHANH_LOI",
         hanh_dong="INSERT",
-        mo_ta=f"Ghi nhận lỗi sai phạm: {payload.username} - {payload.tieu_de or payload.loai_saipham}",
+        mo_ta=f"Ghi nhận lỗi sai phạm: {payload.nguoi_saipham} - {payload.loai_saipham or 'other'}",
         current_user=current_user
     )
     return res
@@ -98,7 +98,7 @@ def create_violations_batch(
         nhom_quyen="HELPDESK",
         man_hinh="CHI_NHANH_LOI",
         hanh_dong="INSERT",
-        mo_ta=f"Ghi nhận vi phạm hàng loạt cho {len(payload.usernames)} nhân viên: {payload.tieu_de or payload.loai_saipham}",
+        mo_ta=f"Ghi nhận vi phạm hàng loạt cho {len(payload.nguoi_saiphams)} nhân viên: {payload.loai_saipham or 'other'}",
         current_user=current_user
     )
     return res

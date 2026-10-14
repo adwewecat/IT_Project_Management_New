@@ -13,6 +13,14 @@ class ViolationBase(BaseModel):
     images: Optional[str] = None
     files: Optional[str] = None
 
+    @property
+    def username(self) -> str:
+        return self.nguoi_saipham
+
+    @property
+    def tieu_de(self) -> Optional[str]:
+        return self.loai_saipham
+
 
 class ViolationCreate(ViolationBase):
     pass
@@ -27,8 +35,17 @@ class ViolationBatchCreate(BaseModel):
     images: Optional[str] = None
     files: Optional[str] = None
 
+    @property
+    def usernames(self) -> List[str]:
+        return self.nguoi_saiphams
+
+    @property
+    def tieu_de(self) -> Optional[str]:
+        return self.loai_saipham
+
 
 class ViolationUpdate(BaseModel):
+    nguoi_saipham: Optional[str] = None
     ho_ten: Optional[str] = None
     noidung: Optional[str] = None
     loai_saipham: Optional[str] = None

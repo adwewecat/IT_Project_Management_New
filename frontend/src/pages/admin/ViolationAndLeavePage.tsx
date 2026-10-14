@@ -458,7 +458,19 @@ export const ViolationAndLeavePage: React.FC = () => {
       setIsViolationModalOpen(false);
       loadViolations();
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Lỗi khi lưu vi phạm!');
+      console.error('Lỗi khi lưu vi phạm:', err);
+      const detail = err.response?.data?.detail;
+      let errMsg = 'Lỗi khi lưu vi phạm!';
+      if (typeof detail === 'string') {
+        errMsg = detail;
+      } else if (Array.isArray(detail)) {
+        errMsg = detail.map((d: any) => d.msg || JSON.stringify(d)).join('; ');
+      } else if (err.response?.data?.message) {
+        errMsg = err.response.data.message;
+      } else if (err.message) {
+        errMsg = `Lỗi kết nối / hệ thống: ${err.message}`;
+      }
+      alert(errMsg);
     } finally {
       setUploadingV(false);
     }
