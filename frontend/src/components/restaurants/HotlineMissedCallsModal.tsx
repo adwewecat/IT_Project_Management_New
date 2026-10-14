@@ -208,24 +208,24 @@ export const HotlineMissedCallsModal: React.FC<HotlineMissedCallsModalProps> = (
                 <button
                   type="button"
                   onClick={openGuideModal}
-                  title="Xem hướng dẫn cài đặt ứng dụng tổng đài 3CX (PWA)"
+                  title="Cấu hình kết nối 3CX Hotline đích danh & hướng dẫn sử dụng"
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '4px',
-                    padding: '2px 8px',
+                    gap: '5px',
+                    padding: '3px 10px',
                     borderRadius: '6px',
                     backgroundColor: '#FEF9C3',
                     border: '1px solid #FDE047',
                     color: '#854D0E',
-                    fontSize: '11.5px',
+                    fontSize: '12px',
                     fontWeight: 600,
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  <Star size={12} style={{ color: '#EAB308', fill: '#FACC15' }} />
-                  <span>Cài 3CX PWA</span>
+                  <Star size={13} style={{ color: '#EAB308', fill: '#FACC15' }} />
+                  <span>Cấu hình 3CX Hotline</span>
                 </button>
               </div>
               <div style={{ fontSize: '12px', fontWeight: 400, color: 'var(--text-secondary)' }}>
@@ -264,9 +264,9 @@ export const HotlineMissedCallsModal: React.FC<HotlineMissedCallsModalProps> = (
                 padding: '4px 10px',
                 fontWeight: 600,
               }}
-              title="Xem hướng dẫn cài đặt ứng dụng tổng đài 3CX (PWA)"
+              title="Cấu hình kết nối 3CX Hotline đích danh & hướng dẫn sử dụng"
             >
-              <Star size={13} style={{ color: '#EAB308', fill: '#FACC15' }} /> Hướng dẫn cài 3CX (PWA)
+              <Star size={13} style={{ color: '#EAB308', fill: '#FACC15' }} /> Cấu hình 3CX Hotline
             </button>
 
             {checkIsDungOrSuperAdmin(user) && (

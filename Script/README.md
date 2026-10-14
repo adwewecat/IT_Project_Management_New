@@ -2221,6 +2221,25 @@ estaurant_service.py).
      - Đồng bộ file `outlook_agent.py` và tạo mới gói `Outlook_Memo_Agent_Full.zip`.
      - Build lại `frontend/dist` sạch sẽ (`cmd /c "npm run build"`, exit code 0). Cú pháp `backend/app` đạt 0 lỗi.
 
+### [2026-10-14] - Khắc Phục Lỗi Bấm "Đã Nghe & Đóng" Popup Hiện Lặp Vô Tận & Dọn Gọn Nút Cấu Hình 3CX
+- **Màn hình & Thành phần**: `GlobalHotlineOverlay.tsx`, `HotlineContext.tsx`, `Header.tsx`, `HotlineMissedCallsModal.tsx`, `hotline.py`.
+- **Hiện tượng lỗi**:
+  1. Khi có cuộc gọi thử nghiệm hoặc nội bộ, người dùng bấm nút `[✕ Đã Nghe & Đóng]` nhưng popup liên tục hiện lại lặp vô tận, không thể tắt được.
+  2. Nút `[Cấu hình 3CX]` nằm lộ trên thanh Header ngoài cùng gây vướng và không đồng bộ.
+- **Nguyên nhân cốt lõi**:
+  - `dismissIncomingCall()` trước đó chỉ gọi `setIncomingCall(null)` ở local state React mà không gọi API `/hotline/end-call` trên server và không lưu ID cuộc gọi vào tập đã đóng (`dismissedCallIdsRef`).
+  - Trong khi đó, biến `_current_active_call` trên Server có thời gian sống 45 giây. Khi vòng polling 2.5s gọi `/hotline/status`, Server tiếp tục trả về cuộc gọi này $\rightarrow$ Frontend lại kích hoạt `setIncomingCall(cur)` làm popup bung lên lại liên tục mỗi 2.5s!
+- **Giải pháp xử lý toàn diện**:
+  1. *Triệt tiêu vòng lặp popup*:
+     - `dismissIncomingCall()` và `dismissNonRestaurantCall()` ngay lập tức ghi nhận ID vào `dismissedCallIdsRef.current`, cập nhật `dismissedCallId`.
+     - Đồng thời gọi `hotlineService.endCall(callId)`, `resolveMissedCall(callId)`, `markCallAnswered()`.
+     - Backend cập nhật `_current_active_call = None`, set `is_resolved = True` trong database và bắn event `call_ended` qua SSE.
+     - Trong hàm polling `pollStatus()`: Bổ sung bẫy kiểm tra `dismissedCallIdsRef.current.has(cid)`, nếu ID đã bị đóng thì bỏ qua tuyệt đối, không bao giờ mở lại.
+     - Bổ sung nút [X] ở góc trên bên phải thẻ modal trung tâm để người dùng đóng nhanh.
+  2. *Dọn gọn Header & Đưa cấu hình vào trong popup*:
+     - Bỏ nút `[Cấu hình 3CX]` khỏi thanh Header ngoài cùng để Header giữ 2 nút chuẩn: `[Hotline: BẬT]` và `[Cuộc Gọi]`.
+     - Đổi tên và làm nổi bật nút `[⭐ Cấu hình 3CX Hotline]` bên trong popup "Quản Lý Cuộc Gọi Hotline 3CX" (`HotlineMissedCallsModal`), người dùng chỉ cần bấm vào nút `Cuộc Gọi` là có thể mở ngay cấu hình và hướng dẫn.
+
 ### [2026-10-14] - Khắc Phục Lỗi 3CX Hotline Client Agent Không Chạy Trên Máy User Khác (Lỗi Thiếu Log & Lỗi Quyền Notifications)
 - **Màn hình & Thành phần**: `Khoi_Dong_Lai_Agent.bat`, `3CX_Hotline_Agent.ps1`, `Run_3CX_Hotline_Agent.bat`, `Header.tsx`, `hotline.py`.
 - **Hiện tượng lỗi**:

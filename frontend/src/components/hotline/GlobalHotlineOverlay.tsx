@@ -182,6 +182,7 @@ export const GlobalHotlineOverlay: React.FC = () => {
         >
           <div
             style={{
+              position: 'relative',
               backgroundColor: '#FFFFFF',
               borderRadius: '16px',
               maxWidth: '460px',
@@ -193,6 +194,29 @@ export const GlobalHotlineOverlay: React.FC = () => {
               animation: 'hotlineSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           >
+            {/* Nút đóng nhanh (X) ở góc phải modal */}
+            <button
+              type="button"
+              onClick={dismissIncomingCall}
+              title="Đóng thông báo"
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                background: 'none',
+                border: 'none',
+                color: '#64748B',
+                cursor: 'pointer',
+                padding: '6px',
+                borderRadius: '6px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <X size={18} />
+            </button>
+
             {/* Icon chuông reo */}
             <div
               style={{

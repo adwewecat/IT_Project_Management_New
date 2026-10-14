@@ -243,16 +243,21 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Đóng/Ẩn banner thông báo cuộc gọi không phải nhà hàng
   const dismissNonRestaurantCall = useCallback(() => {
-    if (latestNonRestaurantCall) {
-      const callId = latestNonRestaurantCall.id;
+    const cur = latestNonRestaurantCall;
+    setLatestNonRestaurantCall(null);
+    setIncomingCall(null);
+
+    const callId = cur ? cur.id : (incomingCall ? (incomingCall.call_id || (incomingCall as any).id) : null);
+    if (callId) {
       dismissedCallIdsRef.current.add(callId);
       setDismissedCallId(callId);
       lastAlertedNonResCallIdRef.current = callId;
       hotlineService.resolveMissedCall(callId).catch(() => {});
       hotlineService.endCall(callId).catch(() => {});
+    } else {
+      hotlineService.endCall().catch(() => {});
     }
-    setLatestNonRestaurantCall(null);
-  }, [latestNonRestaurantCall]);
+  }, [latestNonRestaurantCall, incomingCall]);
 
   // Tải số lượng cuộc gọi nhỡ ban đầu
   const refreshMissedCount = useCallback(async () => {
@@ -285,6 +290,15 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
         // 2. Kiểm tra nếu có cuộc gọi đang reo (current_call)
         if (res.current_call) {
           const cur = res.current_call;
+          const cid = cur.call_id;
+
+          // Nếu ID cuộc gọi này đã bị người dùng bấm đóng hoặc bỏ qua -> BỎ QUA HOÀN TOÀN!
+          if (cid && (dismissedCallIdsRef.current.has(cid) || (dismissedCallId && dismissedCallId === cid))) {
+            setIncomingCall(null);
+            setLatestNonRestaurantCall(null);
+            return;
+          }
+
           const curDuty = (cur.duty_user || '').trim().toLowerCase();
           const hasSpecificAgent = Boolean(
             curDuty &&
@@ -329,6 +343,7 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
             } else {
               // KHÔNG PHẢI NHÀ HÀNG (CUỘC GỌI NỘI BỘ / TEST THỬ NGHIỆM):
               if ((dismissedCallId && cur.call_id === dismissedCallId) || dismissedCallIdsRef.current.has(cur.call_id)) {
+                setIncomingCall(null);
                 setLatestNonRestaurantCall(null);
                 return;
               }
@@ -571,8 +586,22 @@ export const HotlineProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const dismissIncomingCall = useCallback(() => {
+    const cur = incomingCall;
     setIncomingCall(null);
-  }, []);
+    setLatestNonRestaurantCall(null);
+
+    const callId = cur ? (cur.call_id || (cur as any).id) : null;
+    if (callId) {
+      dismissedCallIdsRef.current.add(callId);
+      setDismissedCallId(callId);
+      lastAlertedNonResCallIdRef.current = callId;
+      hotlineService.endCall(callId).catch(() => {});
+      hotlineService.resolveMissedCall(callId).catch(() => {});
+      hotlineService.markCallAnswered(callId, user?.username).catch(() => {});
+    } else {
+      hotlineService.endCall().catch(() => {});
+    }
+  }, [incomingCall, user?.username]);
 
   return (
     <HotlineContext.Provider

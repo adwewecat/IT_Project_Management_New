@@ -842,10 +842,21 @@ def simulate_call(req: SimulateCallRequest):
     return {"success": True, "simulated_call": result}
 
 
-@router.post("/end-call")
-def end_current_active_call(call_id: Optional[int] = Query(None)):
+@router.api_route("/end-call", methods=["GET", "POST"])
+async def end_current_active_call(
+    request: Request,
+    call_id: Optional[int] = Query(None),
+):
     """Khai báo cuộc gọi hiện tại đã kết thúc để sẵn sàng đón cuộc gọi mới"""
-    hotline_3cx_service.end_current_call(call_id)
+    cid = call_id
+    if cid is None and request.method == "POST":
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                cid = body.get("call_id") or body.get("id")
+        except Exception:
+            pass
+    hotline_3cx_service.end_current_call(cid)
     return {"success": True, "message": "Đã kết thúc cuộc gọi."}
 
 
