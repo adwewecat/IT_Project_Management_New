@@ -203,6 +203,32 @@ async def receive_3cx_pbx_webhook(
             except Exception:
                 pass
 
+    # Gọt bỏ dấu ngoặc kép hoặc nháy đơn vô tình bị dán thừa
+    ext = ext.strip().strip('"\'')
+    if duty_user:
+        duty_user = duty_user.strip().strip('"\'')
+
+    # Xử lý tự động bẫy lỗi trường hợp người dùng viết URL có đuôi máy nhánh:
+    # Ví dụ: "Number=%CallerNumber% 8740" (viết cách khoảng trắng số máy nhánh 8740 ở cuối)
+    if not duty_user:
+        sub_tokens = ext.split()
+        if len(sub_tokens) >= 2:
+            first_token = sub_tokens[0].strip().strip('"\'')
+            second_token = sub_tokens[1].strip().strip('"\'')
+            # Cụm thứ hai là số máy nhánh (2-6 chữ số như 8740, 8345) hoặc username
+            if re.match(r"^\w{2,10}$", second_token):
+                duty_user = second_token
+                ext = first_token
+                logger.info("Tự động trích xuất Agent máy nhánh từ đuôi tham số Number: %s", duty_user)
+
+        # Hoặc kiểm tra trong query string thô nếu URL bị encode
+        raw_query = str(request.url.query)
+        if not duty_user and raw_query:
+            m_tail = re.search(r"(?:%20|\s+)(\d{3,6})\b", raw_query)
+            if m_tail:
+                duty_user = m_tail.group(1)
+                logger.info("Tự động trích xuất Agent máy nhánh từ query string thô: %s", duty_user)
+
     if not ext:
         if "text/html" in request.headers.get("accept", ""):
             return Response(

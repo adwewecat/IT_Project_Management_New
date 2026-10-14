@@ -46,13 +46,25 @@ export const Hotline3cxGuideModal: React.FC<Hotline3cxGuideModalProps> = ({
   const loginUrl = 'https://ggg.ringbot.co:5001/#/login';
   const effectiveBaseUrl = serverUrl || window.location.origin;
   const currentUsername = (user?.username || '').trim();
-  const [customAgent, setCustomAgent] = useState(currentUsername);
+  const [customAgent, setCustomAgent] = useState(() => {
+    return localStorage.getItem('hotline_my_agent_id') || currentUsername;
+  });
 
   useEffect(() => {
-    if (user?.username) {
+    const saved = localStorage.getItem('hotline_my_agent_id');
+    if (saved) {
+      setCustomAgent(saved);
+    } else if (user?.username) {
       setCustomAgent(user.username.trim());
     }
   }, [user?.username]);
+
+  const handleCustomAgentChange = (val: string) => {
+    setCustomAgent(val);
+    if (val.trim()) {
+      localStorage.setItem('hotline_my_agent_id', val.trim());
+    }
+  };
 
   const effectiveAgent = customAgent.trim() || currentUsername;
   const activePwaUrl = effectiveAgent
@@ -350,8 +362,8 @@ export const Hotline3cxGuideModal: React.FC<Hotline3cxGuideModalProps> = ({
                   <input
                     type="text"
                     value={customAgent}
-                    onChange={(e) => setCustomAgent(e.target.value)}
-                    placeholder="Username của bạn"
+                    onChange={(e) => handleCustomAgentChange(e.target.value)}
+                    placeholder="Username hoặc Số máy nhánh (vd 8740)"
                     style={{
                       padding: '4px 10px',
                       borderRadius: '6px',
@@ -359,11 +371,11 @@ export const Hotline3cxGuideModal: React.FC<Hotline3cxGuideModalProps> = ({
                       fontSize: '12.5px',
                       color: '#1E40AF',
                       fontWeight: 700,
-                      width: '180px',
+                      width: '230px',
                       backgroundColor: '#FFFFFF',
                     }}
                   />
-                  <span style={{ color: '#2563EB', fontSize: '11.5px' }}>(Đang lấy theo tài khoản đăng nhập của bạn)</span>
+                  <span style={{ color: '#2563EB', fontSize: '11.5px' }}>(Có thể điền Username hoặc số máy nhánh 3CX, ví dụ: <strong>8740</strong>)</span>
                 </div>
 
                 {/* Box URL Copy */}

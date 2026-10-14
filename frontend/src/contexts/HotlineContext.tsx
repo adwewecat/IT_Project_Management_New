@@ -43,6 +43,15 @@ function isAgentMatch(dutyUser?: string | null, curUser?: UserInfo | null): bool
       if (cleanManv && (cleanManv === cleanD || cleanD.includes(cleanManv))) return true;
     }
 
+    // So sánh với mã máy nhánh / định danh riêng đã lưu trên trình duyệt máy này (ví dụ: '8740', '8345')
+    const savedMyAgent = localStorage.getItem('hotline_my_agent_id');
+    if (savedMyAgent) {
+      const cleanSaved = savedMyAgent.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanSaved && (cleanSaved === cleanD || cleanD.includes(cleanSaved) || cleanSaved.includes(cleanD))) {
+        return true;
+      }
+    }
+
     // So sánh email prefix nếu có
     if (curUser.email) {
       const emailPrefix = curUser.email.split('@')[0].trim().toLowerCase().replace(/[^a-z0-9]/g, '');

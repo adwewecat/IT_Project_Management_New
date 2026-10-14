@@ -2255,7 +2255,11 @@ estaurant_service.py).
        - Khớp chuỗi con $\ge 3$ ký tự (`tuan` khớp `tuan.pham`, `dung` khớp `dung.nguyenanh`).
        - Khớp theo mã nhân viên / máy nhánh EXT (`manv`).
        - Khớp bí danh Super Admin / IT Admin (`admin`, `administrator`, `dungnguyenanh`, `dung`).
-  5. *Đóng Gói & Triển Khai*:
+  5. *Cơ chế bẫy lỗi thông minh cho URL 3CX (Auto-recovery & Fault-tolerant)*:
+     - Tự động gọt bỏ dấu ngoặc kép thừa `"` ở đầu/cuối URL.
+     - Tự động phát hiện và trích xuất mã máy nhánh (như `8740`) nếu người dùng vô tình gõ khoảng trắng `Number=%CallerNumber% 8740`.
+     - Frontend tự động lưu nhớ mã máy nhánh (`8740`) vào `localStorage` (`hotline_my_agent_id`) để khớp chính xác 100% khi 3CX kích hoạt.
+  6. *Đóng Gói & Triển Khai*:
      - Chạy `cmd /c "npm run build"` tạo bản build `frontend/dist` mới nhất sạch sẽ 100% (exit code 0).
      - Kiểm thử logic Python backend smoke test đạt 100% PASS.
      - Đẩy toàn bộ source code lên GitHub (`origin/main`).
