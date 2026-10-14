@@ -168,6 +168,26 @@ npm run dev
 
 ---
 
+### [2026-10-14] - Bổ Sung Bộ Cài Môi Trường 1-Click (`Cai_Dat_Full_Moi_Truong_Du_An.bat`) & Cập Nhật Toàn Diện `requirements.txt`
+- **Bối cảnh & Yêu cầu**:
+  - Người dùng cài lại máy tính cá nhân, khi chạy `start_all.bat` thì bị dừng do thiếu lệnh `pnpm` toàn cục và cần bộ công cụ tự động để khi cài lại Win chỉ cần 1 cú click là khôi phục toàn bộ môi trường lập trình và dependencies để khởi động dự án ngay.
+- **Chi tiết triển khai**:
+  1. *Cập nhật [`backend/requirements.txt`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/requirements.txt)*: Bổ sung đầy đủ 100% các package cốt lõi (`requests>=2.31.0`, `pycryptodomex>=3.20.0`, `fastapi`, `uvicorn`, `pymongo`, `pyodbc`, `playwright`, `matplotlib`, `pillow`, `pyzipper`...).
+  2. *Tạo Script Cài Đặt 1-Click [`Cai_Dat_Full_Moi_Truong_Du_An.bat`](file:///d:/LAPTRINH/IT_Project_Management_New/Cai_Dat_Full_Moi_Truong_Du_An.bat)*:
+     - Tự động nhận diện đường dẫn Python 3.10 / 3.14.
+     - Tự động tạo môi trường ảo `.venv` nếu chưa có.
+     - Tự động nâng cấp pip và cài đặt toàn bộ package từ `requirements.txt`.
+     - Tự động kiểm tra Node.js và cài đặt `pnpm` toàn cục (`npm install -g pnpm`).
+     - Tự động chạy `pnpm install` cho thư mục `frontend/`.
+     - Tự động kiểm tra và chuẩn hóa thư mục `C:\scrcpy` (KDS).
+  3. *Lưu trữ tập trung vào `D:\Setup\`*:
+     - Copy file `Cai_Dat_Full_Moi_Truong_Du_An.bat` vào `D:\Setup\`.
+     - Tạo tài liệu [`HUONG_DAN_CAI_LAI_MAY_MOI.md`](file:///d:/LAPTRINH/IT_Project_Management_New/HUONG_DAN_CAI_LAI_MAY_MOI.md) hướng dẫn 3 bước khôi phục siêu nhanh.
+  4. *Nâng cấp [start_all.bat](file:///d:/LAPTRINH/IT_Project_Management_New/start_all.bat) & [start_frontend.bat](file:///d:/LAPTRINH/IT_Project_Management_New/start_frontend.bat)*:
+     - Bổ sung cơ chế auto-fallback (tự chạy `pnpm run dev`, nếu máy chưa có `pnpm` thì tự động dùng `npm run dev`), đảm bảo không bao giờ bị văng lỗi.
+
+---
+
 ### [2026-10-14] - Nâng Cấp KDS & Khắc Phục Lỗi Phân Tích MongoDB Nhà Hàng (Menu Rỗng & Kẹt Kết Nối & Logs KDS & Chuyển Quầy)
 - **Màn hình**: Phân Tích MongoDB Nhà Hàng (`RestaurantMongoAnalysisPage.tsx`, `KdsQuayModals.tsx`, `mongo_menu_so_co_service.py`, `mongodb_service.py`).
 - **Nội dung xử lý chi tiết theo yêu cầu**:
