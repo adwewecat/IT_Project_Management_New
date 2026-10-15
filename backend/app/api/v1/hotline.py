@@ -458,12 +458,13 @@ if (-not $ServerUrl) {
 }
 
 try { Clear-Host } catch {}
+$winUser = $env:USERNAME
 Log-Activity "=================================================================="
-Log-Activity "   3CX HOTLINE CLIENT AGENT — TỰ ĐỘNG BẮT CUỘC GỌI TỪ 3CX PWA    "
+Log-Activity "   3CX HOTLINE CLIENT AGENT - TU DONG BAT CUOC GOI TU 3CX PWA    "
 Log-Activity "=================================================================="
-Log-Activity "-> Server nhận sự kiện: $ServerUrl"
-Log-Activity "-> Người trực máy:       $AgentUser (Windows: $($env:USERNAME))"
-Log-Activity "-> Đang kết nối tới Windows UserNotificationListener..."
+Log-Activity "-> Server nhan su kien: $ServerUrl"
+Log-Activity "-> Nguoi truc may:       $AgentUser [Windows User: $winUser]"
+Log-Activity "-> Dang ket noi toi Windows UserNotificationListener..."
 
 # Nạp Windows Runtime cho Notification Listener
 try {
@@ -482,7 +483,7 @@ try {
     $listener = [Windows.UI.Notifications.Management.UserNotificationListener]::Current
     $access = Await ($listener.RequestAccessAsync()) ([Windows.UI.Notifications.Management.UserNotificationListenerAccessStatus])
 } catch {
-    Log-Activity "[LỖI KHỞI TẠO] Không thể kích hoạt Windows Notification API: $_"
+    Log-Activity "[LOI KHOI TAO] Khong the kich hoat Windows Notification API: $_"
     try {
         Add-Type -AssemblyName System.Windows.Forms
         [System.Windows.Forms.MessageBox]::Show(
@@ -497,8 +498,8 @@ try {
 }
 
 if ($access -ne "Allowed") {
-    Log-Activity "[CẢNH BÁO] Quyền truy cập thông báo Windows bị từ chối ($access)."
-    Log-Activity "Vui lòng mở Windows Settings -> Privacy & security -> Notifications và BẬT 'ON'."
+    Log-Activity "[CANH BAO] Quyen truy cap thong bao Windows bi tu choi ($access)."
+    Log-Activity "Vui long mo Windows Settings -> Privacy & security -> Notifications va BAT 'ON'."
     try {
         Add-Type -AssemblyName System.Windows.Forms
         [System.Windows.Forms.MessageBox]::Show(
@@ -512,15 +513,15 @@ if ($access -ne "Allowed") {
     exit 1
 }
 
-Log-Activity "-> Kết nối Windows Notification API: THÀNH CÔNG!"
-Log-Activity "-> ĐANG CHẠY NGẦM: Tự động lắng nghe cuộc gọi đến và nhỡ..."
+Log-Activity "-> Ket noi Windows Notification API: THANH CONG!"
+Log-Activity "-> DANG CHAY NGAM: Tu dong lang nghe cuoc goi den va nho..."
 
 # Kiểm tra kết nối tới Server
 try {
     $testResp = Invoke-RestMethod -Uri "$ServerUrl/api/v1/hotline/status" -Method Get -TimeoutSec 4
-    Log-Activity "[OK] Đã kiểm tra kết nối Server: OK (Hotline status ready)"
+    Log-Activity "[OK] Da kiem tra ket noi Server: OK (Hotline status ready)"
 } catch {
-    Log-Activity "[CẢNH BÁO] Chưa kết nối được Server $ServerUrl : $_"
+    Log-Activity "[CANH BAO] Chua ket noi duoc Server $ServerUrl : $_"
 }
 
 $seen_keys = [System.Collections.Generic.HashSet[string]]::new()
@@ -544,7 +545,7 @@ Function Send-CallEvent($ext, $callerText, $isMissed, $isEnded) {
         try {
             $endUrl = "$ServerUrl/api/v1/hotline/end-call"
             Invoke-RestMethod -Uri $endUrl -Method Post -TimeoutSec 3 | Out-Null
-            Log-Activity "-> Đã báo kết thúc cuộc gọi lên Server."
+            Log-Activity "-> Da bao ket thuc cuoc goi len Server."
         } catch {}
         return
     }
@@ -561,10 +562,10 @@ Function Send-CallEvent($ext, $callerText, $isMissed, $isEnded) {
         $eventUrl = "$ServerUrl/api/v1/hotline/call-event"
         $utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
         $resp = Invoke-RestMethod -Uri $eventUrl -Method Post -Body $utf8Bytes -ContentType "application/json; charset=utf-8" -TimeoutSec 5
-        $typeLabel = if ($isMissed) { "CUỘC GỌI NHỠ" } else { "CUỘC GỌI ĐẾN" }
-        Log-Activity "[$typeLabel] Đã đẩy lên Server thành công! Line: $ext | Caller: '$callerText'"
+        $typeLabel = if ($isMissed) { "CUOC GOI NHO" } else { "CUOC GOI DEN" }
+        Log-Activity "[$typeLabel] Da day len Server thanh cong! Line: $ext | Caller: '$callerText'"
     } catch {
-        Log-Activity "[LỖI GỬI SERVER] Không thể gửi cuộc gọi Line $ext tới $ServerUrl : $_"
+        Log-Activity "[LOI GUI SERVER] Khong the gui cuoc goi Line $ext toi $ServerUrl : $_"
     }
 }
 
@@ -589,13 +590,13 @@ while ($true) {
                     $hLow = $header.ToLower()
                     $cLow = $caller.ToLower()
 
-                    if (-not ($hLow -match "call|cuộc gọi|incoming|missed|ended|ringing" -or $cLow -match "call|cuộc gọi|incoming|missed")) {
+                    if (-not ($hLow -match "call|cuộc gọi|cuoc goi|incoming|missed|ended|ringing" -or $cLow -match "call|cuộc gọi|cuoc goi|incoming|missed")) {
                         continue
                     }
 
-                    $isIncoming = ($hLow -match "incoming call|cuộc gọi đến|incoming|ringing")
-                    $isMissed = ($hLow -match "missed call|cuộc gọi nhỡ|missed|nhỡ")
-                    $isEnded = ($hLow -match "call ended|kết thúc|ended")
+                    $isIncoming = ($hLow -match "incoming call|cuộc gọi đến|cuoc goi den|incoming|ringing")
+                    $isMissed = ($hLow -match "missed call|cuộc gọi nhỡ|cuoc goi nho|missed|nhỡ|nho")
+                    $isEnded = ($hLow -match "call ended|kết thúc|ket thuc|ended")
 
                     # Tìm số EXT trong caller
                     $match = [regex]::Match($caller, "\b(\d{2,12})\b")
@@ -612,7 +613,7 @@ while ($true) {
             }
         }
     } catch {
-        Log-Activity "[LỖI VÒNG LẶP] $_"
+        Log-Activity "[LOI VONG LAP] $_"
         Start-Sleep -Milliseconds 1000
     }
 }
@@ -743,16 +744,16 @@ def download_client_agent(
     readme_content = CLIENT_AGENT_README_TEMPLATE.replace("{SERVER_URL}", base_url)
     config_content = f"SERVER_URL={base_url}\nAGENT_USERNAME={clean_user}\n"
 
-    # Đóng gói zip in-memory
+    # Đóng gói zip in-memory (Dùng utf-8-sig để PowerShell 5.1 & Notepad trên mọi máy Windows luôn nhận diện chuẩn UTF-8)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("config.txt", config_content.encode("utf-8"))
+        z.writestr("config.txt", config_content.encode("utf-8-sig"))
         z.writestr("Run_3CX_Hotline_Agent.bat", bat_content.encode("utf-8"))
         z.writestr("Run_Silent_Agent.vbs", CLIENT_AGENT_VBS_TEMPLATE.encode("utf-8"))
         z.writestr("Dung_Toan_Bo_Agent.bat", CLIENT_AGENT_STOP_BAT_TEMPLATE.encode("utf-8"))
         z.writestr("Khoi_Dong_Lai_Agent.bat", CLIENT_AGENT_RESTART_BAT_TEMPLATE.encode("utf-8"))
-        z.writestr("3CX_Hotline_Agent.ps1", ps1_content.encode("utf-8"))
-        z.writestr("README_HUONG_DAN.txt", readme_content.encode("utf-8"))
+        z.writestr("3CX_Hotline_Agent.ps1", ps1_content.encode("utf-8-sig"))
+        z.writestr("README_HUONG_DAN.txt", readme_content.encode("utf-8-sig"))
 
     buf.seek(0)
     return Response(

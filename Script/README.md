@@ -2290,6 +2290,24 @@ estaurant_service.py).
      - Bỏ nút `[Cấu hình 3CX]` khỏi thanh Header ngoài cùng để Header giữ 2 nút chuẩn: `[Hotline: BẬT]` và `[Cuộc Gọi]`.
      - Đổi tên và làm nổi bật nút `[⭐ Cấu hình 3CX Hotline]` bên trong popup "Quản Lý Cuộc Gọi Hotline 3CX" (`HotlineMissedCallsModal`), người dùng chỉ cần bấm vào nút `Cuộc Gọi` là có thể mở ngay cấu hình và hướng dẫn.
 
+### [2026-10-15] - Khắc Phục Lỗi The Term 'Windows:' Is Not Recognized & Vỡ Font UTF-8 Khi Chạy 3CX Client Agent Trên Máy Đồng Nghiệp
+- **Màn hình & Thành phần**: `3CX_Hotline_Agent.ps1`, `Run_3CX_Hotline_Agent.bat`, `hotline.py`, `tools/3cx_hotline_agent/`.
+- **Hiện tượng lỗi**:
+  - Trên máy đồng nghiệp khi chạy `Run_3CX_Hotline_Agent.bat`, terminal xuất hiện dòng lỗi màu đỏ:
+    `Windows: : The term 'Windows:' is not recognized as the name of a cmdlet, function, script file, or operable program. At D:\1.Download\3CX_Hotli Ä'áº¿n vĂ   nhá»i...\3CX_Hotline_Agent.ps1:97 char:58`
+  - Các dòng log tiếng Việt sau đó bị vỡ font (mojibake) nghiêm trọng như `[OK] Ä` thay vì `[OK] Đã kiểm tra...`, đường dẫn thư mục có dấu tiếng Việt hiển thị thành `Ä'áº¿n vĂ   nhá»i...`.
+- **Nguyên nhân cốt lõi**:
+  1. *Thiếu UTF-8 BOM*: Backend `hotline.py` đóng gói zip bằng `encode('utf-8')` (không có BOM). Windows PowerShell 5.1 trên Windows 10/11 khi đọc file `.ps1` không có BOM sẽ tự động fallback sang bảng mã ANSI mặc định của hệ thống (Windows-1252 / CP437).
+  2. *Vỡ chuỗi ký tự do mã hóa*: Các ký tự tiếng Việt có dấu nhiều byte ("Người trực máy", "—", "Đ") bị phân rã sai byte làm hỏng dấu đóng/mở ngoặc kép (`"`). Biểu thức `(Windows: $($env:USERNAME))` bị PowerShell hiểu là mã lệnh nằm ngoài chuỗi, và cặp ngoặc đơn `(...)` kích hoạt sub-expression thực thi lệnh. PowerShell xem `Windows:` là tên lệnh/cmdlet cần gọi, dẫn đến lỗi đỏ `The term 'Windows:' is not recognized`.
+  3. *Thư mục giải nén có dấu tiếng Việt*: Tên thư mục chứa dấu tiếng Việt (ví dụ Zalo/tải về: "... cuộc gọi đến và nhỡ") cũng bị hiển thị sai ký tự trong console.
+- **Giải pháp xử lý toàn diện**:
+  1. *Đóng gói chuẩn UTF-8 with BOM (`utf-8-sig`)*: Trong `backend/app/api/v1/hotline.py` hàm `download_client_agent`, dùng `.encode('utf-8-sig')` cho `3CX_Hotline_Agent.ps1`, `config.txt`, `README_HUONG_DAN.txt`. Byte Order Mark (`\xef\xbb\xbf`) bảo đảm 100% PowerShell 5.1 và Notepad nhận diện đúng UTF-8 trên mọi máy tính.
+  2. *Chuẩn hóa chuỗi console / log không dấu*:
+     - Thay `(Windows: $($env:USERNAME))` bằng `$winUser = $env:USERNAME` và in `[Windows User: $winUser]` (ngoặc vuông không bao giờ bị PowerShell phân tích thành lệnh).
+     - Chuẩn hóa toàn bộ text in terminal sang tiếng Việt không dấu (`TU DONG BAT CUOC GOI`, `Nguoi truc may`, `Ket noi Windows Notification API: THANH CONG!`, `[OK] Da kiem tra ket noi Server: OK`, `CUOC GOI DEN`, `CUOC GOI NHO`...) để không bao giờ bị vỡ font trên bất kỳ phiên bản Command Prompt hay PowerShell nào.
+     - Bổ sung các từ khóa không dấu (`cuoc goi den`, `cuoc goi nho`, `ket thuc`) vào regex bắt thông báo.
+  3. *Đồng bộ mã nguồn*: Cập nhật vào template backend `hotline.py`, thư mục `tools/3cx_hotline_agent/3CX_Hotline_Agent.ps1` và thư mục tải về của người dùng.
+
 ### [2026-10-14] - Khắc Phục Lỗi Run_3CX_Hotline_Agent.bat Tự Tắt Đột Ngột & Tinh Gọn Modal Hướng Dẫn 3CX (Gộp Làm 1 View Duy Nhất)
 - **Màn hình & Thành phần**: `Run_3CX_Hotline_Agent.bat`, `Khoi_Dong_Lai_Agent.bat`, `Dung_Toan_Bo_Agent.bat`, `Hotline3cxGuideModal.tsx`, `hotline.py`.
 - **Hiện tượng lỗi**:
