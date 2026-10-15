@@ -4907,25 +4907,6 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  {/* Nút Đồng nhất nhóm bếp theo quầy bếp (1 chạm) */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    style={{
-                      borderColor: '#059669',
-                      backgroundColor: '#ECFDF5',
-                      color: '#047857',
-                      fontWeight: 700,
-                      boxShadow: '0 1px 2px rgba(5, 150, 105, 0.1)'
-                    }}
-                    onClick={handleSyncKdsGroupsByQuays}
-                    isLoading={isSyncingKdsGroups}
-                    leftIcon={<Zap size={14} color="#059669" />}
-                    title="Tự động đồng bộ Nhóm Bếp (groupTypeKds) của toàn bộ món ăn theo đúng Tên Quầy Bếp, xóa nhóm rác 'ALL / Bếp Nóng & Nướng'"
-                  >
-                    ⚡ Đồng Nhất Nhóm Theo Quầy
-                  </Button>
-
                   {/* Nút Các tính năng: Mở popup chứa toàn bộ các tác vụ cấu hình KDS */}
                   <Button
                     size="sm"

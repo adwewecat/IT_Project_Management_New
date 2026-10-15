@@ -2585,6 +2585,9 @@ estaurant_service.py).
      + Backend tự động lưu trường `groupKds` vào cả `ACCOUNT` và `CONFIG_KDS.places`.
    - **Cập Nhật Giải Trình Thông Minh KDS (`get_kds_dish_history`)**:
      + Soi chi tiết cơ chế Auto-Done khi Thu Ngân đóng bàn POS kèm hướng dẫn xử lý triệt để gửi nhà hàng.
-3. **Build & Đóng Gói Chuẩn Bàn Giao**:
-   - Frontend: `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 3.94s`), bản build sạch sẽ tại `frontend/dist/`.
+3. **Tinh Gọn Giao Diện KDS & Khắc Phục Lỗi Not Found**:
+   - **Gỡ nút ngoài toolbar**: Do tính năng `⚡ Đồng Nhất Nhóm Bếp Theo Quầy` đã có trong popup `⚙️ Các Tính Năng KDS ▾` (Mục 7), đã bỏ nút bên ngoài toolbar để giao diện thoáng, tinh gọn, tránh trùng lặp.
+   - **Khắc phục lỗi "Not Found"**: Do backend chạy chế độ `reload=False`, sau khi thêm endpoint mới cần khởi động lại tiến trình backend daemon trên port 8000. Đã khởi động lại backend sạch sẽ, kiểm tra endpoint trả về mã hợp lệ (đã nạp đủ routes `/kds-sync-groups-by-quays`, `/kds-dishes/update-group`, `/kds-dishes/delete-config`).
+4. **Build & Đóng Gói Chuẩn Bàn Giao**:
+   - Frontend: `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 4.47s`), bản build sạch sẽ tại `frontend/dist/`.
    - Backend: `python -m compileall app` và Smoke Test 100% PASSED.
