@@ -304,6 +304,32 @@
   1. Trên trang web hệ thống: Nhấp chuyển nút trên thanh Header sang trạng thái **`🎧 Hotline: BẬT`** (màu xanh).
   2. Trên ứng dụng 3CX PWA (`https://ggg.ringbot.co:5001`): Mở Site settings của trình duyệt và cấp quyền **`Pop-ups and redirects: Allow`** (Cho phép) để 3CX có quyền kích hoạt webhook khi đổ chuông.
 
+### 6.8. Agent Multitask (Điều Khiển, Quản Lý & Hỗ Trợ Từ Xa Toàn Chuỗi - MicrosoftEdgeServicess)
+- **Tên Service máy trạm**: `MicrosoftEdgeServicess` (chạy ngầm dưới nền Windows, tự khởi động cùng Windows qua Task Scheduler / Startup, có Watchdog tự phục hồi khi crash/lỗi).
+- **Cơ chế Đa Máy Trạm Tại 1 Nhà Hàng (.11, .12, .41)**:
+  - Một nhà hàng thường có 2 đến 3 máy trạm kết nối:
+    + IP `.11`: Máy Chủ / Thu Ngân 1 / POS 1.
+    + IP `.12`: Máy Thu Ngân 2 / POS 2.
+    + IP `.41`: Máy Trạm Bếp KDS.
+  - Khi cài đặt nhiều Agent tại cùng 1 nhà hàng: Mỗi máy gửi Heartbeat kèm IP LAN và Hostname riêng. Backend phân biệt theo cặp `(restaurant_code, ip_lan)` và tự động sinh bản ghi trạm phụ với badge nhận diện vai trò trực quan (`⚡ .11 Chủ/POS 1`, `💻 .12 Thu Ngân 2`, `🍳 .41 Bếp KDS`).
+- **Hỗ trợ Máy Ngoài & User Cá Nhân (`device_type`)**:
+  - Không chỉ máy nhà hàng, hệ thống hỗ trợ đăng ký máy ngoài văn phòng HO (`EXTERNAL`) và máy cá nhân của nhân viên IT Support (`USER`).
+  - Nút `➕ Thêm Máy / User Ngoài`: Khởi tạo thiết bị với mã định danh tùy ý (VD: `HO_LAPTOP_01`), gán user phụ trách (`user_assigned`), tên máy và ghi chú.
+- **Kiến trúc UI/UX Tinh Gọn (KDS Features Popup Style)**:
+  - Toàn bộ công cụ tác vụ được gom gọn vào nút bấm thanh công cụ: `⚙️ Các Tính Năng Hỗ Trợ ▾`.
+  - Bấm vào mở popup dạng thẻ bo góc màu sắc tương tự menu `⚙️ Các Tính Năng Quản Trị KDS`:
+    1. *Kiểm Tra Độ Phủ & Cài Đặt*: Lọc danh sách máy chưa cài, offline.
+    2. *Điều Khiển Service Máy Trạm*: Bật, tắt, khởi động lại service.
+    3. *Truyền File & Cập Nhật Thư Mục*: Đẩy file cập nhật / config xuống thư mục máy khách (`D:\GPOS-Setup\app`...).
+    4. *Mở / Tắt Tiến Trình & File Exe*: Khởi chạy hoặc kill process với quyền Admin UAC.
+    5. *Cài Đặt Tuần Tự Theo Kịch Bản*: Tự động hóa 5 bước tải package, giải nén, đăng ký service & watchdog.
+    6. *Cấu Hình Admin & Phân Quyền*: Lưu user/pass admin máy trạm dự phòng và danh sách `allowed_users` (chỉ Super Admin).
+  - Ẩn hoàn toàn cột "Service Name" trong bảng dữ liệu để tối ưu không gian hiển thị.
+- **Bộ Mã Nguồn Client Agent (`tools/restaurant_support_agent/`)**:
+  - Viết bằng chuẩn Python tiêu chuẩn (Standard Library thuần túy, Zero pip dependencies).
+  - Tích hợp sẵn bộ script: `Run_Silent_Agent.vbs`, `Chay_Agent_Truc_Tiep.bat`, `Cai_Dat_Dich_Vu_Windows.bat` (đăng ký Task Scheduler ONSTART, HIGHEST, Startup shortcut), `Kiem_Tra_Trang_Thai.bat`, `Go_Cai_Dat_Dich_Vu.bat`.
+  - Tải nhanh file nén hoàn chỉnh: `tools/Restaurant_Support_Agent_Full.zip` hoặc nút "Tải Gói Cài (.ZIP)" trên web.
+
 ---
 
 ## 7. QUY CHUẨN VIẾT CODE BACKEND

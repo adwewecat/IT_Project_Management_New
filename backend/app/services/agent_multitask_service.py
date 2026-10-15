@@ -15,6 +15,7 @@ from app.schemas.agent_multitask import (
     AgentConfigResponse,
     AgentConfigUpdateRequest,
     AgentEndpointItem,
+    AgentEndpointCreateRequest,
     AgentOverviewResponse,
     AgentCommandRequest,
     AgentCommandResponse,
@@ -233,6 +234,9 @@ class AgentMultitaskService:
                 startup_type=e.startup_type,
                 agent_version=e.agent_version,
                 os_info=e.os_info,
+                device_type=getattr(e, 'device_type', 'RESTAURANT') or 'RESTAURANT',
+                user_assigned=getattr(e, 'user_assigned', None),
+                notes=getattr(e, 'notes', None),
                 last_heartbeat=e.last_heartbeat,
                 last_action=e.last_action,
                 last_error=e.last_error,
@@ -242,13 +246,102 @@ class AgentMultitaskService:
         ]
 
     @staticmethod
-    def process_heartbeat(payload: AgentHeartbeatRequest, db: Session) -> Dict[str, Any]:
-        """Xử lý Heartbeat gửi về từ Windows Service MicrosoftEdgeServicess dưới máy trạm."""
-        ep = db.query(AgentMultitaskEndpoint).filter(
-            AgentMultitaskEndpoint.restaurant_code == payload.restaurant_code
+    def create_endpoint(payload: AgentEndpointCreateRequest, db: Session) -> AgentEndpointItem:
+        """Thêm máy ngoài / user quản trị từ xa hoặc trạm POS phụ mới."""
+        clean_code = payload.restaurant_code.strip()
+        clean_ip = payload.ip_lan.strip()
+
+        # Kiểm tra xem endpoint đã tồn tại theo mã + IP chưa
+        existing = db.query(AgentMultitaskEndpoint).filter(
+            AgentMultitaskEndpoint.restaurant_code == clean_code,
+            AgentMultitaskEndpoint.ip_lan == clean_ip
         ).first()
 
         now = datetime.now()
+        if existing:
+            existing.restaurant_name = payload.restaurant_name.strip()
+            if payload.machine_name:
+                existing.machine_name = payload.machine_name.strip()
+            existing.device_type = payload.device_type or "EXTERNAL"
+            existing.user_assigned = payload.user_assigned
+            existing.notes = payload.notes
+            existing.updated_at = now
+            db.commit()
+            db.refresh(existing)
+            ep = existing
+        else:
+            ep = AgentMultitaskEndpoint(
+                restaurant_code=clean_code,
+                restaurant_name=payload.restaurant_name.strip(),
+                ip_lan=clean_ip,
+                machine_name=payload.machine_name.strip() if payload.machine_name else None,
+                device_type=payload.device_type or "EXTERNAL",
+                user_assigned=payload.user_assigned,
+                notes=payload.notes,
+                service_name="MicrosoftEdgeServicess",
+                service_status="NOT_INSTALLED",
+                is_installed=False,
+                is_online=False,
+                startup_type="Automatic",
+                updated_at=now
+            )
+            db.add(ep)
+            db.commit()
+            db.refresh(ep)
+
+        return AgentEndpointItem(
+            id=ep.id,
+            restaurant_id=ep.restaurant_id,
+            restaurant_code=ep.restaurant_code,
+            restaurant_name=ep.restaurant_name,
+            ip_lan=ep.ip_lan,
+            machine_name=ep.machine_name,
+            service_name=ep.service_name,
+            service_status=ep.service_status,
+            is_installed=ep.is_installed,
+            is_online=ep.is_online,
+            startup_type=ep.startup_type,
+            agent_version=ep.agent_version,
+            os_info=ep.os_info,
+            device_type=getattr(ep, 'device_type', 'RESTAURANT') or 'RESTAURANT',
+            user_assigned=getattr(ep, 'user_assigned', None),
+            notes=getattr(ep, 'notes', None),
+            last_heartbeat=ep.last_heartbeat,
+            last_action=ep.last_action,
+            last_error=ep.last_error,
+            updated_at=ep.updated_at
+        )
+
+    @staticmethod
+    def process_heartbeat(payload: AgentHeartbeatRequest, db: Session) -> Dict[str, Any]:
+        """
+        Xử lý Heartbeat gửi về từ Windows Service MicrosoftEdgeServicess dưới máy trạm.
+        Hỗ trợ 1 nhà hàng có nhiều máy (.11, .12, .41):
+        - Nhận diện máy độc lập theo cặp (restaurant_code, ip_lan) hoặc machine_name.
+        - Tự động tạo bản ghi trạm phụ (.12, .41) nếu nhà hàng đã có máy chủ .11.
+        """
+        now = datetime.now()
+
+        # 1. Tìm endpoint khớp cả mã nhà hàng VÀ địa chỉ IP máy trạm
+        ep = db.query(AgentMultitaskEndpoint).filter(
+            AgentMultitaskEndpoint.restaurant_code == payload.restaurant_code,
+            AgentMultitaskEndpoint.ip_lan == payload.ip_lan
+        ).first()
+
+        # 2. Nếu chưa thấy và có machine_name, tìm theo machine_name
+        if not ep and payload.machine_name:
+            ep = db.query(AgentMultitaskEndpoint).filter(
+                AgentMultitaskEndpoint.restaurant_code == payload.restaurant_code,
+                AgentMultitaskEndpoint.machine_name == payload.machine_name
+            ).first()
+
+        # 3. Nếu vẫn chưa thấy, tìm bản ghi gốc chưa cài đặt của nhà hàng này để gán
+        if not ep:
+            ep = db.query(AgentMultitaskEndpoint).filter(
+                AgentMultitaskEndpoint.restaurant_code == payload.restaurant_code,
+                AgentMultitaskEndpoint.is_installed == False
+            ).first()
+
         if ep:
             ep.is_online = True
             ep.is_installed = True
@@ -267,9 +360,20 @@ class AgentMultitaskService:
                 ep.startup_type = payload.startup_type
             ep.updated_at = now
         else:
+            # Máy thứ 2/thứ 3 (.12, .41) hoặc máy ngoài -> Tạo endpoint mới độc lập!
+            orig_ep = db.query(AgentMultitaskEndpoint).filter(
+                AgentMultitaskEndpoint.restaurant_code == payload.restaurant_code
+            ).first()
+            r_name = orig_ep.restaurant_name if orig_ep else f"Nhà hàng {payload.restaurant_code}"
+            
+            # Gợi ý vai trò máy dựa trên đuôi IP (.11: Máy Chủ, .12: Thu Ngân, .41: Trạm Bếp)
+            ip_tail = payload.ip_lan.split('.')[-1] if '.' in payload.ip_lan else ''
+            role_hint = f"Trạm .{ip_tail}" if ip_tail else ""
+
             ep = AgentMultitaskEndpoint(
+                restaurant_id=orig_ep.restaurant_id if orig_ep else None,
                 restaurant_code=payload.restaurant_code,
-                restaurant_name=f"Nhà hàng {payload.restaurant_code}",
+                restaurant_name=f"{r_name} ({role_hint})" if role_hint else r_name,
                 ip_lan=payload.ip_lan,
                 machine_name=payload.machine_name,
                 service_name=payload.service_name,
@@ -279,6 +383,8 @@ class AgentMultitaskService:
                 startup_type=payload.startup_type or "Automatic",
                 agent_version=payload.agent_version,
                 os_info=payload.os_info,
+                device_type="RESTAURANT" if payload.restaurant_code.isdigit() else "EXTERNAL",
+                notes=f"Máy trạm tự động kết nối qua Heartbeat ({role_hint})",
                 last_heartbeat=now,
                 updated_at=now
             )

@@ -41,10 +41,23 @@ class AgentEndpointItem(BaseModel):
     startup_type: str = "Automatic"
     agent_version: Optional[str] = None
     os_info: Optional[str] = None
+    device_type: Optional[str] = "RESTAURANT"  # RESTAURANT, EXTERNAL, USER
+    user_assigned: Optional[str] = None
+    notes: Optional[str] = None
     last_heartbeat: Optional[datetime] = None
     last_action: Optional[str] = None
     last_error: Optional[str] = None
     updated_at: Optional[datetime] = None
+
+
+class AgentEndpointCreateRequest(BaseModel):
+    restaurant_code: str
+    restaurant_name: str
+    ip_lan: str
+    machine_name: Optional[str] = None
+    device_type: Optional[str] = "EXTERNAL"  # RESTAURANT, EXTERNAL, USER
+    user_assigned: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class AgentOverviewResponse(BaseModel):

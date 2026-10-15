@@ -37,10 +37,23 @@ export interface AgentEndpointItem {
   startup_type: string;
   agent_version?: string;
   os_info?: string;
+  device_type?: string; // RESTAURANT, EXTERNAL, USER
+  user_assigned?: string;
+  notes?: string;
   last_heartbeat?: string;
   last_action?: string;
   last_error?: string;
   updated_at?: string;
+}
+
+export interface AgentEndpointCreateRequest {
+  restaurant_code: string;
+  restaurant_name: string;
+  ip_lan: string;
+  machine_name?: string;
+  device_type?: string; // RESTAURANT, EXTERNAL, USER
+  user_assigned?: string;
+  notes?: string;
 }
 
 export interface AgentOverviewResponse {
@@ -112,6 +125,11 @@ export const agentMultitaskService = {
     search?: string;
   }): Promise<AgentEndpointItem[]> => {
     const res = await api.get('/agent-multitask/endpoints', { params });
+    return res.data;
+  },
+
+  createEndpoint: async (payload: AgentEndpointCreateRequest): Promise<AgentEndpointItem> => {
+    const res = await api.post('/agent-multitask/endpoint', payload);
     return res.data;
   },
 

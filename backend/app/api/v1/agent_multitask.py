@@ -14,6 +14,7 @@ from app.schemas.agent_multitask import (
     AgentConfigResponse,
     AgentConfigUpdateRequest,
     AgentEndpointItem,
+    AgentEndpointCreateRequest,
     AgentOverviewResponse,
     AgentCommandRequest,
     AgentCommandResponse,
@@ -80,6 +81,26 @@ def get_endpoints(
         search=search,
         db=db
     )
+
+
+@router.post("/endpoint", response_model=AgentEndpointItem)
+def create_endpoint(
+    payload: AgentEndpointCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """
+    Thêm mới máy ngoài (Laptop HO, máy IT, server phụ...) hoặc máy user quản lý từ xa.
+    """
+    is_super = is_super_admin(current_user)
+    has_perm = AgentMultitaskService.check_user_permission(current_user.username or "", is_super, db)
+    if not has_perm:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn chưa có quyền thêm thiết bị vào Agent Multitask."
+        )
+
+    return AgentMultitaskService.create_endpoint(payload=payload, db=db)
 
 
 @router.get("/config", response_model=AgentConfigResponse)

@@ -1545,6 +1545,9 @@ BEGIN
         [startup_type] nvarchar(50) NOT NULL DEFAULT ('Automatic'),
         [agent_version] nvarchar(50) NULL,
         [os_info] nvarchar(200) NULL,
+        [device_type] nvarchar(50) NULL DEFAULT ('RESTAURANT'),
+        [user_assigned] nvarchar(100) NULL,
+        [notes] nvarchar(250) NULL,
         [last_heartbeat] datetime NULL,
         [last_action] nvarchar(200) NULL,
         [last_error] nvarchar(max) NULL,
@@ -1554,6 +1557,15 @@ BEGIN
     CREATE NONCLUSTERED INDEX [IX_AGENT_ENDPOINT_CODE] ON [dbo].[AGENT_MULTITASK_ENDPOINTS] ([restaurant_code] ASC);
     CREATE NONCLUSTERED INDEX [IX_AGENT_ENDPOINT_STATUS] ON [dbo].[AGENT_MULTITASK_ENDPOINTS] ([service_status] ASC, [is_installed] ASC);
     PRINT N'Created table [dbo].[AGENT_MULTITASK_ENDPOINTS] successfully.';
+END
+ELSE
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='AGENT_MULTITASK_ENDPOINTS' AND COLUMN_NAME='device_type')
+        ALTER TABLE [dbo].[AGENT_MULTITASK_ENDPOINTS] ADD [device_type] nvarchar(50) NULL DEFAULT ('RESTAURANT');
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='AGENT_MULTITASK_ENDPOINTS' AND COLUMN_NAME='user_assigned')
+        ALTER TABLE [dbo].[AGENT_MULTITASK_ENDPOINTS] ADD [user_assigned] nvarchar(100) NULL;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='AGENT_MULTITASK_ENDPOINTS' AND COLUMN_NAME='notes')
+        ALTER TABLE [dbo].[AGENT_MULTITASK_ENDPOINTS] ADD [notes] nvarchar(250) NULL;
 END
 GO
 

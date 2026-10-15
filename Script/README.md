@@ -210,6 +210,19 @@ npm run dev
   - Backend: `python -m compileall app` và Smoke Test đạt 100% không lỗi.
   - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.89s`), bundle sạch sẽ trong `frontend/dist/`.
 
+### [2026-10-16] - Nâng Cấp Agent Multitask: Quản Lý Đa Máy Trạm (.11, .12, .41), Hỗ Trợ Máy Ngoài / User & Popup Chuẩn KDS
+- **Nghiệp vụ & Yêu cầu giải quyết**:
+  1. *Đa máy trạm tại 1 nhà hàng*: 1 nhà hàng thường có 2-3 máy (.11 Server/POS 1, .12 POS 2, .41 KDS). Hệ thống phân biệt máy độc lập theo cặp `(restaurant_code, ip_lan)` hoặc `machine_name`, gắn badge vai trò trạm trực quan (`⚡ .11 Chủ/POS 1`, `💻 .12 Thu Ngân 2`, `🍳 .41 Bếp KDS`).
+  2. *Hỗ trợ máy ngoài & User quản lý*: Bổ sung trường `device_type` (`RESTAURANT`, `EXTERNAL`, `USER`), `user_assigned`, `notes`. Thêm nút và modal `➕ Thêm Máy / User Ngoài` để đăng ký thiết bị văn phòng HO hoặc máy IT Support.
+  3. *Gom gọn công cụ thành Popup chuẩn KDS*: Thay thế 6 card tĩnh chiếm diện tích bằng nút `⚙️ Các Tính Năng Hỗ Trợ ▾` trên thanh công cụ. Khi bấm mở popup dạng thẻ màu sắc (chuẩn menu KDS Management), click vào từng thẻ sẽ kích hoạt bộ lọc hoặc mở modal công cụ tương ứng.
+  4. *Ẩn cột Service Name*: Loại bỏ cột Service Name trong bảng danh sách để giải phóng không gian hiển thị cho các cột quan trọng.
+- **Backend & Database**:
+  - Bổ sung `device_type`, `user_assigned`, `notes` vào `AGENT_MULTITASK_ENDPOINTS`, `Full_SCRIPT_SQL_TABLE.sql` và lifespan kiểm tra tự động trong `backend/app/main.py`.
+  - Bổ sung API `POST /api/v1/agent-multitask/endpoint`.
+- **Frontend & Build**:
+  - Tái cấu trúc `AgentMultitaskPage.tsx` đạt chuẩn Single-Screen Viewport, không thanh cuộn dọc ngoài cùng, bảng dữ liệu dùng `TopScrollTable` cuộn độc lập.
+  - Chạy `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 11.51s`), `frontend/dist/` sạch sẽ.
+
 ---
 
 ### [2026-10-14] - Bổ Sung Bộ Cài Môi Trường 1-Click (`Cai_Dat_Full_Moi_Truong_Du_An.bat`) & Cập Nhật Toàn Diện `requirements.txt`

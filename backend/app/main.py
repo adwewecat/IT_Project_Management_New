@@ -104,6 +104,23 @@ async def lifespan(app: FastAPI):
                 _c.execute(text("ALTER TABLE dbo.SOFTWARE_VERSIONS ADD ghi_chu NVARCHAR(MAX) NULL"))
                 _c.commit()
                 logger.info("Đã tự động bổ sung cột ghi_chu vào bảng SOFTWARE_VERSIONS.")
+
+            # Đảm bảo các cột cho AGENT_MULTITASK_ENDPOINTS (Hỗ trợ máy ngoài và đa máy trạm)
+            try:
+                _c.execute(text("""
+                    IF OBJECT_ID('dbo.AGENT_MULTITASK_ENDPOINTS', 'U') IS NOT NULL
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='AGENT_MULTITASK_ENDPOINTS' AND COLUMN_NAME='device_type')
+                            ALTER TABLE dbo.AGENT_MULTITASK_ENDPOINTS ADD device_type NVARCHAR(50) NULL DEFAULT ('RESTAURANT');
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='AGENT_MULTITASK_ENDPOINTS' AND COLUMN_NAME='user_assigned')
+                            ALTER TABLE dbo.AGENT_MULTITASK_ENDPOINTS ADD user_assigned NVARCHAR(100) NULL;
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='AGENT_MULTITASK_ENDPOINTS' AND COLUMN_NAME='notes')
+                            ALTER TABLE dbo.AGENT_MULTITASK_ENDPOINTS ADD notes NVARCHAR(250) NULL;
+                    END
+                """))
+                _c.commit()
+            except Exception as _ex_ep:
+                logger.warning("Lỗi tự động kiểm tra cột AGENT_MULTITASK_ENDPOINTS: %s", _ex_ep)
             # Đảm bảo các cột cho bảng Projects và tạo bảng MemberTasks nếu chưa có
             try:
                 _c.execute(text("""
