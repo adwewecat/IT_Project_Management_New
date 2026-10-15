@@ -219,7 +219,7 @@
      - Đã xóa 5 ô stat cards thống kê ở đầu.
      - Modal "Cấu Hình Quầy Bếp & Driver Máy In KDS": **Đã ẩn hoàn toàn cột "Tài Khoản KDS"**.
      - **Đổi Tên Quầy (Place)**: Cho phép đổi tên trực tiếp (bút chì). Khi đổi tên, backend tự động sinh mã quầy viết hoa không dấu (`placeCode`), cập nhật đồng thời trong `CONFIG_KDS.places`, `ACCOUNT.listPlace` và `accName` của trạm con (`role: 3`).
-  4. **4. Cấu hình Ẩn Hiện Món (`dish_show_hide`)**: Ẩn/hiện trên QrOrder, CO, SO.
+  4. **4. Cấu hình Ẩn Hiện Món (`dish_show_hide`)**: Ẩn/hiện trên QrOrder, CO, SO (lưu ý: trên tablet, món hiện lấy từ local SQLite cache nên cần sync `🔄` hoặc kiểm tra `ALLOW_HIDE_ITEM_GROUP = 1`).
   5. **5. Cấu hình Ẩn Hiện Menu (`menu_show_hide`)**: Bật tắt hiển thị menu và KDS Auto (`autoDeliveryInSo`).
   6. **6. Xử Lý Full CPU 100% (`fix_full_cpu`)**: Tạo index tối ưu cho `DISH_KDS`, `ORDER`, `CO_MENU_ITEM` triệt tiêu COLLSCAN.
   7. **7. Chuyển database MongoDB (`transfer_database`)**: Quét IP nguồn/đích, xóa `ACTION_LOG` để tối ưu dung lượng và chuyển database.

@@ -188,6 +188,31 @@ npm run dev
 
 ---
 
+### [2026-10-15] - Tinh Gọn KdsDishHistoryModal & Phân Tích Cơ Chế Màn Hình Ẩn Hiện Món Trên Tablet GPOS
+- **Màn hình**: Phân Tích MongoDB Nhà Hàng (`KdsQuayModals.tsx`, `RestaurantMongoAnalysisPage.tsx`, `mongodb_service.py`), Tablet Android SO G-Waiter.
+- **Nội dung xử lý chi tiết**:
+  1. **Tinh gọn Popup Soi Lịch Sử Món KDS (`KdsDishHistoryModal`)**:
+     - *Yêu cầu người dùng*: "bỏ đi phần kết luận nhé" (xóa khối kết luận đối soát màu xanh và nút copy giải trình).
+     - *Xử lý triệt để*:
+       + Bỏ khối `💡 KẾT LUẬN ĐỐI SOÁT & GIẢI TRÌNH KỸ THUẬT CHO NHÀ HÀNG` (`smart_analysis`) và nút sao chép trong thân modal.
+       + Bỏ nút `📋 Copy Giải Trình Gửi NH` trong footer, dọn dẹp các biến state `copiedAnalysis`, `setCopiedAnalysis`, `handleCopyAnalysis`.
+       + Giữ nguyên 3 thẻ trạng thái nổi bật (Cấu hình Bếp, Kênh bán, Thống kê) và bảng timeline chi tiết các lần order/done từ `LOG_DISH_FINISH_ITEM`.
+  2. **Kiểm tra & Giải trình kỹ thuật màn hình "Cấu hình ẩn hiện món" trên Tablet Android (Nhà hàng Hùng Vương Plaza - IP 10.9.104.11)**:
+     - *Hiện tượng*: Khi kỹ thuật viên vào màn hình "Cấu hình ẩn hiện món" trên tablet, cột "Món ẩn" hiển thị đầy đủ 178 món, nhưng cột "Món hiện" lại trống trơn (màu xám rỗng). Trong khi mở bàn (Bàn 202) thì các món hiện vẫn hiển thị bình thường.
+     - *Bản chất kiến trúc & Nguyên nhân*:
+       + **Cột "Món ẩn"**: Khi mở màn hình, tablet gửi request `GET /v1.0/show-hide-items/list`. Endpoint này query trực tiếp collection `G_ORDER.SHOW_HIDE_ITEMS` (có 178 documents) $\rightarrow$ render ngay lập tức lên cột Món Ẩn.
+       + **Cột "Món hiện"**: Tablet **KHÔNG** gọi API mạng nào tại thời điểm mở màn hình này (khác với khi mở Bàn 202 tablet gọi `/v2.0/qr-order/menu-by-category-code`). Thay vào đó, app Android SO lấy món hiện từ **bộ nhớ đệm SQLite nội bộ của máy tính bảng (Local Master Cache)** sau khi trừ đi 178 món ẩn.
+       + **3 Lý do khiến cột "Món hiện" bị trống**:
+         1. *Chưa bấm Cập nhật dữ liệu (Sync Cache)*: Máy tính bảng chưa tải bộ Master `dishesCache` (gần 5 MB) về SQLite nội bộ. Cần bấm nút xoay tròn **`🔄` (Cập nhật / Đồng bộ dữ liệu)** ở góc trên cùng bên phải màn hình **Cài đặt** (hoặc đăng xuất ra màn hình đăng nhập và bấm Đồng bộ).
+         2. *Cơ chế tìm kiếm (Search Lazy Load)*: Để tránh đơ máy khi render hơn 440 View món cùng lúc, một số bản app SO Tablet chỉ kích hoạt danh sách món hiện khi người dùng gõ từ khóa vào ô **`🔍 Tìm món hiện ...`** (gõ tên món hoặc mã món).
+         3. *Tham số `APP_PARAM.ALLOW_HIDE_ITEM_GROUP`*: Trên MongoDB trạm `.11`, param này đang có giá trị `'0'` (`status: 1`). Khi param này bằng 0, app không tải thanh lọc Nhóm Món (Category/Group), dẫn đến truy vấn lọc món hiện theo nhóm bị rỗng. Khi đổi sang `'1'`, app sẽ hỗ trợ hiển thị phân nhóm món.
+       + *Giải pháp Web*: Hệ thống Web Tool quản lý MongoDB của dự án có sẵn API `/api/v1/mongo/dish-show-hide` và hàm `get_dish_show_hide`: tra cứu trực tiếp toàn bộ 445 món hiện và 178 món ẩn, cho phép bật/tắt cờ CO/SO/QrOrder và lưu tức thì vào `SHOW_HIDE_ITEMS` mà không phụ thuộc vào bộ nhớ đệm tablet.
+- **Kiểm thử & Đóng gói**:
+  - Frontend Build: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.58s`), bản build sạch sẽ trong `frontend/dist/`.
+  - Backend: `python -m compileall app` đạt 100% không lỗi.
+
+---
+
 ### [2026-10-15] - Nâng Cấp Tra Cứu Logs KDS, Soi Lịch Sử Món KDS & Khắc Phục Auto Mail Memo Hiệu Lực
 - **Màn hình**: Phân Tích MongoDB Nhà Hàng (`RestaurantMongoAnalysisPage.tsx`, `KdsQuayModals.tsx`, `mongodb_service.py`, `mongodb.py`), Quản Lý Mail Memo (`mail_memo_service.py`, `mail_memo.py`, `outlook_agent.py`).
 - **Nội dung xử lý chi tiết**:

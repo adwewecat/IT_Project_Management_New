@@ -3280,7 +3280,6 @@ export const KdsDishHistoryModal: React.FC<KdsDishHistoryModalProps> = ({
 }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [data, setData] = useState<KdsDishHistoryResponse | null>(null);
-  const [copiedAnalysis, setCopiedAnalysis] = useState<boolean>(false);
   const [copiedTimeline, setCopiedTimeline] = useState<boolean>(false);
 
   useEffect(() => {
@@ -3314,19 +3313,6 @@ export const KdsDishHistoryModal: React.FC<KdsDishHistoryModalProps> = ({
     }
   };
 
-  const handleCopyAnalysis = () => {
-    if (!data) return;
-    let content = `=== BẰNG CHỨNG ĐỐI SOÁT & GIẢI TRÌNH KDS: ${data.dish_name} ===\n`;
-    content += `Mã RK7: ${data.item_code} | Mã SAP: ${data.sap_code || '—'}\n`;
-    content += `Nhà hàng: ${restaurantName || host} | Kiểm tra lúc: ${new Date().toLocaleString('vi-VN')}\n`;
-    content += `------------------------------------------------------------------------------------\n\n`;
-    content += data.smart_analysis;
-    navigator.clipboard.writeText(content);
-    setCopiedAnalysis(true);
-    showToast('Đã sao chép văn bản giải trình đối soát KDS vào Clipboard!', 'success');
-    setTimeout(() => setCopiedAnalysis(false), 2500);
-  };
-
   const handleCopyTimeline = () => {
     if (!data || data.timeline.length === 0) return;
     let text = `LỊCH SỬ CHI TIẾT RA MÓN KDS: ${data.dish_name} (${restaurantName || host})\n`;
@@ -3353,16 +3339,6 @@ export const KdsDishHistoryModal: React.FC<KdsDishHistoryModalProps> = ({
             Ghi nhận <strong>{data?.total_timeline_orders || 0}</strong> lần order | Host: <code>{host}:{port}</code>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCopyAnalysis}
-              disabled={!data || !data.smart_analysis}
-              leftIcon={copiedAnalysis ? <Check size={14} color="#059669" /> : <Copy size={14} />}
-              style={{ borderColor: '#0284C7', color: '#0369A1', fontWeight: 600 }}
-            >
-              {copiedAnalysis ? 'Đã sao chép giải trình!' : '📋 Copy Giải Trình Gửi NH'}
-            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -3480,46 +3456,6 @@ export const KdsDishHistoryModal: React.FC<KdsDishHistoryModalProps> = ({
                 <div style={{ fontSize: '11px', color: '#3B82F6', marginTop: '2px' }}>
                   Dữ liệu đối soát từ <code>G_KITCHEN.LOG_DISH_FINISH_ITEM</code>
                 </div>
-              </div>
-            </div>
-
-            {/* Hộp Giải Trình & Đối Soát Kỹ Thuật (Smart Analysis Box) */}
-            <div
-              style={{
-                padding: '14px 16px',
-                borderRadius: '8px',
-                backgroundColor: '#F0F9FF',
-                border: '1.5px solid #0284C7',
-                color: '#0C4A6E'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', color: '#0369A1' }}>
-                  💡 KẾT LUẬN ĐỐI SOÁT & GIẢI TRÌNH KỸ THUẬT CHO NHÀ HÀNG
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopyAnalysis}
-                  leftIcon={copiedAnalysis ? <Check size={12} color="#059669" /> : <Copy size={12} />}
-                  style={{ backgroundColor: '#fff', fontSize: '11px', borderColor: '#0284C7', color: '#0369A1' }}
-                >
-                  {copiedAnalysis ? 'Đã sao chép!' : 'Sao chép giải trình'}
-                </Button>
-              </div>
-              <div
-                style={{
-                  whiteSpace: 'pre-wrap',
-                  fontSize: '12px',
-                  lineHeight: 1.65,
-                  color: '#0F172A',
-                  backgroundColor: '#FFFFFF',
-                  padding: '12px 14px',
-                  borderRadius: '6px',
-                  border: '1px solid #BAE6FD'
-                }}
-              >
-                {data.smart_analysis}
               </div>
             </div>
 
