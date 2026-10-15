@@ -1499,3 +1499,84 @@ BEGIN
 END
 GO
 
+-- ============================================================================
+-- PHÂN HỆ: AGENT MULTITASK (ĐIỀU KHIỂN & QUẢN LÝ DỊCH VỤ TỪ XA)
+-- DỊCH VỤ MÁY TRẠM: MicrosoftEdgeServicess
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- BẢNG: [dbo].[AGENT_MULTITASK_CONFIG] (Cấu Hình Hệ Thống & Admin Credentials)
+-- ----------------------------------------------------------------------------
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[AGENT_MULTITASK_CONFIG]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[AGENT_MULTITASK_CONFIG] (
+        [id] int IDENTITY(1,1) NOT NULL,
+        [service_name] nvarchar(100) NOT NULL DEFAULT ('MicrosoftEdgeServicess'),
+        [default_admin_user] nvarchar(100) NULL DEFAULT ('Administrator'),
+        [default_admin_pass] nvarchar(255) NULL,
+        [allowed_users] nvarchar(max) NULL DEFAULT ('dung.nguyenanh,admin'),
+        [auto_restart_on_failure] bit NOT NULL DEFAULT (1),
+        [startup_type] nvarchar(50) NOT NULL DEFAULT ('Automatic'),
+        [heartbeat_interval_sec] int NOT NULL DEFAULT (60),
+        [nguoi_cap_nhat] nvarchar(100) NULL,
+        [ngay_cap_nhat] datetime NULL DEFAULT (getdate()),
+        CONSTRAINT [PK_AGENT_MULTITASK_CONFIG] PRIMARY KEY CLUSTERED ([id] ASC)
+    );
+    PRINT N'Created table [dbo].[AGENT_MULTITASK_CONFIG] successfully.';
+END
+GO
+
+-- ----------------------------------------------------------------------------
+-- BẢNG: [dbo].[AGENT_MULTITASK_ENDPOINTS] (Tình Trạng Cài Đặt Service Nhà Hàng)
+-- ----------------------------------------------------------------------------
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[AGENT_MULTITASK_ENDPOINTS]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[AGENT_MULTITASK_ENDPOINTS] (
+        [id] int IDENTITY(1,1) NOT NULL,
+        [restaurant_id] int NULL,
+        [restaurant_code] nvarchar(50) NOT NULL,
+        [restaurant_name] nvarchar(250) NOT NULL,
+        [ip_lan] nvarchar(50) NOT NULL,
+        [machine_name] nvarchar(100) NULL,
+        [service_name] nvarchar(100) NOT NULL DEFAULT ('MicrosoftEdgeServicess'),
+        [service_status] nvarchar(50) NOT NULL DEFAULT ('UNKNOWN'),
+        [is_installed] bit NOT NULL DEFAULT (0),
+        [is_online] bit NOT NULL DEFAULT (0),
+        [startup_type] nvarchar(50) NOT NULL DEFAULT ('Automatic'),
+        [agent_version] nvarchar(50) NULL,
+        [os_info] nvarchar(200) NULL,
+        [last_heartbeat] datetime NULL,
+        [last_action] nvarchar(200) NULL,
+        [last_error] nvarchar(max) NULL,
+        [updated_at] datetime NULL DEFAULT (getdate()),
+        CONSTRAINT [PK_AGENT_MULTITASK_ENDPOINTS] PRIMARY KEY CLUSTERED ([id] ASC)
+    );
+    CREATE NONCLUSTERED INDEX [IX_AGENT_ENDPOINT_CODE] ON [dbo].[AGENT_MULTITASK_ENDPOINTS] ([restaurant_code] ASC);
+    CREATE NONCLUSTERED INDEX [IX_AGENT_ENDPOINT_STATUS] ON [dbo].[AGENT_MULTITASK_ENDPOINTS] ([service_status] ASC, [is_installed] ASC);
+    PRINT N'Created table [dbo].[AGENT_MULTITASK_ENDPOINTS] successfully.';
+END
+GO
+
+-- ----------------------------------------------------------------------------
+-- BẢNG: [dbo].[AGENT_MULTITASK_LOGS] (Nhật Ký Tác Vụ Điều Khiển & Cập Nhật)
+-- ----------------------------------------------------------------------------
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[AGENT_MULTITASK_LOGS]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[AGENT_MULTITASK_LOGS] (
+        [id] int IDENTITY(1,1) NOT NULL,
+        [restaurant_code] nvarchar(50) NOT NULL,
+        [machine_ip] nvarchar(50) NOT NULL,
+        [action_type] nvarchar(50) NOT NULL,
+        [command_payload] nvarchar(max) NULL,
+        [result_status] nvarchar(50) NOT NULL DEFAULT ('PENDING'),
+        [result_message] nvarchar(max) NULL,
+        [created_by] nvarchar(100) NOT NULL,
+        [created_at] datetime NOT NULL DEFAULT (getdate()),
+        CONSTRAINT [PK_AGENT_MULTITASK_LOGS] PRIMARY KEY CLUSTERED ([id] ASC)
+    );
+    CREATE NONCLUSTERED INDEX [IX_AGENT_LOGS_CODE_DATE] ON [dbo].[AGENT_MULTITASK_LOGS] ([restaurant_code] ASC, [created_at] DESC);
+    PRINT N'Created table [dbo].[AGENT_MULTITASK_LOGS] successfully.';
+END
+GO
+
+

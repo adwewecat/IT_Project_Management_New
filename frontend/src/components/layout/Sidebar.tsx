@@ -27,6 +27,7 @@ import {
   ListChecks,
   KeyRound,
   ScrollText,
+  Cpu,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { dashboardService, PendingSummaryResponse } from '../../services/dashboardService';
@@ -485,6 +486,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <KeyRound size={15} style={{ color: 'var(--color-primary-hover)' }} />
                       <span>Xử Lý SSO</span>
+                    </div>
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to="/app/agent-multitask"
+                    className="sidebar-sub-item"
+                    style={({ isActive }) => getSubLinkStyle(isActive)}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Cpu size={15} style={{ color: 'var(--color-primary)' }} />
+                      <span>Agent Multitask</span>
                     </div>
                   </NavLink>
                 </li>

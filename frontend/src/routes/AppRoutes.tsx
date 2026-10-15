@@ -24,6 +24,7 @@ import { WorkChecklistPage } from '../pages/app/WorkChecklistPage';
 import { RestaurantMongoPage } from '../pages/app/RestaurantMongoPage';
 import { RestaurantMongoAnalysisPage } from '../pages/app/RestaurantMongoAnalysisPage';
 import { SsoManagementPage } from '../pages/app/SsoManagementPage';
+import { AgentMultitaskPage } from '../pages/app/AgentMultitaskPage';
 import { MainLayout } from '../components/layout/MainLayout';
 import { ProtectedRoute } from './ProtectedRoute';
 
@@ -89,6 +90,10 @@ export const AppRoutes: React.FC = () => {
         <Route path="sso-management" element={<Navigate to="/app/sso-management" replace />} />
         <Route path="app/sso" element={<Navigate to="/app/sso-management" replace />} />
         <Route path="sso" element={<Navigate to="/app/sso-management" replace />} />
+        <Route path="app/agent-multitask" element={<AgentMultitaskPage />} />
+        <Route path="agent-multitask" element={<Navigate to="/app/agent-multitask" replace />} />
+        <Route path="app/multitask" element={<Navigate to="/app/agent-multitask" replace />} />
+        <Route path="multitask" element={<Navigate to="/app/agent-multitask" replace />} />
         <Route path="inventory/pr-po-do" element={<TheodoiPrPoDoPage />} />
         <Route path="helpdesk/ext-rsc" element={<ExtRscPage />} />
         <Route path="helpdesk/code-photo" element={<CodePhotoPage />} />

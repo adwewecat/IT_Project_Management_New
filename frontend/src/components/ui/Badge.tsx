@@ -4,12 +4,16 @@ export interface BadgeProps {
   variant?: 'primary' | 'success' | 'danger' | 'warning' | 'info' | 'neutral';
   children: React.ReactNode;
   icon?: React.ReactNode;
+  style?: React.CSSProperties;
+  className?: string;
 }
 
 export const Badge: React.FC<BadgeProps> = ({
   variant = 'neutral',
   children,
   icon,
+  style,
+  className,
 }) => {
   const getStyles = (): React.CSSProperties => {
     switch (variant) {
@@ -64,10 +68,11 @@ export const Badge: React.FC<BadgeProps> = ({
     lineHeight: 1,
     whiteSpace: 'nowrap',
     ...getStyles(),
+    ...style,
   };
 
   return (
-    <span style={badgeStyle}>
+    <span className={className} style={badgeStyle}>
       {icon}
       {children}
     </span>

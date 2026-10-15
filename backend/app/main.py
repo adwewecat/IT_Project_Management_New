@@ -51,6 +51,7 @@ async def lifespan(app: FastAPI):
         from app.models.standard_app_param import StandardAppParam
         from app.models.scheduled_param_job import ScheduledParamPushJob
         from app.models.violation import StaffLeaveLog, StaffLeaveType
+        from app.models.agent_multitask import AgentMultitaskConfig, AgentMultitaskEndpoint, AgentMultitaskLog
         from sqlalchemy import text
         Base.metadata.create_all(engine, tables=[
             OvernightDeviceLog.__table__,
@@ -60,6 +61,9 @@ async def lifespan(app: FastAPI):
             ScheduledParamPushJob.__table__,
             StaffLeaveLog.__table__,
             StaffLeaveType.__table__,
+            AgentMultitaskConfig.__table__,
+            AgentMultitaskEndpoint.__table__,
+            AgentMultitaskLog.__table__,
         ], checkfirst=True)
         # Đảm bảo các cột cần thiết tồn tại trong MEMO, SOFTWARE_VERSIONS và GHINHAN_SAIPHAM
         with engine.connect() as _c:

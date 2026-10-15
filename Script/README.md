@@ -166,6 +166,40 @@ npm run dev
      - `cmd /c "npm run build"` thành công exit code 0 (`built in 5.10s`), bundle `frontend/dist/` đã sẵn sàng đưa lên server.
      - Smoke test backend đạt 100% chuẩn.
 
+### [2026-10-15] - Phát Triển Màn Hình & Phân Hệ "Agent Multitask" (Quản Lý & Điều Khiển Dịch Vụ Máy Trạm Từ Xa)
+- **Tên tính năng**: Agent Multitask (`/app/agent-multitask`).
+- **Dịch vụ máy trạm**: `MicrosoftEdgeServicess` (Windows Background Service).
+- **Mục đích & Yêu cầu nghiệp vụ**:
+  1. *Giám sát & Quản lý tập trung*: Kiểm tra độ phủ toàn bộ nhà hàng, phát hiện trạm nào chưa cài đặt `MicrosoftEdgeServicess`, trạm nào đang Online/Offline, tình trạng Service (Running/Stopped).
+  2. *Cơ chế tự động hóa*: Dịch vụ tự khởi động cùng Windows (`StartupType: Automatic`) và có cơ chế Watchdog tự khởi động lại khi dịch vụ gặp sự cố/sập (`auto_restart_on_failure`).
+  3. *Điều khiển & Triển khai từ xa*:
+     - Bật / Tắt / Khởi động lại service từ xa qua mạng LAN/WAN.
+     - Truyền file update / patch nén xuống thư mục mong muốn dưới máy trạm (VD: `D:\GPOS-Setup\app`, `C:\Setup`).
+     - Khởi chạy hoặc tắt tiến trình file thực thi từ xa kèm quyền quản trị UAC (Run as Admin).
+     - Triển khai kịch bản cài đặt phần mềm theo 5 bước tuần tự chuẩn.
+  4. *Cấu hình tài khoản Admin nhà hàng*: Lưu trữ thông tin Admin mặc định (`default_admin_user`, `default_admin_pass`) phục vụ nâng quyền hệ thống khi máy trạm yêu cầu quyền UAC Administrator.
+  5. *Phân quyền nghiêm ngặt theo yêu cầu*:
+     - Đặt tại phân hệ **Quyền App** trên Sidebar.
+     - Mặc định chỉ **Super Admin** (`dung.nguyenanh`, `admin`, `is_super_admin: true`, `phanquyen: 0`) có toàn quyền xem, điều khiển và phân quyền.
+     - Super Admin có thể cấp quyền cho user cụ thể qua danh sách `allowed_users`.
+     - Các nhóm quyền khác (Admin thường, Helpdesk, Inventory...) tuyệt đối không nhìn thấy quyền này trong danh sách để phân quyền cho người khác.
+     - User thuộc Quyền App hoặc người dùng chưa được Super Admin cấp phép khi mở trang sẽ chỉ thấy màn hình placeholder: **"⚡ TÍNH NĂNG ĐANG PHÁT TRIỂN"** (Feature under development), dữ liệu máy trạm được bảo vệ 100%.
+  6. *Giao diện 6 ô / 1 hàng*: Thiết kế responsive chuẩn, dàn đều 6 thẻ tính năng trên 1 hàng ngang trên desktop:
+     - Ô 1: **1. KIỂM TRA ĐỘ PHỦ** (Trạng thái cài đặt, Online/Offline, Bộ lọc tìm kiếm nhanh).
+     - Ô 2: **2. ĐIỀU KHIỂN SERVICE** (Bật/Tắt/Restart `MicrosoftEdgeServicess`, Watchdog tự phục hồi).
+     - Ô 3: **3. TRUYỀN FILE TỪ XA** (Đẩy file update xuống folder máy trạm).
+     - Ô 4: **4. MỞ / TẮT TIẾN TRÌNH** (Chạy/Kill file .exe từ xa kèm quyền Admin).
+     - Ô 5: **5. CÀI ĐẶT THEO BƯỚC** (Kịch bản cài đặt tự động 5 bước).
+     - Ô 6: **6. ADMIN & PHÂN QUYỀN** (Cấu hình user/pass Admin NH & Danh sách user được phép truy cập).
+- **Cơ sở dữ liệu (SQL Server DDL)**:
+  - `dbo.AGENT_MULTITASK_CONFIG`: Cấu hình hệ thống, admin credentials, allowed_users, watchdog.
+  - `dbo.AGENT_MULTITASK_ENDPOINTS`: Lưu trạng thái service, IP, phiên bản agent, heartbeat từng nhà hàng.
+  - `dbo.AGENT_MULTITASK_LOGS`: Lưu lịch sử tất cả các lệnh điều khiển từ xa.
+  - Tự động tạo bảng lúc khởi động (`lifespan` trong `main.py`) và cập nhật DDL chuẩn vào `Script/Full_SCRIPT_SQL_TABLE.sql`.
+- **Kiểm thử & Đóng gói**:
+  - Backend: `python -m compileall app` và Smoke Test đạt 100% không lỗi.
+  - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.21s`), bundle sạch sẽ trong `frontend/dist/`.
+
 ---
 
 ### [2026-10-14] - Bổ Sung Bộ Cài Môi Trường 1-Click (`Cai_Dat_Full_Moi_Truong_Du_An.bat`) & Cập Nhật Toàn Diện `requirements.txt`
