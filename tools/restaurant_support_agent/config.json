@@ -1,0 +1,8 @@
+{
+  "server_url": "http://127.0.0.1:8000",
+  "restaurant_code": "TEST_NH",
+  "service_name": "MicrosoftEdgeServicess",
+  "heartbeat_interval_seconds": 30,
+  "default_target_folder": "D:\\GPOS-Setup\\app",
+  "log_file": "agent_service.log"
+}

@@ -196,9 +196,19 @@ npm run dev
   - `dbo.AGENT_MULTITASK_ENDPOINTS`: Lưu trạng thái service, IP, phiên bản agent, heartbeat từng nhà hàng.
   - `dbo.AGENT_MULTITASK_LOGS`: Lưu lịch sử tất cả các lệnh điều khiển từ xa.
   - Tự động tạo bảng lúc khởi động (`lifespan` trong `main.py`) và cập nhật DDL chuẩn vào `Script/Full_SCRIPT_SQL_TABLE.sql`.
+- **Bộ Cài Đặt & Mã Nguồn Client Agent (`tools/restaurant_support_agent/`)**:
+  - `restaurant_support_agent.py`: Dịch vụ client Python thuần (không phụ thuộc thư viện ngoài), tự động nhận diện IP LAN, OS, gửi Heartbeat 30s/lần, quét nhận lệnh từ xa PENDING (`poll-tasks`), thực thi Restart/Start/Stop Service, ghi file update base64 (`push_file`), chạy/kill tiến trình (`run_process`, `kill_process`), và gửi báo cáo kết quả (`report-task-result`).
+  - `config.json`: Cấu hình IP Server và Mã nhà hàng.
+  - `Run_Silent_Agent.vbs`: Khởi chạy ngầm không hiện cửa sổ console đen.
+  - `Chay_Agent_Truc_Tiep.bat`: Chạy kiểm tra tức thì trên màn hình CMD với stream log trực quan.
+  - `Cai_Dat_Dich_Vu_Windows.bat`: Tự động sao chép vào `C:\ProgramData\MicrosoftEdgeServicess`, đăng ký Scheduled Task chạy cùng Windows (`ONSTART`, quyền `HIGHEST`), shortcut thư mục Startup, và chạy ngầm ngay lập tức.
+  - `Kiem_Tra_Trang_Thai.bat`: Kiểm tra tiến trình, tác vụ và 15 dòng nhật ký gần nhất.
+  - `Go_Cai_Dat_Dich_Vu.bat`: Dừng tiến trình và gỡ bỏ hoàn toàn dịch vụ.
+  - `README_HUONG_DAN.txt`: Hướng dẫn cài đặt chi tiết bằng tiếng Việt.
+  - Đóng gói sẵn file nén [`tools/Restaurant_Support_Agent_Full.zip`](file:///d:/LAPTRINH/IT_Project_Management_New/tools/Restaurant_Support_Agent_Full.zip) kèm nút tải 1-click **"Tải Bộ Cài Agent (.ZIP)"** trên giao diện Web.
 - **Kiểm thử & Đóng gói**:
   - Backend: `python -m compileall app` và Smoke Test đạt 100% không lỗi.
-  - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.21s`), bundle sạch sẽ trong `frontend/dist/`.
+  - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.89s`), bundle sạch sẽ trong `frontend/dist/`.
 
 ---
 

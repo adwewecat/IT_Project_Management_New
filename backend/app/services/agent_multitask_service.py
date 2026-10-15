@@ -382,15 +382,11 @@ class AgentMultitaskService:
                 success = False
                 msg = f"Hành động '{action}' không được hỗ trợ."
 
-            if success:
-                success_count += 1
-                log_entry.result_status = "SUCCESS"
-            else:
-                failed_count += 1
-                log_entry.result_status = "FAILED"
-
-            log_entry.result_message = msg
+            # Đặt trạng thái PENDING để Client Agent (MicrosoftEdgeServicess) kéo về thực thi trực tiếp
+            log_entry.result_status = "PENDING"
+            log_entry.result_message = f"Đã gửi lệnh '{action}' vào hàng đợi chờ Agent máy trạm thực thi."
             db.add(log_entry)
+            success_count += 1
 
             results.append(AgentCommandResultItem(
                 restaurant_code=r_code,
@@ -433,3 +429,54 @@ class AgentMultitaskService:
             )
             for l in logs
         ]
+
+    @staticmethod
+    def poll_pending_tasks(restaurant_code: str, db: Session) -> List[Dict[str, Any]]:
+        """Quét và lấy các lệnh điều khiển PENDING dành cho nhà hàng tương ứng."""
+        clean_code = (restaurant_code or "").strip()
+        if not clean_code:
+            return []
+
+        pending_logs = db.query(AgentMultitaskLog).filter(
+            AgentMultitaskLog.restaurant_code == clean_code,
+            AgentMultitaskLog.result_status == "PENDING"
+        ).order_by(AgentMultitaskLog.created_at.asc()).limit(5).all()
+
+        results = []
+        for pl in pending_logs:
+            results.append({
+                "id": pl.id,
+                "task_id": pl.id,
+                "restaurant_code": pl.restaurant_code,
+                "action_type": pl.action_type,
+                "command_payload": pl.command_payload,
+                "created_at": pl.created_at.isoformat() if pl.created_at else None
+            })
+        return results
+
+    @staticmethod
+    def report_task_result(
+        task_id: int,
+        restaurant_code: str,
+        status_val: str,
+        message: str,
+        output: Optional[str],
+        db: Session
+    ) -> Dict[str, Any]:
+        """Cập nhật kết quả thực thi tác vụ từ Agent máy trạm gửi về."""
+        log_entry = db.query(AgentMultitaskLog).filter(AgentMultitaskLog.id == task_id).first()
+        if log_entry:
+            log_entry.result_status = status_val.upper()
+            log_entry.result_message = message
+            db.commit()
+
+        # Cập nhật trạng thái endpoint
+        ep = db.query(AgentMultitaskEndpoint).filter(
+            AgentMultitaskEndpoint.restaurant_code == restaurant_code
+        ).first()
+        if ep:
+            ep.last_action = f"Thực thi task #{task_id}: {status_val.upper()}"
+            ep.updated_at = datetime.now()
+            db.commit()
+
+        return {"status": "SUCCESS", "message": f"Updated task #{task_id} result"}

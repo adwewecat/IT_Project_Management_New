@@ -135,5 +135,19 @@ export const agentMultitaskService = {
       params: { restaurant_code, limit }
     });
     return res.data;
+  },
+
+  downloadAgentPackage: async (): Promise<void> => {
+    const res = await api.get('/agent-multitask/download-package', {
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'Restaurant_Support_Agent_Full.zip');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   }
 };

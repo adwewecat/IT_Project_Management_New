@@ -15,7 +15,8 @@ import {
   RotateCw,
   Lock,
   UserCheck,
-  Sparkles
+  Sparkles,
+  Download
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -210,6 +211,16 @@ export const AgentMultitaskPage: React.FC = () => {
     }
   };
 
+  const handleDownloadAgentPackage = async () => {
+    try {
+      showToast('Đang tải bộ cài đặt Client Agent (.ZIP)...', 'info');
+      await agentMultitaskService.downloadAgentPackage();
+      showToast('Đã tải xuống Restaurant_Support_Agent_Full.zip thành công!', 'success');
+    } catch (err: any) {
+      showToast('Lỗi khi tải bộ cài đặt: ' + (err?.response?.data?.detail || err.message), 'error');
+    }
+  };
+
   // ══════════════════════════════════════════════════════════════════════════
   // NẾU USER KHÔNG CÓ QUYỀN: HIỂN THỊ TRANG "TÍNH NĂNG ĐANG PHÁT TRIỂN"
   // (Theo đúng yêu cầu: User quyền App hoặc chưa được Super Admin phân quyền chỉ thấy tính năng đang phát triển)
@@ -380,6 +391,15 @@ export const AgentMultitaskPage: React.FC = () => {
             <UserCheck size={14} style={{ color: '#059669' }} />
             <span>Admin Mặc Định: <strong>{config?.default_admin_user || 'Administrator'}</strong></span>
           </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadAgentPackage}
+            leftIcon={<Download size={14} style={{ color: 'var(--color-primary)' }} />}
+          >
+            Tải Bộ Cài Agent (.ZIP)
+          </Button>
 
           <Button
             variant="outline"
@@ -1178,6 +1198,39 @@ export const AgentMultitaskPage: React.FC = () => {
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
                   Lưu thông tin tài khoản quản trị viên máy trạm (khi đòi quyền) và kiểm soát danh sách user được phép truy cập màn hình này.
                 </p>
+              </div>
+
+              {/* KHỐI TẢI BỘ CÀI ĐẶT CLIENT AGENT */}
+              <div
+                style={{
+                  padding: '16px 20px',
+                  borderRadius: '10px',
+                  backgroundColor: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-color)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '16px'
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Download size={16} style={{ color: '#2563EB' }} />
+                    Bộ Cài Đặt Dịch Vụ Máy Trạm (Restaurant_Support_Agent_Full.zip)
+                  </div>
+                  <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    Gói ZIP chuẩn gồm: <code>config.json</code>, mã nguồn Python, kịch bản đăng ký Task tự khởi động cùng Windows, và hướng dẫn chi tiết.
+                  </div>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleDownloadAgentPackage}
+                  leftIcon={<Download size={14} />}
+                  style={{ backgroundColor: '#2563EB', fontWeight: 800, whiteSpace: 'nowrap' }}
+                >
+                  Tải Bộ Cài (.ZIP)
+                </Button>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>

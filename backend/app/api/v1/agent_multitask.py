@@ -1,7 +1,10 @@
 from __future__ import annotations
+import os
+import zipfile
 import logging
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -182,3 +185,72 @@ def get_logs(
         )
 
     return AgentMultitaskService.get_logs(restaurant_code=restaurant_code, limit=limit, db=db)
+
+
+@router.get("/poll-tasks")
+def poll_tasks(
+    restaurant_code: str = Query(..., description="Mã nhà hàng đang yêu cầu kiểm tra tác vụ"),
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint cho Client Agent (MicrosoftEdgeServicess) gọi định kỳ để lấy lệnh từ xa đang PENDING.
+    """
+    return AgentMultitaskService.poll_pending_tasks(restaurant_code=restaurant_code, db=db)
+
+
+@router.post("/report-task-result")
+def report_task_result(
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint cho Client Agent báo cáo kết quả thực thi lệnh về Server.
+    """
+    task_id = int(payload.get("task_id") or 0)
+    restaurant_code = str(payload.get("restaurant_code") or "")
+    status_val = str(payload.get("status") or "SUCCESS")
+    message = str(payload.get("message") or "")
+    output = payload.get("output")
+
+    return AgentMultitaskService.report_task_result(
+        task_id=task_id,
+        restaurant_code=restaurant_code,
+        status_val=status_val,
+        message=message,
+        output=output,
+        db=db
+    )
+
+
+@router.get("/download-package")
+def download_package(
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """
+    Tải gói cài đặt toàn diện Client Agent (.ZIP) cho máy trạm nhà hàng.
+    """
+    # Đường dẫn thư mục tools/restaurant_support_agent
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
+    agent_dir = os.path.join(project_root, "tools", "restaurant_support_agent")
+    zip_path = os.path.join(project_root, "tools", "Restaurant_Support_Agent_Full.zip")
+
+    # Tự động nén lại nếu zip chưa có hoặc có file mới
+    if os.path.exists(agent_dir):
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+            for f in os.listdir(agent_dir):
+                fp = os.path.join(agent_dir, f)
+                if os.path.isfile(fp):
+                    z.write(fp, arcname=f)
+
+    if not os.path.exists(zip_path) or os.path.getsize(zip_path) < 100:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chưa tìm thấy gói cài đặt Restaurant_Support_Agent_Full.zip."
+        )
+
+    return FileResponse(
+        path=zip_path,
+        filename="Restaurant_Support_Agent_Full.zip",
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=Restaurant_Support_Agent_Full.zip"}
+    )
