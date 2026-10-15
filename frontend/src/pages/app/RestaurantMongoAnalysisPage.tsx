@@ -51,7 +51,9 @@ import {
   ArrowRightLeft,
   Zap,
   Settings,
-  LayoutGrid
+  LayoutGrid,
+  Trash2,
+  Tag
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -69,7 +71,9 @@ import {
   KdsRoleUserModal,
   ModalCreateFoodControl,
   KdsTransferQuayModal,
-  KdsLogsModal
+  KdsLogsModal,
+  KdsEditDishGroupModal,
+  KdsDeleteCookingConfigModal
 } from './KdsQuayModals';
 import { BatchRoleUserModal } from './BatchRoleUserModal';
 import { AndroidEmulatorTab } from './AndroidEmulatorTab';
@@ -1454,6 +1458,55 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
   // Multi-selection for batch dish actions
   const [selectedKdsDishCodes, setSelectedKdsDishCodes] = useState<string[]>([]);
+
+  // Modal: Đổi Nhóm Bếp (groupTypeKds) cho 1 hoặc nhiều món
+  const [showEditDishGroupModal, setShowEditDishGroupModal] = useState<boolean>(false);
+  const [dishesToEditGroup, setDishesToEditGroup] = useState<KdsItemDish[]>([]);
+
+  // Modal: Gỡ bỏ món khỏi KDS (CONFIG_COOKING) cho Vé Buffet / Đồ uống đóng chai
+  const [showDeleteDishConfigModal, setShowDeleteDishConfigModal] = useState<boolean>(false);
+  const [dishesToDeleteConfig, setDishesToDeleteConfig] = useState<KdsItemDish[]>([]);
+
+  // Đang chạy đồng nhất nhóm bếp
+  const [isSyncingKdsGroups, setIsSyncingKdsGroups] = useState<boolean>(false);
+
+  const handleOpenEditDishGroup = (dishes: KdsItemDish[]) => {
+    setDishesToEditGroup(dishes);
+    setShowEditDishGroupModal(true);
+  };
+
+  const handleOpenDeleteDishConfig = (dishes: KdsItemDish[]) => {
+    setDishesToDeleteConfig(dishes);
+    setShowDeleteDishConfigModal(true);
+  };
+
+  const handleSyncKdsGroupsByQuays = async () => {
+    const hostToUse = connectedHost || searchParams.get('host') || selectedRestaurant?.ip;
+    if (!hostToUse) {
+      showToast('Chưa kết nối đến máy chủ MongoDB!', 'error');
+      return;
+    }
+    const confirmSync = window.confirm(
+      '⚡ ĐỒNG NHẤT NHÓM BẾP THEO QUẦY BẾP (1 CHẠM)\n\n' +
+      'Hệ thống sẽ tự động quét tất cả món trong CONFIG_COOKING:\n' +
+      '- Món thuộc quầy nào sẽ được cập nhật nhóm bếp (groupTypeKds) theo tên quầy đó.\n' +
+      '- Xóa bỏ hoàn toàn tình trạng nhóm rác "Bếp Nóng & Nướng" hoặc "ALL" không đúng thực tế.\n\n' +
+      'Bạn có chắc chắn muốn thực hiện ngay?'
+    );
+    if (!confirmSync) return;
+
+    setIsSyncingKdsGroups(true);
+    try {
+      const res = await mongoService.syncKdsGroupsByQuays(hostToUse);
+      showToast(res.message, 'success');
+      fetchKdsItems(hostToUse);
+      fetchKdsPlaces(hostToUse);
+    } catch (err: any) {
+      showToast('Lỗi khi đồng nhất nhóm bếp: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setIsSyncingKdsGroups(false);
+    }
+  };
 
   const fetchKdsPlaces = async (hostOverride?: string) => {
     const hostToUse = hostOverride || connectedHost;
@@ -4854,6 +4907,25 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  {/* Nút Đồng nhất nhóm bếp theo quầy bếp (1 chạm) */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    style={{
+                      borderColor: '#059669',
+                      backgroundColor: '#ECFDF5',
+                      color: '#047857',
+                      fontWeight: 700,
+                      boxShadow: '0 1px 2px rgba(5, 150, 105, 0.1)'
+                    }}
+                    onClick={handleSyncKdsGroupsByQuays}
+                    isLoading={isSyncingKdsGroups}
+                    leftIcon={<Zap size={14} color="#059669" />}
+                    title="Tự động đồng bộ Nhóm Bếp (groupTypeKds) của toàn bộ món ăn theo đúng Tên Quầy Bếp, xóa nhóm rác 'ALL / Bếp Nóng & Nướng'"
+                  >
+                    ⚡ Đồng Nhất Nhóm Theo Quầy
+                  </Button>
+
                   {/* Nút Các tính năng: Mở popup chứa toàn bộ các tác vụ cấu hình KDS */}
                   <Button
                     size="sm"
@@ -5348,6 +5420,30 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                         🔄 Chuyển Quầy ({selectedKdsDishCodes.length} món)
                       </Button>
                       <Button
+                        size="sm"
+                        style={{ backgroundColor: '#4F46E5', color: '#fff', fontWeight: 600 }}
+                        onClick={() => {
+                          const selectedDishes = (kdsData?.items || []).filter((d) => selectedKdsDishCodes.includes(d.menu_item_code));
+                          handleOpenEditDishGroup(selectedDishes);
+                        }}
+                        leftIcon={<Tag size={13} />}
+                        title="Đổi tên Nhóm Bếp (groupTypeKds) cho tất cả các món được chọn"
+                      >
+                        🏷️ Đổi Nhóm Bếp ({selectedKdsDishCodes.length})
+                      </Button>
+                      <Button
+                        size="sm"
+                        style={{ backgroundColor: '#DC2626', color: '#fff', fontWeight: 600 }}
+                        onClick={() => {
+                          const selectedDishes = (kdsData?.items || []).filter((d) => selectedKdsDishCodes.includes(d.menu_item_code));
+                          handleOpenDeleteDishConfig(selectedDishes);
+                        }}
+                        leftIcon={<Trash2 size={13} />}
+                        title="Gỡ bỏ món khỏi CONFIG_COOKING để không bao giờ bị đẩy vào KDS hoặc tính trễ khi đóng bill"
+                      >
+                        🗑️ Gỡ Khỏi KDS ({selectedKdsDishCodes.length})
+                      </Button>
+                      <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setSelectedKdsDishCodes([])}
@@ -5536,22 +5632,55 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
                               {/* Nhóm Bếp */}
                               <td style={{ padding: '10px 12px' }}>
-                                {item.group_type_kds ? (
-                                  <span
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                                  {item.group_type_kds ? (
+                                    <span
+                                      style={{
+                                        padding: '2px 8px',
+                                        borderRadius: '4px',
+                                        fontSize: '11px',
+                                        fontWeight: 600,
+                                        backgroundColor:
+                                          item.group_type_kds.includes('Bếp Nóng & Nướng') || item.group_type_kds === 'ALL'
+                                            ? '#FEF3C7'
+                                            : '#F1F5F9',
+                                        color:
+                                          item.group_type_kds.includes('Bếp Nóng & Nướng') || item.group_type_kds === 'ALL'
+                                            ? '#B45309'
+                                            : '#475569',
+                                        border:
+                                          item.group_type_kds.includes('Bếp Nóng & Nướng') || item.group_type_kds === 'ALL'
+                                            ? '1px solid #FCD34D'
+                                            : 'none'
+                                      }}
+                                      title={
+                                        item.group_type_kds.includes('Bếp Nóng & Nướng') || item.group_type_kds === 'ALL'
+                                          ? 'Nhóm mặc định ALL/GPOS sinh ra khi nạp menu chưa phân quầy'
+                                          : `Nhóm bếp: ${item.group_type_kds}`
+                                      }
+                                    >
+                                      {item.group_type_kds}
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>—</span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditDishGroup([item])}
                                     style={{
-                                      padding: '2px 8px',
-                                      borderRadius: '4px',
-                                      fontSize: '11px',
-                                      fontWeight: 600,
-                                      backgroundColor: '#F1F5F9',
-                                      color: '#475569',
+                                      border: 'none',
+                                      background: 'transparent',
+                                      cursor: 'pointer',
+                                      color: 'var(--text-muted)',
+                                      padding: '2px',
+                                      display: 'flex',
+                                      alignItems: 'center'
                                     }}
+                                    title="Chỉnh sửa tên nhóm bếp cho món này"
                                   >
-                                    {item.group_type_kds}
-                                  </span>
-                                ) : (
-                                  <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>—</span>
-                                )}
+                                    <Edit2 size={12} />
+                                  </button>
+                                </div>
                               </td>
 
                               {/* Quầy Bếp (ACCOUNT) */}
@@ -5755,6 +5884,16 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                                     title="Gán món vào quầy bếp KDS"
                                   >
                                     Gán Quầy
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleOpenDeleteDishConfig([item])}
+                                    leftIcon={<Trash2 size={11} color="#DC2626" />}
+                                    style={{ fontSize: '11px', padding: '3px 7px', color: '#DC2626', borderColor: '#FECACA' }}
+                                    title="Gỡ món này khỏi CONFIG_COOKING (dành cho Vé buffet, Nước ngọt lon...)"
+                                  >
+                                    Gỡ KDS
                                   </Button>
                                 </div>
                               </td>
@@ -7988,6 +8127,63 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                 </div>
               </div>
             </button>
+
+            {/* 7. Đồng nhất Nhóm Bếp theo Quầy Bếp (1 chạm) */}
+            <button
+              type="button"
+              disabled={isSyncingKdsGroups}
+              onClick={() => {
+                setShowKdsFeaturesModal(false);
+                handleSyncKdsGroupsByQuays();
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                padding: '14px',
+                borderRadius: '10px',
+                border: '1.5px solid #6EE7B7',
+                backgroundColor: '#ECFDF5',
+                textAlign: 'left',
+                cursor: isSyncingKdsGroups ? 'not-allowed' : 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.2)';
+                e.currentTarget.style.borderColor = '#10B981';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)';
+                e.currentTarget.style.borderColor = '#6EE7B7';
+              }}
+            >
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '8px',
+                  backgroundColor: '#059669',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                {isSyncingKdsGroups ? <RefreshCw size={20} className="animate-spin" /> : <Zap size={20} />}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '13px', color: '#065F46', marginBottom: '3px' }}>
+                  ⚡ Đồng Nhất Nhóm Bếp Theo Quầy
+                </div>
+                <div style={{ fontSize: '11px', color: '#047857', lineHeight: '1.4' }}>
+                  Tự động đồng bộ Nhóm Bếp (groupTypeKds) của toàn bộ món ăn theo đúng Tên Quầy Bếp, xóa nhóm rác 'ALL / Bếp Nóng &amp; Nướng'.
+                </div>
+              </div>
+            </button>
           </div>
         </div>
       </Modal>
@@ -8318,6 +8514,47 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
           </div>
         </Modal>
       )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* MODAL: CHỈNH SỬA NHÓM BẾP (groupTypeKds) */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <KdsEditDishGroupModal
+        isOpen={showEditDishGroupModal}
+        onClose={() => setShowEditDishGroupModal(false)}
+        host={connectedHost || searchParams.get('host') || selectedRestaurant?.ip || ''}
+        port={27017}
+        dishes={dishesToEditGroup}
+        places={kdsPlaces}
+        onSuccess={() => {
+          const hostToUse = connectedHost || searchParams.get('host') || selectedRestaurant?.ip;
+          if (hostToUse) {
+            fetchKdsItems(hostToUse);
+            fetchKdsPlaces(hostToUse);
+          }
+          setSelectedKdsDishCodes([]);
+        }}
+        showToast={showToast}
+      />
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* MODAL: GỠ BỎ MÓN KHỎI KDS (CONFIG_COOKING) - CHO VÉ / ĐỒ UỐNG */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <KdsDeleteCookingConfigModal
+        isOpen={showDeleteDishConfigModal}
+        onClose={() => setShowDeleteDishConfigModal(false)}
+        host={connectedHost || searchParams.get('host') || selectedRestaurant?.ip || ''}
+        port={27017}
+        dishes={dishesToDeleteConfig}
+        onSuccess={() => {
+          const hostToUse = connectedHost || searchParams.get('host') || selectedRestaurant?.ip;
+          if (hostToUse) {
+            fetchKdsItems(hostToUse);
+            fetchKdsPlaces(hostToUse);
+          }
+          setSelectedKdsDishCodes([]);
+        }}
+        showToast={showToast}
+      />
     </div>
   );
 };

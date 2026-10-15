@@ -954,6 +954,42 @@ export const mongoService = {
     return res.data;
   },
 
+  syncKdsGroupsByQuays: async (
+    host: string,
+    port: number = 27017
+  ): Promise<KdsSyncGroupsByQuaysResponse> => {
+    const res = await api.post<KdsSyncGroupsByQuaysResponse>(
+      '/mongodb/kds-sync-groups-by-quays',
+      { host, port }
+    );
+    return res.data;
+  },
+
+  updateKdsDishGroup: async (
+    host: string,
+    menuItemCodes: string[],
+    newGroupName: string,
+    port: number = 27017
+  ): Promise<KdsUpdateDishGroupResponse> => {
+    const res = await api.post<KdsUpdateDishGroupResponse>(
+      '/mongodb/kds-dishes/update-group',
+      { host, port, menu_item_codes: menuItemCodes, new_group_name: newGroupName }
+    );
+    return res.data;
+  },
+
+  deleteKdsCookingConfig: async (
+    host: string,
+    menuItemCodes: string[],
+    port: number = 27017
+  ): Promise<KdsDeleteCookingConfigResponse> => {
+    const res = await api.post<KdsDeleteCookingConfigResponse>(
+      '/mongodb/kds-dishes/delete-config',
+      { host, port, menu_item_codes: menuItemCodes }
+    );
+    return res.data;
+  },
+
   getKdsLogs: async (
     payload: KdsLogQueryRequest
   ): Promise<KdsLogQueryResponse> => {
@@ -1444,6 +1480,7 @@ export interface KdsPlaceCreateRequest {
   port?: number;
   place_name: string;
   place_code?: string;
+  group_kds?: string;
   printer: string;
   account_name?: string;
   account_id?: string;
@@ -1458,6 +1495,24 @@ export interface KdsPlaceCreateResponse {
   printer: string;
   account_name: string;
   account_id: string;
+  message: string;
+}
+
+export interface KdsSyncGroupsByQuaysResponse {
+  success: boolean;
+  modified_count: number;
+  message: string;
+}
+
+export interface KdsUpdateDishGroupResponse {
+  success: boolean;
+  modified_count: number;
+  message: string;
+}
+
+export interface KdsDeleteCookingConfigResponse {
+  success: boolean;
+  deleted_count: number;
   message: string;
 }
 

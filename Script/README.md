@@ -2557,6 +2557,34 @@ estaurant_service.py).
    - Frontend `cmd /c "npm run build"` thành công 100% (exit code 0), thư mục `frontend/dist/` sẵn sàng deploy IIS.
    - Backend `python -m compileall app` và Smoke Test 100% PASSED.
 
+---
 
-
-
+### [2026-10-15] - Giải Mã Bản Chất "Nhóm Bếp ALL / Bếp Nóng & Nướng", Cơ Chế Auto-Done Bill Thu Ngân POS & Bộ Tính Năng Quản Trị Nhóm Bếp KDS
+1. **Làm Rõ Bản Chất Kỹ Thuật (Trả Lời Thắc Mắc & Tranh Chấp Của Nhà Hàng)**:
+   - **Nguồn gốc tên "Bếp Nóng & Nướng"**: Đây là template mặc định từ RK7/GPOS khi nạp danh mục thực đơn ban đầu vào bảng `CONFIG_COOKING` (`code: "ALL", name: "Bếp Nóng & Nướng"`). Có hàng trăm món (bao gồm cả Vé buffet, Coca Cola, Panchan, Rau cuốn...) bị gán tên nhóm này mặc dù nhà hàng không có bếp nào tên như vậy.
+   - **Tại sao món chưa gán quầy (`placeIds: []`) đầu bếp không thấy nhưng KDS vẫn ghi nhận ra món và phạt trễ hàng trăm phút?**:
+     + Các tablet KDS tại bếp chỉ lọc và hiển thị món có mã quầy (`placeIds`) khớp với quầy trạm của họ (QUẦY THỊT ID 1, QUẦY NÓNG ID 2, QUẦY SALAD ID 3). Khi món có `placeIds: []` rỗng, các tablet bếp hoàn toàn **KHÔNG NHẬN ĐƯỢC MÓN**, do đó nhân viên bếp khẳng định "không thấy món để bấm Done" là **HOÀN TOÀN CHÍNH XÁC**.
+     + **Cơ chế Auto-Done của GPOS khi Thu Ngân đóng bàn**: Khi khách dùng bữa xong và ra quầy thu ngân thanh toán / đóng bàn trên máy POS, hệ thống GPOS tự động kích hoạt cơ chế `Auto-Done` cho tất cả các món còn treo trên bàn đó. Thời điểm hoàn tất (`deliveryTime`) thực chất chính là **giờ in bill thanh toán** (sau 1 - 3 tiếng khách ngồi ăn).
+     + Do món vẫn tồn trong `CONFIG_COOKING`, KDS tính thời gian làm món = `giờ đóng bill - giờ order` $\rightarrow$ ra con số 80 - 180 phút và bị bôi ĐỎ, phạt trễ oan uổng cho nhà hàng!
+2. **Bộ Tính Năng Quản Trị & Đồng Nhất Nhóm Bếp KDS Toàn Diện**:
+   - **⚡ Đồng Nhất Nhóm Bếp Theo Quầy (1 Chạm)**:
+     + Tích hợp tại cả Header KDS và bên trong popup `⚙️ Các Tính Năng KDS`.
+     + Backend API `POST /api/v1/mongodb/kds-sync-groups-by-quays`: Quét toàn bộ món trong `CONFIG_COOKING`, lấy tên quầy từ `placeIds` map sang `CONFIG_KDS.places` và tự động cập nhật `groupTypeKds` chuẩn dạng object `{"id": 0, "code": name, "name": name}`. Xóa bỏ hoàn toàn nhóm rác "Bếp Nóng & Nướng" hay "ALL".
+   - **Chỉnh Sửa Nhóm Bếp Trực Tiếp (`KdsEditDishGroupModal`)**:
+     + Nút bút chì ✏️ trên từng dòng ở cột "Nhóm Bếp".
+     + Nút `🏷️ Đổi Nhóm Bếp ({số món})` trên thanh thao tác hàng loạt khi tích chọn nhiều món.
+     + Hỗ trợ bấm chọn nhanh 1 chạm theo các Quầy Bếp có sẵn trong nhà hàng để điền tức thì.
+     + Backend API `POST /api/v1/mongodb/kds-dishes/update-group`.
+   - **Gỡ Bỏ Món Khỏi KDS (`KdsDeleteCookingConfigModal`)**:
+     + Nút `🗑️ Gỡ KDS` trên cột Thao Tác từng món và nút `🗑️ Gỡ Khỏi KDS ({số món})` trên thanh thao tác hàng loạt.
+     + Xóa món khỏi `CONFIG_COOKING` (dành cho các mặt hàng không cần nấu nướng: Vé Buffet, Panchan, Rau cuốn, Nước ngọt lon, Bia, Khăn lạnh...).
+     + Món sau khi gỡ sẽ **không bao giờ bị đẩy vào KDS và không bao giờ bị tính trễ oan khi thu ngân đóng bàn**.
+     + Backend API `POST /api/v1/mongodb/kds-dishes/delete-config`.
+   - **Tự Động Đồng Bộ Nhóm Bếp Khi Thêm Quầy Bếp Mới (`KdsAddQuayModal`)**:
+     + Bổ sung trường "Nhóm Bếp (groupTypeKds)" tự động điền giống hệt "Tên Quầy".
+     + Backend tự động lưu trường `groupKds` vào cả `ACCOUNT` và `CONFIG_KDS.places`.
+   - **Cập Nhật Giải Trình Thông Minh KDS (`get_kds_dish_history`)**:
+     + Soi chi tiết cơ chế Auto-Done khi Thu Ngân đóng bàn POS kèm hướng dẫn xử lý triệt để gửi nhà hàng.
+3. **Build & Đóng Gói Chuẩn Bàn Giao**:
+   - Frontend: `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 3.94s`), bản build sạch sẽ tại `frontend/dist/`.
+   - Backend: `python -m compileall app` và Smoke Test 100% PASSED.

@@ -339,6 +339,7 @@ export const KdsAddQuayModal: React.FC<KdsAddQuayModalProps> = ({
 }) => {
   const [placeName, setPlaceName] = useState<string>('');
   const [placeCode, setPlaceCode] = useState<string>('');
+  const [groupKds, setGroupKds] = useState<string>('');
   const [printer, setPrinter] = useState<string>('');
   const [accountName, setAccountName] = useState<string>('');
   const [accountId, setAccountId] = useState<string>('');
@@ -350,6 +351,7 @@ export const KdsAddQuayModal: React.FC<KdsAddQuayModalProps> = ({
   const handleResetAndClose = () => {
     setPlaceName('');
     setPlaceCode('');
+    setGroupKds('');
     setPrinter('');
     setAccountName('');
     setAccountId('');
@@ -375,6 +377,7 @@ export const KdsAddQuayModal: React.FC<KdsAddQuayModalProps> = ({
         port,
         place_name: placeName.trim(),
         place_code: placeCode.trim() || undefined,
+        group_kds: groupKds.trim() || placeName.trim(),
         printer: printer.trim(),
         account_name: accountName.trim() || undefined,
         account_id: accountId.trim() || undefined,
@@ -477,9 +480,42 @@ export const KdsAddQuayModal: React.FC<KdsAddQuayModalProps> = ({
             onChange={(e) => {
               const val = e.target.value;
               setPlaceName(val);
-              if (!placeCode) setPlaceCode(val.toUpperCase().replace(/\s+/g, ' '));
-              if (!accountName) setAccountName(val.toUpperCase());
+              if (!placeCode || placeCode === placeName.toUpperCase().replace(/\s+/g, ' ')) {
+                setPlaceCode(val.toUpperCase().replace(/\s+/g, ' '));
+              }
+              if (!accountName || accountName === placeName.toUpperCase()) {
+                setAccountName(val.toUpperCase());
+              }
+              if (!groupKds || groupKds === placeName) {
+                setGroupKds(val);
+              }
             }}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              border: '1px solid var(--border-color)',
+              backgroundColor: 'var(--bg-primary)',
+              color: 'var(--text-primary)',
+              fontSize: '13px'
+            }}
+          />
+        </div>
+
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+            <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+              Nhóm Bếp (groupTypeKds):
+            </label>
+            <span style={{ fontSize: '11px', color: '#059669', fontWeight: 600 }}>
+              ⚡ Tự động giống Tên Quầy (đồng nhất danh mục)
+            </span>
+          </div>
+          <input
+            type="text"
+            placeholder="Nhập tên nhóm bếp (mặc định giống tên quầy)..."
+            value={groupKds}
+            onChange={(e) => setGroupKds(e.target.value)}
             style={{
               width: '100%',
               padding: '8px 12px',
@@ -3617,4 +3653,330 @@ export const KdsDishHistoryModal: React.FC<KdsDishHistoryModalProps> = ({
     </Modal>
   );
 };
+
+// ══════════════════════════════════════════════════════════════════════════
+// 10. MODAL CHỈNH SỬA NHÓM BẾP (groupTypeKds) CHO 1 HOẶC NHIỀU MÓN
+// ══════════════════════════════════════════════════════════════════════════
+interface KdsEditDishGroupModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  host: string;
+  port?: number;
+  dishes: KdsItemDish[];
+  places: KdsPlaceItem[];
+  onSuccess: () => void;
+  showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
+}
+
+export const KdsEditDishGroupModal: React.FC<KdsEditDishGroupModalProps> = ({
+  isOpen,
+  onClose,
+  host,
+  port = 27017,
+  dishes,
+  places,
+  onSuccess,
+  showToast
+}) => {
+  const [newGroupName, setNewGroupName] = useState<string>('');
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (dishes.length === 1) {
+        setNewGroupName(dishes[0].group_type_kds || '');
+      } else {
+        setNewGroupName('');
+      }
+    }
+  }, [isOpen, dishes]);
+
+  if (!isOpen) return null;
+
+  const handleSave = async () => {
+    if (!newGroupName.trim()) {
+      showToast('Vui lòng nhập tên Nhóm Bếp mới!', 'error');
+      return;
+    }
+    const codes = dishes.map((d) => d.menu_item_code);
+    setIsSaving(true);
+    try {
+      const res = await mongoService.updateKdsDishGroup(
+        host,
+        codes,
+        newGroupName.trim(),
+        port
+      );
+      showToast(res.message, 'success');
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      showToast('Lỗi khi cập nhật nhóm bếp: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`🏷️ Chỉnh Sửa Nhóm Bếp KDS (${dishes.length} món)`}
+      maxWidth="620px"
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+          <Button variant="outline" onClick={onClose} disabled={isSaving}>
+            Hủy bỏ
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleSave}
+            isLoading={isSaving}
+            leftIcon={<Check size={16} />}
+            style={{ backgroundColor: '#2563EB', color: '#fff', fontWeight: 600 }}
+          >
+            Lưu Nhóm Bếp Mới
+          </Button>
+        </div>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div
+          style={{
+            padding: '10px 14px',
+            borderRadius: '8px',
+            backgroundColor: '#EFF6FF',
+            border: '1px solid #BFDBFE',
+            fontSize: '12.5px',
+            color: '#1E40AF',
+            lineHeight: '1.5'
+          }}
+        >
+          💡 <strong>Nhóm Bếp (groupTypeKds)</strong>: Bạn có thể nhập tên nhóm tùy ý hoặc bấm nhanh các Quầy Bếp bên dưới để đồng nhất tên nhóm theo quầy (ví dụ: <code>QUẦY THỊT</code>, <code>QUẦY NÓNG</code>, <code>QUẦY SALAD</code>).
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '6px' }}>
+            Tên Nhóm Bếp Mới: <span style={{ color: '#EF4444' }}>*</span>
+          </label>
+          <input
+            type="text"
+            placeholder="Nhập tên nhóm bếp (VD: QUẦY THỊT, QUẦY NÓNG, BEP_LAU...)"
+            value={newGroupName}
+            onChange={(e) => setNewGroupName(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '9px 12px',
+              borderRadius: '6px',
+              border: '1.5px solid #2563EB',
+              backgroundColor: 'var(--bg-primary)',
+              color: 'var(--text-primary)',
+              fontSize: '13.5px',
+              fontWeight: 600
+            }}
+          />
+        </div>
+
+        {/* Gợi ý nhanh từ các quầy có sẵn */}
+        {places && places.length > 0 && (
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748B', marginBottom: '6px' }}>
+              ⚡ Gợi ý chọn nhanh theo Quầy Bếp có sẵn (1 chạm để điền):
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {places.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setNewGroupName(p.name)}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: newGroupName === p.name ? '#DBEAFE' : '#F8FAFC',
+                    color: newGroupName === p.name ? '#1D4ED8' : '#334155',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {p.name} {p.place_code ? `(${p.place_code})` : ''}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Danh sách món đang đổi */}
+        <div>
+          <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '6px' }}>
+            Danh Sách Món Được Áp Dụng ({dishes.length} món):
+          </div>
+          <div
+            style={{
+              maxHeight: '180px',
+              overflowY: 'auto',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              backgroundColor: 'var(--bg-secondary)'
+            }}
+          >
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#F1F5F9', borderBottom: '1px solid #CBD5E1', textAlign: 'left' }}>
+                  <th style={{ padding: '6px 8px', width: '40px', textAlign: 'center' }}>STT</th>
+                  <th style={{ padding: '6px 8px', width: '100px' }}>Mã Món</th>
+                  <th style={{ padding: '6px 8px' }}>Tên Món</th>
+                  <th style={{ padding: '6px 8px', width: '140px' }}>Nhóm Hiện Tại</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dishes.map((d, dIdx) => (
+                  <tr key={d.menu_item_code} style={{ borderBottom: '1px solid #E2E8F0' }}>
+                    <td style={{ padding: '6px 8px', textAlign: 'center', color: '#64748B' }}>{dIdx + 1}</td>
+                    <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontWeight: 700, color: '#059669' }}>
+                      {d.menu_item_code}
+                    </td>
+                    <td style={{ padding: '6px 8px', fontWeight: 600 }}>{d.menu_item_name}</td>
+                    <td style={{ padding: '6px 8px', color: '#64748B' }}>{d.group_type_kds || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════════════════
+// 11. MODAL XÁC NHẬN GỠ MÓN KHỎI KDS (CONFIG_COOKING) - CHO VÉ / ĐỒ UỐNG
+// ══════════════════════════════════════════════════════════════════════════
+interface KdsDeleteCookingConfigModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  host: string;
+  port?: number;
+  dishes: KdsItemDish[];
+  onSuccess: () => void;
+  showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
+}
+
+export const KdsDeleteCookingConfigModal: React.FC<KdsDeleteCookingConfigModalProps> = ({
+  isOpen,
+  onClose,
+  host,
+  port = 27017,
+  dishes,
+  onSuccess,
+  showToast
+}) => {
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
+  if (!isOpen) return null;
+
+  const handleDelete = async () => {
+    const codes = dishes.map((d) => d.menu_item_code);
+    setIsDeleting(true);
+    try {
+      const res = await mongoService.deleteKdsCookingConfig(host, codes, port);
+      showToast(res.message, 'success');
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      showToast('Lỗi khi gỡ món khỏi KDS: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`🗑️ Gỡ Bỏ Món Khỏi KDS (${dishes.length} món)`}
+      maxWidth="620px"
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+          <Button variant="outline" onClick={onClose} disabled={isDeleting}>
+            Hủy bỏ (Giữ lại)
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleDelete}
+            isLoading={isDeleting}
+            leftIcon={<Trash2 size={16} />}
+            style={{ backgroundColor: '#DC2626', color: '#fff', fontWeight: 700 }}
+          >
+            🚨 Xác Nhận Gỡ Khỏi KDS
+          </Button>
+        </div>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div
+          style={{
+            padding: '12px 16px',
+            borderRadius: '8px',
+            backgroundColor: '#FEF2F2',
+            border: '1.5px solid #FCA5A5',
+            fontSize: '13px',
+            color: '#991B1B',
+            lineHeight: '1.5'
+          }}
+        >
+          <div style={{ fontWeight: 800, fontSize: '14px', marginBottom: '4px' }}>
+            ⚠️ TÁC DỤNG QUAN TRỌNG KHI GỠ MÓN KHỎI CONFIG_COOKING:
+          </div>
+          <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
+            <li>Món sau khi gỡ sẽ <strong>KHÔNG CÒN được đẩy vào màn hình bếp KDS</strong> khi khách order.</li>
+            <li><strong>KHÔNG BAO GIỜ bị tính trễ oan</strong> khi Thu Ngân đóng bàn / in bill thanh toán trên POS.</li>
+            <li>Rất khuyến khích cho các mặt hàng không cần chế biến: <strong>Vé Buffet, Panchan, Rau cuốn, Nước ngọt lon, Bia, Khăn lạnh...</strong></li>
+          </ul>
+        </div>
+
+        <div>
+          <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '6px' }}>
+            Danh Sách Món Sẽ Gỡ Bỏ Khỏi KDS ({dishes.length} món):
+          </div>
+          <div
+            style={{
+              maxHeight: '220px',
+              overflowY: 'auto',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              backgroundColor: 'var(--bg-secondary)'
+            }}
+          >
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#FEE2E2', borderBottom: '1px solid #FECACA', textAlign: 'left' }}>
+                  <th style={{ padding: '6px 8px', width: '40px', textAlign: 'center' }}>STT</th>
+                  <th style={{ padding: '6px 8px', width: '100px' }}>Mã Món</th>
+                  <th style={{ padding: '6px 8px' }}>Tên Món</th>
+                  <th style={{ padding: '6px 8px', width: '130px' }}>Nhóm Hiện Tại</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dishes.map((d, dIdx) => (
+                  <tr key={d.menu_item_code} style={{ borderBottom: '1px solid #E2E8F0' }}>
+                    <td style={{ padding: '6px 8px', textAlign: 'center', color: '#64748B' }}>{dIdx + 1}</td>
+                    <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontWeight: 700, color: '#DC2626' }}>
+                      {d.menu_item_code}
+                    </td>
+                    <td style={{ padding: '6px 8px', fontWeight: 600 }}>{d.menu_item_name}</td>
+                    <td style={{ padding: '6px 8px', color: '#64748B' }}>{d.group_type_kds || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
 

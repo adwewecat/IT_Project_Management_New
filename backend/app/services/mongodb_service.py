@@ -185,6 +185,12 @@ from app.schemas.mongodb import (
     KdsDishHistoryRequest,
     KdsDishHistoryTimelineItem,
     KdsDishHistoryResponse,
+    KdsSyncGroupsByQuaysRequest,
+    KdsSyncGroupsByQuaysResponse,
+    KdsUpdateDishGroupRequest,
+    KdsUpdateDishGroupResponse,
+    KdsDeleteCookingConfigRequest,
+    KdsDeleteCookingConfigResponse,
     KdsUpdatePlacePrinterRequest,
     KdsUpdatePlacePrinterResponse,
     KdsPlaceDeleteRequest,
@@ -2214,6 +2220,7 @@ class MongoDBService:
                         existing_acc_ids.append(int(aid))
                 account_id = str((max(existing_acc_ids) + 1) if existing_acc_ids else (100 + new_place_id))
 
+            group_kds_val = (payload.group_kds or place_name).strip()
             new_place = {
                 "id": new_place_id,
                 "name": place_name,
@@ -2221,7 +2228,8 @@ class MongoDBService:
                 "hallPlanIds": hall_plan_ids,
                 "printer": printer_name,
                 "driverName": printer_name,
-                "placeCode": place_code
+                "placeCode": place_code,
+                "groupKds": group_kds_val
             }
 
             # Update CONFIG_KDS
@@ -2239,6 +2247,7 @@ class MongoDBService:
                 "placeParent": food_control_acc_id,
                 "listPlace": [new_place],
                 "role": 3,
+                "groupKds": group_kds_val,
                 "reorganizeTime": 0
             }
             acc_col.insert_one(new_account)
@@ -2463,6 +2472,26 @@ class MongoDBService:
             db_kitchen = client["G_KITCHEN"]
             cook_col = db_kitchen["CONFIG_COOKING"]
 
+            # Lấy thông tin quầy để đồng bộ Nhóm Bếp (groupTypeKds) chuẩn
+            kds_cfg = db_kitchen["CONFIG_KDS"].find_one() or {}
+            place_id_to_name = {}
+            for p in (kds_cfg.get("places") or []):
+                if isinstance(p, dict) and p.get("id") is not None:
+                    place_id_to_name[int(p["id"])] = p.get("name") or f"Quầy #{p['id']}"
+
+            # Xác định tên nhóm bếp cần gán: ưu tiên payload.group_type_kds, nếu không có thì lấy tên quầy đầu tiên
+            target_grp_name = ""
+            if payload.group_type_kds is not None and payload.group_type_kds.strip():
+                target_grp_name = payload.group_type_kds.strip()
+            elif payload.place_ids:
+                target_grp_name = place_id_to_name.get(payload.place_ids[0], "")
+
+            grp_obj = {
+                "id": 0,
+                "code": target_grp_name,
+                "name": target_grp_name
+            } if target_grp_name else None
+
             modified_count = 0
             for code in payload.menu_item_codes:
                 code_str = str(code).strip()
@@ -2473,8 +2502,8 @@ class MongoDBService:
                     q.append({"menuItemCode": int(code_str)})
 
                 update_set = {}
-                if payload.group_type_kds is not None and payload.group_type_kds.strip():
-                    update_set["groupTypeKds"] = payload.group_type_kds.strip()
+                if grp_obj:
+                    update_set["groupTypeKds"] = grp_obj
 
                 if payload.mode == "append":
                     update_ops = {"$addToSet": {"placeIds": {"$each": payload.place_ids}}}
@@ -2556,18 +2585,27 @@ class MongoDBService:
 
             doc_ids = [d["_id"] for d in matched_docs]
 
+            to_grp_obj = {
+                "id": 0,
+                "code": to_name,
+                "name": to_name
+            }
             if not payload.keep_source:
                 cook_col.update_many(
                     {"_id": {"$in": doc_ids}},
                     {
                         "$pull": {"placeIds": payload.from_place_id},
-                        "$addToSet": {"placeIds": payload.to_place_id}
+                        "$addToSet": {"placeIds": payload.to_place_id},
+                        "$set": {"groupTypeKds": to_grp_obj}
                     }
                 )
             else:
                 cook_col.update_many(
                     {"_id": {"$in": doc_ids}},
-                    {"$addToSet": {"placeIds": payload.to_place_id}}
+                    {
+                        "$addToSet": {"placeIds": payload.to_place_id},
+                        "$set": {"groupTypeKds": to_grp_obj}
+                    }
                 )
 
             if db:
@@ -2602,6 +2640,164 @@ class MongoDBService:
                 from_place_name=from_name,
                 to_place_name=to_name,
                 message=f"Đã chuyển thành công {len(doc_ids)} món từ {from_name} sang {to_name}!"
+            )
+        finally:
+            client.close()
+
+    @staticmethod
+    def sync_kds_groups_by_quays(
+        current_user: UserInfo,
+        payload: KdsSyncGroupsByQuaysRequest,
+        db: Optional[Session] = None
+    ) -> KdsSyncGroupsByQuaysResponse:
+        """
+        Đồng nhất Nhóm Bếp (groupTypeKds) theo Quầy Bếp (places trong CONFIG_KDS) 1 chạm:
+        Món thuộc quầy nào thì groupTypeKds tự động cập nhật giống 100% theo tên quầy đó.
+        """
+        client = MongoClient(payload.host, payload.port, serverSelectionTimeoutMS=4000)
+        try:
+            db_kitchen = client["G_KITCHEN"]
+            cook_col = db_kitchen["CONFIG_COOKING"]
+            kds_col = db_kitchen["CONFIG_KDS"]
+
+            kds_doc = kds_col.find_one() or {}
+            places = kds_doc.get("places") or []
+            place_id_to_name = {}
+            for p in places:
+                if isinstance(p, dict) and p.get("id") is not None:
+                    place_id_to_name[int(p["id"])] = p.get("name") or f"Quầy #{p['id']}"
+
+            modified_count = 0
+            for pid, pname in place_id_to_name.items():
+                grp_obj = {
+                    "id": 0,
+                    "code": pname,
+                    "name": pname
+                }
+                res = cook_col.update_many(
+                    {"placeIds": pid},
+                    {"$set": {"groupTypeKds": grp_obj}}
+                )
+                modified_count += res.modified_count
+
+            if db:
+                try:
+                    log_entry = AuditLog(
+                        USER_ACTION=current_user.username,
+                        ACTION_TYPE="SYNC_KDS_GROUPS_BY_QUAYS",
+                        TARGET_OBJECT="CONFIG_COOKING",
+                        DESCRIPTION=f"Đồng nhất Nhóm Bếp theo Quầy Bếp (cập nhật {modified_count} lượt món) trên {payload.host}:{payload.port}",
+                        DETAILS=json.dumps({"host": payload.host, "modified_count": modified_count}),
+                        DATE_ACTION=datetime.datetime.now(),
+                    )
+                    db.add(log_entry)
+                    db.commit()
+                except Exception:
+                    pass
+
+            return KdsSyncGroupsByQuaysResponse(
+                success=True,
+                modified_count=modified_count,
+                message=f"Đã đồng nhất thành công Nhóm Bếp theo Quầy Bếp cho {modified_count} lượt món!"
+            )
+        finally:
+            client.close()
+
+    @staticmethod
+    def update_kds_dish_group(
+        current_user: UserInfo,
+        payload: KdsUpdateDishGroupRequest,
+        db: Optional[Session] = None
+    ) -> KdsUpdateDishGroupResponse:
+        """
+        Cập nhật Nhóm Bếp (groupTypeKds) cho 1 hoặc nhiều món ăn được chỉ định trong CONFIG_COOKING.
+        """
+        client = MongoClient(payload.host, payload.port, serverSelectionTimeoutMS=4000)
+        try:
+            db_kitchen = client["G_KITCHEN"]
+            cook_col = db_kitchen["CONFIG_COOKING"]
+
+            grp_name = payload.new_group_name.strip()
+            if not grp_name:
+                raise ValueError("Tên nhóm bếp không được để trống!")
+
+            clean_codes = [str(c).strip() for c in payload.menu_item_codes if str(c).strip()]
+            int_codes = [int(c) for c in clean_codes if c.isdigit()]
+            all_codes = list(set(clean_codes + int_codes))
+
+            new_grp_obj = {
+                "id": 0,
+                "code": grp_name,
+                "name": grp_name
+            }
+
+            res = cook_col.update_many(
+                {"menuItemCode": {"$in": all_codes}},
+                {"$set": {"groupTypeKds": new_grp_obj}}
+            )
+
+            if db:
+                try:
+                    log_entry = AuditLog(
+                        USER_ACTION=current_user.username,
+                        ACTION_TYPE="UPDATE_KDS_DISH_GROUP",
+                        TARGET_OBJECT=f"CONFIG_COOKING:dishes_{len(clean_codes)}",
+                        DESCRIPTION=f"Cập nhật Nhóm Bếp thành '{grp_name}' cho {res.modified_count} món trên {payload.host}:{payload.port}",
+                        DETAILS=json.dumps({"host": payload.host, "group": grp_name, "count": res.modified_count}),
+                        DATE_ACTION=datetime.datetime.now(),
+                    )
+                    db.add(log_entry)
+                    db.commit()
+                except Exception:
+                    pass
+
+            return KdsUpdateDishGroupResponse(
+                success=True,
+                modified_count=res.modified_count,
+                message=f"Đã cập nhật Nhóm Bếp thành '{grp_name}' cho {res.modified_count} món thành công!"
+            )
+        finally:
+            client.close()
+
+    @staticmethod
+    def delete_kds_cooking_config(
+        current_user: UserInfo,
+        payload: KdsDeleteCookingConfigRequest,
+        db: Optional[Session] = None
+    ) -> KdsDeleteCookingConfigResponse:
+        """
+        Gỡ bỏ món khỏi bảng CONFIG_COOKING (dành cho các món không cần theo dõi chế biến như Vé Buffet, nước ngọt).
+        """
+        client = MongoClient(payload.host, payload.port, serverSelectionTimeoutMS=4000)
+        try:
+            db_kitchen = client["G_KITCHEN"]
+            cook_col = db_kitchen["CONFIG_COOKING"]
+
+            clean_codes = [str(c).strip() for c in payload.menu_item_codes if str(c).strip()]
+            int_codes = [int(c) for c in clean_codes if c.isdigit()]
+            all_codes = list(set(clean_codes + int_codes))
+
+            res = cook_col.delete_many({"menuItemCode": {"$in": all_codes}})
+
+            if db:
+                try:
+                    log_entry = AuditLog(
+                        USER_ACTION=current_user.username,
+                        ACTION_TYPE="DELETE_KDS_COOKING_CONFIG",
+                        TARGET_OBJECT=f"CONFIG_COOKING:dishes_{len(clean_codes)}",
+                        DESCRIPTION=f"Gỡ bỏ {res.deleted_count} món khỏi CONFIG_COOKING (không theo dõi KDS) trên {payload.host}:{payload.port}",
+                        DETAILS=json.dumps({"host": payload.host, "deleted_count": res.deleted_count, "codes": clean_codes}),
+                        DATE_ACTION=datetime.datetime.now(),
+                    )
+                    db.add(log_entry)
+                    db.commit()
+                except Exception:
+                    pass
+
+            return KdsDeleteCookingConfigResponse(
+                success=True,
+                deleted_count=res.deleted_count,
+                message=f"Đã gỡ bỏ {res.deleted_count} món khỏi CONFIG_COOKING thành công! Từ nay món này khi order sẽ không gửi về KDS và không bao giờ bị báo đỏ trễ giờ."
             )
         finally:
             client.close()
@@ -3143,16 +3339,22 @@ class MongoDBService:
                     analysis_parts.append(
                         f"⚠️ ĐỐI SOÁT LỊCH SỬ KDS: Toàn bộ {unassigned_count} lần order trong lịch sử đều ghi nhận placeIds: [] (Rỗng) "
                         f"và nhóm KDS là '{sample_grp}'.\n"
-                        f"👉 GIẢI THÍCH CHUYÊN SÂU CHO NHÀ HÀNG: Theo logic lõi của hệ thống KDS Golden Gate, khi một món không được gán vào quầy cụ thể "
-                        f"(placeIds rỗng), KDS sẽ kích hoạt cơ chế fallback điều phối món vào màn hình của nhóm '{sample_grp}' (hoặc trạm KDS Master) "
-                        f"với thời gian chuẩn mặc định (5 phút). Vì vậy, nhân viên nhà hàng khẳng định 'chưa từng gán món vào quầy nào' "
-                        f"là ĐÚNG về mặt danh mục quầy (placeIds), nhưng món VẪN VÀO MÀN HÌNH BẾP và chuyển màu ĐỎ sau khi quá hạn thời gian chuẩn!"
+                        f"👉 GIẢI TRÌNH BẢN CHẤT KỸ THUẬT (GỬI NHÀ HÀNG & QUẢN TRỊ VIÊN):\n"
+                        f"1. TẠI SAO BẾP KHÔNG THẤY MÓN? Các tablet KDS tại bếp chỉ lọc và hiển thị món có mã quầy (placeIds) khớp với quầy của trạm. "
+                        f"Khi món có placeIds rỗng, các tablet quầy con KHÔNG nhận được món, nên nhân viên bếp khẳng định 'không thấy món để bấm Done' là HOÀN TOÀN CHÍNH XÁC!\n"
+                        f"2. TẠI SAO LỊCH SỬ LẠI GHI NHẬN ĐÃ RA MÓN (DONE) VÀ BỊ TRỄ HÀNG TRĂM PHÚT? Khi khách dùng bữa xong và thu ngân thực hiện đóng bàn / thanh toán hóa đơn trên POS, "
+                        f"phần mềm GPOS sẽ tự động kích hoạt cơ chế 'Auto-Done' (hoàn tất tự động) cho tất cả các món còn treo trên bàn đó. "
+                        f"Thời gian Done thực chất chính là THỜI ĐIỂM THU NGÂN IN BILL THANH TOÁN (sau 1 - 3 tiếng khách ngồi ăn), dẫn đến KDS tính độ trễ oan uổng cho nhà hàng!\n"
+                        f"3. NGUỒN GỐC TÊN '{sample_grp}': Tên nhóm này do cấu hình đồng bộ mặc định (nhóm ALL) từ GPOS/RK7 sinh ra khi nạp thực đơn vào CONFIG_COOKING mà chưa được phân quầy.\n"
+                        f"💡 HƯỚNG XỬ LÝ TRIỆT ĐỂ:\n"
+                        f"- Nếu đây là món KHÔNG CẦN CHẾ BIẾN (Vé Buffet, Nước ngọt lon, Khăn lạnh...): Nhấn nút '🗑️ Gỡ Khỏi KDS' để xóa khỏi CONFIG_COOKING. Món sẽ không bao giờ bị đưa vào KDS hay phạt trễ nữa!\n"
+                        f"- Nếu đây là món CẦN CHẾ BIẾN: Nhấn nút 'Gán Quầy' hoặc '⚡ Đồng Nhất Nhóm Bếp Theo Quầy' để phân bổ về đúng quầy và tài khoản tablet tương ứng."
                     )
                 elif unassigned_count > 0 and assigned_count > 0:
                     analysis_parts.append(
-                        f"🔍 PHÁT HIỆN BIẾN ĐỘNG QUẦY: Món này có {assigned_count} lần từng được gán vào quầy cụ thể "
-                        f"và {unassigned_count} lần bị bỏ trống quầy (placeIds rỗng). "
-                        f"Có bằng chứng rõ ràng cho thấy cấu hình quầy đã từng bị chỉnh sửa hoặc tháo gỡ!"
+                        f"🔍 PHÁT HIỆN BIẾN ĐỘNG CẤU HÌNH QUẦY: Món này có {assigned_count} lần từng được gán vào quầy cụ thể "
+                        f"và {unassigned_count} lần bị bỏ trống quầy (placeIds: []).\n"
+                        f"Khi placeIds bị rỗng, đầu bếp tại trạm con không nhận được món, và món chỉ được Auto-Done khi thu ngân đóng bàn thanh toán trên POS!"
                     )
                 else:
                     analysis_parts.append(

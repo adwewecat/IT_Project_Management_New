@@ -413,6 +413,7 @@ class KdsPlaceCreateRequest(BaseModel):
     account_name: Optional[str] = None
     account_id: Optional[str] = None
     password: Optional[str] = "1"
+    group_kds: Optional[str] = None
 
 
 class KdsPlaceCreateResponse(BaseModel):
@@ -562,6 +563,42 @@ class KdsDishHistoryResponse(BaseModel):
     timeline: List[KdsDishHistoryTimelineItem] = []
     smart_analysis: str = ""
     message: str = ""
+
+
+class KdsSyncGroupsByQuaysRequest(BaseModel):
+    host: str
+    port: int = 27017
+
+
+class KdsSyncGroupsByQuaysResponse(BaseModel):
+    success: bool
+    modified_count: int
+    message: str
+
+
+class KdsUpdateDishGroupRequest(BaseModel):
+    host: str
+    port: int = 27017
+    menu_item_codes: List[str]
+    new_group_name: str
+
+
+class KdsUpdateDishGroupResponse(BaseModel):
+    success: bool
+    modified_count: int
+    message: str
+
+
+class KdsDeleteCookingConfigRequest(BaseModel):
+    host: str
+    port: int = 27017
+    menu_item_codes: List[str]
+
+
+class KdsDeleteCookingConfigResponse(BaseModel):
+    success: bool
+    deleted_count: int
+    message: str
 
 
 class KdsUpdatePlacePrinterRequest(BaseModel):

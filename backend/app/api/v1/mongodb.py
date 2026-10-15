@@ -56,6 +56,12 @@ from app.schemas.mongodb import (
     KdsAssignDishQuayResponse,
     KdsTransferQuayRequest,
     KdsTransferQuayResponse,
+    KdsSyncGroupsByQuaysRequest,
+    KdsSyncGroupsByQuaysResponse,
+    KdsUpdateDishGroupRequest,
+    KdsUpdateDishGroupResponse,
+    KdsDeleteCookingConfigRequest,
+    KdsDeleteCookingConfigResponse,
     KdsLogQueryRequest,
     KdsLogQueryResponse,
     KdsDishHistoryRequest,
@@ -1151,6 +1157,74 @@ def transfer_kds_dishes_quay(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Lỗi khi chuyển quầy món ăn ({payload.host}): {str(e)}"
+        )
+
+
+@router.post("/kds-sync-groups-by-quays", response_model=KdsSyncGroupsByQuaysResponse)
+def sync_kds_groups_by_quays(
+    payload: KdsSyncGroupsByQuaysRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Đồng nhất Nhóm Bếp (groupTypeKds) theo Quầy Bếp (places) cho toàn bộ món ăn trong CONFIG_COOKING.
+    Món thuộc quầy nào sẽ có nhóm bếp mang tên và mã quầy đó, xóa bỏ hoàn toàn tình trạng nhóm 'ALL' hoặc 'Bếp Nóng & Nướng' sai lệch.
+    """
+    try:
+        return MongoDBService.sync_kds_groups_by_quays(
+            current_user=current_user,
+            payload=payload,
+            db=db
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Lỗi khi đồng nhất nhóm bếp theo quầy ({payload.host}): {str(e)}"
+        )
+
+
+@router.post("/kds-dishes/update-group", response_model=KdsUpdateDishGroupResponse)
+def update_kds_dish_group(
+    payload: KdsUpdateDishGroupRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Chỉnh sửa trực tiếp tên Nhóm Bếp (groupTypeKds) cho 1 hoặc nhiều món ăn trong CONFIG_COOKING.
+    """
+    try:
+        return MongoDBService.update_kds_dish_group(
+            current_user=current_user,
+            payload=payload,
+            db=db
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Lỗi khi cập nhật nhóm bếp ({payload.host}): {str(e)}"
+        )
+
+
+@router.post("/kds-dishes/delete-config", response_model=KdsDeleteCookingConfigResponse)
+def delete_kds_cooking_config(
+    payload: KdsDeleteCookingConfigRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Gỡ bỏ món ăn khỏi CONFIG_COOKING (Dành cho các món không cần bếp nấu: Vé Buffet, Nước ngọt lon, Khăn lạnh...).
+    Khi gỡ, món sẽ không bao giờ bị đẩy vào KDS hoặc tính trễ oan khi thu ngân đóng bàn.
+    """
+    try:
+        return MongoDBService.delete_kds_cooking_config(
+            current_user=current_user,
+            payload=payload,
+            db=db
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Lỗi khi gỡ món khỏi KDS ({payload.host}): {str(e)}"
         )
 
 
