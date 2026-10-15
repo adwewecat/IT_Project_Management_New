@@ -100,6 +100,39 @@ def is_running_as_admin() -> bool:
         return False
 
 
+def parse_date_str(s: str):
+    s = s.strip()
+    m_iso = re.match(r"^([0-9]{4})[-/]([0-9]{1,2})[-/]([0-9]{1,2})$", s)
+    if m_iso:
+        try:
+            return f"{int(m_iso.group(1)):04d}-{int(m_iso.group(2)):02d}-{int(m_iso.group(3)):02d}"
+        except Exception:
+            return None
+    m = re.match(r"^([0-9]{1,2})[-/]([0-9]{1,2})[-/]([0-9]{4})$", s)
+    if not m:
+        return None
+    p1, p2, yr = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if p1 > 12:  # p1 là ngày (DD/MM/YYYY)
+        return f"{yr:04d}-{p2:02d}-{p1:02d}"
+    if p2 > 12:  # p2 là ngày (MM/DD/YYYY)
+        return f"{yr:04d}-{p1:02d}-{p2:02d}"
+    # Mặc định theo chuẩn Salesforce GGG Loyalty (MM/DD/YYYY)
+    return f"{yr:04d}-{p1:02d}-{p2:02d}"
+
+
+def parse_effective_dates(raw_str: str):
+    """Bóc tách ngày bắt đầu và kết thúc từ chuỗi Hiệu lực."""
+    if not raw_str:
+        return None, None
+    found_dates = re.findall(r"[0-9]{1,4}[-/][0-9]{1,2}[-/][0-9]{1,4}", raw_str)
+    if len(found_dates) >= 2:
+        return parse_date_str(found_dates[0]), parse_date_str(found_dates[1])
+    elif len(found_dates) == 1:
+        d = parse_date_str(found_dates[0])
+        return d, d
+    return None, None
+
+
 def parse_memo_email(subject: str, body: str) -> dict | None:
     """Bóc tách dữ liệu email Memo từ Salesforce Loyalty."""
     if not body:
@@ -132,6 +165,11 @@ def parse_memo_email(subject: str, body: str) -> dict | None:
     ngay_yc_match = re.search(r"Ngày\s*tạo\s*(?:yêu\s*cầu)?\s*:\s*([0-9]{1,2}/[0-9]{1,2}/[0-9]{4})", body, re.IGNORECASE)
     ngay_yc_str = ngay_yc_match.group(1).strip() if ngay_yc_match else None
 
+    # Hiệu lực (Thời gian bắt đầu & kết thúc áp dụng Memo/Sub-Memo)
+    hieu_luc_match = re.search(r"Hiệu\s*lực\s*:\s*([^\r\n]+)", body, re.IGNORECASE)
+    hieu_luc_str = hieu_luc_match.group(1).strip() if hieu_luc_match else None
+    d_start, d_end = parse_effective_dates(hieu_luc_str) if hieu_luc_str else (None, None)
+
     # Link Salesforce
     link_match = re.search(r"Link\s*:\s*(https?://[^\s\r\n]+)", body, re.IGNORECASE)
     link_sf = link_match.group(1).strip() if link_match else None
@@ -142,6 +180,9 @@ def parse_memo_email(subject: str, body: str) -> dict | None:
         "ten_memo": ten_memo,
         "nguoi_yeu_cau": nguoi_yc,
         "ngay_yeu_cau": ngay_yc_str,
+        "hieu_luc": hieu_luc_str,
+        "ngay_batdau": d_start,
+        "ngay_ketthuc": d_end,
         "link_salesforce": link_sf,
         "raw_subject": subject,
     }
@@ -420,8 +461,9 @@ def poll_server_thread():
                 data = json.loads(resp.read().decode("utf-8"))
                 # Nếu Server yêu cầu quét (do người dùng bấm Quét trên Web)
                 if data.get("command") == "scan":
-                    logger.info("⚡ [Web Trigger] Nhận lệnh quét Outlook từ Web...")
-                    perform_sync(CONFIG.get("max_items", 400))
+                    max_it = int(data.get("max_items") or CONFIG.get("max_items", 400))
+                    logger.info(f"⚡ [Web Trigger] Nhận lệnh quét Outlook từ Web (max {max_it} emails)...")
+                    perform_sync(max_it)
         except Exception:
             pass
         time.sleep(2)

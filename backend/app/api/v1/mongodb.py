@@ -58,6 +58,8 @@ from app.schemas.mongodb import (
     KdsTransferQuayResponse,
     KdsLogQueryRequest,
     KdsLogQueryResponse,
+    KdsDishHistoryRequest,
+    KdsDishHistoryResponse,
     KdsUpdatePlacePrinterRequest,
     KdsUpdatePlacePrinterResponse,
     KdsPlaceDeleteRequest,
@@ -1170,6 +1172,28 @@ def get_kds_logs(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Lỗi khi tra cứu nhật ký KDS ({payload.host}): {str(e)}"
+        )
+
+
+@router.post("/kds-dish-history", response_model=KdsDishHistoryResponse)
+def get_kds_dish_history(
+    payload: KdsDishHistoryRequest,
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Soi lịch sử món KDS: tra cứu toàn diện quá trình order/ra món của món trong LOG_DISH_FINISH_ITEM,
+    kiểm tra trạng thái cấu hình CONFIG_COOKING hiện tại, trạng thái ẩn/hiện, báo hết món,
+    và tự động phân tích đối soát lý do món xuất hiện trên KDS (cơ chế fallback group ALL).
+    """
+    try:
+        return MongoDBService.get_kds_dish_history(
+            current_user=current_user,
+            payload=payload
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Lỗi khi tra cứu lịch sử món KDS ({payload.host}): {str(e)}"
         )
 
 

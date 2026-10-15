@@ -19,7 +19,8 @@ import {
   Check,
   X,
   ArrowRightLeft,
-  Layers
+  Layers,
+  History
 } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
@@ -28,7 +29,8 @@ import {
   KdsPlaceItem,
   KdsRoleUsersResponse,
   KdsItemDish,
-  KdsLogItem
+  KdsLogItem,
+  KdsDishHistoryResponse
 } from '../../services/mongoService';
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -2676,6 +2678,11 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [hasQueried, setHasQueried] = useState<boolean>(false);
   const [copiedAll, setCopiedAll] = useState<boolean>(false);
+  const [historyTarget, setHistoryTarget] = useState<{
+    itemCode: string;
+    sapCode?: string;
+    dishName?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (isOpen && host) {
@@ -2906,7 +2913,7 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
             />
           </div>
 
-          <div>
+          <div style={{ display: 'flex', gap: '6px' }}>
             <Button
               variant="primary"
               size="sm"
@@ -2917,6 +2924,24 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
             >
               Tra Cứu
             </Button>
+            {filterQuery.trim() && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setHistoryTarget({
+                    itemCode: filterQuery.trim(),
+                    sapCode: filterQuery.trim(),
+                    dishName: filterQuery.trim()
+                  });
+                }}
+                leftIcon={<History size={14} />}
+                style={{ borderColor: '#0284C7', color: '#0369A1', fontWeight: 700, backgroundColor: '#F0F9FF' }}
+                title="Soi toàn diện lịch sử và đối soát fallback KDS cho món này"
+              >
+                Soi Món Này
+              </Button>
+            )}
           </div>
         </div>
 
@@ -2934,13 +2959,13 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
             maxWidth: '100%'
           }}
         >
-          <table style={{ width: '100%', minWidth: '1080px', borderCollapse: 'collapse', fontSize: '12px' }}>
+          <table style={{ width: '100%', minWidth: '1160px', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #CBD5E1', color: '#475569', position: 'sticky', top: 0, zIndex: 10 }}>
                 <th style={{ padding: '9px 10px', textAlign: 'center', width: '70px' }}>Bàn</th>
                 <th style={{ padding: '9px 10px', textAlign: 'left', minWidth: '170px' }}>Món Ăn</th>
                 <th style={{ padding: '9px 10px', textAlign: 'center', width: '90px' }}>Mã SAP</th>
-                <th style={{ padding: '9px 10px', textAlign: 'left', width: '120px' }}>Quầy Bếp</th>
+                <th style={{ padding: '9px 10px', textAlign: 'left', minWidth: '140px' }}>Quầy Bếp (Thời Điểm Order)</th>
                 <th style={{ padding: '9px 10px', textAlign: 'center', width: '135px' }}>Giờ Order (CO/SO)</th>
                 <th style={{ padding: '9px 10px', textAlign: 'center', width: '135px' }}>Giờ Done (KDS)</th>
                 <th style={{ padding: '9px 10px', textAlign: 'center', width: '155px' }}>Lệnh In / Máy In KDS</th>
@@ -2948,19 +2973,20 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
                 <th style={{ padding: '9px 10px', textAlign: 'center', width: '80px' }}>Chuẩn</th>
                 <th style={{ padding: '9px 10px', textAlign: 'center', width: '110px' }}>Trạng Thái</th>
                 <th style={{ padding: '9px 10px', textAlign: 'center', width: '80px' }}>Tài Khoản</th>
+                <th style={{ padding: '9px 10px', textAlign: 'center', width: '95px' }}>Thao Tác</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={11} style={{ padding: '30px', textAlign: 'center', color: '#6B7280' }}>
+                  <td colSpan={12} style={{ padding: '30px', textAlign: 'center', color: '#6B7280' }}>
                     <RefreshCw size={20} className="animate-spin" style={{ display: 'inline', marginRight: '8px' }} />
                     Đang tra cứu dữ liệu nhật ký KDS từ MongoDB...
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
-                  <td colSpan={11} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF' }}>
+                  <td colSpan={12} style={{ padding: '30px', textAlign: 'center', color: '#9CA3AF' }}>
                     {hasQueried ? 'Không tìm thấy bản ghi nào phù hợp với bộ lọc trong ngày đã chọn.' : 'Vui lòng nhấn nút Tra Cứu để tải dữ liệu.'}
                   </td>
                 </tr>
@@ -2995,18 +3021,36 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
                         {item.sap_code || '—'}
                       </td>
                       <td style={{ padding: '8px 10px', color: '#334155' }}>
-                        <span
-                          style={{
-                            display: 'inline-block',
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                            backgroundColor: '#F1F5F9',
-                            fontSize: '11px',
-                            fontWeight: 600
-                          }}
-                        >
-                          {item.place_name}
-                        </span>
+                        {item.is_unassigned ? (
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: '#FEF2F2',
+                              color: '#B91C1C',
+                              border: '1px solid #FECACA',
+                              fontSize: '11px',
+                              fontWeight: 700
+                            }}
+                            title="Lúc order món chưa được gán quầy cụ thể (placeIds rỗng), KDS tự động fallback vào nhóm bếp chung"
+                          >
+                            ⚠️ {item.place_name}
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: '#F1F5F9',
+                              fontSize: '11px',
+                              fontWeight: 600
+                            }}
+                          >
+                            {item.place_name}
+                          </span>
+                        )}
                       </td>
                       <td style={{ padding: '8px 10px', textAlign: 'center', color: '#1E40AF', fontFamily: 'monospace', fontSize: '11px' }}>
                         {item.order_time}
@@ -3118,6 +3162,33 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
                       <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: '11px', color: '#64748B' }}>
                         {item.account_name || '—'}
                       </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => setHistoryTarget({
+                            itemCode: item.menu_item_code,
+                            sapCode: item.sap_code,
+                            dishName: item.dish_name
+                          })}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            border: '1px solid #0284C7',
+                            backgroundColor: '#E0F2FE',
+                            color: '#0369A1',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                          title="Soi toàn diện lịch sử order, trạng thái cấu hình và đối soát fallback KDS"
+                        >
+                          <History size={12} />
+                          Soi Món
+                        </button>
+                      </td>
                     </tr>
                   );
                 })
@@ -3125,6 +3196,423 @@ export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* MODAL CON: SOI LỊCH SỬ MÓN & ĐỐI SOÁT BẾP KDS */}
+      {historyTarget && (
+        <KdsDishHistoryModal
+          isOpen={!!historyTarget}
+          onClose={() => setHistoryTarget(null)}
+          host={host}
+          port={port}
+          restaurantName={restaurantName}
+          itemCode={historyTarget.itemCode}
+          sapCode={historyTarget.sapCode}
+          dishName={historyTarget.dishName}
+          showToast={showToast}
+        />
+      )}
+    </Modal>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════════════════
+// 9. MODAL SOI LỊCH SỬ MÓN KDS & ĐỐI SOÁT BẾP (SMART TIMELINE & ANALYSIS)
+// ══════════════════════════════════════════════════════════════════════════
+export interface KdsDishHistoryModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  host: string;
+  port?: number;
+  restaurantName?: string;
+  itemCode: string;
+  sapCode?: string;
+  dishName?: string;
+  showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
+}
+
+export const KdsDishHistoryModal: React.FC<KdsDishHistoryModalProps> = ({
+  isOpen,
+  onClose,
+  host,
+  port = 27017,
+  restaurantName = '',
+  itemCode,
+  sapCode = '',
+  dishName = '',
+  showToast
+}) => {
+  const [loading, setLoading] = useState<boolean>(false);
+  const [data, setData] = useState<KdsDishHistoryResponse | null>(null);
+  const [copiedAnalysis, setCopiedAnalysis] = useState<boolean>(false);
+  const [copiedTimeline, setCopiedTimeline] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isOpen && host && itemCode) {
+      loadHistory();
+    }
+  }, [isOpen, host, itemCode, sapCode]);
+
+  if (!isOpen) return null;
+
+  const loadHistory = async () => {
+    setLoading(true);
+    try {
+      const res = await mongoService.getKdsDishHistory({
+        host,
+        port,
+        item_code: itemCode,
+        sap_code: sapCode || undefined,
+        dish_name: dishName || undefined
+      });
+      setData(res);
+      showToast(res.message || `Đã tải lịch sử món ${itemCode}.`, 'success');
+    } catch (err: any) {
+      showToast(
+        'Lỗi khi soi lịch sử món KDS: ' + (err.response?.data?.detail || err.message),
+        'error'
+      );
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopyAnalysis = () => {
+    if (!data) return;
+    let content = `=== BẰNG CHỨNG ĐỐI SOÁT & GIẢI TRÌNH KDS: ${data.dish_name} ===\n`;
+    content += `Mã RK7: ${data.item_code} | Mã SAP: ${data.sap_code || '—'}\n`;
+    content += `Nhà hàng: ${restaurantName || host} | Kiểm tra lúc: ${new Date().toLocaleString('vi-VN')}\n`;
+    content += `------------------------------------------------------------------------------------\n\n`;
+    content += data.smart_analysis;
+    navigator.clipboard.writeText(content);
+    setCopiedAnalysis(true);
+    showToast('Đã sao chép văn bản giải trình đối soát KDS vào Clipboard!', 'success');
+    setTimeout(() => setCopiedAnalysis(false), 2500);
+  };
+
+  const handleCopyTimeline = () => {
+    if (!data || data.timeline.length === 0) return;
+    let text = `LỊCH SỬ CHI TIẾT RA MÓN KDS: ${data.dish_name} (${restaurantName || host})\n`;
+    text += `BÀN | GIỜ ORDER | GIỜ DONE | QUẦY ORDER | THỰC TẾ | CHUẨN | TRẠNG THÁI\n`;
+    text += `------------------------------------------------------------------------------------\n`;
+    data.timeline.forEach((t) => {
+      text += `${t.table_name} | ${t.order_time} | ${t.done_time} | ${t.place_name} | ${t.actual_minutes}p | ${t.config_minutes}p | ${t.status_label}\n`;
+    });
+    navigator.clipboard.writeText(text);
+    setCopiedTimeline(true);
+    showToast('Đã sao chép bảng lịch sử ra món vào Clipboard!', 'success');
+    setTimeout(() => setCopiedTimeline(false), 2500);
+  };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`🔍 Soi Lịch Sử & Đối Soát Bếp KDS: ${dishName || data?.dish_name || 'Món ăn'} (RK7: ${itemCode}${sapCode ? ` | SAP: ${sapCode}` : ''})`}
+      maxWidth="1100px"
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+            Ghi nhận <strong>{data?.total_timeline_orders || 0}</strong> lần order | Host: <code>{host}:{port}</code>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyAnalysis}
+              disabled={!data || !data.smart_analysis}
+              leftIcon={copiedAnalysis ? <Check size={14} color="#059669" /> : <Copy size={14} />}
+              style={{ borderColor: '#0284C7', color: '#0369A1', fontWeight: 600 }}
+            >
+              {copiedAnalysis ? 'Đã sao chép giải trình!' : '📋 Copy Giải Trình Gửi NH'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyTimeline}
+              disabled={!data || data.timeline.length === 0}
+              leftIcon={copiedTimeline ? <Check size={14} color="#059669" /> : <Copy size={14} />}
+            >
+              {copiedTimeline ? 'Đã sao chép!' : 'Sao Chép Timeline'}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={onClose}>
+              Đóng
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {loading ? (
+          <div style={{ padding: '50px', textAlign: 'center', color: '#6B7280' }}>
+            <RefreshCw size={24} className="animate-spin" style={{ display: 'inline', marginRight: '10px' }} />
+            Đang phân tích đối soát dữ liệu lịch sử KDS từ máy trạm nhà hàng ({host})...
+          </div>
+        ) : !data ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#EF4444' }}>
+            Không tìm thấy dữ liệu hoặc có lỗi xảy ra khi truy vấn MongoDB.
+          </div>
+        ) : (
+          <>
+            {/* 3 Thẻ tóm tắt thông tin hiện tại */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: '12px'
+              }}
+            >
+              {/* Thẻ 1: Cấu hình Bếp KDS */}
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  backgroundColor: data.is_in_config_cooking ? '#F0FDF4' : '#FEF2F2',
+                  border: data.is_in_config_cooking ? '1px solid #BBF7D0' : '1px solid #FECACA'
+                }}
+              >
+                <div style={{ fontSize: '11px', fontWeight: 700, color: data.is_in_config_cooking ? '#15803D' : '#DC2626', marginBottom: '4px' }}>
+                  ⚙️ CẤU HÌNH BẾP (CONFIG_COOKING)
+                </div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', marginBottom: '4px' }}>
+                  {data.is_in_config_cooking ? '✓ Đang có trong CONFIG_COOKING' : '❌ Chưa cấu hình / Đã bị xóa'}
+                </div>
+                <div style={{ fontSize: '11px', color: '#475569' }}>
+                  Quầy hiện tại: <strong>{data.current_place_names?.length ? data.current_place_names.join(', ') : 'Chưa gán quầy (placeIds: [])'}</strong>
+                </div>
+                <div style={{ fontSize: '11px', color: '#475569' }}>
+                  Nhóm KDS: <strong>{data.current_group_name || 'Không có'}</strong> | Chuẩn: <strong>{data.current_config_minutes}p</strong>
+                </div>
+              </div>
+
+              {/* Thẻ 2: Kênh bán */}
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #E2E8F0'
+                }}
+              >
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                  📱 KÊNH BÁN (QR-ORDER / CO / SO)
+                </div>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
+                  <span
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      backgroundColor: data.is_hidden ? '#FEE2E2' : '#DCFCE7',
+                      color: data.is_hidden ? '#DC2626' : '#15803D'
+                    }}
+                  >
+                    {data.is_hidden ? '👁️ Đang ẨN trên Menu' : '✓ Hiển thị bình thường'}
+                  </span>
+                  <span
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      backgroundColor: data.is_out_of_stock ? '#FEF3C7' : '#DCFCE7',
+                      color: data.is_out_of_stock ? '#B45309' : '#15803D'
+                    }}
+                  >
+                    {data.is_out_of_stock ? '📦 BÁO HẾT MÓN (Out of Dish)' : '✓ Còn hàng'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Thẻ 3: Tổng lượt order */}
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  backgroundColor: '#EFF6FF',
+                  border: '1px solid #BFDBFE'
+                }}
+              >
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#1E40AF', marginBottom: '4px' }}>
+                  📊 THỐNG KÊ LỊCH SỬ RA MÓN
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 900, color: '#1E3A8A' }}>
+                  {data.total_timeline_orders} <span style={{ fontSize: '12px', fontWeight: 500 }}>lần order</span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#3B82F6', marginTop: '2px' }}>
+                  Dữ liệu đối soát từ <code>G_KITCHEN.LOG_DISH_FINISH_ITEM</code>
+                </div>
+              </div>
+            </div>
+
+            {/* Hộp Giải Trình & Đối Soát Kỹ Thuật (Smart Analysis Box) */}
+            <div
+              style={{
+                padding: '14px 16px',
+                borderRadius: '8px',
+                backgroundColor: '#F0F9FF',
+                border: '1.5px solid #0284C7',
+                color: '#0C4A6E'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', color: '#0369A1' }}>
+                  💡 KẾT LUẬN ĐỐI SOÁT & GIẢI TRÌNH KỸ THUẬT CHO NHÀ HÀNG
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyAnalysis}
+                  leftIcon={copiedAnalysis ? <Check size={12} color="#059669" /> : <Copy size={12} />}
+                  style={{ backgroundColor: '#fff', fontSize: '11px', borderColor: '#0284C7', color: '#0369A1' }}
+                >
+                  {copiedAnalysis ? 'Đã sao chép!' : 'Sao chép giải trình'}
+                </Button>
+              </div>
+              <div
+                style={{
+                  whiteSpace: 'pre-wrap',
+                  fontSize: '12px',
+                  lineHeight: 1.65,
+                  color: '#0F172A',
+                  backgroundColor: '#FFFFFF',
+                  padding: '12px 14px',
+                  borderRadius: '6px',
+                  border: '1px solid #BAE6FD'
+                }}
+              >
+                {data.smart_analysis}
+              </div>
+            </div>
+
+            {/* Bảng Dòng Thời Gian Ra Món (Timeline Table) */}
+            <div style={{ marginTop: '4px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                📜 DÒNG THỜI GIAN CÁC LẦN RA MÓN (LOG_DISH_FINISH_ITEM):
+              </div>
+              <div
+                style={{
+                  maxHeight: '340px',
+                  overflowY: 'auto',
+                  overflowX: 'auto',
+                  WebkitOverflowScrolling: 'touch',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  backgroundColor: '#FFFFFF'
+                }}
+              >
+                <table style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #CBD5E1', color: '#475569', position: 'sticky', top: 0, zIndex: 10 }}>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', width: '75px' }}>Bàn</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', width: '140px' }}>Giờ Order (CO/SO)</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', width: '140px' }}>Giờ Done (KDS)</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', minWidth: '160px' }}>Quầy Khi Order</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', width: '100px' }}>Máy In</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', width: '80px' }}>Thực Tế</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', width: '75px' }}>Chuẩn</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', width: '110px' }}>Trạng Thái</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.timeline.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: '#9CA3AF' }}>
+                          Chưa có bản ghi order nào của món này trong ngày.
+                        </td>
+                      </tr>
+                    ) : (
+                      data.timeline.map((item, idx) => {
+                        const isDelayed = item.delay_minutes > 0;
+                        const isUnassigned = !item.place_ids || item.place_ids.length === 0;
+                        return (
+                          <tr
+                            key={`${item.id}_${idx}`}
+                            style={{
+                              borderBottom: '1px solid #E2E8F0',
+                              backgroundColor: isDelayed ? '#FFFBEB' : idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'
+                            }}
+                          >
+                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800 }}>
+                              <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: '#E2E8F0', fontFamily: 'monospace' }}>
+                                {item.table_name}
+                              </span>
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center', color: '#1E40AF', fontFamily: 'monospace', fontSize: '11px' }}>
+                              {item.order_time}
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center', color: '#047857', fontFamily: 'monospace', fontSize: '11px' }}>
+                              {item.done_time}
+                            </td>
+                            <td style={{ padding: '8px 10px' }}>
+                              {isUnassigned ? (
+                                <span
+                                  style={{
+                                    display: 'inline-block',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    backgroundColor: '#FEF2F2',
+                                    color: '#B91C1C',
+                                    border: '1px solid #FECACA',
+                                    fontSize: '11px',
+                                    fontWeight: 700
+                                  }}
+                                  title="placeIds: [] lúc order -> KDS fallback về nhóm bếp chung"
+                                >
+                                  ⚠️ {item.place_name}
+                                </span>
+                              ) : (
+                                <span
+                                  style={{
+                                    display: 'inline-block',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    backgroundColor: '#F1F5F9',
+                                    fontSize: '11px',
+                                    fontWeight: 600
+                                  }}
+                                >
+                                  {item.place_name}
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: '11px', color: '#475569' }}>
+                              {item.printer_name || '—'}
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, color: isDelayed ? '#DC2626' : '#059669' }}>
+                              {item.actual_minutes > 0 ? `${item.actual_minutes}p` : '—'}
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>
+                              {item.config_minutes > 0 ? `${item.config_minutes}p` : '—'}
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                              <span
+                                style={{
+                                  display: 'inline-block',
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  backgroundColor: isDelayed ? '#FEE2E2' : '#DCFCE7',
+                                  color: isDelayed ? '#DC2626' : '#15803D',
+                                  border: isDelayed ? '1px solid #FECACA' : '1px solid #BBF7D0'
+                                }}
+                              >
+                                {item.status_label}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </Modal>
   );

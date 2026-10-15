@@ -182,6 +182,9 @@ from app.schemas.mongodb import (
     KdsLogQueryRequest,
     KdsLogItem,
     KdsLogQueryResponse,
+    KdsDishHistoryRequest,
+    KdsDishHistoryTimelineItem,
+    KdsDishHistoryResponse,
     KdsUpdatePlacePrinterRequest,
     KdsUpdatePlacePrinterResponse,
     KdsPlaceDeleteRequest,
@@ -2703,7 +2706,27 @@ class MongoDBService:
                     m_code = str(m.get("code") or doc.get("menuItemCode") or "").strip()
                     m_name = str(m.get("name") or doc.get("menuItemName") or "").strip()
                     m_sap = str(m.get("sapCode") or doc.get("sapCode") or "").strip()
-                    tbl = str(doc.get("tableName") or doc.get("table") or doc.get("tableCode") or "-").strip()
+
+                    # Bóc tách tên bàn sạch sẽ, không hiển thị cả object dict
+                    raw_tbl = doc.get("tableName") or doc.get("table") or doc.get("tableCode") or "-"
+                    tbl = "-"
+                    if isinstance(raw_tbl, dict):
+                        tbl = str(raw_tbl.get("name") or raw_tbl.get("code") or "-").strip()
+                    elif isinstance(raw_tbl, str):
+                        raw_str = raw_tbl.strip()
+                        if raw_str.startswith("{") and "'name':" in raw_str:
+                            import ast
+                            try:
+                                p_tbl = ast.literal_eval(raw_str)
+                                tbl = str(p_tbl.get("name") or p_tbl.get("code") or "-").strip()
+                            except Exception:
+                                tbl = raw_str
+                        else:
+                            tbl = raw_str
+                    else:
+                        tbl = str(raw_tbl).strip()
+                    if tbl and not tbl.lower().startswith("bàn") and tbl != "-":
+                        tbl = f"Bàn {tbl}"
 
                     if table_filter and table_filter not in tbl.lower():
                         continue
@@ -2734,9 +2757,37 @@ class MongoDBService:
                     else:
                         status_lbl = "Kịp giờ"
 
-                    pid = doc.get("placeId") or (c.get("placeIds", [None])[0] if c.get("placeIds") else None)
-                    p_name = str(doc.get("placeName") or place_map.get(pid) or (f"Quầy #{pid}" if pid else "Quầy Bếp"))
-                    assigned_prn = str(doc.get("printer") or (place_printer_map.get(pid, "") if pid is not None else "")).strip()
+                    # Trích xuất danh sách quầy và nhóm KDS tại THỜI ĐIỂM ORDER (ghi nhận trong snapshot configCooking)
+                    hist_pids_raw = c.get("placeIds") if isinstance(c.get("placeIds"), list) else ([doc.get("placeId")] if doc.get("placeId") is not None else [])
+                    clean_pids: List[int] = []
+                    for p in hist_pids_raw:
+                        try:
+                            clean_pids.append(int(p))
+                        except (ValueError, TypeError):
+                            pass
+
+                    grp_kds = c.get("groupTypeKds") or {}
+                    grp_name = str(grp_kds.get("name") or grp_kds.get("code") or "").strip()
+                    is_unassigned = len(clean_pids) == 0
+
+                    # Xác định tên quầy bếp tại thời điểm order
+                    if doc.get("placeName"):
+                        p_name = str(doc.get("placeName")).strip()
+                    elif clean_pids:
+                        p_names = [place_map.get(pid, f"Quầy #{pid}") for pid in clean_pids]
+                        p_name = ", ".join(p_names)
+                    elif grp_name:
+                        p_name = f"⚠️ Chưa gán quầy ({grp_name})"
+                    else:
+                        p_name = "⚠️ Chưa gán quầy (ALL)"
+
+                    # Bóc tách cấu hình máy in ghi nhận tại thời điểm đó
+                    hist_prn = str(doc.get("printer") or c.get("printer") or c.get("driverName") or "").strip()
+                    if not hist_prn and clean_pids:
+                        for pid in clean_pids:
+                            if place_printer_map.get(pid):
+                                hist_prn = place_printer_map[pid]
+                                break
 
                     # Bắt logs và kiểm tra phát lệnh in khi Done món
                     if not deliv_dt:
@@ -2745,13 +2796,17 @@ class MongoDBService:
                     elif is_disable_print:
                         p_status = "DISABLED"
                         p_msg = "Tắt in KDS (Cấu hình isDisablePrint: BẬT)"
-                    elif not assigned_prn:
+                    elif is_unassigned and not hist_prn:
+                        p_status = "NO_PRINTER"
+                        p_msg = f"Món chưa gán quầy cụ thể ({grp_name or 'ALL'}) - KDS không cấu hình máy in"
+                        hist_prn = f"Không có máy in ({grp_name or 'ALL'})"
+                    elif not hist_prn:
                         p_status = "NO_PRINTER"
                         p_msg = f"Quầy {p_name} chưa gán máy in/driver"
                     else:
                         p_status = "PRINTED"
                         done_str = deliv_dt.strftime("%H:%M:%S")
-                        p_msg = f"Đã phát lệnh in ra [{assigned_prn}] lúc {done_str}"
+                        p_msg = f"Đã phát lệnh in ra [{hist_prn}] lúc {done_str}"
 
                     logs.append(KdsLogItem(
                         id=str(doc.get("_id")),
@@ -2760,6 +2815,9 @@ class MongoDBService:
                         menu_item_code=m_code,
                         sap_code=m_sap,
                         place_name=p_name,
+                        group_name=grp_name or None,
+                        historical_place_ids=clean_pids,
+                        is_unassigned=is_unassigned,
                         account_name=str(doc.get("accountName") or doc.get("accName") or doc.get("user") or "-"),
                         order_time=sub_dt.strftime("%d/%m/%Y %H:%M:%S") if sub_dt else "-",
                         done_time=deliv_dt.strftime("%d/%m/%Y %H:%M:%S") if deliv_dt else "Chưa Done",
@@ -2768,7 +2826,7 @@ class MongoDBService:
                         delay_minutes=delay_mins,
                         status_label=status_lbl,
                         source_collection="G_KITCHEN.LOG_DISH_FINISH_ITEM",
-                        printer_name=assigned_prn or None,
+                        printer_name=hist_prn or None,
                         print_status=p_status,
                         print_message=p_msg
                     ))
@@ -2790,7 +2848,26 @@ class MongoDBService:
                     m_code = str(m.get("code") or doc.get("itemCode") or "").strip()
                     m_name = str(m.get("name") or doc.get("itemName") or "").strip()
                     m_sap = str(m.get("sapCode") or "").strip()
-                    tbl = str(doc.get("tableName") or doc.get("table") or "-").strip()
+
+                    raw_tbl = doc.get("tableName") or doc.get("table") or "-"
+                    tbl = "-"
+                    if isinstance(raw_tbl, dict):
+                        tbl = str(raw_tbl.get("name") or raw_tbl.get("code") or "-").strip()
+                    elif isinstance(raw_tbl, str):
+                        raw_str = raw_tbl.strip()
+                        if raw_str.startswith("{") and "'name':" in raw_str:
+                            import ast
+                            try:
+                                p_tbl = ast.literal_eval(raw_str)
+                                tbl = str(p_tbl.get("name") or p_tbl.get("code") or "-").strip()
+                            except Exception:
+                                tbl = raw_str
+                        else:
+                            tbl = raw_str
+                    else:
+                        tbl = str(raw_tbl).strip()
+                    if tbl and not tbl.lower().startswith("bàn") and tbl != "-":
+                        tbl = f"Bàn {tbl}"
 
                     if table_filter and table_filter not in tbl.lower():
                         continue
@@ -2814,13 +2891,16 @@ class MongoDBService:
                     delay_mins = round(max(0.0, actual_mins - config_mins), 1)
                     status_lbl = f"Trễ {delay_mins:.1f}p" if (config_mins > 0 and actual_mins > config_mins) else "Kịp giờ"
 
+                    p_name_raw = str(doc.get("placeName") or "").strip()
+                    p_name = p_name_raw if p_name_raw else "Quầy Bếp"
+
                     logs.append(KdsLogItem(
                         id=str(doc.get("_id")),
                         table_name=tbl,
                         dish_name=m_name or "Món ăn",
                         menu_item_code=m_code,
                         sap_code=m_sap,
-                        place_name=str(doc.get("placeName") or "Quầy Bếp"),
+                        place_name=p_name,
                         account_name=str(doc.get("accountName") or doc.get("user") or "-"),
                         order_time=ord_dt.strftime("%d/%m/%Y %H:%M:%S") if ord_dt else "-",
                         done_time=deliv_dt.strftime("%d/%m/%Y %H:%M:%S") if deliv_dt else "-",
@@ -2842,6 +2922,266 @@ class MongoDBService:
                 query_filter=payload.query,
                 logs=logs,
                 message=f"Đã tìm thấy {len(logs)} bản ghi nhật ký KDS trong ngày {date_str}."
+            )
+        finally:
+            client.close()
+
+    @staticmethod
+    def get_kds_dish_history(
+        current_user: UserInfo,
+        payload: KdsDishHistoryRequest,
+        db: Optional[Session] = None
+    ) -> KdsDishHistoryResponse:
+        """
+        Tra cứu lịch sử chi tiết của một món ăn trên KDS:
+        1. Đối soát cấu hình hiện tại trong CONFIG_COOKING (quầy, nhóm KDS, thời gian chuẩn).
+        2. Quét toàn bộ lịch sử các lần Order & Vào KDS từ LOG_DISH_FINISH_ITEM để phát hiện:
+           - Món tại thời điểm order từng thuộc quầy nào?
+           - Có bị gỡ khỏi quầy (placeIds: []) không?
+           - Có được KDS mặc định điều phối vào nhóm ALL (Bếp Nóng & Nướng / KDS Tổng) không?
+        3. Kiểm tra trạng thái Ẩn/Hiện trong SHOW_HIDE_ITEMS và Hết món trong OUT_OF_DISH.
+        4. Tự động xuất báo cáo phân tích đối soát thông minh giúp IT làm việc với Nhà hàng.
+        """
+        client = MongoClient(payload.host, payload.port, serverSelectionTimeoutMS=4000)
+        try:
+            all_dbs = client.list_database_names()
+            db_kitchen = client["G_KITCHEN"] if "G_KITCHEN" in all_dbs else None
+            db_order = client["G_ORDER"] if "G_ORDER" in all_dbs else None
+
+            # 1. Map tên quầy hiện tại từ CONFIG_KDS
+            place_map: Dict[int, str] = {}
+            if db_kitchen is not None and "CONFIG_KDS" in db_kitchen.list_collection_names():
+                cfg = db_kitchen["CONFIG_KDS"].find_one() or {}
+                for p in (cfg.get("places") or []):
+                    if isinstance(p, dict) and p.get("id") is not None:
+                        try:
+                            place_map[int(p["id"])] = p.get("name", f"Quầy #{p['id']}")
+                        except Exception:
+                            pass
+
+            item_code = payload.item_code.strip()
+            sap_code = (payload.sap_code or "").strip()
+            d_name = (payload.dish_name or "").strip()
+
+            # 2. Kiểm tra CONFIG_COOKING hiện tại
+            is_in_cfg = False
+            cur_pids: List[int] = []
+            cur_names: List[str] = []
+            cur_grp: str = ""
+            cur_cfg_mins: float = 0.0
+
+            if db_kitchen is not None and "CONFIG_COOKING" in db_kitchen.list_collection_names():
+                q_cfg: Dict[str, Any] = {"$or": [
+                    {"menuItemCode": item_code},
+                    {"code": item_code}
+                ]}
+                if sap_code:
+                    q_cfg["$or"].append({"sapCode": sap_code})
+                c_doc = db_kitchen["CONFIG_COOKING"].find_one(q_cfg)
+                if c_doc:
+                    is_in_cfg = True
+                    d_name = d_name or str(c_doc.get("menuItemName") or c_doc.get("name") or "")
+                    sap_code = sap_code or str(c_doc.get("sapCode") or "")
+                    for pid in (c_doc.get("placeIds") or []):
+                        try:
+                            pid_i = int(pid)
+                            cur_pids.append(pid_i)
+                            cur_names.append(place_map.get(pid_i, f"Quầy #{pid_i}"))
+                        except Exception:
+                            pass
+                    g = c_doc.get("groupTypeKds") or {}
+                    cur_grp = str(g.get("name") or g.get("code") or "")
+                    raw_s = c_doc.get("singleCookingTime") or 0
+                    cur_cfg_mins = round(float(raw_s) / 60.0, 1) if raw_s else 0.0
+
+            # 3. Kiểm tra ẩn / hiện & hết món trong G_ORDER
+            is_hidden = False
+            is_out_of_stock = False
+            if db_order is not None:
+                if "SHOW_HIDE_ITEMS" in db_order.list_collection_names():
+                    sh_doc = db_order["SHOW_HIDE_ITEMS"].find_one({"$or": [{"itemCode": item_code}, {"code": item_code}]})
+                    if sh_doc:
+                        d_name = d_name or str(sh_doc.get("itemName") or "")
+                        sap_code = sap_code or str(sh_doc.get("sapCode") or "")
+                        if bool(sh_doc.get("isHideQrOrder")) or bool(sh_doc.get("isHideCo")) or bool(sh_doc.get("isHideSo")):
+                            is_hidden = True
+
+                if "OUT_OF_DISH" in db_order.list_collection_names():
+                    out_doc = db_order["OUT_OF_DISH"].find_one({"$or": [{"itemCode": item_code}, {"code": item_code}, {"menuItemCode": item_code}]})
+                    if out_doc and bool(out_doc.get("isOutOfDish", False)):
+                        is_out_of_stock = True
+
+            # 4. Truy xuất Timeline từ LOG_DISH_FINISH_ITEM
+            timeline: List[KdsDishHistoryTimelineItem] = []
+            if db_kitchen is not None and "LOG_DISH_FINISH_ITEM" in db_kitchen.list_collection_names():
+                col_finish = db_kitchen["LOG_DISH_FINISH_ITEM"]
+                q_log: Dict[str, Any] = {"$or": [
+                    {"menuItem.code": item_code},
+                    {"menuItemCode": item_code}
+                ]}
+                if sap_code:
+                    q_log["$or"].extend([{"menuItem.sapCode": sap_code}, {"sapCode": sap_code}])
+                if d_name:
+                    q_log["$or"].append({"menuItem.name": {"$regex": re.escape(d_name), "$options": "i"}})
+
+                cursor = col_finish.find(q_log).sort("submitTime", -1).limit(50)
+                for doc in cursor:
+                    m = doc.get("menuItem") or {}
+                    c = doc.get("configCooking") or {}
+                    d_name = d_name or str(m.get("name") or doc.get("menuItemName") or "Món ăn")
+                    sap_code = sap_code or str(m.get("sapCode") or doc.get("sapCode") or "")
+
+                    raw_tbl = doc.get("tableName") or doc.get("table") or doc.get("tableCode") or "-"
+                    tbl = "-"
+                    if isinstance(raw_tbl, dict):
+                        tbl = str(raw_tbl.get("name") or raw_tbl.get("code") or "-").strip()
+                    elif isinstance(raw_tbl, str):
+                        raw_str = raw_tbl.strip()
+                        if raw_str.startswith("{") and "'name':" in raw_str:
+                            import ast
+                            try:
+                                p_tbl = ast.literal_eval(raw_str)
+                                tbl = str(p_tbl.get("name") or p_tbl.get("code") or "-").strip()
+                            except Exception:
+                                tbl = raw_str
+                        else:
+                            tbl = raw_str
+                    else:
+                        tbl = str(raw_tbl).strip()
+                    if tbl and not tbl.lower().startswith("bàn") and tbl != "-":
+                        tbl = f"Bàn {tbl}"
+
+                    def _ts_to_dt(val):
+                        if not val:
+                            return None
+                        if isinstance(val, datetime.datetime):
+                            return val
+                        if isinstance(val, (int, float)):
+                            if val > 1000000000000:
+                                return datetime.datetime.fromtimestamp(val / 1000.0)
+                            return datetime.datetime.fromtimestamp(val)
+                        return None
+
+                    sub_dt = _ts_to_dt(doc.get("submitTime"))
+                    deliv_dt = _ts_to_dt(doc.get("deliveryTime"))
+
+                    sub_ms = doc.get("submitTime") if isinstance(doc.get("submitTime"), (int, float)) else (int(sub_dt.timestamp() * 1000) if sub_dt else 0)
+                    deliv_ms = doc.get("deliveryTime") if isinstance(doc.get("deliveryTime"), (int, float)) else (int(deliv_dt.timestamp() * 1000) if deliv_dt else 0)
+
+                    actual_mins = 0.0
+                    if sub_ms and deliv_ms and deliv_ms >= sub_ms:
+                        actual_mins = round((deliv_ms - sub_ms) / 60000.0, 1)
+
+                    raw_cfg = c.get("singleCookingTime") or doc.get("singleCookingTime") or 0
+                    config_mins = round(float(raw_cfg) / 60.0, 1) if raw_cfg else 0.0
+                    delay_mins = round(max(0.0, actual_mins - config_mins), 1)
+
+                    if not deliv_dt:
+                        status_lbl = "Đang chế biến (Chưa Done)"
+                    elif config_mins > 0 and actual_mins > config_mins:
+                        status_lbl = f"Trễ {delay_mins:.1f}p"
+                    else:
+                        status_lbl = "Kịp giờ"
+
+                    h_pids: List[int] = []
+                    for p in (c.get("placeIds") or []):
+                        try:
+                            h_pids.append(int(p))
+                        except Exception:
+                            pass
+
+                    h_grp = c.get("groupTypeKds") or {}
+                    h_grp_name = str(h_grp.get("name") or h_grp.get("code") or "").strip()
+
+                    if doc.get("placeName"):
+                        p_name = str(doc.get("placeName")).strip()
+                    elif h_pids:
+                        p_name = ", ".join([place_map.get(pid, f"Quầy #{pid}") for pid in h_pids])
+                    elif h_grp_name:
+                        p_name = f"Chưa gán quầy ({h_grp_name})"
+                    else:
+                        p_name = "Chưa gán quầy (ALL)"
+
+                    prn = str(doc.get("printer") or c.get("printer") or c.get("driverName") or "").strip()
+
+                    timeline.append(KdsDishHistoryTimelineItem(
+                        id=str(doc.get("_id")),
+                        order_time=sub_dt.strftime("%d/%m/%Y %H:%M:%S") if sub_dt else "-",
+                        done_time=deliv_dt.strftime("%d/%m/%Y %H:%M:%S") if deliv_dt else "Chưa Done",
+                        table_name=tbl,
+                        place_ids=h_pids,
+                        place_name=p_name,
+                        group_name=h_grp_name,
+                        config_minutes=config_mins,
+                        actual_minutes=actual_mins,
+                        delay_minutes=delay_mins,
+                        status_label=status_lbl,
+                        printer_name=prn or None,
+                        source="LOG_DISH_FINISH_ITEM"
+                    ))
+
+            # 5. Phân tích thông minh (Smart Analysis)
+            analysis_parts = []
+            if not is_in_cfg:
+                analysis_parts.append(
+                    "❌ CẤU HÌNH HIỆN TẠI: Món này hiện KHÔNG CÓ trong bảng CONFIG_COOKING trên KDS của nhà hàng. "
+                    "Điều này có nghĩa là nhà hàng chưa từng thiết lập hoặc ĐÃ XÓA/GỠ BỎ cấu hình quầy của món này."
+                )
+            else:
+                p_text = ", ".join(cur_names) if cur_names else "Chưa chọn quầy (placeIds rỗng)"
+                analysis_parts.append(
+                    f"✅ CẤU HÌNH HIỆN TẠI: Món đang được gán vào: [{p_text}], Nhóm: '{cur_grp or 'Không có'}', "
+                    f"Thời gian chuẩn: {cur_cfg_mins} phút."
+                )
+
+            if timeline:
+                unassigned_count = sum(1 for t in timeline if not t.place_ids)
+                assigned_count = len(timeline) - unassigned_count
+                sample_grp = timeline[0].group_name or "ALL / Bếp Nóng & Nướng"
+
+                if unassigned_count > 0 and assigned_count == 0:
+                    analysis_parts.append(
+                        f"⚠️ ĐỐI SOÁT LỊCH SỬ KDS: Toàn bộ {unassigned_count} lần order trong lịch sử đều ghi nhận placeIds: [] (Rỗng) "
+                        f"và nhóm KDS là '{sample_grp}'.\n"
+                        f"👉 GIẢI THÍCH CHUYÊN SÂU CHO NHÀ HÀNG: Theo logic lõi của hệ thống KDS Golden Gate, khi một món không được gán vào quầy cụ thể "
+                        f"(placeIds rỗng), KDS sẽ kích hoạt cơ chế fallback điều phối món vào màn hình của nhóm '{sample_grp}' (hoặc trạm KDS Master) "
+                        f"với thời gian chuẩn mặc định (5 phút). Vì vậy, nhân viên nhà hàng khẳng định 'chưa từng gán món vào quầy nào' "
+                        f"là ĐÚNG về mặt danh mục quầy (placeIds), nhưng món VẪN VÀO MÀN HÌNH BẾP và chuyển màu ĐỎ sau khi quá hạn thời gian chuẩn!"
+                    )
+                elif unassigned_count > 0 and assigned_count > 0:
+                    analysis_parts.append(
+                        f"🔍 PHÁT HIỆN BIẾN ĐỘNG QUẦY: Món này có {assigned_count} lần từng được gán vào quầy cụ thể "
+                        f"và {unassigned_count} lần bị bỏ trống quầy (placeIds rỗng). "
+                        f"Có bằng chứng rõ ràng cho thấy cấu hình quầy đã từng bị chỉnh sửa hoặc tháo gỡ!"
+                    )
+                else:
+                    analysis_parts.append(
+                        f"ℹ️ Lịch sử ghi nhận món luôn được gán vào quầy cụ thể ({', '.join(set(t.place_name for t in timeline))})."
+                    )
+
+            if is_hidden:
+                analysis_parts.append("👁️ TRẠNG THÁI ẨN/HIỆN: Món hiện đang được đặt cờ ẨN trên hệ thống (QR-Order/CO/SO).")
+            if is_out_of_stock:
+                analysis_parts.append("📦 TRẠNG THÁI HẾT MÓN: Món đang được đánh dấu BÁO HẾT (Out of Dish) tại nhà hàng.")
+
+            smart_analysis_text = "\n\n".join(analysis_parts)
+
+            return KdsDishHistoryResponse(
+                success=True,
+                dish_name=d_name or f"Món {item_code}",
+                item_code=item_code,
+                sap_code=sap_code,
+                is_in_config_cooking=is_in_cfg,
+                current_place_ids=cur_pids,
+                current_place_names=cur_names,
+                current_group_name=cur_grp,
+                current_config_minutes=cur_cfg_mins,
+                is_hidden=is_hidden,
+                is_out_of_stock=is_out_of_stock,
+                total_timeline_orders=len(timeline),
+                timeline=timeline,
+                smart_analysis=smart_analysis_text,
+                message=f"Đã tra cứu thành công lịch sử món {item_code} ({len(timeline)} lần order)."
             )
         finally:
             client.close()

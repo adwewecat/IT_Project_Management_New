@@ -188,6 +188,31 @@ npm run dev
 
 ---
 
+### [2026-10-15] - Nâng Cấp Tra Cứu Logs KDS, Soi Lịch Sử Món KDS & Khắc Phục Auto Mail Memo Hiệu Lực
+- **Màn hình**: Phân Tích MongoDB Nhà Hàng (`RestaurantMongoAnalysisPage.tsx`, `KdsQuayModals.tsx`, `mongodb_service.py`, `mongodb.py`), Quản Lý Mail Memo (`mail_memo_service.py`, `mail_memo.py`, `outlook_agent.py`).
+- **Nội dung xử lý chi tiết**:
+  1. **Nâng cấp đối soát Logs KDS & Tính năng Soi Lịch Sử Món (KdsDishHistoryModal)**:
+     - *Thực tế phát sinh tại [4654] Gogi House Hùng Vương Plaza (IP 10.9.104.11)*: Nhà hàng phản ánh món "Vé Buffet Panchan" (Mã RK7: 17340, SAP: 65003403) chưa từng gán quầy nào nhưng vẫn xuất hiện trên màn hình KDS và báo đỏ trễ 102.7 phút. Ngoài ra, cột "Bàn" trên bảng logs hiển thị raw Python dict `{ 'code': '924', 'name': '213' }`.
+     - *Bản chất kiến trúc KDS Golden Gate*: Kiểm tra trực tiếp MongoDB trạm nhà hàng, trong `LOG_DISH_FINISH_ITEM`, món có `placeIds: []` và `groupTypeKds: { 'code': 'ALL', 'name': 'Bếp Nóng & Nướng' }`. Trong bảng cấu hình `CONFIG_COOKING`, món này không có bản ghi (nhà hàng chưa cấu hình hoặc đã xóa). Khi `placeIds` rỗng, KDS kích hoạt cơ chế fallback điều phối món vào màn hình của nhóm bếp chung (`Bếp Nóng & Nướng`) với thời gian chuẩn 5 phút. Khi quá 5 phút chưa bấm Done, món chuyển sang màu đỏ. Vì vậy, nhà hàng khẳng định "chưa từng gán quầy" là đúng về mặt `placeIds`, nhưng món vẫn vào màn hình bếp và báo đỏ quá hạn!
+     - *Giải pháp triển khai*:
+       + Chuẩn hóa cột "Bàn": trích xuất số bàn từ dict hoặc chuỗi, tự động định dạng thành `Bàn 213`.
+       + Đổi tiêu đề cột thành `Quầy Bếp (Thời Điểm Order)`, hiển thị đúng quầy/nhóm ghi nhận tại thời điểm order. Nếu `is_unassigned` (`placeIds: []`), hiển thị badge cảnh báo đỏ `⚠️ Chưa gán quầy (Bếp Nóng & Nướng)`.
+       + Xây dựng backend `POST /api/v1/mongodb/kds-dish-history` & `MongoDBService.get_kds_dish_history`: tra cứu toàn diện lịch sử order/done trong `LOG_DISH_FINISH_ITEM`, kiểm tra cấu hình hiện tại trong `CONFIG_COOKING`, kiểm tra cờ ẩn (`SHOW_HIDE_ITEMS`), cờ hết món (`OUT_OF_DISH`), và tự động sinh giải trình kỹ thuật thông minh (`smart_analysis`).
+       + Xây dựng component `KdsDishHistoryModal`: Gồm 3 thẻ trạng thái, hộp giải trình đối soát kỹ thuật nổi bật kèm nút copy 1 chạm gửi nhà hàng, và bảng timeline chi tiết các lần order/done.
+       + Bổ sung nút `🔍 Soi Món` trên từng dòng nhật ký KDS và nút `Soi Món Này` trên thanh tìm kiếm.
+  2. **Khắc phục lỗi scan tự động Mail Memo & Tự động trích xuất ngày hiệu lực**:
+     - *Nguyên nhân lỗi 500*: Agent Outlook gọi import về backend bị sập vì `mail_memo_service.py` gọi hàm chưa định nghĩa `self.record_agent_heartbeat`.
+     - *Xử lý triệt để*:
+       + Định nghĩa hàm `record_agent_heartbeat` lưu trạng thái heartbeat vào `mail_memo_config.json`.
+       + Viết bộ bóc tách regex thông minh ngày hiệu lực `Hiệu lực: MM/DD/YYYY - MM/DD/YYYY` (chuẩn Salesforce) và `DD/MM/YYYY - DD/MM/YYYY` ở cả backend và client `outlook_agent.py`.
+       + Khi import memo con bổ sung (VD: `402600LC013.09`), hệ thống tự động cập nhật ngày bắt đầu / kết thúc, tự động chuyển trạng thái memo cha sang `4: Bổ sung nút bấm`, gỡ cờ hoàn thành, và thêm ghi chú hiệu lực vào nội dung mail.
+       + Đóng gói lại bộ cài đặt `Outlook_Memo_Agent_Full.zip` và khởi động lại agent local cổng 18890.
+- **Kiểm thử & Đóng gói**:
+  - Backend: `python -m compileall app` và Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
+  - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.94s`), bundle sạch sẽ trong `frontend/dist/`.
+
+---
+
 ### [2026-10-15] - Khắc Phục Lỗi Không Load Được Danh Sách Nhóm Trong Modal "Thêm Món Ăn Hàng Loạt Vào Menu (Dạng Bảng Tính Sheets)"
 - **Màn hình**: Phân Tích Thực Đơn SO/CO - Thêm Món Hàng Loạt (`ManageMenuSoCoTask.tsx`, `mongo_menu_so_co_service.py`, `mongoService.ts`, `mongodb.py`).
 - **Hiện tượng**:

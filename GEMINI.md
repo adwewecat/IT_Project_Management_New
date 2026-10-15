@@ -229,6 +229,8 @@
      - **Đổi Tên Quầy (Place)**: Cho phép đổi tên trực tiếp (bút chì). Khi đổi tên, backend tự động sinh mã quầy viết hoa không dấu (`placeCode`), cập nhật đồng thời trong `CONFIG_KDS.places`, `ACCOUNT.listPlace` và `accName` của trạm con (`role: 3`).
      - **Gom Gọn Toolbar KDS**: Chỉ giữ lại 2 nút: `⚙️ Các Tính Năng KDS ▾` (mở popup chứa Thêm quầy, Chuyển món, Cấu hình quầy & máy in, Phân quyền, Phân quyền hàng loạt, Toggle KDS Master) và `📋 Logs KDS (Order & Ra Món)`.
      - **Bổ Sung Cột Lệnh In / Máy In KDS (`KdsLogsModal`)**: Bắt logs từ `G_KITCHEN.LOG_DISH_FINISH_ITEM`, đối soát `placeIds` với `CONFIG_KDS.places` để hiển thị máy in đích và trạng thái phát lệnh in (`✓ Đã phát lệnh in`, `⛔ Tắt in KDS`, `⚠️ Chưa gán máy in`).
+     - **Chuẩn Hóa Cột Bàn & Quầy Bếp Thời Điểm Order**: Cột "Bàn" chuẩn hóa hiển thị sạch sẽ (`Bàn 213`, triệt tiêu raw Python dict). Cột "Quầy Bếp (Thời Điểm Order)" hiển thị chính xác quầy ghi nhận lúc order; nếu `placeIds: []` thì hiển thị cảnh báo đỏ `⚠️ Chưa gán quầy (Tên Nhóm / ALL)`.
+     - **Tính Năng Soi Lịch Sử Món & Đối Soát Kỹ Thuật (`KdsDishHistoryModal`)**: Nút `🔍 Soi Món` trên từng dòng logs và thanh tìm kiếm mở modal soi toàn diện: đối soát cấu hình `CONFIG_COOKING`, cờ ẩn (`SHOW_HIDE_ITEMS`), cờ hết món (`OUT_OF_DISH`), dòng thời gian order/ra món và hộp **Giải trình kỹ thuật thông minh** phân tích cơ chế fallback KDS khi `placeIds` rỗng (kèm nút copy 1 chạm gửi nhà hàng).
   4. **4. Cấu hình Ẩn Hiện Món (`dish_show_hide`)**: Ẩn/hiện trên QrOrder, CO, SO.
   5. **5. Cấu hình Ẩn Hiện Menu (`menu_show_hide`)**: Bật tắt hiển thị menu và KDS Auto (`autoDeliveryInSo`).
   6. **6. Xử Lý Full CPU 100% (`fix_full_cpu`)**: Tạo index tối ưu cho `DISH_KDS`, `ORDER`, `CO_MENU_ITEM` triệt tiêu COLLSCAN.

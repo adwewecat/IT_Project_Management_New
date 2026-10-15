@@ -22,6 +22,54 @@ MAIL_MEMO_CONFIG_FILE = os.path.join(DATA_DIR, "mail_memo_config.json")
 MAIL_MEMO_HISTORY_FILE = os.path.join(DATA_DIR, "mail_memo_history.json")
 
 
+def parse_date_str(s: str) -> Optional[date]:
+    s = s.strip()
+    m_iso = re.match(r"^([0-9]{4})[-/]([0-9]{1,2})[-/]([0-9]{1,2})$", s)
+    if m_iso:
+        try:
+            return date(int(m_iso.group(1)), int(m_iso.group(2)), int(m_iso.group(3)))
+        except ValueError:
+            return None
+    m = re.match(r"^([0-9]{1,2})[-/]([0-9]{1,2})[-/]([0-9]{4})$", s)
+    if not m:
+        return None
+    p1, p2, yr = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if p1 > 12:  # p1 là ngày (DD/MM/YYYY)
+        try:
+            return date(yr, p2, p1)
+        except ValueError:
+            return None
+    if p2 > 12:  # p2 là ngày (MM/DD/YYYY)
+        try:
+            return date(yr, p1, p2)
+        except ValueError:
+            return None
+    # Nếu cả 2 đều <= 12: Mặc định theo chuẩn Salesforce GGG Loyalty (MM/DD/YYYY)
+    try:
+        return date(yr, p1, p2)
+    except ValueError:
+        try:
+            return date(yr, p2, p1)
+        except ValueError:
+            return None
+
+
+def parse_effective_dates(raw_str: str) -> tuple[Optional[date], Optional[date]]:
+    """
+    Bóc tách ngày bắt đầu và kết thúc từ chuỗi Hiệu lực:
+    VD: '10/20/2026 - 10/20/2026' -> (date(2026, 10, 20), date(2026, 10, 20))
+    """
+    if not raw_str:
+        return None, None
+    found_dates = re.findall(r"[0-9]{1,4}[-/][0-9]{1,2}[-/][0-9]{1,4}", raw_str)
+    if len(found_dates) >= 2:
+        return parse_date_str(found_dates[0]), parse_date_str(found_dates[1])
+    elif len(found_dates) == 1:
+        d = parse_date_str(found_dates[0])
+        return d, d
+    return None, None
+
+
 class MailMemoService:
     def __init__(self):
         self._config = self._load_config()
@@ -75,6 +123,13 @@ class MailMemoService:
         except Exception as e:
             logger.error(f"[MAIL_MEMO] Lỗi lưu history: {e}")
 
+    def record_agent_heartbeat(self, data: Dict[str, Any]):
+        """Cập nhật trạng thái nhịp tim và hoạt động của Agent."""
+        if self._agent_state is None:
+            self._agent_state = {}
+        self._agent_state.update(data)
+        self._agent_state["last_seen"] = datetime.now()
+
     def record_agent_poll(self, agent_data: Dict[str, Any], client_ip: str) -> Dict[str, Any]:
         """Agent gọi định kỳ mỗi 2s để báo online và nhận lệnh quét nếu có."""
         now = datetime.now()
@@ -83,14 +138,16 @@ class MailMemoService:
         self._agent_state = agent_data
 
         cmd = "idle"
-        # Nếu có lệnh quét được kích hoạt từ Web trong vòng 25s qua
-        if self._scan_command_pending and (time.time() - self._scan_command_time) < 25:
+        max_items = getattr(self, "_scan_max_items", 400) or 400
+        # Nếu có lệnh quét được kích hoạt từ Web trong vòng 35s qua
+        if self._scan_command_pending and (time.time() - self._scan_command_time) < 35:
             cmd = "scan"
             self._scan_command_pending = False  # Reset lệnh sau khi đã giao cho agent
 
         return {
             "status": "ok",
             "command": cmd,
+            "max_items": max_items,
             "server_time": now.strftime("%Y-%m-%d %H:%M:%S")
         }
 
@@ -112,7 +169,7 @@ class MailMemoService:
             "last_seen": self._agent_state["last_seen"].strftime("%Y-%m-%d %H:%M:%S")
         }
 
-    def request_agent_scan(self, timeout_sec: int = 25) -> Dict[str, Any]:
+    def request_agent_scan(self, timeout_sec: int = 35, max_items: int = 400) -> Dict[str, Any]:
         """Web kích hoạt quét: Gửi tín hiệu cho Agent và chờ Agent thực hiện."""
         if not self.is_agent_online():
             return {
@@ -121,6 +178,7 @@ class MailMemoService:
             }
         self._scan_done_event.clear()
         self._last_scan_result = None
+        self._scan_max_items = max_items
         self._scan_command_time = time.time()
         self._scan_command_pending = True
 
@@ -201,7 +259,12 @@ class MailMemoService:
         ngay_yc_match = re.search(r"Ngày\s*tạo\s*(?:yêu\s*cầu)?\s*:\s*([0-9]{1,2}/[0-9]{1,2}/[0-9]{4})", body, re.IGNORECASE)
         ngay_yc_str = ngay_yc_match.group(1).strip() if ngay_yc_match else None
 
-        # 6. Tìm Link Salesforce
+        # 6. Tìm Hiệu lực (Thời gian bắt đầu & kết thúc áp dụng Memo/Sub-Memo)
+        hieu_luc_match = re.search(r"Hiệu\s*lực\s*:\s*([^\r\n]+)", body, re.IGNORECASE)
+        hieu_luc_str = hieu_luc_match.group(1).strip() if hieu_luc_match else None
+        d_start, d_end = parse_effective_dates(hieu_luc_str) if hieu_luc_str else (None, None)
+
+        # 7. Tìm Link Salesforce
         link_match = re.search(r"Link\s*:\s*(https?://[^\s\r\n]+)", body, re.IGNORECASE)
         link_sf = link_match.group(1).strip() if link_match else None
 
@@ -211,6 +274,9 @@ class MailMemoService:
             "ten_memo": ten_memo,
             "nguoi_yeu_cau": nguoi_yc,
             "ngay_yeu_cau": ngay_yc_str,
+            "hieu_luc": hieu_luc_str,
+            "ngay_batdau": d_start.strftime("%Y-%m-%d") if d_start else None,
+            "ngay_ketthuc": d_end.strftime("%Y-%m-%d") if d_end else None,
             "link_salesforce": link_sf,
             "raw_subject": subject,
         }
@@ -420,6 +486,25 @@ class MailMemoService:
                         # CÓ NỘI DUNG MỚI (BỔ SUNG SUB-MEMO / NÚT BẤM MỚI TỪ MAIL)
                         logger.info(f"[MAIL_MEMO] Phát hiện {len(new_sub_items)} sub-memo mới bổ sung cho Memo {memo_code}")
 
+                        # Cập nhật ngày hiệu lực nếu existing chưa có hoặc sub-memo mới nới rộng ngày
+                        for s in new_sub_items:
+                            s_start_str = s.get("ngay_batdau")
+                            s_end_str = s.get("ngay_ketthuc")
+                            if s_start_str:
+                                try:
+                                    s_d1 = datetime.strptime(s_start_str, "%Y-%m-%d").date()
+                                    if not existing.ngay_batdau or s_d1 < existing.ngay_batdau:
+                                        existing.ngay_batdau = s_d1
+                                except Exception:
+                                    pass
+                            if s_end_str:
+                                try:
+                                    s_d2 = datetime.strptime(s_end_str, "%Y-%m-%d").date()
+                                    if not existing.ngay_ketthuc or s_d2 > existing.ngay_ketthuc:
+                                        existing.ngay_ketthuc = s_d2
+                                except Exception:
+                                    pass
+
                         # 1. Tìm link salesforce bổ sung (nếu có)
                         supplement_link = None
                         for s in new_sub_items:
@@ -427,12 +512,14 @@ class MailMemoService:
                                 supplement_link = s.get("link_salesforce").strip()
                                 break
 
-                        # 2. Chuẩn bị nội dung đợt bổ sung
+                        # 2. Chuẩn bị nội dung đợt bổ sung (kèm thời gian hiệu lực nếu có)
                         supplement_lines = []
                         for s in new_sub_items:
                             s_code = s.get("sub_memo_code") or ""
                             s_title = s.get("ten_memo") or ""
-                            supplement_lines.append(f"  • Sub-Memo {s_code}: {s_title}")
+                            s_eff = s.get("hieu_luc") or (f"{s.get('ngay_batdau')} → {s.get('ngay_ketthuc')}" if s.get("ngay_batdau") else "")
+                            eff_str = f" (Hiệu lực: {s_eff})" if s_eff else ""
+                            supplement_lines.append(f"  • Sub-Memo {s_code}: {s_title}{eff_str}")
 
                         supp_text = (
                             f"\n\n[BỔ SUNG NÚT BẤM TỪ MAIL - {now.strftime('%d/%m/%Y %H:%M:%S')}]:\n"
@@ -528,7 +615,9 @@ class MailMemoService:
                 for s in sub_list:
                     sub_code = s.get("sub_memo_code") or ""
                     sub_title = s.get("ten_memo") or ""
-                    sub_lines.append(f"  • Sub-Memo {sub_code}: {sub_title}")
+                    s_eff = s.get("hieu_luc") or (f"{s.get('ngay_batdau')} → {s.get('ngay_ketthuc')}" if s.get("ngay_batdau") else "")
+                    eff_str = f" (Hiệu lực: {s_eff})" if s_eff else ""
+                    sub_lines.append(f"  • Sub-Memo {sub_code}: {sub_title}{eff_str}")
 
                 mail_content_text = (
                     f"- Mã Memo: {memo_code}\n"
@@ -543,12 +632,29 @@ class MailMemoService:
                 else:
                     subject_val = ten_memo
 
+                # Tính ngày bắt đầu và kết thúc tổng hợp từ các sub-memo
+                all_start_dates = []
+                all_end_dates = []
+                for s in sub_list:
+                    if s.get("ngay_batdau"):
+                        try:
+                            all_start_dates.append(datetime.strptime(s["ngay_batdau"], "%Y-%m-%d").date())
+                        except Exception:
+                            pass
+                    if s.get("ngay_ketthuc"):
+                        try:
+                            all_end_dates.append(datetime.strptime(s["ngay_ketthuc"], "%Y-%m-%d").date())
+                        except Exception:
+                            pass
+                overall_start = min(all_start_dates) if all_start_dates else None
+                overall_end = max(all_end_dates) if all_end_dates else None
+
                 # Tạo mới Memo: noidung_mail lưu nội dung từ mail, huong_dan để trống cho IT
                 new_memo = Memo(
                     ma_memo=memo_code,
                     subject_mail=subject_val,
-                    ngay_batdau=None,   # Thời gian hiệu lực bỏ trống
-                    ngay_ketthuc=None,  # Thời gian hiệu lực bỏ trống
+                    ngay_batdau=overall_start,   # Tự động gán ngày bắt đầu hiệu lực từ mail
+                    ngay_ketthuc=overall_end,    # Tự động gán ngày kết thúc hiệu lực từ mail
                     it_setup=auto_user,
                     ma_tua=ma_tua,
                     giahan="0",

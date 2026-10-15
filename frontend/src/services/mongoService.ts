@@ -961,6 +961,13 @@ export const mongoService = {
     return res.data;
   },
 
+  getKdsDishHistory: async (
+    payload: KdsDishHistoryRequest
+  ): Promise<KdsDishHistoryResponse> => {
+    const res = await api.post<KdsDishHistoryResponse>('/mongodb/kds-dish-history', payload);
+    return res.data;
+  },
+
   updateKdsPlacePrinter: async (
     payload: KdsUpdatePlacePrinterRequest
   ): Promise<KdsUpdatePlacePrinterResponse> => {
@@ -1524,6 +1531,9 @@ export interface KdsLogItem {
   menu_item_code: string;
   sap_code: string;
   place_name: string;
+  group_name?: string | null;
+  historical_place_ids?: number[] | null;
+  is_unassigned?: boolean;
   account_name?: string | null;
   order_time?: string | null;
   done_time?: string | null;
@@ -1535,6 +1545,48 @@ export interface KdsLogItem {
   printer_name?: string | null;
   print_status?: string | null;
   print_message?: string | null;
+}
+
+export interface KdsDishHistoryRequest {
+  host: string;
+  port?: number;
+  item_code: string;
+  sap_code?: string;
+  dish_name?: string;
+}
+
+export interface KdsDishHistoryTimelineItem {
+  id: string;
+  order_time: string;
+  done_time: string;
+  table_name: string;
+  place_ids: number[];
+  place_name: string;
+  group_name: string;
+  config_minutes: number;
+  actual_minutes: number;
+  delay_minutes: number;
+  status_label: string;
+  printer_name?: string | null;
+  source: string;
+}
+
+export interface KdsDishHistoryResponse {
+  success: boolean;
+  dish_name: string;
+  item_code: string;
+  sap_code: string;
+  is_in_config_cooking: boolean;
+  current_place_ids: number[];
+  current_place_names: string[];
+  current_group_name: string;
+  current_config_minutes: number;
+  is_hidden: boolean;
+  is_out_of_stock: boolean;
+  total_timeline_orders: number;
+  timeline: KdsDishHistoryTimelineItem[];
+  smart_analysis: string;
+  message: string;
 }
 
 export interface KdsLogQueryResponse {

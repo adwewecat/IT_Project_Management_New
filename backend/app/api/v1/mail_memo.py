@@ -65,7 +65,7 @@ def trigger_scan_mail_memos(
     """
     if not check_is_dung_or_super_admin(current_user):
         raise HTTPException(status_code=403, detail="Chỉ dung.nguyenanh hoặc Super Admin mới có quyền thực hiện.")
-    res = mail_memo_service.request_agent_scan(timeout_sec=30)
+    res = mail_memo_service.request_agent_scan(timeout_sec=35, max_items=max_items)
     if not res.get("success"):
         raise HTTPException(status_code=400, detail=res.get("message", "Lỗi quét mail Memo qua Agent"))
     return res

@@ -496,6 +496,9 @@ class KdsLogItem(BaseModel):
     menu_item_code: str
     sap_code: str
     place_name: str
+    group_name: Optional[str] = None
+    historical_place_ids: Optional[List[int]] = None
+    is_unassigned: bool = False
     account_name: Optional[str] = None
     order_time: Optional[str] = None
     done_time: Optional[str] = None
@@ -516,6 +519,48 @@ class KdsLogQueryResponse(BaseModel):
     table_filter: Optional[str] = None
     query_filter: Optional[str] = None
     logs: List[KdsLogItem]
+    message: str = ""
+
+
+class KdsDishHistoryRequest(BaseModel):
+    host: str
+    port: int = 27017
+    item_code: str
+    sap_code: Optional[str] = None
+    dish_name: Optional[str] = None
+
+
+class KdsDishHistoryTimelineItem(BaseModel):
+    id: str
+    order_time: str
+    done_time: str
+    table_name: str
+    place_ids: List[int] = []
+    place_name: str
+    group_name: str
+    config_minutes: float = 0.0
+    actual_minutes: float = 0.0
+    delay_minutes: float = 0.0
+    status_label: str
+    printer_name: Optional[str] = None
+    source: str = "LOG_DISH_FINISH_ITEM"
+
+
+class KdsDishHistoryResponse(BaseModel):
+    success: bool
+    dish_name: str
+    item_code: str
+    sap_code: str
+    is_in_config_cooking: bool
+    current_place_ids: List[int] = []
+    current_place_names: List[str] = []
+    current_group_name: str = ""
+    current_config_minutes: float = 0.0
+    is_hidden: bool = False
+    is_out_of_stock: bool = False
+    total_timeline_orders: int = 0
+    timeline: List[KdsDishHistoryTimelineItem] = []
+    smart_analysis: str = ""
     message: str = ""
 
 
