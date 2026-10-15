@@ -580,7 +580,7 @@ class KdsUpdateDishGroupRequest(BaseModel):
     host: str
     port: int = 27017
     menu_item_codes: List[str]
-    new_group_name: str
+    new_group_name: str = ""
 
 
 class KdsUpdateDishGroupResponse(BaseModel):

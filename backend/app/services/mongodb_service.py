@@ -2220,7 +2220,7 @@ class MongoDBService:
                         existing_acc_ids.append(int(aid))
                 account_id = str((max(existing_acc_ids) + 1) if existing_acc_ids else (100 + new_place_id))
 
-            group_kds_val = (payload.group_kds or place_name).strip()
+            group_kds_val = MongoDBService.to_kds_group_code(payload.group_kds or place_name)
             new_place = {
                 "id": new_place_id,
                 "name": place_name,
@@ -2486,11 +2486,15 @@ class MongoDBService:
             elif payload.place_ids:
                 target_grp_name = place_id_to_name.get(payload.place_ids[0], "")
 
-            grp_obj = {
-                "id": 0,
-                "code": target_grp_name,
-                "name": target_grp_name
-            } if target_grp_name else None
+            if target_grp_name:
+                code_name = MongoDBService.to_kds_group_code(target_grp_name)
+                grp_obj = {
+                    "id": 0,
+                    "code": code_name,
+                    "name": code_name
+                }
+            else:
+                grp_obj = None
 
             modified_count = 0
             for code in payload.menu_item_codes:
@@ -2585,10 +2589,11 @@ class MongoDBService:
 
             doc_ids = [d["_id"] for d in matched_docs]
 
+            to_code = MongoDBService.to_kds_group_code(to_name)
             to_grp_obj = {
                 "id": 0,
-                "code": to_name,
-                "name": to_name
+                "code": to_code,
+                "name": to_code
             }
             if not payload.keep_source:
                 cook_col.update_many(
@@ -2645,40 +2650,127 @@ class MongoDBService:
             client.close()
 
     @staticmethod
+    def to_kds_group_code(name: str) -> str:
+        """
+        Chuẩn hóa tên nhóm bếp KDS:
+        - Bỏ dấu tiếng Việt (đ -> d, Đ -> D, loại bỏ dấu kết hợp)
+        - Dấu cách thay bằng dấu gạch dưới _
+        - Viết hoa chữ cái đầu mỗi từ chuẩn đẹp (VD: 'Quầy Thịt' hoặc 'QUẦY THỊT' -> 'Quay_Thit')
+        """
+        if not name:
+            return ""
+        text = str(name).strip()
+        words = text.split()
+        capitalized_words = []
+        for w in words:
+            if w.isupper() or w.islower():
+                capitalized_words.append(w.capitalize())
+            else:
+                capitalized_words.append(w[0].upper() + w[1:] if len(w) > 0 else "")
+        normalized_text = " ".join(capitalized_words)
+
+        s = normalized_text.replace("đ", "d").replace("Đ", "D")
+        s = unicodedata.normalize('NFKD', s)
+        s = "".join(c for c in s if not unicodedata.combining(c))
+        s = re.sub(r'[\s_]+', '_', s.strip())
+        return s
+
+    @staticmethod
     def sync_kds_groups_by_quays(
         current_user: UserInfo,
         payload: KdsSyncGroupsByQuaysRequest,
         db: Optional[Session] = None
     ) -> KdsSyncGroupsByQuaysResponse:
         """
-        Đồng nhất Nhóm Bếp (groupTypeKds) theo Quầy Bếp (places trong CONFIG_KDS) 1 chạm:
-        Món thuộc quầy nào thì groupTypeKds tự động cập nhật giống 100% theo tên quầy đó.
+        Đồng nhất Nhóm Bếp (groupTypeKds) theo Quầy Bếp (places trong CONFIG_KDS & ACCOUNT):
+        1. Món thuộc quầy nào thì groupTypeKds tự động cập nhật theo tên quầy đó, bỏ dấu tiếng Việt và dấu cách thay bằng _ (VD: 'Quầy Thịt' -> 'Quay_Thit').
+        2. Những món chưa được gán Quầy Bếp (ACCOUNT / CONFIG_KDS) thì nhóm bếp cũng bỏ luôn, cập nhật lại để trống {"id": 0, "code": "", "name": ""}.
         """
         client = MongoClient(payload.host, payload.port, serverSelectionTimeoutMS=4000)
         try:
             db_kitchen = client["G_KITCHEN"]
             cook_col = db_kitchen["CONFIG_COOKING"]
             kds_col = db_kitchen["CONFIG_KDS"]
+            acc_col = db_kitchen["ACCOUNT"]
 
             kds_doc = kds_col.find_one() or {}
             places = kds_doc.get("places") or []
-            place_id_to_name = {}
+            place_id_to_name: Dict[int, str] = {}
             for p in places:
                 if isinstance(p, dict) and p.get("id") is not None:
-                    place_id_to_name[int(p["id"])] = p.get("name") or f"Quầy #{p['id']}"
+                    try:
+                        pid_int = int(p["id"])
+                        place_id_to_name[pid_int] = p.get("name") or f"Quầy #{p['id']}"
+                    except (ValueError, TypeError):
+                        pass
+
+            # Bổ sung mapping từ ACCOUNT nếu places trong CONFIG_KDS chưa có
+            for acc in acc_col.find():
+                acc_name = str(acc.get("accName") or "").strip()
+                for p in (acc.get("listPlace") or []):
+                    if isinstance(p, dict) and p.get("id") is not None:
+                        try:
+                            pid_int = int(p["id"])
+                            if pid_int not in place_id_to_name:
+                                place_id_to_name[pid_int] = p.get("name") or acc_name or f"Quầy #{pid_int}"
+                        except (ValueError, TypeError):
+                            pass
 
             modified_count = 0
+            assigned_count = 0
+            all_valid_pids = set(place_id_to_name.keys())
+
+            # 1. Cập nhật nhóm bếp cho các món đã gán vào quầy (bỏ dấu tiếng Việt, dấu cách thành _)
             for pid, pname in place_id_to_name.items():
+                code_name = MongoDBService.to_kds_group_code(pname)
                 grp_obj = {
                     "id": 0,
-                    "code": pname,
-                    "name": pname
+                    "code": code_name,
+                    "name": code_name
                 }
+                # Khớp cả dạng pid là số nguyên hoặc chuỗi
                 res = cook_col.update_many(
-                    {"placeIds": pid},
+                    {"$or": [{"placeIds": pid}, {"placeIds": str(pid)}]},
                     {"$set": {"groupTypeKds": grp_obj}}
                 )
-                modified_count += res.modified_count
+                assigned_count += res.modified_count
+
+            modified_count += assigned_count
+
+            # 2. Những món chưa được gán Quầy Bếp (ACCOUNT): bỏ nhóm bếp, cập nhật lại để trống
+            unassigned_doc_ids = []
+            for doc in cook_col.find({}, {"_id": 1, "placeIds": 1}):
+                raw_pids = doc.get("placeIds")
+                if not raw_pids or not isinstance(raw_pids, list):
+                    unassigned_doc_ids.append(doc["_id"])
+                    continue
+                has_valid = any(
+                    int(p) in all_valid_pids
+                    for p in raw_pids
+                    if str(p).isdigit()
+                )
+                if not has_valid:
+                    unassigned_doc_ids.append(doc["_id"])
+
+            empty_grp_obj = {
+                "id": 0,
+                "code": "",
+                "name": ""
+            }
+            empty_count = 0
+            if unassigned_doc_ids:
+                res_empty = cook_col.update_many(
+                    {"_id": {"$in": unassigned_doc_ids}},
+                    {"$set": {"groupTypeKds": empty_grp_obj}}
+                )
+                empty_count = res_empty.modified_count
+                modified_count += empty_count
+
+            msg = (
+                f"Đã đồng nhất Nhóm Bếp theo Quầy Bếp thành công: "
+                f"cập nhật {assigned_count} món theo quầy (VD: Quay_Thit), "
+                f"làm trống nhóm cho {empty_count} món chưa gán quầy!"
+            )
 
             if db:
                 try:
@@ -2686,8 +2778,13 @@ class MongoDBService:
                         USER_ACTION=current_user.username,
                         ACTION_TYPE="SYNC_KDS_GROUPS_BY_QUAYS",
                         TARGET_OBJECT="CONFIG_COOKING",
-                        DESCRIPTION=f"Đồng nhất Nhóm Bếp theo Quầy Bếp (cập nhật {modified_count} lượt món) trên {payload.host}:{payload.port}",
-                        DETAILS=json.dumps({"host": payload.host, "modified_count": modified_count}),
+                        DESCRIPTION=f"Đồng nhất Nhóm Bếp theo Quầy Bếp ({assigned_count} món gán quầy dạng 'Quay_Thit', làm trống {empty_count} món chưa gán quầy) trên {payload.host}:{payload.port}",
+                        DETAILS=json.dumps({
+                            "host": payload.host,
+                            "assigned_count": assigned_count,
+                            "empty_count": empty_count,
+                            "total_modified": modified_count
+                        }),
                         DATE_ACTION=datetime.datetime.now(),
                     )
                     db.add(log_entry)
@@ -2698,7 +2795,7 @@ class MongoDBService:
             return KdsSyncGroupsByQuaysResponse(
                 success=True,
                 modified_count=modified_count,
-                message=f"Đã đồng nhất thành công Nhóm Bếp theo Quầy Bếp cho {modified_count} lượt món!"
+                message=msg
             )
         finally:
             client.close()
@@ -2711,6 +2808,7 @@ class MongoDBService:
     ) -> KdsUpdateDishGroupResponse:
         """
         Cập nhật Nhóm Bếp (groupTypeKds) cho 1 hoặc nhiều món ăn được chỉ định trong CONFIG_COOKING.
+        Nếu tên nhóm để trống -> xóa trắng nhóm bếp (để trống).
         """
         client = MongoClient(payload.host, payload.port, serverSelectionTimeoutMS=4000)
         try:
@@ -2719,17 +2817,24 @@ class MongoDBService:
 
             grp_name = payload.new_group_name.strip()
             if not grp_name:
-                raise ValueError("Tên nhóm bếp không được để trống!")
+                new_grp_obj = {
+                    "id": 0,
+                    "code": "",
+                    "name": ""
+                }
+                desc_name = "(để trống)"
+            else:
+                code_name = MongoDBService.to_kds_group_code(grp_name) if payload.new_group_name else grp_name
+                new_grp_obj = {
+                    "id": 0,
+                    "code": code_name,
+                    "name": code_name
+                }
+                desc_name = code_name
 
             clean_codes = [str(c).strip() for c in payload.menu_item_codes if str(c).strip()]
             int_codes = [int(c) for c in clean_codes if c.isdigit()]
             all_codes = list(set(clean_codes + int_codes))
-
-            new_grp_obj = {
-                "id": 0,
-                "code": grp_name,
-                "name": grp_name
-            }
 
             res = cook_col.update_many(
                 {"menuItemCode": {"$in": all_codes}},
@@ -2742,8 +2847,8 @@ class MongoDBService:
                         USER_ACTION=current_user.username,
                         ACTION_TYPE="UPDATE_KDS_DISH_GROUP",
                         TARGET_OBJECT=f"CONFIG_COOKING:dishes_{len(clean_codes)}",
-                        DESCRIPTION=f"Cập nhật Nhóm Bếp thành '{grp_name}' cho {res.modified_count} món trên {payload.host}:{payload.port}",
-                        DETAILS=json.dumps({"host": payload.host, "group": grp_name, "count": res.modified_count}),
+                        DESCRIPTION=f"Cập nhật Nhóm Bếp thành '{desc_name}' cho {res.modified_count} món trên {payload.host}:{payload.port}",
+                        DETAILS=json.dumps({"host": payload.host, "group": desc_name, "count": res.modified_count}),
                         DATE_ACTION=datetime.datetime.now(),
                     )
                     db.add(log_entry)
@@ -2754,7 +2859,8 @@ class MongoDBService:
             return KdsUpdateDishGroupResponse(
                 success=True,
                 modified_count=res.modified_count,
-                message=f"Đã cập nhật Nhóm Bếp thành '{grp_name}' cho {res.modified_count} món thành công!"
+                group_name=desc_name,
+                message=f"Đã cập nhật Nhóm Bếp thành '{desc_name}' cho {res.modified_count} món thành công!"
             )
         finally:
             client.close()

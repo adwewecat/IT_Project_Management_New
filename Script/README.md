@@ -2568,8 +2568,10 @@ estaurant_service.py).
      + Do món vẫn tồn trong `CONFIG_COOKING`, KDS tính thời gian làm món = `giờ đóng bill - giờ order` $\rightarrow$ ra con số 80 - 180 phút và bị bôi ĐỎ, phạt trễ oan uổng cho nhà hàng!
 2. **Bộ Tính Năng Quản Trị & Đồng Nhất Nhóm Bếp KDS Toàn Diện**:
    - **⚡ Đồng Nhất Nhóm Bếp Theo Quầy (1 Chạm)**:
-     + Tích hợp tại cả Header KDS và bên trong popup `⚙️ Các Tính Năng KDS`.
-     + Backend API `POST /api/v1/mongodb/kds-sync-groups-by-quays`: Quét toàn bộ món trong `CONFIG_COOKING`, lấy tên quầy từ `placeIds` map sang `CONFIG_KDS.places` và tự động cập nhật `groupTypeKds` chuẩn dạng object `{"id": 0, "code": name, "name": name}`. Xóa bỏ hoàn toàn nhóm rác "Bếp Nóng & Nướng" hay "ALL".
+     + Tích hợp tại popup `⚙️ Các Tính Năng KDS ▾` (Mục 7).
+     + Backend API `POST /api/v1/mongodb/kds-sync-groups-by-quays`: Quét toàn bộ món trong `CONFIG_COOKING`.
+     + **Chuẩn hóa tên nhóm theo quầy**: Bỏ dấu tiếng Việt, dấu cách thay bằng `_` (VD: 'Quầy Thịt' -> `Quay_Thit`, 'Quầy Nóng' -> `Quay_Nong`, 'Quầy Salad' -> `Quay_Salad`).
+     + **Món chưa gán Quầy Bếp (ACCOUNT)**: Cập nhật lại để trống (`groupTypeKds: {"id": 0, "code": "", "name": ""}`), triệt tiêu hoàn toàn nhóm rác "Bếp Nóng & Nướng" hay "ALL".
    - **Chỉnh Sửa Nhóm Bếp Trực Tiếp (`KdsEditDishGroupModal`)**:
      + Nút bút chì ✏️ trên từng dòng ở cột "Nhóm Bếp".
      + Nút `🏷️ Đổi Nhóm Bếp ({số món})` trên thanh thao tác hàng loạt khi tích chọn nhiều món.

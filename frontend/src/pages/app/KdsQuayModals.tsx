@@ -3693,10 +3693,30 @@ export const KdsEditDishGroupModal: React.FC<KdsEditDishGroupModalProps> = ({
 
   if (!isOpen) return null;
 
+  const toKdsGroupCode = (name: string): string => {
+    if (!name) return '';
+    const words = name.trim().split(/\s+/);
+    const capitalized = words.map((w) => {
+      if (w === w.toUpperCase() || w === w.toLowerCase()) {
+        return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+      }
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    });
+    const text = capitalized.join(' ');
+    return text
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[\s_]+/g, '_')
+      .trim();
+  };
+
   const handleSave = async () => {
-    if (!newGroupName.trim()) {
-      showToast('Vui lòng nhập tên Nhóm Bếp mới!', 'error');
-      return;
+    const trimmed = newGroupName.trim();
+    if (!trimmed) {
+      const confirmEmpty = window.confirm(`Bạn có chắc chắn muốn LÀM TRỐNG (xóa) Nhóm Bếp cho ${dishes.length} món này?`);
+      if (!confirmEmpty) return;
     }
     const codes = dishes.map((d) => d.menu_item_code);
     setIsSaving(true);
@@ -3704,7 +3724,7 @@ export const KdsEditDishGroupModal: React.FC<KdsEditDishGroupModalProps> = ({
       const res = await mongoService.updateKdsDishGroup(
         host,
         codes,
-        newGroupName.trim(),
+        trimmed,
         port
       );
       showToast(res.message, 'success');
@@ -3784,26 +3804,47 @@ export const KdsEditDishGroupModal: React.FC<KdsEditDishGroupModalProps> = ({
               ⚡ Gợi ý chọn nhanh theo Quầy Bếp có sẵn (1 chạm để điền):
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {places.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setNewGroupName(p.name)}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid #CBD5E1',
-                    backgroundColor: newGroupName === p.name ? '#DBEAFE' : '#F8FAFC',
-                    color: newGroupName === p.name ? '#1D4ED8' : '#334155',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  {p.name} {p.place_code ? `(${p.place_code})` : ''}
-                </button>
-              ))}
+              {places.map((p) => {
+                const grpCode = toKdsGroupCode(p.name);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setNewGroupName(grpCode)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: newGroupName === grpCode ? '#DBEAFE' : '#F8FAFC',
+                      color: newGroupName === grpCode ? '#1D4ED8' : '#334155',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    🏷️ {grpCode} ({p.name})
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setNewGroupName('')}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px dashed #EF4444',
+                  backgroundColor: newGroupName === '' ? '#FEE2E2' : '#FFF5F5',
+                  color: '#DC2626',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Làm trống (xóa) Nhóm Bếp cho các món này"
+              >
+                🧹 Để trống nhóm (Xóa nhóm)
+              </button>
             </div>
           </div>
         )}
