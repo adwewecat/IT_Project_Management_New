@@ -216,12 +216,14 @@ npm run dev
   2. *Hỗ trợ máy ngoài & User quản lý*: Bổ sung trường `device_type` (`RESTAURANT`, `EXTERNAL`, `USER`), `user_assigned`, `notes`. Thêm nút và modal `➕ Thêm Máy / User Ngoài` để đăng ký thiết bị văn phòng HO hoặc máy IT Support.
   3. *Gom gọn công cụ thành Popup chuẩn KDS*: Thay thế 6 card tĩnh chiếm diện tích bằng nút `⚙️ Các Tính Năng Hỗ Trợ ▾` trên thanh công cụ. Khi bấm mở popup dạng thẻ màu sắc (chuẩn menu KDS Management), click vào từng thẻ sẽ kích hoạt bộ lọc hoặc mở modal công cụ tương ứng.
   4. *Ẩn cột Service Name*: Loại bỏ cột Service Name trong bảng danh sách để giải phóng không gian hiển thị cho các cột quan trọng.
+  5. *Dán hàng loạt mã nhà hàng (Batch Paste Search & Select)*: Ô tìm kiếm hỗ trợ dán trực tiếp danh sách mã từ Excel (dạng cột xuống dòng), Notepad, danh sách phân cách bởi dấu phẩy hoặc khoảng trắng. Hệ thống tự động nhận diện danh sách mã, lọc chính xác các nhà hàng tương ứng và tự động tích chọn hàng loạt máy khớp mã kèm nút bấm nhanh `☑️ Tích chọn ({count} máy)`.
+  6. *Bỏ ô lọc Tất cả tình trạng cài*: Loại bỏ dropdown lọc tình trạng cài đặt theo đúng yêu cầu để toolbar thoáng đãng, vừa vặn trên 1 hàng không bị rớt dòng.
 - **Backend & Database**:
   - Bổ sung `device_type`, `user_assigned`, `notes` vào `AGENT_MULTITASK_ENDPOINTS`, `Full_SCRIPT_SQL_TABLE.sql` và lifespan kiểm tra tự động trong `backend/app/main.py`.
   - Bổ sung API `POST /api/v1/agent-multitask/endpoint`.
 - **Frontend & Build**:
   - Tái cấu trúc `AgentMultitaskPage.tsx` đạt chuẩn Single-Screen Viewport, không thanh cuộn dọc ngoài cùng, bảng dữ liệu dùng `TopScrollTable` cuộn độc lập.
-  - Chạy `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 11.51s`), `frontend/dist/` sạch sẽ.
+  - Chạy `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 4.46s`), `frontend/dist/` sạch sẽ.
 
 ---
 

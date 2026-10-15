@@ -68,7 +68,6 @@ export const AgentMultitaskPage: React.FC = () => {
 
   // Bộ lọc danh sách thiết bị
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [filterInstalled, setFilterInstalled] = useState<string>('ALL'); // ALL, INSTALLED, NOT_INSTALLED
   const [filterStatus, setFilterStatus] = useState<string>('ALL'); // ALL, ONLINE, OFFLINE, RUNNING, STOPPED
   const [filterDeviceType, setFilterDeviceType] = useState<string>('ALL'); // ALL, RESTAURANT, EXTERNAL, USER
   const [filterRole, setFilterRole] = useState<string>('ALL'); // ALL, SERVER_11, POS_12, KDS_41, OTHER
@@ -135,8 +134,9 @@ export const AgentMultitaskPage: React.FC = () => {
 
   // Xác định vai trò chuẩn của máy dựa vào địa chỉ IP
   const getMachineRole = (ip: string) => {
-    if (!ip) return { role: 'OTHER', label: 'Chưa rõ', badgeColor: '#64748B' };
-    const tail = ip.trim().split('.').pop();
+    if (!ip) return { role: 'OTHER', label: 'Chưa có IP', badgeColor: '#64748B' };
+    const clean = ip.trim();
+    const tail = clean.split('.').pop()?.toLowerCase();
     if (tail === '11') {
       return { role: 'SERVER_11', label: 'Máy Chủ / POS 1 (.11)', badgeColor: '#2563EB' };
     }
@@ -146,25 +146,86 @@ export const AgentMultitaskPage: React.FC = () => {
     if (tail === '41') {
       return { role: 'KDS_41', label: 'Trạm Bếp KDS (.41)', badgeColor: '#059669' };
     }
+    if (tail === 'x') {
+      return { role: 'OTHER', label: 'Dải IP Nhà Hàng', badgeColor: '#64748B' };
+    }
+    if (tail === '1') {
+      return { role: 'OTHER', label: 'Router Gateway .1', badgeColor: '#64748B' };
+    }
     return { role: 'OTHER', label: `Trạm .${tail}`, badgeColor: '#475569' };
+  };
+
+  // Tách danh sách mã tìm kiếm (hỗ trợ dán nhiều mã ngăn cách bởi dấu phẩy, dấu cách, chấm phẩy, tab hoặc xuống dòng từ Excel)
+  const searchTokens = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    return searchQuery
+      .split(/[\s,;\n\r\t]+/)
+      .map((t) => t.trim().toLowerCase())
+      .filter((t) => t.length > 0);
+  }, [searchQuery]);
+
+  // Xử lý khi người dùng dán (paste) hàng loạt mã nhà hàng (từ Excel, Notepad, tin nhắn...)
+  const handlePasteSearch = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pastedText = e.clipboardData.getData('text');
+    if (pastedText && /[\n\r,;\t]/.test(pastedText)) {
+      e.preventDefault();
+      const rawCodes = pastedText
+        .split(/[\s,;\n\r\t]+/)
+        .map((c) => c.trim())
+        .filter(Boolean);
+
+      const uniqueCodes = Array.from(new Set(rawCodes));
+      const formatted = uniqueCodes.join(', ');
+      setSearchQuery(formatted);
+
+      // Tự động tìm và tích chọn tất cả các máy tương ứng với danh sách mã vừa dán
+      const codeSet = new Set(uniqueCodes.map((c) => c.toLowerCase()));
+      const matched = endpoints.filter((ep) =>
+        codeSet.has(ep.restaurant_code.toLowerCase())
+      );
+      const matchedIds = matched.map((ep) => ep.id ?? 0).filter((id) => id > 0);
+
+      if (matchedIds.length > 0) {
+        setSelectedEndpointIds(matchedIds);
+        showToast(
+          `Đã nhận diện ${uniqueCodes.length} mã và tự động tích chọn ${matchedIds.length} máy!`,
+          'success'
+        );
+      } else {
+        showToast(`Đã nhận diện ${uniqueCodes.length} mã nhà hàng trong ô tìm kiếm.`, 'info');
+      }
+    }
   };
 
   // Lọc danh sách endpoints
   const filteredEndpoints = useMemo(() => {
-    return endpoints.filter((ep) => {
-      const matchSearch =
-        !searchQuery ||
-        ep.restaurant_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ep.restaurant_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ep.ip_lan.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (ep.machine_name && ep.machine_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (ep.user_assigned && ep.user_assigned.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (ep.notes && ep.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+    const isMultiCode = searchTokens.length > 1;
+    const tokenSet = isMultiCode ? new Set(searchTokens) : null;
 
-      const matchInstalled =
-        filterInstalled === 'ALL' ||
-        (filterInstalled === 'INSTALLED' && ep.is_installed) ||
-        (filterInstalled === 'NOT_INSTALLED' && !ep.is_installed);
+    return endpoints.filter((ep) => {
+      let matchSearch = true;
+      if (searchTokens.length === 1) {
+        const q = searchTokens[0];
+        matchSearch =
+          ep.restaurant_code.toLowerCase().includes(q) ||
+          ep.restaurant_name.toLowerCase().includes(q) ||
+          ep.ip_lan.toLowerCase().includes(q) ||
+          Boolean(ep.machine_name?.toLowerCase().includes(q)) ||
+          Boolean(ep.user_assigned?.toLowerCase().includes(q)) ||
+          Boolean(ep.notes?.toLowerCase().includes(q));
+      } else if (isMultiCode && tokenSet) {
+        // Nếu dán nhiều mã: Khớp mã nhà hàng chính xác hoặc nằm trong danh sách mã đã dán
+        const epCode = ep.restaurant_code.toLowerCase();
+        matchSearch =
+          tokenSet.has(epCode) ||
+          searchTokens.some(
+            (t) =>
+              epCode === t ||
+              epCode.startsWith(t) ||
+              ep.restaurant_name.toLowerCase().includes(t) ||
+              ep.ip_lan.toLowerCase().includes(t)
+          );
+      }
 
       const matchStatus =
         filterStatus === 'ALL' ||
@@ -182,9 +243,9 @@ export const AgentMultitaskPage: React.FC = () => {
         filterRole === 'ALL' ||
         roleInfo.role === filterRole;
 
-      return matchSearch && matchInstalled && matchStatus && matchDeviceType && matchRole;
+      return matchSearch && matchStatus && matchDeviceType && matchRole;
     });
-  }, [endpoints, searchQuery, filterInstalled, filterStatus, filterDeviceType, filterRole]);
+  }, [endpoints, searchTokens, filterStatus, filterDeviceType, filterRole]);
 
   // Chọn / Bỏ chọn tất cả máy trong danh sách đang lọc
   const handleSelectAll = (checked: boolean) => {
@@ -559,8 +620,8 @@ export const AgentMultitaskPage: React.FC = () => {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
-          {/* Ô tìm kiếm từ khóa */}
-          <div style={{ position: 'relative', minWidth: '220px', flex: 1, maxWidth: '320px' }}>
+          {/* Ô tìm kiếm từ khóa & Hỗ trợ dán hàng loạt từ Excel */}
+          <div style={{ position: 'relative', minWidth: '260px', flex: 1, maxWidth: '380px' }}>
             <Search
               size={14}
               style={{ position: 'absolute', left: '10px', top: '9px', color: 'var(--text-secondary)' }}
@@ -569,10 +630,12 @@ export const AgentMultitaskPage: React.FC = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm mã NH, tên máy, IP, User..."
+              onPaste={handlePasteSearch}
+              placeholder="Tìm hoặc dán nhiều mã NH (Excel, phẩy, cách)..."
+              title="Hỗ trợ dán hàng loạt mã nhà hàng từ Excel (copy cột mã), dấu phẩy, cách hoặc xuống dòng"
               style={{
                 width: '100%',
-                padding: '6px 10px 6px 30px',
+                padding: '6px 28px 6px 30px',
                 borderRadius: '6px',
                 border: '1px solid var(--border-color)',
                 fontSize: '12.5px',
@@ -581,7 +644,54 @@ export const AgentMultitaskPage: React.FC = () => {
                 color: 'var(--text-primary)'
               }}
             />
+            {searchQuery && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedEndpointIds([]);
+                }}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '6px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  padding: '2px 4px'
+                }}
+                title="Xóa tìm kiếm"
+              >
+                ✕
+              </button>
+            )}
           </div>
+
+          {/* Nút tích chọn hàng loạt nhanh khi dán nhiều mã */}
+          {searchTokens.length > 1 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const matchedIds = filteredEndpoints.map((ep) => ep.id ?? 0).filter((id) => id > 0);
+                setSelectedEndpointIds(matchedIds);
+                showToast(`Đã tích chọn ${matchedIds.length} máy theo ${searchTokens.length} mã đã dán!`, 'success');
+              }}
+              style={{
+                fontSize: '11.5px',
+                fontWeight: 700,
+                padding: '5px 10px',
+                borderColor: '#2563EB',
+                color: '#2563EB',
+                backgroundColor: '#EFF6FF',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              ☑️ Tích chọn ({filteredEndpoints.length} máy)
+            </Button>
+          )}
 
           {/* Dropdown Lọc Loại Thiết Bị */}
           <select
@@ -620,24 +730,6 @@ export const AgentMultitaskPage: React.FC = () => {
             <option value="POS_12">💻 .12 (Thu Ngân 2)</option>
             <option value="KDS_41">🍳 .41 (Trạm Bếp KDS)</option>
             <option value="OTHER">🖥️ Trạm Khác</option>
-          </select>
-
-          {/* Dropdown Lọc Tình Trạng Cài Service */}
-          <select
-            value={filterInstalled}
-            onChange={(e) => setFilterInstalled(e.target.value)}
-            style={{
-              padding: '6px 10px',
-              borderRadius: '6px',
-              border: '1px solid var(--border-color)',
-              fontSize: '12.5px',
-              backgroundColor: 'var(--bg-secondary)',
-              color: 'var(--text-primary)'
-            }}
-          >
-            <option value="ALL">Tất cả tình trạng cài</option>
-            <option value="INSTALLED">✓ Đã cài Service</option>
-            <option value="NOT_INSTALLED">❌ Chưa cài Service</option>
           </select>
 
           {/* Dropdown Lọc Trạng Thái Máy */}
@@ -967,12 +1059,12 @@ export const AgentMultitaskPage: React.FC = () => {
                 gap: '12px'
               }}
             >
-              {/* Thẻ 1: Kiểm Tra Độ Phủ & Danh Sách Chưa Cài */}
+              {/* Thẻ 1: Kiểm Tra Độ Phủ & Máy Offline */}
               <div
                 onClick={() => {
                   setIsFeaturesModalOpen(false);
-                  setFilterInstalled('NOT_INSTALLED');
-                  showToast('Đang lọc danh sách các nhà hàng / máy chưa cài đặt service!', 'info');
+                  setFilterStatus('OFFLINE');
+                  showToast('Đang lọc danh sách các máy đang Offline / Chưa kết nối!', 'info');
                 }}
                 style={{
                   border: '1.5px solid #A7F3D0',
