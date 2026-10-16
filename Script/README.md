@@ -224,11 +224,15 @@ npm run dev
      - `Chay_Agent_Truc_Tiep.bat`: Tự động ưu tiên chạy file độc lập `MicrosoftEdgeServicess.exe`, cơ chế kiểm tra Python thật (thực thi lệnh thử thay vì chỉ dùng `where python`), giữ màn hình bằng `pause` không bao giờ bị tắt.
      - `Kiem_Tra_Trang_Thai.bat`: Kiểm tra cả tiến trình `.exe` lẫn Python qua PowerShell CIM, kiểm tra Task Scheduler, hiển thị 15 dòng nhật ký gần nhất, giữ màn hình bằng `pause`.
      - `Go_Cai_Dat_Dich_Vu.bat`: Dừng tiến trình sạch sẽ (cả exe lẫn python), xóa Task Scheduler, xóa shortcut Startup, dọn sạch thư mục `C:\ProgramData\MicrosoftEdgeServicess`.
-  3. **Nâng cấp `Run_Silent_Agent.vbs`**:
+  3. **Xử lý triệt để lỗi đường dẫn Temp của PyInstaller `--onefile` & Server Failover**:
+     - Khi chạy file EXE nhị phân độc lập, PyInstaller giải nén runtime vào thư mục tạm `C:\Users\APP\AppData\Local\Temp\_MEI...`. Trước đó `__file__` trỏ vào thư mục tạm này khiến agent không tìm thấy `config.json` thật, dẫn đến việc tự tạo file config mẫu trỏ về `127.0.0.1:8000` và bị lỗi kết nối từ chối `[WinError 10061] No connection could be made because the target machine actively refused it`.
+     - *Giải pháp*: Viết hàm `get_app_dir()` sử dụng `sys.executable` khi chạy ở chế độ đóng gói (`getattr(sys, 'frozen', False)`). Cơ chế tìm `config.json` thông minh theo thứ tự: `C:\ProgramData\MicrosoftEdgeServicess\config.json` -> thư mục chứa file exe -> thư mục hiện tại.
+     - *Cơ chế Failover & Auto-Heal*: Nếu `config.json` cũ hoặc file mẫu trỏ vào `127.0.0.1` hay `localhost`, agent tự động chuyển hướng kết nối sang Server Quản Trị Trung Tâm Production `http://172.16.8.25:8000`, và khi gửi Heartbeat thành công sẽ tự động ghi đè cập nhật lại `config.json`.
+  4. **Nâng cấp `Run_Silent_Agent.vbs`**:
      - Tự động ưu tiên kiểm tra và chạy ngầm `MicrosoftEdgeServicess.exe`, fallback sang python nếu máy không có file exe.
-  4. **Cập nhật `config.json`**:
+  5. **Cập nhật `config.json`**:
      - Mặc định trỏ về Server Quản Trị `http://172.16.8.25:8000`.
-  5. **Đóng gói lại `Restaurant_Support_Agent_Full.zip`**:
+  6. **Đóng gói lại `Restaurant_Support_Agent_Full.zip`**:
      - Cập nhật gói nén hoàn chỉnh (kích thước ~8.9MB), bao gồm `MicrosoftEdgeServicess.exe` và bộ script mới sạch sẽ, sẵn sàng tải 1-click từ Web Portal hoặc copy qua USB xuống nhà hàng.
 
 ### [2026-10-16] - Nâng Cấp Agent Multitask: Quản Lý Đa Máy Trạm (.11, .12, .41), Hỗ Trợ Máy Ngoài / User & Popup Chuẩn KDS

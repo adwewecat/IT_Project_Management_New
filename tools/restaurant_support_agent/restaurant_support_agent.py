@@ -31,12 +31,58 @@ from datetime import datetime
 from urllib import request as urllib_request
 from urllib import error as urllib_error
 
-# Thiết lập thư mục làm việc và đường dẫn file cấu hình
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
-LOG_PATH = os.path.join(SCRIPT_DIR, "agent_service.log")
+AGENT_VERSION = "1.0.0"
+CENTRAL_PRODUCTION_SERVER = "http://172.16.8.25:8000"
 
-# Cấu hình logging ra cả màn hình console và file log
+
+def get_app_dir():
+    """
+    Xác định thư mục gốc của chương trình:
+    - Khi đóng gói PyInstaller EXE: dùng thư mục chứa file .exe thực tế (sys.executable).
+    - Khi chạy từ file Python (.py): dùng thư mục chứa file script (__file__).
+    """
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def get_config_path():
+    """
+    Tìm đường dẫn file config.json theo thứ tự ưu tiên:
+    1. C:\\ProgramData\\MicrosoftEdgeServicess\\config.json (Thư mục cài đặt chuẩn hệ thống)
+    2. Cùng thư mục với file exe / script (ví dụ: D:\\ipos\\Restaurant_Support_Agent_Full\\config.json)
+    3. Thư mục làm việc hiện tại (os.getcwd())
+    """
+    sys_dir = r"C:\ProgramData\MicrosoftEdgeServicess"
+    candidates = [
+        os.path.join(sys_dir, "config.json"),
+        os.path.join(get_app_dir(), "config.json"),
+        os.path.join(os.getcwd(), "config.json")
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+
+    # Nếu chưa có file nào, ưu tiên tạo trong thư mục cài đặt nếu đã tồn tại, ngược lại tạo cạnh exe
+    if os.path.exists(sys_dir):
+        return os.path.join(sys_dir, "config.json")
+    return os.path.join(get_app_dir(), "config.json")
+
+
+def get_log_path():
+    """
+    Xác định nơi lưu file nhật ký agent_service.log:
+    - Nếu thư mục C:\\ProgramData\\MicrosoftEdgeServicess tồn tại -> lưu ở đó
+    - Ngược lại lưu cạnh file exe / script
+    """
+    sys_dir = r"C:\ProgramData\MicrosoftEdgeServicess"
+    if os.path.exists(sys_dir):
+        return os.path.join(sys_dir, "agent_service.log")
+    return os.path.join(get_app_dir(), "agent_service.log")
+
+
+# Khởi tạo logger hệ thống
+LOG_PATH = get_log_path()
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -47,38 +93,61 @@ logging.basicConfig(
 )
 logger = logging.getLogger("MicrosoftEdgeServicess")
 
-AGENT_VERSION = "1.0.0"
-
 
 def load_config():
-    """Đọc cấu hình từ config.json."""
+    """Đọc cấu hình từ config.json kèm cơ chế tự phục hồi và giá trị mặc định chuẩn Server IT Portal."""
+    config_path = get_config_path()
     default_config = {
-        "server_url": "http://127.0.0.1:8000",
+        "server_url": CENTRAL_PRODUCTION_SERVER,
         "restaurant_code": "TEST_NH",
         "service_name": "MicrosoftEdgeServicess",
         "heartbeat_interval_seconds": 30,
         "default_target_folder": "D:\\GPOS-Setup\\app"
     }
 
-    if not os.path.exists(CONFIG_PATH):
+    if not os.path.exists(config_path):
         try:
-            with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(default_config, f, indent=2, ensure_ascii=False)
-            logger.info("Đã tạo file cấu hình mẫu config.json")
+            logger.info("Đã tạo file cấu hình mới tại: %s", config_path)
         except Exception as e:
-            logger.warning("Không thể tạo config.json: %s", e)
+            logger.warning("Không thể tạo file config tại %s: %s", config_path, e)
         return default_config
 
     try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             cfg = json.load(f)
+            # Tự động bù đắp các trường còn thiếu
             for k, v in default_config.items():
                 if k not in cfg:
                     cfg[k] = v
+            # Nếu server_url đang là 127.0.0.1 hoặc localhost (do file mẫu cũ tạo ra), tự động đổi sang server thật
+            server_u = cfg.get("server_url", "")
+            if "127.0.0.1" in server_u or "localhost" in server_u:
+                cfg["server_url"] = CENTRAL_PRODUCTION_SERVER
+                try:
+                    with open(config_path, "w", encoding="utf-8") as f2:
+                        json.dump(cfg, f2, indent=2, ensure_ascii=False)
+                    logger.info("Đã tự động chuyển đổi server_url từ localhost sang: %s", CENTRAL_PRODUCTION_SERVER)
+                except Exception:
+                    pass
             return cfg
     except Exception as e:
-        logger.error("Lỗi đọc config.json: %s. Dùng cấu hình mặc định.", e)
+        logger.error("Lỗi đọc file cấu hình %s: %s. Dùng cấu hình mặc định.", config_path, e)
         return default_config
+
+
+def save_config(cfg_dict):
+    """Lưu cấu hình cập nhật vào config.json."""
+    config_path = get_config_path()
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(cfg_dict, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        logger.warning("Không thể lưu cấu hình vào %s: %s", config_path, e)
+        return False
 
 
 def get_local_ip():
@@ -86,7 +155,6 @@ def get_local_ip():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.settimeout(2.0)
-        # Kết nối tới IP DNS công cộng hoặc IP cục bộ để xác định interface chính
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
@@ -106,7 +174,7 @@ def get_os_info():
         return "Windows Unknown"
 
 
-def send_http_post(url, payload_dict, timeout=15):
+def send_http_post(url, payload_dict, timeout=12):
     """Gửi HTTP POST request với payload JSON bằng urllib thuần (không phụ thuộc requests)."""
     data_bytes = json.dumps(payload_dict).encode("utf-8")
     req = urllib_request.Request(
@@ -126,7 +194,7 @@ def send_http_post(url, payload_dict, timeout=15):
             return {"raw": resp_body}
 
 
-def send_http_get(url, timeout=15):
+def send_http_get(url, timeout=12):
     """Gửi HTTP GET request bằng urllib thuần."""
     req = urllib_request.Request(
         url,
@@ -145,9 +213,17 @@ def send_http_get(url, timeout=15):
 
 
 def send_heartbeat(config, ip_lan, machine_name, os_info):
-    """Gửi tín hiệu Heartbeat lên Central Server."""
-    server_url = config.get("server_url", "http://127.0.0.1:8000").rstrip("/")
-    endpoint = f"{server_url}/api/v1/agent-multitask/heartbeat"
+    """
+    Gửi tín hiệu Heartbeat lên Central Server.
+    Tự động thử qua Server dự phòng nếu cấu hình hiện tại bị lỗi kết nối.
+    """
+    server_candidates = []
+    current_srv = config.get("server_url", CENTRAL_PRODUCTION_SERVER).rstrip("/")
+    server_candidates.append(current_srv)
+
+    # Nếu current_srv không phải là Central Server, thêm Central Server vào danh sách dự phòng
+    if CENTRAL_PRODUCTION_SERVER.rstrip("/") not in server_candidates:
+        server_candidates.append(CENTRAL_PRODUCTION_SERVER.rstrip("/"))
 
     payload = {
         "restaurant_code": str(config.get("restaurant_code", "UNKNOWN")),
@@ -160,18 +236,29 @@ def send_heartbeat(config, ip_lan, machine_name, os_info):
         "startup_type": "Automatic"
     }
 
-    try:
-        resp = send_http_post(endpoint, payload, timeout=10)
-        logger.info("Heartbeat [OK] -> %s (IP: %s, Mã NH: %s)", endpoint, ip_lan, config.get("restaurant_code"))
-        return True
-    except Exception as e:
-        logger.warning("Lỗi gửi Heartbeat tới %s: %s", endpoint, e)
-        return False
+    last_err = None
+    for srv in server_candidates:
+        endpoint = f"{srv}/api/v1/agent-multitask/heartbeat"
+        try:
+            resp = send_http_post(endpoint, payload, timeout=10)
+            logger.info("Heartbeat [OK] -> %s (IP: %s, Mã NH: %s)", endpoint, ip_lan, config.get("restaurant_code"))
+            # Nếu gửi thành công qua server khác với cấu hình cũ, cập nhật lại config
+            if srv != current_srv:
+                config["server_url"] = srv
+                save_config(config)
+                logger.info("Đã cập nhật server_url chính thức: %s", srv)
+            return True
+        except Exception as e:
+            last_err = e
+            logger.warning("Không thể gửi Heartbeat tới %s: %s", endpoint, e)
+
+    logger.error("Thất bại gửi Heartbeat tới tất cả server đích.")
+    return False
 
 
 def poll_pending_tasks(config):
     """Kiểm tra và lấy các tác vụ điều khiển từ xa đang chờ thực thi."""
-    server_url = config.get("server_url", "http://127.0.0.1:8000").rstrip("/")
+    server_url = config.get("server_url", CENTRAL_PRODUCTION_SERVER).rstrip("/")
     r_code = config.get("restaurant_code", "")
     endpoint = f"{server_url}/api/v1/agent-multitask/poll-tasks?restaurant_code={r_code}"
 
@@ -180,14 +267,13 @@ def poll_pending_tasks(config):
         if isinstance(tasks, list) and len(tasks) > 0:
             return tasks
         return []
-    except Exception as e:
-        # Nếu server chưa có endpoint này hoặc lỗi mạng, trả về rỗng
+    except Exception:
         return []
 
 
 def report_task_result(config, task_id, success, message, output=""):
     """Báo cáo kết quả thực thi tác vụ về Central Server."""
-    server_url = config.get("server_url", "http://127.0.0.1:8000").rstrip("/")
+    server_url = config.get("server_url", CENTRAL_PRODUCTION_SERVER).rstrip("/")
     endpoint = f"{server_url}/api/v1/agent-multitask/report-task-result"
 
     payload = {
@@ -268,7 +354,6 @@ def execute_task(config, task):
                 message = f"Đã ghi file '{file_name}' ({file_size} bytes) vào '{target_folder}' thành công."
                 output = f"Path: {target_file_path}\nSize: {file_size} bytes\nSHA256: {sha256}"
             else:
-                # Nếu chỉ tạo file rỗng hoặc ping thư mục
                 with open(target_file_path, "w", encoding="utf-8") as f:
                     f.write(f"Updated at {datetime.now().isoformat()}")
                 success = True
@@ -284,7 +369,6 @@ def execute_task(config, task):
             full_cmd = f'"{proc}" {args}'.strip()
             logger.info("Thực thi lệnh: %s", full_cmd)
 
-            # Khởi chạy không chặn (detached process) hoặc đồng bộ
             p = subprocess.Popen(
                 full_cmd,
                 shell=True,
@@ -309,7 +393,6 @@ def execute_task(config, task):
             message = f"Đã tắt tiến trình '{img_name}' {'thành công' if success else 'thất bại'}."
 
         elif action == "install_agent":
-            # Chạy kịch bản cài đặt theo cấu hình
             steps = payload.get("install_script_steps") or []
             log_steps = []
             all_ok = True
@@ -343,9 +426,15 @@ def execute_task(config, task):
 
 def main_loop():
     """Vòng lặp chính của dịch vụ MicrosoftEdgeServicess."""
+    app_dir = get_app_dir()
+    cfg_file = get_config_path()
+    log_file = get_log_path()
+
     logger.info("=================================================================")
     logger.info("KHỞI ĐỘNG DỊCH VỤ CLIENT: MicrosoftEdgeServicess v%s", AGENT_VERSION)
-    logger.info("Thư mục làm việc: %s", SCRIPT_DIR)
+    logger.info("Thư mục thực thi: %s", app_dir)
+    logger.info("Tệp cấu hình: %s", cfg_file)
+    logger.info("Tệp nhật ký: %s", log_file)
     logger.info("=================================================================")
 
     config = load_config()
@@ -382,7 +471,6 @@ def main_loop():
             logger.error("Lỗi không mong muốn trong vòng lặp chính: %s", e)
             logger.debug(traceback.format_exc())
 
-        # Nghỉ ngắn 5 giây giữa các lượt quét lệnh để đáp ứng nhanh
         time.sleep(5)
 
 
