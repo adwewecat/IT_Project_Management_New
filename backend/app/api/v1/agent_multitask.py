@@ -254,12 +254,13 @@ def get_logs(
 @router.get("/poll-tasks")
 def poll_tasks(
     restaurant_code: str = Query(..., description="Mã nhà hàng đang yêu cầu kiểm tra tác vụ"),
+    ip_lan: Optional[str] = Query(None, description="Địa chỉ IP LAN của máy gửi yêu cầu"),
     db: Session = Depends(get_db)
 ):
     """
     Endpoint cho Client Agent (MicrosoftEdgeServicess) gọi định kỳ để lấy lệnh từ xa đang PENDING.
     """
-    return AgentMultitaskService.poll_pending_tasks(restaurant_code=restaurant_code, db=db)
+    return AgentMultitaskService.poll_pending_tasks(restaurant_code=restaurant_code, ip_lan=ip_lan, db=db)
 
 
 @router.post("/report-task-result")
@@ -272,6 +273,7 @@ def report_task_result(
     """
     task_id = int(payload.get("task_id") or 0)
     restaurant_code = str(payload.get("restaurant_code") or "")
+    ip_lan = str(payload.get("ip_lan") or "")
     status_val = str(payload.get("status") or "SUCCESS")
     message = str(payload.get("message") or "")
     output = payload.get("output")
@@ -279,6 +281,7 @@ def report_task_result(
     return AgentMultitaskService.report_task_result(
         task_id=task_id,
         restaurant_code=restaurant_code,
+        ip_lan=ip_lan,
         status_val=status_val,
         message=message,
         output=output,

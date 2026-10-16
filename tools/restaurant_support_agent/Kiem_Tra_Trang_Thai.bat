@@ -3,36 +3,35 @@ title Kiem Tra Trang Thai Dich Vu MicrosoftEdgeServicess
 cd /d "%~dp0"
 
 echo ===============================================================================
-echo   KIEM TRA TRANG THAI DICH VU: MicrosoftEdgeServicess
+echo   KIEM TRA TRANG THAI DICH VU MicrosoftEdgeServicess
 echo ===============================================================================
 echo.
 
-:: 1. Kiem tra tien trinh chay ngam (ca ban EXE va ban Python)
-echo 1. Kiem tra tien trinh he thong dang chay ngam:
-powershell -NoProfile -Command "$procs = Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*MicrosoftEdgeServicess*' -or $_.CommandLine -like '*restaurant_support_agent.py*' }; if ($procs) { $procs | Select-Object ProcessId, Name, CommandLine | Format-Table -AutoSize } else { Write-Host '   -> KHONG CO tien trinh MicrosoftEdgeServicess hoac Python agent nao dang chay.' -ForegroundColor Yellow }"
+set "INSTALL_DIR=C:\ProgramData\MicrosoftEdgeServicess"
 
+:: 1. Kiem tra Windows Service trong services.msc
+echo [1] Kiem tra trong Windows Services (services.msc):
+sc.exe query MicrosoftEdgeServicess
 echo.
-echo 2. Kiem tra tac vu tu dong khoi dong Task Scheduler:
-schtasks /Query /TN "MicrosoftEdgeServicess" /FO LIST 2>nul
-if %errorlevel% neq 0 (
-    echo    -> Chua tim thay tac vu Task Scheduler 'MicrosoftEdgeServicess'.
-)
 
+:: 2. Kiem tra tien trinh chay ngam trong Task Manager
+echo [2] Kiem tra tien trinh MicrosoftEdgeServicess.exe:
+tasklist /FI "IMAGENAME eq MicrosoftEdgeServicess.exe"
 echo.
-echo 3. Kiem tra thu muc cai dat va file nhat ky hoat dong (Log):
-if exist "C:\ProgramData\MicrosoftEdgeServicess\agent_service.log" (
-    echo [OK] Nhat ky tai C:\ProgramData\MicrosoftEdgeServicess\agent_service.log:
-    powershell -NoProfile -Command "Get-Content -Path 'C:\ProgramData\MicrosoftEdgeServicess\agent_service.log' -Tail 15"
+
+:: 3. Kiem tra file log
+echo [3] Nhat ky hoat dong gan nhat (agent_service.log):
+if exist "%INSTALL_DIR%\agent_service.log" (
+    powershell -Command "Get-Content -Path '%INSTALL_DIR%\agent_service.log' -Tail 15 -ErrorAction SilentlyContinue"
 ) else if exist "%~dp0agent_service.log" (
-    echo [OK] Nhat ky tai %~dp0agent_service.log:
-    powershell -NoProfile -Command "Get-Content -Path '%~dp0agent_service.log' -Tail 15"
+    powershell -Command "Get-Content -Path '%~dp0agent_service.log' -Tail 15 -ErrorAction SilentlyContinue"
 ) else (
-    echo    -> Chua co tep nhat ky nao duoc tao.
+    echo    Chua tim thay file nhat ky agent_service.log.
 )
-
 echo.
+
 echo ===============================================================================
-echo   KIEM TRA HOAN TAT.
+echo   Hoan tat kiem tra.
 echo ===============================================================================
 echo.
 pause

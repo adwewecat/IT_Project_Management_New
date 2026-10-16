@@ -2707,3 +2707,28 @@ estaurant_service.py).
 4. **Build & Đóng Gói Chuẩn Bàn Giao**:
    - Frontend: `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 4.47s`), bản build sạch sẽ tại `frontend/dist/`.
    - Backend: `python -m compileall app` và Smoke Test 100% PASSED.
+
+---
+
+### [2026-10-16] - Nâng Cấp Toàn Diện Agent Multitask: Khắc Phục Trạng Thái Offline & Đăng Ký Windows Service Native (services.msc)
+1. **Khắc Phục Vấn Đề "VẪN OFFLINE" Khi Cài Đặt Trên Máy Ảo VMware / Máy Trạm Thực Tế**:
+   - **Nguyên nhân cốt lõi**:
+     + Frontend trước đây chỉ nạp dữ liệu danh sách `endpoints` 1 lần lúc mở trang (`mount`), không có cơ chế tự động thăm dò (auto-polling). Khi người dùng thêm máy ngoài (`vmwave`) trên Web và máy ảo VMware chạy Heartbeat gửi về thành công (HTTP 200), giao diện web vẫn giữ nguyên dữ liệu cũ (`❌ Chưa Cài`, `⚪ Offline`, `—`) nếu người dùng chưa bấm nút `🔄 Làm Mới`.
+     + Backend trước đây lưu trường `is_online` tĩnh trong Database. Nếu máy trạm tắt hoặc ngắt kết nối, cờ không được cập nhật linh hoạt theo thời gian thực.
+   - **Giải pháp xử lý toàn diện**:
+     + **Auto-polling 10 giây trên Frontend (`AgentMultitaskPage.tsx`)**: Bổ sung `setInterval(10000)` gọi ngầm `agentMultitaskService.getEndpoints()` và `getOverview()` để tự động cập nhật trạng thái `🟢 Online (Run)`, Hostname và giờ báo cáo theo thời gian thực mà không làm giật màn hình.
+     + **Đánh giá Online linh hoạt theo thời gian thực (`AgentMultitaskService.get_endpoints`)**: So khớp `last_heartbeat` với thời gian hiện tại (`now - last_heartbeat <= 90s`). Nếu nhận heartbeat trong 90s thì lập tức trả về `is_online = True` và `service_status = RUNNING`, ngược lại tự động chuyển `⚪ Offline`.
+     + **Ưu tiên khớp chính xác theo IP LAN (`process_heartbeat`)**: Khi nhận Heartbeat từ IP LAN cụ thể (ví dụ: `192.168.254.129`), backend ưu tiên tìm và gán vào đúng bản ghi do người dùng tự tạo (`device_type in ('USER', 'EXTERNAL')`), tránh tình trạng trùng lặp hoặc gán nhầm vào mã generic `TEST_NH`.
+2. **Đăng Ký Chuẩn Native Windows Service Trong `services.msc`**:
+   - **Nguyên nhân**: File cài đặt cũ chỉ dùng Task Scheduler (`schtasks`) nên khi người dùng mở `services.msc` không tìm thấy `MicrosoftEdgeServicess`. Đồng thời khi bấm nút "Restart Service" trên Web, lệnh `Restart-Service -Name 'MicrosoftEdgeServicess'` bị báo lỗi "thất bại".
+   - **Giải pháp**:
+     + Tích hợp trực tiếp lớp Windows Service `win32serviceutil.ServiceFramework` vào `tools/restaurant_support_agent/restaurant_support_agent.py` và biên dịch thành `MicrosoftEdgeServicess.exe` độc lập (~10.4MB).
+     + Hỗ trợ đầy đủ tham số dòng lệnh Windows Service: `MicrosoftEdgeServicess.exe --startup auto install`, `start`, `stop`, `restart`, `remove`. Khi chạy, service hiển thị trực tiếp trong `services.msc` với tên `MicrosoftEdgeServicess`.
+     + Cấu hình tự động phục hồi khi gặp lỗi (`sc failure MicrosoftEdgeServicess reset= 60 actions= restart/5000/restart/5000/restart/5000`).
+     + Nâng cấp `Cai_Dat_Dich_Vu_Windows.bat`: Kiểm tra quyền Administrator, cài đặt native Windows Service vào `services.msc`, đồng thời thiết lập dự phòng qua Task Scheduler và Startup folder.
+     + Nâng cấp `Kiem_Tra_Trang_Thai.bat` và `Go_Cai_Dat_Dich_Vu.bat` sạch sẽ.
+     + Xử lý đa cơ chế cho lệnh `restart_service`: Thử restart qua `services.msc`, nếu không có fallback sang `schtasks` hoặc tự kích hoạt tiến trình mới không bao giờ báo lỗi vô cớ.
+3. **Đóng Gói & Đồng Bộ Hệ Thống**:
+   - Đóng gói bản build mới nhất vào `tools/Restaurant_Support_Agent_Full.zip`.
+   - Biên dịch Frontend: `cmd /c "npm run build"` thành công 100% exit code 0 (`✓ built in 4.92s`).
+   - Khởi động lại backend daemon trên port 8000, kiểm thử `python -m compileall app` và Smoke Test 100% PASSED.

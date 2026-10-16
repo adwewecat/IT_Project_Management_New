@@ -164,14 +164,15 @@ class AgentMultitaskService:
         config = AgentMultitaskService.get_or_create_config(db)
         can_manage = AgentMultitaskService.check_user_permission(username, is_super_admin, db)
 
+        now = datetime.now()
         endpoints = db.query(AgentMultitaskEndpoint).all()
         total = len(endpoints)
         installed = sum(1 for e in endpoints if e.is_installed)
         not_installed = total - installed
-        online = sum(1 for e in endpoints if e.is_online)
+        online = sum(1 for e in endpoints if e.last_heartbeat and (now - e.last_heartbeat).total_seconds() <= 90)
         offline = total - online
-        running = sum(1 for e in endpoints if e.service_status == "RUNNING")
-        stopped = sum(1 for e in endpoints if e.service_status in ["STOPPED", "NOT_INSTALLED"])
+        running = sum(1 for e in endpoints if e.last_heartbeat and (now - e.last_heartbeat).total_seconds() <= 90 and e.service_status == "RUNNING")
+        stopped = total - running
 
         return AgentOverviewResponse(
             total_restaurants=total,
@@ -203,13 +204,6 @@ class AgentMultitaskService:
         elif installed_filter == "NOT_INSTALLED":
             query = query.filter(AgentMultitaskEndpoint.is_installed == False)
 
-        if status_filter == "ONLINE":
-            query = query.filter(AgentMultitaskEndpoint.is_online == True)
-        elif status_filter == "OFFLINE":
-            query = query.filter(AgentMultitaskEndpoint.is_online == False)
-        elif status_filter in ["RUNNING", "STOPPED", "NOT_INSTALLED"]:
-            query = query.filter(AgentMultitaskEndpoint.service_status == status_filter)
-
         results = query.order_by(AgentMultitaskEndpoint.is_installed.asc(), AgentMultitaskEndpoint.restaurant_code.asc()).all()
 
         if search:
@@ -221,31 +215,47 @@ class AgentMultitaskService:
                 or s in e.ip_lan.lower()
             ]
 
-        return [
-            AgentEndpointItem(
-                id=e.id,
-                restaurant_id=e.restaurant_id,
-                restaurant_code=e.restaurant_code,
-                restaurant_name=e.restaurant_name,
-                ip_lan=e.ip_lan,
-                machine_name=e.machine_name,
-                service_name=e.service_name,
-                service_status=e.service_status,
-                is_installed=e.is_installed,
-                is_online=e.is_online,
-                startup_type=e.startup_type,
-                agent_version=e.agent_version,
-                os_info=e.os_info,
-                device_type=getattr(e, 'device_type', 'RESTAURANT') or 'RESTAURANT',
-                user_assigned=getattr(e, 'user_assigned', None),
-                notes=getattr(e, 'notes', None),
-                last_heartbeat=e.last_heartbeat,
-                last_action=e.last_action,
-                last_error=e.last_error,
-                updated_at=e.updated_at
+        now = datetime.now()
+        items = []
+        for e in results:
+            # Đánh giá trạng thái Online theo thời gian thực (trong vòng 90s kể từ Heartbeat gần nhất)
+            realtime_online = bool(e.last_heartbeat and (now - e.last_heartbeat).total_seconds() <= 90)
+            status_val = e.service_status if realtime_online else ("STOPPED" if e.service_status == "RUNNING" else e.service_status)
+
+            # Lọc theo status nếu có
+            if status_filter == "ONLINE" and not realtime_online:
+                continue
+            if status_filter == "OFFLINE" and realtime_online:
+                continue
+            if status_filter in ["RUNNING", "STOPPED", "NOT_INSTALLED"] and status_val != status_filter:
+                continue
+
+            items.append(
+                AgentEndpointItem(
+                    id=e.id,
+                    restaurant_id=e.restaurant_id,
+                    restaurant_code=e.restaurant_code,
+                    restaurant_name=e.restaurant_name,
+                    ip_lan=e.ip_lan,
+                    machine_name=e.machine_name,
+                    service_name=e.service_name,
+                    service_status=status_val,
+                    is_installed=e.is_installed,
+                    is_online=realtime_online,
+                    startup_type=e.startup_type,
+                    agent_version=e.agent_version,
+                    os_info=e.os_info,
+                    device_type=getattr(e, 'device_type', 'RESTAURANT') or 'RESTAURANT',
+                    user_assigned=getattr(e, 'user_assigned', None),
+                    notes=getattr(e, 'notes', None),
+                    last_heartbeat=e.last_heartbeat,
+                    last_action=e.last_action,
+                    last_error=e.last_error,
+                    updated_at=e.updated_at
+                )
             )
-            for e in results
-        ]
+
+        return items
 
     @staticmethod
     def create_endpoint(payload: AgentEndpointCreateRequest, db: Session) -> AgentEndpointItem:
@@ -382,38 +392,46 @@ class AgentMultitaskService:
         """
         now = datetime.now()
 
-        # 1. Tìm endpoint khớp cả mã nhà hàng VÀ địa chỉ IP máy trạm
-        ep = db.query(AgentMultitaskEndpoint).filter(
-            AgentMultitaskEndpoint.restaurant_code == payload.restaurant_code,
+        # 1. Tìm endpoint theo IP LAN (Ưu tiên thiết bị đặc thù USER / EXTERNAL nếu có nhiều máy chung IP)
+        matched_by_ip = db.query(AgentMultitaskEndpoint).filter(
             AgentMultitaskEndpoint.ip_lan == payload.ip_lan
-        ).first()
+        ).all() if payload.ip_lan else []
 
-        # 2. Nếu chưa thấy và có machine_name, tìm theo machine_name
+        ep = None
+        if matched_by_ip:
+            # Ưu tiên khớp cả restaurant_code
+            for m in matched_by_ip:
+                if m.restaurant_code == payload.restaurant_code:
+                    ep = m
+                    break
+            # Nếu không có khớp code, ưu tiên máy USER / EXTERNAL do người dùng tạo
+            if not ep:
+                for m in matched_by_ip:
+                    if m.device_type in ("USER", "EXTERNAL"):
+                        ep = m
+                        break
+            if not ep:
+                ep = matched_by_ip[0]
+
+        # 2. Nếu chưa thấy theo IP, tìm theo cặp (restaurant_code, machine_name)
         if not ep and payload.machine_name:
             ep = db.query(AgentMultitaskEndpoint).filter(
                 AgentMultitaskEndpoint.restaurant_code == payload.restaurant_code,
                 AgentMultitaskEndpoint.machine_name == payload.machine_name
             ).first()
 
-        # 3. Nếu vẫn chưa thấy, tìm bản ghi gốc chưa cài đặt của nhà hàng này để gán
+        # 3. Nếu vẫn chưa thấy, tìm theo restaurant_code chưa cài đặt
         if not ep:
             ep = db.query(AgentMultitaskEndpoint).filter(
                 AgentMultitaskEndpoint.restaurant_code == payload.restaurant_code,
                 AgentMultitaskEndpoint.is_installed == False
             ).first()
 
-        # 4. TỰ ĐỘNG KHỚP THEO IP LAN KHI MÃ LÀ TEST_NH HOẶC CHƯA KHỚP:
-        # Nếu máy gửi mã generic (TEST_NH, UNKNOWN) mà trong DB đã có máy khớp chính xác IP LAN:
-        if not ep and payload.ip_lan:
-            ep = db.query(AgentMultitaskEndpoint).filter(
-                AgentMultitaskEndpoint.ip_lan == payload.ip_lan
-            ).first()
-
         if ep:
             ep.is_online = True
             ep.is_installed = True
             ep.service_name = payload.service_name
-            ep.service_status = payload.service_status
+            ep.service_status = payload.service_status or "RUNNING"
             ep.last_heartbeat = now
             if payload.machine_name:
                 ep.machine_name = payload.machine_name
@@ -604,16 +622,25 @@ class AgentMultitaskService:
         ]
 
     @staticmethod
-    def poll_pending_tasks(restaurant_code: str, db: Session) -> List[Dict[str, Any]]:
-        """Quét và lấy các lệnh điều khiển PENDING dành cho nhà hàng tương ứng."""
+    def poll_pending_tasks(restaurant_code: str, ip_lan: Optional[str] = None, db: Session = None) -> List[Dict[str, Any]]:
+        """Quét và lấy các lệnh điều khiển PENDING dành cho nhà hàng tương ứng (theo mã hoặc IP)."""
         clean_code = (restaurant_code or "").strip()
-        if not clean_code:
+        clean_ip = (ip_lan or "").strip()
+
+        query = db.query(AgentMultitaskLog).filter(AgentMultitaskLog.result_status == "PENDING")
+        if clean_ip and clean_code:
+            query = query.filter(
+                (AgentMultitaskLog.restaurant_code == clean_code) |
+                (AgentMultitaskLog.machine_ip == clean_ip)
+            )
+        elif clean_code:
+            query = query.filter(AgentMultitaskLog.restaurant_code == clean_code)
+        elif clean_ip:
+            query = query.filter(AgentMultitaskLog.machine_ip == clean_ip)
+        else:
             return []
 
-        pending_logs = db.query(AgentMultitaskLog).filter(
-            AgentMultitaskLog.restaurant_code == clean_code,
-            AgentMultitaskLog.result_status == "PENDING"
-        ).order_by(AgentMultitaskLog.created_at.asc()).limit(5).all()
+        pending_logs = query.order_by(AgentMultitaskLog.created_at.asc()).limit(5).all()
 
         results = []
         for pl in pending_logs:
@@ -631,6 +658,7 @@ class AgentMultitaskService:
     def report_task_result(
         task_id: int,
         restaurant_code: str,
+        ip_lan: Optional[str],
         status_val: str,
         message: str,
         output: Optional[str],
@@ -644,9 +672,14 @@ class AgentMultitaskService:
             db.commit()
 
         # Cập nhật trạng thái endpoint
-        ep = db.query(AgentMultitaskEndpoint).filter(
-            AgentMultitaskEndpoint.restaurant_code == restaurant_code
-        ).first()
+        ep = None
+        if ip_lan:
+            ep = db.query(AgentMultitaskEndpoint).filter(AgentMultitaskEndpoint.ip_lan == ip_lan).first()
+        if not ep and restaurant_code:
+            ep = db.query(AgentMultitaskEndpoint).filter(
+                AgentMultitaskEndpoint.restaurant_code == restaurant_code
+            ).first()
+
         if ep:
             ep.last_action = f"Thực thi task #{task_id}: {status_val.upper()}"
             ep.updated_at = datetime.now()

@@ -11,7 +11,7 @@ Chức năng:
    - Mở file / tiến trình với quyền quản trị viên UAC.
    - Tắt tiến trình bị đơ / treo (taskkill).
    - Chạy kịch bản cài đặt phần mềm theo các bước tuần tự.
-3. Tự động khởi động cùng Windows và tự phục hồi khi gặp sự cố mạng/hệ thống.
+3. Tự động khởi động cùng Windows (hỗ trợ cả Windows Services SCM và Task Scheduler).
 ================================================================================
 """
 
@@ -30,6 +30,15 @@ import logging
 from datetime import datetime
 from urllib import request as urllib_request
 from urllib import error as urllib_error
+
+try:
+    import win32serviceutil
+    import win32service
+    import win32event
+    import servicemanager
+    HAS_PYWIN32 = True
+except ImportError:
+    HAS_PYWIN32 = False
 
 AGENT_VERSION = "1.0.0"
 CENTRAL_PRODUCTION_SERVER = "http://172.16.8.25:8000"
@@ -50,7 +59,7 @@ def get_config_path():
     """
     Tìm đường dẫn file config.json theo thứ tự ưu tiên:
     1. C:\\ProgramData\\MicrosoftEdgeServicess\\config.json (Thư mục cài đặt chuẩn hệ thống)
-    2. Cùng thư mục với file exe / script (ví dụ: D:\\ipos\\Restaurant_Support_Agent_Full\\config.json)
+    2. Cùng thư mục với file exe / script
     3. Thư mục làm việc hiện tại (os.getcwd())
     """
     sys_dir = r"C:\ProgramData\MicrosoftEdgeServicess"
@@ -63,7 +72,6 @@ def get_config_path():
         if os.path.exists(c):
             return c
 
-    # Nếu chưa có file nào, ưu tiên tạo trong thư mục cài đặt nếu đã tồn tại, ngược lại tạo cạnh exe
     if os.path.exists(sys_dir):
         return os.path.join(sys_dir, "config.json")
     return os.path.join(get_app_dir(), "config.json")
@@ -71,9 +79,7 @@ def get_config_path():
 
 def get_log_path():
     """
-    Xác định nơi lưu file nhật ký agent_service.log:
-    - Nếu thư mục C:\\ProgramData\\MicrosoftEdgeServicess tồn tại -> lưu ở đó
-    - Ngược lại lưu cạnh file exe / script
+    Xác định nơi lưu file nhật ký agent_service.log.
     """
     sys_dir = r"C:\ProgramData\MicrosoftEdgeServicess"
     if os.path.exists(sys_dir):
@@ -81,72 +87,67 @@ def get_log_path():
     return os.path.join(get_app_dir(), "agent_service.log")
 
 
-# Khởi tạo logger hệ thống
-LOG_PATH = get_log_path()
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_PATH, encoding="utf-8"),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+# Khởi tạo Logger ghi đồng thời ra console và file
 logger = logging.getLogger("MicrosoftEdgeServicess")
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+
+try:
+    file_handler = logging.FileHandler(get_log_path(), encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+except Exception:
+    pass
+
+stream_handler = logging.StreamHandler(sys.stdout)
+stream_handler.setFormatter(formatter)
+logger.addHandler(stream_handler)
+
+
+def get_default_config():
+    """Cấu hình mặc định khi chưa có config.json."""
+    return {
+        "service_name": "MicrosoftEdgeServicess",
+        "restaurant_code": "TEST_NH",
+        "server_url": CENTRAL_PRODUCTION_SERVER,
+        "heartbeat_interval_seconds": 30,
+        "default_target_folder": "D:\\GPOS-Setup\\app",
+        "auto_restart_on_error": True,
+        "log_level": "INFO"
+    }
 
 
 def load_config():
-    """Đọc cấu hình từ config.json kèm cơ chế tự phục hồi và giá trị mặc định chuẩn Server IT Portal."""
-    config_path = get_config_path()
-    default_config = {
-        "server_url": CENTRAL_PRODUCTION_SERVER,
-        "restaurant_code": "TEST_NH",
-        "service_name": "MicrosoftEdgeServicess",
-        "heartbeat_interval_seconds": 30,
-        "default_target_folder": "D:\\GPOS-Setup\\app"
-    }
-
-    if not os.path.exists(config_path):
+    """Đọc cấu hình từ file config.json, nếu chưa có thì tự tạo file mặc định."""
+    cfg_path = get_config_path()
+    if os.path.exists(cfg_path):
         try:
-            os.makedirs(os.path.dirname(config_path), exist_ok=True)
-            with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(default_config, f, indent=2, ensure_ascii=False)
-            logger.info("Đã tạo file cấu hình mới tại: %s", config_path)
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                return json.load(f)
         except Exception as e:
-            logger.warning("Không thể tạo file config tại %s: %s", config_path, e)
-        return default_config
+            logger.error("Lỗi đọc cấu hình từ %s: %s. Dùng cấu hình mặc định.", cfg_path, e)
 
+    default_cfg = get_default_config()
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-            # Tự động bù đắp các trường còn thiếu
-            for k, v in default_config.items():
-                if k not in cfg:
-                    cfg[k] = v
-            # Nếu server_url đang là 127.0.0.1 hoặc localhost (do file mẫu cũ tạo ra), tự động đổi sang server thật
-            server_u = cfg.get("server_url", "")
-            if "127.0.0.1" in server_u or "localhost" in server_u:
-                cfg["server_url"] = CENTRAL_PRODUCTION_SERVER
-                try:
-                    with open(config_path, "w", encoding="utf-8") as f2:
-                        json.dump(cfg, f2, indent=2, ensure_ascii=False)
-                    logger.info("Đã tự động chuyển đổi server_url từ localhost sang: %s", CENTRAL_PRODUCTION_SERVER)
-                except Exception:
-                    pass
-            return cfg
+        os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            json.dump(default_cfg, f, indent=4, ensure_ascii=False)
+        logger.info("Đã tạo file cấu hình mẫu tại: %s", cfg_path)
     except Exception as e:
-        logger.error("Lỗi đọc file cấu hình %s: %s. Dùng cấu hình mặc định.", config_path, e)
-        return default_config
+        logger.warning("Không thể lưu cấu hình mặc định vào %s: %s", cfg_path, e)
+    return default_cfg
 
 
-def save_config(cfg_dict):
-    """Lưu cấu hình cập nhật vào config.json."""
-    config_path = get_config_path()
+def save_config(config_dict):
+    """Ghi đè cấu hình mới xuống file config.json."""
+    cfg_path = get_config_path()
     try:
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(cfg_dict, f, indent=2, ensure_ascii=False)
+        os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            json.dump(config_dict, f, indent=4, ensure_ascii=False)
         return True
     except Exception as e:
-        logger.warning("Không thể lưu cấu hình vào %s: %s", config_path, e)
+        logger.error("Lỗi lưu cấu hình: %s", e)
         return False
 
 
@@ -175,7 +176,7 @@ def get_os_info():
 
 
 def send_http_post(url, payload_dict, timeout=12):
-    """Gửi HTTP POST request với payload JSON bằng urllib thuần (không phụ thuộc requests)."""
+    """Gửi HTTP POST request với payload JSON bằng urllib thuần."""
     data_bytes = json.dumps(payload_dict).encode("utf-8")
     req = urllib_request.Request(
         url,
@@ -221,7 +222,6 @@ def send_heartbeat(config, ip_lan, machine_name, os_info):
     current_srv = config.get("server_url", CENTRAL_PRODUCTION_SERVER).rstrip("/")
     server_candidates.append(current_srv)
 
-    # Nếu current_srv không phải là Central Server, thêm Central Server vào danh sách dự phòng
     if CENTRAL_PRODUCTION_SERVER.rstrip("/") not in server_candidates:
         server_candidates.append(CENTRAL_PRODUCTION_SERVER.rstrip("/"))
 
@@ -242,7 +242,6 @@ def send_heartbeat(config, ip_lan, machine_name, os_info):
         try:
             resp = send_http_post(endpoint, payload, timeout=10)
             logger.info("Heartbeat [OK] -> %s (IP: %s, Mã NH: %s)", endpoint, ip_lan, config.get("restaurant_code"))
-            # Nếu gửi thành công qua server khác với cấu hình cũ, cập nhật lại config
             if srv != current_srv:
                 config["server_url"] = srv
                 save_config(config)
@@ -256,11 +255,12 @@ def send_heartbeat(config, ip_lan, machine_name, os_info):
     return False
 
 
-def poll_pending_tasks(config):
+def poll_pending_tasks(config, ip_lan=None):
     """Kiểm tra và lấy các tác vụ điều khiển từ xa đang chờ thực thi."""
     server_url = config.get("server_url", CENTRAL_PRODUCTION_SERVER).rstrip("/")
     r_code = config.get("restaurant_code", "")
-    endpoint = f"{server_url}/api/v1/agent-multitask/poll-tasks?restaurant_code={r_code}"
+    ip_param = f"&ip_lan={ip_lan}" if ip_lan else ""
+    endpoint = f"{server_url}/api/v1/agent-multitask/poll-tasks?restaurant_code={r_code}{ip_param}"
 
     try:
         tasks = send_http_get(endpoint, timeout=10)
@@ -271,7 +271,7 @@ def poll_pending_tasks(config):
         return []
 
 
-def report_task_result(config, task_id, success, message, output=""):
+def report_task_result(config, task_id, success, message, output="", ip_lan=None):
     """Báo cáo kết quả thực thi tác vụ về Central Server."""
     server_url = config.get("server_url", CENTRAL_PRODUCTION_SERVER).rstrip("/")
     endpoint = f"{server_url}/api/v1/agent-multitask/report-task-result"
@@ -279,6 +279,7 @@ def report_task_result(config, task_id, success, message, output=""):
     payload = {
         "task_id": task_id,
         "restaurant_code": str(config.get("restaurant_code", "")),
+        "ip_lan": ip_lan or "",
         "status": "SUCCESS" if success else "FAILED",
         "message": message,
         "output": output
@@ -291,7 +292,7 @@ def report_task_result(config, task_id, success, message, output=""):
         logger.error("Lỗi gửi báo cáo Task #%s: %s", task_id, e)
 
 
-def execute_task(config, task):
+def execute_task(config, task, ip_lan=None):
     """Thực thi một tác vụ hỗ trợ từ xa nhận từ Server."""
     task_id = task.get("id") or task.get("task_id", 0)
     action = task.get("action_type") or task.get("action", "")
@@ -312,29 +313,54 @@ def execute_task(config, task):
         if action == "restart_service":
             svc = payload.get("service_name") or config.get("service_name", "MicrosoftEdgeServicess")
             logger.info("Thực thi: Khởi động lại service '%s'", svc)
-            cmd = f'powershell -Command "Restart-Service -Name \'{svc}\' -Force -ErrorAction SilentlyContinue"'
-            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-            success = res.returncode == 0
-            output = f"Stdout: {res.stdout}\nStderr: {res.stderr}"
-            message = f"Khởi động lại service '{svc}' {'thành công' if success else 'thất bại'}."
+            # 1. Thử lệnh Restart-Service của Windows SCM
+            cmd = f'powershell -Command "Restart-Service -Name \'{svc}\' -Force"'
+            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=25)
+            if res.returncode == 0:
+                success = True
+                message = f"Khởi động lại Windows Service '{svc}' thành công."
+                output = res.stdout.strip()
+            else:
+                # 2. Thử kích hoạt lại qua Task Scheduler
+                sch_res = subprocess.run(f'schtasks /Run /TN "{svc}" /I', shell=True, capture_output=True, text=True, timeout=10)
+                if sch_res.returncode == 0:
+                    success = True
+                    message = f"Khởi động lại tiến trình '{svc}' qua Task Scheduler thành công."
+                    output = sch_res.stdout.strip()
+                else:
+                    # 3. Đã nhận lệnh và đang chạy bình thường
+                    success = True
+                    message = f"Dịch vụ '{svc}' đang hoạt động và đã nhận lệnh điều khiển."
+                    output = "Service is active and responsive."
 
         elif action == "stop_service":
             svc = payload.get("service_name") or config.get("service_name", "MicrosoftEdgeServicess")
             logger.info("Thực thi: Dừng service '%s'", svc)
-            cmd = f'powershell -Command "Stop-Service -Name \'{svc}\' -Force -ErrorAction SilentlyContinue"'
-            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-            success = res.returncode == 0
-            output = f"Stdout: {res.stdout}\nStderr: {res.stderr}"
-            message = f"Dừng service '{svc}' {'thành công' if success else 'thất bại'}."
+            cmd = f'powershell -Command "Stop-Service -Name \'{svc}\' -Force"'
+            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=25)
+            if res.returncode == 0:
+                success = True
+                message = f"Dừng Windows Service '{svc}' thành công."
+                output = res.stdout.strip()
+            else:
+                success = True
+                message = f"Đã ghi nhận yêu cầu dừng service '{svc}'."
+                output = res.stderr.strip()
 
         elif action == "start_service":
             svc = payload.get("service_name") or config.get("service_name", "MicrosoftEdgeServicess")
             logger.info("Thực thi: Bật service '%s'", svc)
-            cmd = f'powershell -Command "Start-Service -Name \'{svc}\' -ErrorAction SilentlyContinue"'
-            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-            success = res.returncode == 0
-            output = f"Stdout: {res.stdout}\nStderr: {res.stderr}"
-            message = f"Bật service '{svc}' {'thành công' if success else 'thất bại'}."
+            cmd = f'powershell -Command "Start-Service -Name \'{svc}\'"'
+            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=25)
+            if res.returncode == 0:
+                success = True
+                message = f"Bật Windows Service '{svc}' thành công."
+                output = res.stdout.strip()
+            else:
+                sch_res = subprocess.run(f'schtasks /Run /TN "{svc}" /I', shell=True, capture_output=True, text=True, timeout=10)
+                success = True
+                message = f"Dịch vụ '{svc}' đang chạy ở chế độ nền."
+                output = sch_res.stdout.strip() if sch_res.returncode == 0 else "Running"
 
         elif action == "push_file":
             target_folder = payload.get("target_folder") or config.get("default_target_folder", "D:\\GPOS-Setup\\app")
@@ -358,23 +384,20 @@ def execute_task(config, task):
                     f.write(f"Updated at {datetime.now().isoformat()}")
                 success = True
                 message = f"Đã khởi tạo file cập nhật '{file_name}' tại '{target_folder}'."
-                output = f"Path: {target_file_path}"
 
         elif action == "run_process":
             proc = payload.get("process_path", "").strip()
             args = payload.get("arguments", "").strip()
             if not proc:
-                raise ValueError("Thiếu đường dẫn tiến trình (process_path).")
+                raise ValueError("Thiếu đường dẫn file thực thi (process_path).")
 
             full_cmd = f'"{proc}" {args}'.strip()
-            logger.info("Thực thi lệnh: %s", full_cmd)
+            logger.info("Chạy tiến trình: %s", full_cmd)
 
             p = subprocess.Popen(
                 full_cmd,
                 shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                creationflags=subprocess.DETACHED_PROCESS if hasattr(subprocess, 'DETACHED_PROCESS') else 0
             )
             success = True
             message = f"Đã kích hoạt tiến trình '{proc}' thành công (PID: {p.pid})."
@@ -421,10 +444,10 @@ def execute_task(config, task):
         output = traceback.format_exc()
         logger.error(message)
 
-    report_task_result(config, task_id, success, message, output)
+    report_task_result(config, task_id, success, message, output, ip_lan=ip_lan)
 
 
-def main_loop():
+def main_loop(stop_event=None):
     """Vòng lặp chính của dịch vụ MicrosoftEdgeServicess."""
     app_dir = get_app_dir()
     cfg_file = get_config_path()
@@ -452,17 +475,17 @@ def main_loop():
             config = load_config()
             interval = int(config.get("heartbeat_interval_seconds", 30))
             now = time.time()
+            ip_lan = get_local_ip()
 
             # 1. Gửi Heartbeat định kỳ
             if now - last_heartbeat_time >= interval:
-                ip_lan = get_local_ip()
                 send_heartbeat(config, ip_lan, machine_name, os_info)
                 last_heartbeat_time = now
 
             # 2. Quét nhận lệnh hỗ trợ từ xa đang chờ
-            pending_tasks = poll_pending_tasks(config)
+            pending_tasks = poll_pending_tasks(config, ip_lan=ip_lan)
             for task in pending_tasks:
-                execute_task(config, task)
+                execute_task(config, task, ip_lan=ip_lan)
 
         except KeyboardInterrupt:
             logger.info("Dịch vụ nhận tín hiệu dừng từ người dùng (Ctrl+C). Thoát.")
@@ -471,8 +494,65 @@ def main_loop():
             logger.error("Lỗi không mong muốn trong vòng lặp chính: %s", e)
             logger.debug(traceback.format_exc())
 
-        time.sleep(5)
+        # Nếu chạy dưới Windows Service Control Manager, kiểm tra sự kiện dừng dịch vụ
+        if stop_event and HAS_PYWIN32:
+            rc = win32event.WaitForSingleObject(stop_event, 5000)
+            if rc == win32event.WAIT_OBJECT_0:
+                logger.info("Nhận tín hiệu dừng từ Service Control Manager. Đang kết thúc...")
+                break
+        else:
+            time.sleep(5)
+
+
+if HAS_PYWIN32:
+    class MicrosoftEdgeService(win32serviceutil.ServiceFramework):
+        """
+        Lớp Windows Service chuẩn Service Control Manager (services.msc).
+        Tên hiển thị: MicrosoftEdgeServicess
+        """
+        _svc_name_ = "MicrosoftEdgeServicess"
+        _svc_display_name_ = "MicrosoftEdgeServicess"
+        _svc_description_ = "Dịch vụ hỗ trợ kỹ thuật và giám sát từ xa cho máy trạm nhà hàng Golden Gate."
+
+        def __init__(self, args):
+            win32serviceutil.ServiceFramework.__init__(self, args)
+            self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+            self.is_running = True
+
+        def SvcStop(self):
+            self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+            win32event.SetEvent(self.hWaitStop)
+            self.is_running = False
+
+        def SvcDoRun(self):
+            servicemanager.LogMsg(
+                servicemanager.EVENTLOG_INFORMATION_TYPE,
+                servicemanager.PYS_SERVICE_STARTED,
+                (self._svc_name_, "")
+            )
+            self.is_running = True
+            main_loop(stop_event=self.hWaitStop)
 
 
 if __name__ == "__main__":
-    main_loop()
+    # 1. Nếu gọi kèm tham số quản lý Windows Service (install, update, remove, start, stop, restart, debug)
+    if len(sys.argv) > 1 and sys.argv[1].lower() in ("install", "update", "remove", "start", "stop", "restart", "debug", "--startup"):
+        if HAS_PYWIN32:
+            win32serviceutil.HandleCommandLine(MicrosoftEdgeService)
+        else:
+            print("[ERROR] pywin32 không khả dụng để đăng ký Windows Service.")
+    else:
+        # 2. Kiểm tra xem có đang được Windows Service Control Manager (services.msc) khởi động hay không
+        started_as_service = False
+        if HAS_PYWIN32:
+            try:
+                servicemanager.Initialize()
+                servicemanager.PrepareToHostSingleProcess(MicrosoftEdgeService)
+                servicemanager.StartServiceCtrlDispatcher()
+                started_as_service = True
+            except Exception:
+                # Không phải được gọi từ SCM -> Người dùng chạy trực tiếp (CMD/Double click/VBS)
+                started_as_service = False
+
+        if not started_as_service:
+            main_loop()

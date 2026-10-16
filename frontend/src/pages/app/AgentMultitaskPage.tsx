@@ -117,9 +117,26 @@ export const AgentMultitaskPage: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Nạp dữ liệu ban đầu
+  // Nạp dữ liệu ban đầu và thiết lập tự động làm mới ngầm mỗi 10 giây (Auto-polling)
   useEffect(() => {
     loadAllData();
+
+    const intervalTimer = setInterval(() => {
+      // Tải ngầm danh sách endpoints và overview để cập nhật trạng thái Online/Offline theo thời gian thực
+      Promise.all([
+        agentMultitaskService.getEndpoints(),
+        agentMultitaskService.getOverview()
+      ])
+        .then(([updatedEndpoints, updatedOverview]) => {
+          setEndpoints(updatedEndpoints);
+          setOverview(updatedOverview);
+        })
+        .catch(() => {
+          // Bỏ qua lỗi ngầm khi poll
+        });
+    }, 10000);
+
+    return () => clearInterval(intervalTimer);
   }, []);
 
   const loadAllData = async () => {
