@@ -18,7 +18,9 @@ import {
   Download,
   Plus,
   Settings,
-  Monitor
+  Monitor,
+  Edit,
+  Trash2
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -65,6 +67,19 @@ export const AgentMultitaskPage: React.FC = () => {
   const [addUserAssigned, setAddUserAssigned] = useState<string>('');
   const [addNotes, setAddNotes] = useState<string>('');
   const [isAddingDevice, setIsAddingDevice] = useState<boolean>(false);
+
+  // Modal Chỉnh Sửa Thiết Bị / Tên Máy Trạm
+  const [editingEndpoint, setEditingEndpoint] = useState<AgentEndpointItem | null>(null);
+  const [editName, setEditName] = useState<string>('');
+  const [editCode, setEditCode] = useState<string>('');
+  const [editIp, setEditIp] = useState<string>('');
+  const [editMachineName, setEditMachineName] = useState<string>('');
+  const [editDeviceType, setEditDeviceType] = useState<string>('EXTERNAL'); // RESTAURANT, EXTERNAL, USER
+  const [editUserAssigned, setEditUserAssigned] = useState<string>('');
+  const [editNotes, setEditNotes] = useState<string>('');
+  const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
 
   // Bộ lọc danh sách thiết bị
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -347,6 +362,80 @@ export const AgentMultitaskPage: React.FC = () => {
       setIsAddingDevice(false);
     }
   };
+
+  // Mở modal chỉnh sửa thông tin thiết bị / máy trạm
+  const handleOpenEditModal = (ep: AgentEndpointItem) => {
+    setEditingEndpoint(ep);
+    setEditName(ep.restaurant_name || '');
+    setEditCode(ep.restaurant_code || '');
+    setEditIp(ep.ip_lan || '');
+    setEditMachineName(ep.machine_name || '');
+    setEditDeviceType(ep.device_type || 'EXTERNAL');
+    setEditUserAssigned(ep.user_assigned || '');
+    setEditNotes(ep.notes || '');
+  };
+
+  // Lưu chỉnh sửa thông tin thiết bị / máy trạm
+  const handleSaveEditEndpoint = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editingEndpoint?.id) return;
+    if (!editName.trim()) {
+      showToast('Vui lòng nhập tên thiết bị / mô tả máy.', 'error');
+      return;
+    }
+    if (!editCode.trim()) {
+      showToast('Vui lòng nhập mã định danh thiết bị.', 'error');
+      return;
+    }
+    if (!editIp.trim()) {
+      showToast('Vui lòng nhập địa chỉ IP LAN/WAN.', 'error');
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      await agentMultitaskService.updateEndpoint(editingEndpoint.id, {
+        restaurant_name: editName.trim(),
+        restaurant_code: editCode.trim(),
+        ip_lan: editIp.trim(),
+        machine_name: editMachineName.trim() || undefined,
+        device_type: editDeviceType as any,
+        user_assigned: editUserAssigned.trim() || undefined,
+        notes: editNotes.trim() || undefined
+      });
+
+      showToast(`Đã cập nhật thông tin thiết bị "${editName.trim()}" thành công!`, 'success');
+      setEditingEndpoint(null);
+      await loadAllData();
+    } catch (err: any) {
+      showToast('Lỗi khi cập nhật thiết bị: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  // Xóa thiết bị ngoài / máy test / user
+  const handleDeleteEndpoint = async (ep: AgentEndpointItem) => {
+    if (!ep.id) return;
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa thiết bị "${ep.restaurant_name}" (${ep.restaurant_code} - ${ep.ip_lan}) khỏi hệ thống?`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      await agentMultitaskService.deleteEndpoint(ep.id);
+      showToast(`Đã xóa thiết bị "${ep.restaurant_name}" thành công!`, 'success');
+      if (editingEndpoint?.id === ep.id) {
+        setEditingEndpoint(null);
+      }
+      await loadAllData();
+    } catch (err: any) {
+      showToast('Lỗi khi xóa thiết bị: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
 
   // Lưu cấu hình Admin & Phân quyền
   const handleSaveConfig = async () => {
@@ -882,8 +971,27 @@ export const AgentMultitaskPage: React.FC = () => {
 
                       {/* Tên Thiết Bị / Nhà Hàng & Machine Name */}
                       <td style={{ padding: '8px 10px' }}>
-                        <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {ep.restaurant_name}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {ep.restaurant_name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditModal(ep)}
+                            title="Chỉnh sửa tên thiết bị / thông tin máy trạm"
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                              padding: '2px 4px',
+                              color: '#2563EB',
+                              borderRadius: '4px',
+                              display: 'inline-flex',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <Edit size={13} />
+                          </button>
                         </div>
                         {ep.machine_name && (
                           <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
@@ -985,7 +1093,18 @@ export const AgentMultitaskPage: React.FC = () => {
 
                       {/* Thao Tác Nhanh Từng Máy */}
                       <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', alignItems: 'center' }}>
+                          {/* Nút Sửa Thông Tin Máy Trạm */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenEditModal(ep)}
+                            title="Chỉnh sửa tên thiết bị, tên máy Windows, IP, user"
+                            style={{ padding: '4px 7px', color: '#2563EB', borderColor: '#BFDBFE' }}
+                          >
+                            <Edit size={12} />
+                          </Button>
+
                           <Button
                             variant="outline"
                             size="sm"
@@ -1005,6 +1124,20 @@ export const AgentMultitaskPage: React.FC = () => {
                               style={{ padding: '4px 8px', backgroundColor: '#059669', fontSize: '11px' }}
                             >
                               Cài Ngay
+                            </Button>
+                          )}
+
+                          {/* Nút Xóa Thiết Bị (đối với máy ngoài hoặc user) */}
+                          {!isRestaurant && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteEndpoint(ep)}
+                              title="Xóa thiết bị này khỏi danh sách quản lý"
+                              disabled={isDeleting}
+                              style={{ padding: '4px 7px', color: '#EF4444', borderColor: '#FECACA' }}
+                            >
+                              <Trash2 size={12} />
                             </Button>
                           )}
                         </div>
@@ -1493,6 +1626,214 @@ export const AgentMultitaskPage: React.FC = () => {
                   value={addNotes}
                   onChange={(e) => setAddNotes(e.target.value)}
                   placeholder="VD: Máy trực hỗ trợ ca tối..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '13px',
+                    backgroundColor: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+              </div>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 5.1. MODAL: CHỈNH SỬA THÔNG TIN THIẾT BỊ / TÊN MÁY TRẠM */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {editingEndpoint && (
+        <Modal
+          isOpen={true}
+          onClose={() => setEditingEndpoint(null)}
+          title={`✏️ Chỉnh Sửa Thiết Bị: ${editingEndpoint.restaurant_name} (${editingEndpoint.restaurant_code})`}
+          maxWidth="620px"
+          footer={
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <div>
+                <Button
+                  variant="outline"
+                  onClick={() => handleDeleteEndpoint(editingEndpoint)}
+                  disabled={isSavingEdit || isDeleting}
+                  style={{ color: '#EF4444', borderColor: '#FECACA', fontWeight: 700 }}
+                  leftIcon={<Trash2 size={14} />}
+                >
+                  {isDeleting ? 'Đang Xóa...' : 'Xóa Thiết Bị'}
+                </Button>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <Button
+                  variant="secondary"
+                  onClick={() => setEditingEndpoint(null)}
+                  disabled={isSavingEdit || isDeleting}
+                >
+                  Hủy
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleSaveEditEndpoint}
+                  disabled={isSavingEdit || isDeleting}
+                  style={{ backgroundColor: '#2563EB', fontWeight: 800 }}
+                >
+                  {isSavingEdit ? 'Đang Lưu...' : '💾 Lưu Thay Đổi'}
+                </Button>
+              </div>
+            </div>
+          }
+        >
+          <form onSubmit={handleSaveEditEndpoint} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Hàng 1: Mã định danh & IP LAN */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '5px' }}>
+                  Mã Thiết Bị / Định Danh *:
+                </label>
+                <input
+                  type="text"
+                  value={editCode}
+                  onChange={(e) => setEditCode(e.target.value)}
+                  placeholder="VD: TEST_LILY, 1001_POS2..."
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '13px',
+                    backgroundColor: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '5px' }}>
+                  Địa Chỉ IP LAN / WAN *:
+                </label>
+                <input
+                  type="text"
+                  value={editIp}
+                  onChange={(e) => setEditIp(e.target.value)}
+                  placeholder="VD: 192.168.254.129"
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '13px',
+                    backgroundColor: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Hàng 2: Tên Thiết Bị / Mô Tả */}
+            <div>
+              <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '5px' }}>
+                Tên Thiết Bị / Mô Tả Máy *:
+              </label>
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="VD: vmwave, Máy ảo test LILI..."
+                required
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  fontSize: '13px',
+                  backgroundColor: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)'
+                }}
+              />
+            </div>
+
+            {/* Hàng 3: Phân loại & User phụ trách */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '5px' }}>
+                  Phân Loại Thiết Bị:
+                </label>
+                <select
+                  value={editDeviceType}
+                  onChange={(e) => setEditDeviceType(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '13px',
+                    backgroundColor: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)'
+                  }}
+                >
+                  <option value="RESTAURANT">🏢 Máy Trạm Nhà Hàng (.11, .12, .41)</option>
+                  <option value="EXTERNAL">💻 Máy Ngoài / Server Phụ / Laptop HO</option>
+                  <option value="USER">👤 Thiết Bị Cá Nhân User</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '5px' }}>
+                  User Phụ Trách / Quản Lý:
+                </label>
+                <input
+                  type="text"
+                  value={editUserAssigned}
+                  onChange={(e) => setEditUserAssigned(e.target.value)}
+                  placeholder="VD: LILI, dung.nguyenanh..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '13px',
+                    backgroundColor: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Hàng 4: Hostname Windows & Ghi chú */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '5px' }}>
+                  Tên Máy Windows (Machine Hostname):
+                </label>
+                <input
+                  type="text"
+                  value={editMachineName}
+                  onChange={(e) => setEditMachineName(e.target.value)}
+                  placeholder="VD: DESKTOP-GF1DC2U"
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '13px',
+                    backgroundColor: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '5px' }}>
+                  Ghi Chú Bổ Sung:
+                </label>
+                <input
+                  type="text"
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="VD: Máy ảo VMware test môi trường..."
                   style={{
                     width: '100%',
                     padding: '8px 10px',

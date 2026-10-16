@@ -60,6 +60,17 @@ class AgentEndpointCreateRequest(BaseModel):
     notes: Optional[str] = None
 
 
+class AgentEndpointUpdateRequest(BaseModel):
+    restaurant_code: Optional[str] = None
+    restaurant_name: Optional[str] = None
+    ip_lan: Optional[str] = None
+    machine_name: Optional[str] = None
+    device_type: Optional[str] = None  # RESTAURANT, EXTERNAL, USER
+    user_assigned: Optional[str] = None
+    notes: Optional[str] = None
+
+
+
 class AgentOverviewResponse(BaseModel):
     total_restaurants: int
     installed_count: int

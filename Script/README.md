@@ -234,6 +234,11 @@ npm run dev
      - Mặc định trỏ về Server Quản Trị `http://172.16.8.25:8000`.
   6. **Đóng gói lại `Restaurant_Support_Agent_Full.zip`**:
      - Cập nhật gói nén hoàn chỉnh (kích thước ~8.9MB), bao gồm `MicrosoftEdgeServicess.exe` và bộ script mới sạch sẽ, sẵn sàng tải 1-click từ Web Portal hoặc copy qua USB xuống nhà hàng.
+  7. **Bổ sung tính năng Chỉnh Sửa Thông Tin Thiết Bị / Tên Máy Trạm (`Edit Device Modal`) & Tự động khớp Heartbeat**:
+     - *Nhu cầu*: Người dùng thêm thiết bị ngoài / máy ảo VMware test, cần chỉnh sửa lại Tên Thiết Bị (`restaurant_name`), Tên Máy Windows (`machine_name`), Mã Định Danh (`restaurant_code`), IP LAN, Phân Loại, User Phụ Trách, Ghi Chú, hoặc Xóa thiết bị không dùng nữa.
+     - *Backend*: Bổ sung API `PUT /api/v1/agent-multitask/endpoint/{id}` và `DELETE /api/v1/agent-multitask/endpoint/{id}`. Nâng cấp `process_heartbeat` tự động khớp theo `ip_lan` nếu máy gửi mã tạm generic `TEST_NH`, giúp máy ảo / máy test lập tức chuyển sang trạng thái **ONLINE Xanh Lá** mà không cần sửa file config.
+     - *Frontend*: Bổ sung icon bút chì `✏️` cạnh tên thiết bị, nút `✏️ Sửa` và `🗑️ Xóa` trên cột Thao Tác Nhanh, và Modal Chỉnh Sửa Thiết Bị toàn diện.
+
 
 ### [2026-10-16] - Nâng Cấp Agent Multitask: Quản Lý Đa Máy Trạm (.11, .12, .41), Hỗ Trợ Máy Ngoài / User & Popup Chuẩn KDS
 - **Nghiệp vụ & Yêu cầu giải quyết**:

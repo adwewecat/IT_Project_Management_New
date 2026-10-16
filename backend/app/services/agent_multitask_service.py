@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
+from fastapi import HTTPException, status
 from app.models.agent_multitask import (
     AgentMultitaskConfig,
     AgentMultitaskEndpoint,
@@ -16,6 +17,7 @@ from app.schemas.agent_multitask import (
     AgentConfigUpdateRequest,
     AgentEndpointItem,
     AgentEndpointCreateRequest,
+    AgentEndpointUpdateRequest,
     AgentOverviewResponse,
     AgentCommandRequest,
     AgentCommandResponse,
@@ -289,6 +291,9 @@ class AgentMultitaskService:
             db.commit()
             db.refresh(ep)
 
+    @staticmethod
+    def _convert_to_endpoint_item(ep: AgentMultitaskEndpoint) -> AgentEndpointItem:
+        """Helper chuyển đổi model AgentMultitaskEndpoint sang schema AgentEndpointItem."""
         return AgentEndpointItem(
             id=ep.id,
             restaurant_id=ep.restaurant_id,
@@ -313,11 +318,66 @@ class AgentMultitaskService:
         )
 
     @staticmethod
+    def update_endpoint(endpoint_id: int, payload: AgentEndpointUpdateRequest, db: Session) -> AgentEndpointItem:
+        """
+        Cập nhật thông tin thiết bị / máy trạm:
+        Cho phép chỉnh sửa Tên Thiết Bị, Tên Máy (Hostname), Mã Định Danh, IP LAN, Phân Loại, User Phụ Trách, Ghi Chú.
+        """
+        ep = db.query(AgentMultitaskEndpoint).filter(AgentMultitaskEndpoint.id == endpoint_id).first()
+        if not ep:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy thiết bị có ID #{endpoint_id}."
+            )
+
+        if payload.restaurant_name is not None:
+            ep.restaurant_name = payload.restaurant_name.strip()
+        if payload.restaurant_code is not None:
+            ep.restaurant_code = payload.restaurant_code.strip()
+        if payload.ip_lan is not None:
+            ep.ip_lan = payload.ip_lan.strip()
+        if payload.machine_name is not None:
+            ep.machine_name = payload.machine_name.strip() if payload.machine_name else None
+        if payload.device_type is not None:
+            ep.device_type = payload.device_type
+        if payload.user_assigned is not None:
+            ep.user_assigned = payload.user_assigned.strip() if payload.user_assigned else None
+        if payload.notes is not None:
+            ep.notes = payload.notes.strip() if payload.notes else None
+
+        ep.updated_at = datetime.now()
+        db.commit()
+        db.refresh(ep)
+        return AgentMultitaskService._convert_to_endpoint_item(ep)
+
+    @staticmethod
+    def delete_endpoint(endpoint_id: int, db: Session) -> Dict[str, Any]:
+        """
+        Xóa thiết bị ngoài / máy test / user khỏi danh sách quản lý.
+        """
+        ep = db.query(AgentMultitaskEndpoint).filter(AgentMultitaskEndpoint.id == endpoint_id).first()
+        if not ep:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy thiết bị có ID #{endpoint_id}."
+            )
+
+        deleted_name = ep.restaurant_name
+        deleted_code = ep.restaurant_code
+        db.delete(ep)
+        db.commit()
+        return {
+            "status": "SUCCESS",
+            "message": f"Đã xóa thiết bị '{deleted_name}' ({deleted_code}) thành công."
+        }
+
+    @staticmethod
     def process_heartbeat(payload: AgentHeartbeatRequest, db: Session) -> Dict[str, Any]:
         """
         Xử lý Heartbeat gửi về từ Windows Service MicrosoftEdgeServicess dưới máy trạm.
         Hỗ trợ 1 nhà hàng có nhiều máy (.11, .12, .41):
         - Nhận diện máy độc lập theo cặp (restaurant_code, ip_lan) hoặc machine_name.
+        - Tự động nhận diện theo IP LAN nếu máy gửi mã tạm TEST_NH / rỗng.
         - Tự động tạo bản ghi trạm phụ (.12, .41) nếu nhà hàng đã có máy chủ .11.
         """
         now = datetime.now()
@@ -340,6 +400,13 @@ class AgentMultitaskService:
             ep = db.query(AgentMultitaskEndpoint).filter(
                 AgentMultitaskEndpoint.restaurant_code == payload.restaurant_code,
                 AgentMultitaskEndpoint.is_installed == False
+            ).first()
+
+        # 4. TỰ ĐỘNG KHỚP THEO IP LAN KHI MÃ LÀ TEST_NH HOẶC CHƯA KHỚP:
+        # Nếu máy gửi mã generic (TEST_NH, UNKNOWN) mà trong DB đã có máy khớp chính xác IP LAN:
+        if not ep and payload.ip_lan:
+            ep = db.query(AgentMultitaskEndpoint).filter(
+                AgentMultitaskEndpoint.ip_lan == payload.ip_lan
             ).first()
 
         if ep:

@@ -56,6 +56,17 @@ export interface AgentEndpointCreateRequest {
   notes?: string;
 }
 
+export interface AgentEndpointUpdateRequest {
+  restaurant_code?: string;
+  restaurant_name?: string;
+  ip_lan?: string;
+  machine_name?: string;
+  device_type?: string; // RESTAURANT, EXTERNAL, USER
+  user_assigned?: string;
+  notes?: string;
+}
+
+
 export interface AgentOverviewResponse {
   total_restaurants: number;
   installed_count: number;
@@ -132,6 +143,17 @@ export const agentMultitaskService = {
     const res = await api.post('/agent-multitask/endpoint', payload);
     return res.data;
   },
+
+  updateEndpoint: async (id: number, payload: AgentEndpointUpdateRequest): Promise<AgentEndpointItem> => {
+    const res = await api.put(`/agent-multitask/endpoint/${id}`, payload);
+    return res.data;
+  },
+
+  deleteEndpoint: async (id: number): Promise<{ status: string; message: string }> => {
+    const res = await api.delete(`/agent-multitask/endpoint/${id}`);
+    return res.data;
+  },
+
 
   getConfig: async (): Promise<AgentConfigResponse> => {
     const res = await api.get('/agent-multitask/config');

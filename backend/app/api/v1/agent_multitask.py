@@ -15,6 +15,7 @@ from app.schemas.agent_multitask import (
     AgentConfigUpdateRequest,
     AgentEndpointItem,
     AgentEndpointCreateRequest,
+    AgentEndpointUpdateRequest,
     AgentOverviewResponse,
     AgentCommandRequest,
     AgentCommandResponse,
@@ -101,6 +102,48 @@ def create_endpoint(
         )
 
     return AgentMultitaskService.create_endpoint(payload=payload, db=db)
+
+
+@router.put("/endpoint/{id}", response_model=AgentEndpointItem)
+def update_endpoint(
+    id: int,
+    payload: AgentEndpointUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """
+    Cập nhật thông tin máy trạm / thiết bị (Tên thiết bị, Hostname máy, Mã, IP, Phân loại, User phụ trách, Ghi chú).
+    """
+    is_super = is_super_admin(current_user)
+    has_perm = AgentMultitaskService.check_user_permission(current_user.username or "", is_super, db)
+    if not has_perm:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn chưa có quyền chỉnh sửa thông tin thiết bị Agent Multitask."
+        )
+
+    return AgentMultitaskService.update_endpoint(endpoint_id=id, payload=payload, db=db)
+
+
+@router.delete("/endpoint/{id}")
+def delete_endpoint(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """
+    Xóa thiết bị ngoài / máy test / user khỏi danh sách quản lý.
+    """
+    is_super = is_super_admin(current_user)
+    has_perm = AgentMultitaskService.check_user_permission(current_user.username or "", is_super, db)
+    if not has_perm:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn chưa có quyền xóa thiết bị Agent Multitask."
+        )
+
+    return AgentMultitaskService.delete_endpoint(endpoint_id=id, db=db)
+
 
 
 @router.get("/config", response_model=AgentConfigResponse)
