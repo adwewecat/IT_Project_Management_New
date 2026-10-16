@@ -80,8 +80,26 @@ export interface AgentOverviewResponse {
   is_super_admin: boolean;
 }
 
+export interface DeployStepItem {
+  step_number?: number;
+  step_name?: string;
+  step_type: 'MODIFY_FILE' | 'RUN_SCRIPT' | 'RUN_COMMAND' | 'DELETE_FILE' | string;
+  file_path?: string;
+  relative_path?: string;
+  // Cho Modify file
+  modify_mode?: 'JSON_KEY_VALUE' | 'TEXT_REPLACE' | string;
+  json_modifications?: Record<string, any>;
+  text_replacements?: Array<{ search: string; replace: string }>;
+  search_text?: string;
+  replace_text?: string;
+  // Cho Run script
+  arguments?: string;
+  run_as_admin?: boolean;
+  wait_for_completion?: boolean;
+}
+
 export interface AgentCommandRequest {
-  action: 'start_service' | 'stop_service' | 'restart_service' | 'push_file' | 'run_process' | 'kill_process' | 'install_agent' | 'run_relative_script';
+  action: 'start_service' | 'stop_service' | 'restart_service' | 'push_file' | 'run_process' | 'kill_process' | 'install_agent' | 'run_relative_script' | 'deploy_package';
   restaurant_codes: string[];
   target_ip?: string;
   target_ips?: string[];
@@ -95,6 +113,9 @@ export interface AgentCommandRequest {
   folder_hint?: string;
   working_directory?: string;
   install_script_steps?: any[];
+  auto_extract?: boolean;
+  download_url?: string;
+  steps?: DeployStepItem[];
 }
 
 export interface AgentCommandResultItem {

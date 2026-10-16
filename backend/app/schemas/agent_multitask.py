@@ -103,6 +103,10 @@ class AgentCommandRequest(BaseModel):
     working_directory: Optional[str] = None
     # Dành cho Install App
     install_script_steps: Optional[List[Dict[str, Any]]] = None
+    # Dành cho Truyền Gói Cài & Thực Thi Đa Bước (deploy_package)
+    auto_extract: Optional[bool] = True
+    download_url: Optional[str] = None
+    steps: Optional[List[Dict[str, Any]]] = None
 
 
 class AgentCommandResultItem(BaseModel):

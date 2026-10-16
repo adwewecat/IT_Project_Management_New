@@ -582,9 +582,17 @@
   + Tu dong phong ve: Khoi tao bang tu dong trong `lifespan` (`main.py`) va DDL trong `Script/Full_SCRIPT_SQL_TABLE.sql`.
 - **Bo Cai Dat 1-Click & Khoi Chay Tuong Tac Desktop (Interactive Session Execution)**:
   + **1-Click Auto-Elevation**: File `Cai_Dat_Dich_Vu_Windows.bat` va `Go_Cai_Dat_Dich_Vu.bat` tich hop tu dong yeu cau quyen UAC qua PowerShell (`Start-Process '%~f0' -Verb RunAs`). Nguoi dung chi can click dup chuot la he thong tu dong xin quyen va cai dat/go bo thanh cong 100%.
-  + **Khoi chay tuong tac tren man hinh nguoi dung (Interactive Desktop)**: Do Windows Service chay o Session 0 cach ly voi Desktop cua nguoi dung (Session 1), khi khoi chay `.bat` tu xa, Agent su dung Task Scheduler voi co `/it` (`schtasks /create ... /it /rl HIGHEST` va `schtasks /run`) giup cua so CMD hien thi truc tiep len man hinh Desktop cua nguoi dung dang xem.
-  + **Tim kiem mo rong User Profiles**: Tu dong quet them `C:\Users\<user>\Desktop`, `Downloads`, `Documents` dam bao tim duoc cac file bat ky nguoi dung luu o dau.
-  + **Serialization Chuan RFC**: Backend dung `json.dumps` chuan va tu dong lam sach cac gia tri `None` thanh chuoi rong `""` de client agent khong bao gio bi loi `'NoneType' object has no attribute 'strip'`.
-  + **Phan Phoi Lenh Chinh Xac Theo IP (Chong Cuop Lenh - Strict IP Routing)**: `poll_pending_tasks` bat buoc so khop chinh xac `machine_ip` cua may trạm. Neu task chi dinh may nao thi chi dung may do duoc phep lay lenh, ngan chan triet de truong hop may trạm khac hoac may test cu snatch mat lenh cua may ao VMware.
-  + **Xoa Sach Thu Muc Khi Go Bo (`Go_Cai_Dat_Dich_Vu.bat`)**: Tu dong xoa sach `C:\ProgramData\MicrosoftEdgeServicess` de khong con file cu dong lai. File cai `Cai_Dat_Dich_Vu_Windows.bat` co co che xoa file cu va xac thuc kiem tra copy thanh cong 100%.
+- **Tinh Nang 2: Truyen Goi Cai Dat & Chay Kich Ban Da Buoc (Deploy Package & Multi-Step Pipeline)**:
+  + Cho phep truyen ca folder hoac file nen (.zip, vi du `Restaurant_Support_Agent_Full.zip`) xuong may tram tai o `C:\` hoac `D:\` (vi du: `C:\ABC`).
+  + Tu dong giai nen (Auto Extract) toan bo noi dung file nen vao thu muc dich qua module `zipfile`.
+  + Chuoi kich ban da buoc tuan tu (Sequential Multi-Step Pipeline):
+    * `MODIFY_FILE`: Chinh sua file JSON theo cap Key-Value (vi du: sua `server_url` thanh `http://172.16.20.47:8000`, sua `restaurant_code` thanh `4454`) hoac sua file van ban theo cum tim kiem & thay the (Search & Replace) voi bang ma UTF-8 an toan.
+    * `RUN_SCRIPT`: Khoi chay file script (.bat, .cmd, .ps1, .exe) trong thu muc vua giai nen (vi du `Cai_Dat_Dich_Vu_Windows.bat`), ho tro chay dong bo hoac bat ngam.
+    * `DELETE_FILE`: Tu dong don dep, xoa file tam hoac folder sau khi thuc thi xong.
+    * Nguoi dung co the tu them cac buoc tiep theo tuy y (Buoc 3, Buoc 4...) truc tiep tren Web Portal bang trinh dung kịch ban truc quan (Pipeline Step Builder).
+  + Co che tai file stream truc tiep qua HTTP (`/api/v1/agent-multitask/download-package-file/{package_name}`) giup may tram tai nhanh file dung luong lon ma khong gay phi dung luong MSSQL log.
+  + Ky thuat tach tien trinh doc lap (`_service_installer_runner.bat` delay 3 giay) khi chay kich ban cai dat / cap nhat Windows Service: Agent gui bao cao hoan tat `SUCCESS` ve Server an toan truoc khi service cu bi dong va duoc dang ky khoi chay phien ban moi.
+  + Tu dong cap nhat `restaurant_code` va `restaurant_name` tren Server khi may tram gui Heartbeat voi ma nha hang moi (vi du tu `TEST_NH` thanh `4454`).
+  + Da kiem thu thuc te 100% tren may ao VMware (`192.168.254.129`), truyen `Restaurant_Support_Agent_Full.zip` xuong `C:\ABC`, tu giai nen, doi IP va ma nha hang thanh `4454`, khoi chay cai dat thanh cong va ghi nhan Heartbeat 4454 tuc thi.
+
 

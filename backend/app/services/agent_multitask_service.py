@@ -438,6 +438,17 @@ class AgentMultitaskService:
             ep.service_name = payload.service_name
             ep.service_status = payload.service_status or "RUNNING"
             ep.last_heartbeat = now
+            if payload.restaurant_code and ep.restaurant_code != payload.restaurant_code:
+                ep.restaurant_code = payload.restaurant_code
+                orig_ep = db.query(AgentMultitaskEndpoint).filter(
+                    AgentMultitaskEndpoint.restaurant_code == payload.restaurant_code,
+                    AgentMultitaskEndpoint.id != ep.id
+                ).first()
+                if orig_ep:
+                    ep.restaurant_name = orig_ep.restaurant_name
+                    ep.restaurant_id = orig_ep.restaurant_id
+                elif payload.restaurant_code != "TEST_NH":
+                    ep.restaurant_name = f"Nhà hàng {payload.restaurant_code}"
             if payload.machine_name:
                 ep.machine_name = payload.machine_name
             if payload.ip_lan:
@@ -528,6 +539,8 @@ class AgentMultitaskService:
             # Ghi nhận log tác vụ
             # Chuẩn hóa payload tránh giá trị None/null khiến client agent bị lỗi 'NoneType' object has no attribute 'strip'
             payload_dict = payload.model_dump(exclude={'file_content_base64'})
+            if payload.file_content_base64 and len(payload.file_content_base64) <= 1000000:
+                payload_dict['file_content_base64'] = payload.file_content_base64
             for str_k in ['arguments', 'folder_hint', 'file_name', 'process_path', 'service_name', 'target_folder']:
                 if payload_dict.get(str_k) is None:
                     payload_dict[str_k] = ""
@@ -603,6 +616,18 @@ class AgentMultitaskService:
                     ep.service_status = "RUNNING"
                     ep.is_online = True
                     ep.last_action = f"Cài đặt service {config.service_name}"
+            elif action == "deploy_package":
+                target_f = payload.target_folder or "C:\\ABC"
+                pkg_name = payload.file_name or "Restaurant_Support_Agent_Full.zip"
+                step_list = payload.steps or []
+                if not payload_dict.get("download_url"):
+                    payload_dict["download_url"] = f"/api/v1/agent-multitask/download-package-file/{pkg_name}"
+                    command_payload_json = json.dumps(payload_dict, ensure_ascii=False)
+                    log_entry.command_payload = command_payload_json
+                msg = f"Đã gửi lệnh triển khai gói '{pkg_name}' ({len(step_list)} bước) tới {ip}."
+                out = f"[DEPLOY_PACKAGE] TargetFolder: {target_f}, File: {pkg_name}, Steps: {len(step_list)}"
+                if ep:
+                    ep.last_action = f"Triển khai gói {pkg_name} ({len(step_list)} bước)"
             else:
                 success = False
                 msg = f"Hành động '{action}' không được hỗ trợ."

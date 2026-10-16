@@ -2958,3 +2958,67 @@ estaurant_service.py).
    - API `download-client-agent` luon tu dong zip truc tiep cac file moi nhat tu `tools/restaurant_support_agent/`.
    - File zip `tools/Restaurant_Support_Agent_Full.zip` tren o dia da duoc nen lai hoan chinh (10.33MB).
    - Backend daemon khoi dong lai tren port 8000 voi logic phan phoi IP chinh xac 100%.
+
+---
+
+### [2026-10-16] - Phat Trien Tinh Nang 2: Truyen Goi Cai Dat (Folder / File Nen .ZIP) & Chay Kich Ban Da Buoc Tuan Tu (Multi-Step Pipeline Execution)
+
+1. **Yeu Cau Nghiep Vu**:
+   - Tinh nang thu 2 cua Agent Multitask cho phep truyen ca folder hoac file nen (.zip, vi du `Restaurant_Support_Agent_Full.zip`) xuong may tram nha hang tai o C: hoac D: (vi du `C:\ABC`).
+   - Tu dong giai nen file zip vao thu muc dich.
+   - Thuc thi chuoi kich ban da buoc tuan tu (Sequential Pipeline Steps):
+     + **Buoc 1**: Mo file `config.json` chinh sua `server_url` tu `http://192.168.254.1:8000` thanh `http://172.16.20.47:8000`, doi `restaurant_code` tu `TEST_NH` thanh `4454` (ma nha hang) va luu lai.
+     + **Buoc 2**: Chay file `Cai_Dat_Dich_Vu_Windows.bat` de cai dat / dang ky lai Windows Service voi cau hinh moi.
+     + **Buoc 3 / N**: Ho tro nguoi dung tu do them / bot / cau hinh cac buoc tiep theo tuy y (Modify File, Run Script, Delete File) truc tiep tren Web Portal.
+   - Bao cao tien do va ket qua phan hoi chi tiet tung buoc (SUCCESS / FAILED) ve Central Server.
+
+2. **Kien Truc & Giai Phap Ky Thuat**:
+   - **Backend Schema & Service (`agent_multitask.py`, `agent_multitask_service.py`)**:
+     + Bo sung action `deploy_package` vao `AgentCommandRequest` kem cac truong `auto_extract`, `download_url`, `steps`.
+     + Bo sung API stream download truc tiep: `GET /api/v1/agent-multitask/download-package-file/{package_name}` giup may tram tai nhanh file dung luong lon (~10.3MB) ma khong phai luu chuoi base64 vao Database MSSQL, tranh phinh to du lieu.
+     + Cap nhat `receive_heartbeat`: Khi may tram gui heartbeat voi `restaurant_code` moi (vi du tu `TEST_NH` sang `4454`), he thong tu dong cap nhat `ep.restaurant_code` va `ep.restaurant_name` tuong ung.
+   - **Client Agent (`restaurant_support_agent.py`)**:
+     + Bo sung bo xu ly `deploy_package`:
+       * Tao thu muc dich tren o C: hoac D: (`C:\ABC`).
+       * Tai file qua HTTP Streaming chunked hoac base64.
+       * Tu dong giai nen qua `zipfile.ZipFile`.
+       * Chay tuan tu cac buoc:
+         - `MODIFY_FILE`: Cap nhat file JSON theo cap Key-Value (ho tro ca `json_modifications` dictionary va truc tiep `json_key` / `json_value`) hoac tim & thay the text.
+         - `RUN_SCRIPT`: Chay file `.bat`, `.cmd`, `.ps1`, `.exe`.
+         - `DELETE_FILE`: Don dep file/thu muc tam.
+     + **Ky Thuat Tach Tien Trinh Installer Doc Lap (`_service_installer_runner.bat`)**:
+       * Do file `Cai_Dat_Dich_Vu_Windows.bat` se tat `MicrosoftEdgeServicess.exe` de ghi de ban moi, neu goi truc tiep thi agent se bi kill truoc khi kip bao cao ket qua task.
+       * Giai phap: Agent tao file runner doc lap `_service_installer_runner.bat` kem do tre 3 giay (`ping 127.0.0.1 -n 4 >nul & cd /d "C:\ABC" & call Cai_Dat_Dich_Vu_Windows.bat`), khoi chay bang `subprocess.Popen` voi `DETACHED_PROCESS`, gui ngay lap tuc bao cao `SUCCESS` ve Server, va 3 giay sau installer moi chay de kill va khoi dong lai service moi.
+   - **Frontend UI/UX (`AgentMultitaskPage.tsx`, `agentMultitaskService.ts`)**:
+     + Them nut `📦 Truyền Gói & Chạy Kịch Bản` tren Toolbar.
+     + Them The 2 trong Modal "Cac Tinh Nang Quan Tri & Ho Tro Tu Xa".
+     + Xay dung Modal Trien Khai Goi & Kich Ban Da Buoc day du:
+       * Bo chon thiet bi dich (Target Device Picker).
+       * Chon nguon goi cai (Goi chuan Restaurant_Support_Agent_Full.zip hoac Upload file tuy chon).
+       * Chon o dia / thu muc dich (`C:\ABC`, `D:\ABC`, custom path).
+       * Checkbox Tu dong giai nen (Auto-extract).
+       * Trinh dung buoc thuc thi (Pipeline Step Builder) cho phep Them / Bot / Sap xep / Chinh sua cac buoc:
+         - Sửa file (JSON Key-Value hoac Text Replace).
+         - Chay file Script (.bat, .ps1, .cmd, .exe, tham so, quyen Admin, chay nen/cho hoan tat).
+         - Xoa file tam.
+       * Nut 1 cham nạp mẫu chuẩn (Apply Standard Preset: Sua IP -> Sua Ma NH -> Cai Service).
+
+3. **Kiem Thu Thuc Te Tren May Ao VMware (`192.168.254.129`)**:
+   - Phat lenh `deploy_package` toi may ao VMware:
+     + Target Folder: `C:\ABC`
+     + File: `Restaurant_Support_Agent_Full.zip` (10.35MB)
+     + Auto Extract: True
+     + Buoc 1: Chinh sua `config.json` -> `server_url: http://172.16.20.47:8000`, `restaurant_code: 4454`
+     + Buoc 2: Chay `Cai_Dat_Dich_Vu_Windows.bat`
+   - **Ket qua thuc thi (Task #34)**:
+     + Giai nen 11 file vao `C:\ABC`: THANH CONG.
+     + Buoc 1 sua JSON: OK (`server_url='http://172.16.20.47:8000', restaurant_code='4454'`).
+     + Buoc 2 khoi chay installer: OK, len lich tach tien trinh thanh cong.
+     + Task report ve Server: `SUCCESS` hoan tat 100%.
+     + Windows Service tren may ao tu dong cap nhat, khoi dong lai va gui Heartbeat moi ve Server voi ma nha hang `4454` (IP: `192.168.254.129`, Status: `RUNNING`, Last Action: `Thực thi task #34: SUCCESS`).
+
+4. **Kiem Tra Tuan Thu Chat Che Quy Tac Du An**:
+   - Backend compile: `.venv\Scripts\python.exe -m compileall app` -> Clean 100%.
+   - Backend Smoke Test: `from app.main import app; print('>>> PASSED 100%')` -> PASSED 100%.
+   - Frontend build: `cmd /c "npm run build"` tai `frontend/` -> Exit code 0 (`built in 6.33s`), san sang trong `frontend/dist/`.
+

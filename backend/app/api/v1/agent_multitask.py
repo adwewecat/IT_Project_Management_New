@@ -380,3 +380,42 @@ def download_package(
         media_type="application/zip",
         headers={"Content-Disposition": "attachment; filename=Restaurant_Support_Agent_Full.zip"}
     )
+
+
+@router.get("/download-package-file/{package_name}")
+def download_package_file(package_name: str):
+    """
+    Tải gói cài đặt (.ZIP) trực tiếp cho Client Agent máy trạm thực thi lệnh deploy_package.
+    Không yêu cầu Bearer token của người dùng web.
+    """
+    clean_name = os.path.basename(package_name).strip()
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
+    agent_dir = os.path.join(project_root, "tools", "restaurant_support_agent")
+    zip_path = os.path.join(project_root, "tools", clean_name)
+
+    if clean_name.lower() == "restaurant_support_agent_full.zip" and os.path.exists(agent_dir):
+        # Tự động đồng bộ zip nếu cần
+        try:
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+                for f in sorted(os.listdir(agent_dir)):
+                    if f.endswith('.log') or f.endswith('.tmp') or '_old' in f or f.endswith('.bak'):
+                        continue
+                    fp = os.path.join(agent_dir, f)
+                    if os.path.isfile(fp):
+                        z.write(fp, arcname=f)
+        except Exception as e_zip:
+            logger.warning("Không thể tự động nén zip: %s", e_zip)
+
+    if not os.path.exists(zip_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Không tìm thấy gói file '{clean_name}'."
+        )
+
+    return FileResponse(
+        path=zip_path,
+        filename=clean_name,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename={clean_name}"}
+    )
+

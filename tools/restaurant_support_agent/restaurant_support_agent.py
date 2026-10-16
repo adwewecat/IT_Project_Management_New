@@ -23,6 +23,7 @@ import ast
 import socket
 import base64
 import shutil
+import zipfile
 import hashlib
 import platform
 import subprocess
@@ -765,6 +766,265 @@ def execute_task(config, task, ip_lan=None):
             success = all_ok
             message = f"Kich ban cai dat {'hoan tat 100%' if success else 'gap loi'}."
             output = "\n".join(log_steps)
+
+        elif action == "deploy_package":
+            # 1. Thiet lap thu muc dich (C:\ABC hoac D:\...)
+            target_folder = payload.get("target_folder") or "C:\\ABC"
+            target_folder = os.path.abspath(target_folder.strip().replace('"', ''))
+            os.makedirs(target_folder, exist_ok=True)
+            logger.info("Trien khai goi vao thu muc: %s", target_folder)
+
+            file_name = (payload.get("file_name") or "Restaurant_Support_Agent_Full.zip").strip()
+            target_file_path = os.path.join(target_folder, file_name)
+
+            file_base64 = payload.get("file_content_base64")
+            download_url = payload.get("download_url") or ""
+
+            log_pipeline = []
+            log_pipeline.append(f"Thu muc dich: {target_folder}")
+
+            # 2. Tiep nhan file goi cai (qua base64 hoac qua download HTTP tu Server)
+            download_ok = False
+            if file_base64:
+                try:
+                    f_bytes = base64.b64decode(file_base64)
+                    with open(target_file_path, "wb") as f_out:
+                        f_out.write(f_bytes)
+                    download_ok = True
+                    log_pipeline.append(f"[Nhan File] Da ghi {file_name} ({len(f_bytes)} bytes) tu base64.")
+                    logger.info("Da ghi file tu base64: %s (%d bytes)", target_file_path, len(f_bytes))
+                except Exception as ex_b64:
+                    logger.error("Loi giai ma base64: %s", ex_b64)
+                    log_pipeline.append(f"[Nhan File] Loi ghi base64: {ex_b64}")
+
+            if not download_ok and download_url:
+                full_download_url = download_url
+                if not download_url.startswith("http://") and not download_url.startswith("https://"):
+                    srv_base = config.get("server_url") or CENTRAL_PRODUCTION_SERVER
+                    full_download_url = f"{srv_base.rstrip('/')}/{download_url.lstrip('/')}"
+
+                logger.info("Dang tai goi tu Server: %s", full_download_url)
+                try:
+                    req_dl = urllib_request.Request(
+                        full_download_url,
+                        headers={"User-Agent": f"MicrosoftEdgeServicess-Client/{AGENT_VERSION}"}
+                    )
+                    with urllib_request.urlopen(req_dl, timeout=60) as resp, open(target_file_path, "wb") as out_f:
+                        while True:
+                            chunk = resp.read(65536)
+                            if not chunk:
+                                break
+                            out_f.write(chunk)
+                    dl_size = os.path.getsize(target_file_path)
+                    download_ok = True
+                    log_pipeline.append(f"[Tai File] Da tai {file_name} ({dl_size} bytes) tu {full_download_url}.")
+                    logger.info("Tai goi thanh cong: %s (%d bytes)", target_file_path, dl_size)
+                except Exception as ex_dl:
+                    logger.error("Loi tai file tu %s: %s", full_download_url, ex_dl)
+                    log_pipeline.append(f"[Tai File] Loi tai tu server: {ex_dl}")
+
+            if not os.path.isfile(target_file_path):
+                # Thu tim file san co tren he thong
+                alt_f, _ = smart_find_file("", file_name)
+                if alt_f and os.path.isfile(alt_f):
+                    target_file_path = alt_f
+                    log_pipeline.append(f"[Tim File] Su dung file co san tai: {target_file_path}")
+                else:
+                    raise FileNotFoundError(f"Khong the tim thay hoac tai file '{file_name}' vao '{target_folder}'.")
+
+            # 3. Tu dong giai nen neu la file zip
+            auto_extract = payload.get("auto_extract", True)
+            if auto_extract and target_file_path.lower().endswith((".zip",)):
+                logger.info("Bat dau giai nen: %s vao %s", target_file_path, target_folder)
+                try:
+                    with zipfile.ZipFile(target_file_path, "r") as zf:
+                        zf.extractall(target_folder)
+                        extracted_list = zf.namelist()
+                    log_pipeline.append(f"[Giai Nen] Da giai nen {len(extracted_list)} file vao {target_folder}.")
+                    logger.info("Giai nen thanh cong %d file vao %s", len(extracted_list), target_folder)
+                except Exception as ex_unzip:
+                    raise RuntimeError(f"Loi giai nen file zip: {ex_unzip}")
+
+            # 4. Thuc thi tuan tu cac buoc (steps)
+            steps = payload.get("steps") or []
+            pipeline_success = True
+            scheduled_installer_cmd = None
+
+            for s_idx, step in enumerate(steps, start=1):
+                step_type = str(step.get("step_type") or "").upper().strip()
+                step_name = step.get("step_name") or f"Buoc {s_idx} ({step_type})"
+                logger.info("Thuc thi %s: type='%s'", step_name, step_type)
+
+                # ── BƯỚC: SỬA FILE (MODIFY_FILE / EDIT_CONFIG) ──
+                if step_type in ["MODIFY_FILE", "EDIT_CONFIG", "EDIT_FILE"]:
+                    rel_file = (step.get("file_path") or step.get("relative_path") or "config.json").strip()
+                    modify_file_path = os.path.join(target_folder, rel_file)
+                    if not os.path.isfile(modify_file_path):
+                        for r, _, fs in os.walk(target_folder):
+                            for fn in fs:
+                                if fn.lower() == os.path.basename(rel_file).lower():
+                                    modify_file_path = os.path.join(r, fn)
+                                    break
+                            if os.path.isfile(modify_file_path):
+                                break
+
+                    if not os.path.isfile(modify_file_path):
+                        raise FileNotFoundError(f"Khong tim thay file can sua '{rel_file}' tai '{target_folder}'.")
+
+                    mod_mode = str(step.get("modify_mode") or step.get("mode") or "").upper().strip()
+                    if not mod_mode:
+                        mod_mode = "JSON_KEY_VALUE" if modify_file_path.lower().endswith(".json") else "TEXT_REPLACE"
+
+                    if mod_mode in ["JSON_KEY_VALUE", "JSON"]:
+                        modifications = dict(step.get("json_modifications") or step.get("modifications") or {})
+                        if step.get("json_key"):
+                            modifications[str(step.get("json_key"))] = step.get("json_value")
+
+                        with open(modify_file_path, "r", encoding="utf-8") as f_json:
+                            data_json = json.load(f_json)
+                        applied_changes = []
+                        for k, v in modifications.items():
+                            data_json[k] = v
+                            applied_changes.append(f"{k}='{v}'")
+                        with open(modify_file_path, "w", encoding="utf-8") as f_json:
+                            json.dump(data_json, f_json, indent=4, ensure_ascii=False)
+                        log_pipeline.append(f"[{step_name}] Sua JSON {os.path.basename(modify_file_path)}: OK ({', '.join(applied_changes)})")
+                        logger.info("Da sua JSON file %s: %s", modify_file_path, applied_changes)
+
+                    else:
+                        text_replacements = list(step.get("text_replacements") or [])
+                        search_t = step.get("search_text")
+                        replace_t = step.get("replace_text", "")
+                        if search_t:
+                            text_replacements.append({"search": search_t, "replace": replace_t})
+
+                        with open(modify_file_path, "r", encoding="utf-8", errors="ignore") as f_txt:
+                            content_txt = f_txt.read()
+
+                        applied_count = 0
+                        for r_item in text_replacements:
+                            s_str = r_item.get("search", "")
+                            r_str = r_item.get("replace", "")
+                            if s_str and s_str in content_txt:
+                                content_txt = content_txt.replace(s_str, r_str)
+                                applied_count += 1
+
+                        with open(modify_file_path, "w", encoding="utf-8") as f_txt:
+                            f_txt.write(content_txt)
+                        log_pipeline.append(f"[{step_name}] Sua Text {os.path.basename(modify_file_path)}: Da thay the {applied_count} vi tri.")
+                        logger.info("Da thay the text file %s", modify_file_path)
+
+                # ── BƯỚC: CHẠY FILE SCRIPT / LỆNH (RUN_SCRIPT / RUN_COMMAND) ──
+                elif step_type in ["RUN_SCRIPT", "RUN_COMMAND", "EXECUTE_FILE"]:
+                    rel_script = (step.get("file_path") or step.get("script_file") or step.get("relative_path") or "").strip()
+                    script_args = (step.get("arguments") or "").strip()
+                    wait_comp = step.get("wait_for_completion", True)
+
+                    target_script_path = os.path.join(target_folder, rel_script)
+                    script_work_dir = target_folder
+                    if not os.path.isfile(target_script_path):
+                        for r, _, fs in os.walk(target_folder):
+                            for fn in fs:
+                                if fn.lower() == os.path.basename(rel_script).lower():
+                                    target_script_path = os.path.join(r, fn)
+                                    script_work_dir = r
+                                    break
+                            if os.path.isfile(target_script_path):
+                                break
+
+                    if not os.path.isfile(target_script_path):
+                        raise FileNotFoundError(f"Khong tim thay file script can chay '{rel_script}' tai '{target_folder}'.")
+
+                    scr_name = os.path.basename(target_script_path)
+                    _, s_ext = os.path.splitext(scr_name)
+                    s_ext = s_ext.lower()
+
+                    if s_ext in [".bat", ".cmd", ".txt"]:
+                        exec_cmd = f'cmd.exe /c "call \"{target_script_path}\" {script_args}"'.strip()
+                    elif s_ext in [".ps1"]:
+                        exec_cmd = f'powershell.exe -ExecutionPolicy Bypass -File "{target_script_path}" {script_args}'.strip()
+                    else:
+                        exec_cmd = f'"{target_script_path}" {script_args}'.strip()
+
+                    is_service_installer = "cai_dat_dich_vu" in scr_name.lower() or "install" in scr_name.lower()
+
+                    if is_service_installer:
+                        clean_script_dir = script_work_dir.replace('"', '')
+                        clean_script_file = target_script_path.replace('"', '')
+                        runner_bat = os.path.join(clean_script_dir, "_service_installer_runner.bat")
+                        try:
+                            with open(runner_bat, "w", encoding="ascii", errors="ignore") as f_run:
+                                f_run.write(
+                                    "@echo off\r\n"
+                                    "ping 127.0.0.1 -n 4 >nul\r\n"
+                                    f'cd /d "{clean_script_dir}"\r\n'
+                                    f'call "{clean_script_file}" {script_args}\r\n'
+                                )
+                            scheduled_installer_cmd = f'cmd.exe /c "{runner_bat}"'
+                        except Exception as ex_run:
+                            logger.warning("Loi tao runner bat: %s", ex_run)
+                            scheduled_installer_cmd = f'cmd.exe /c cd /d "{clean_script_dir}" && call "{clean_script_file}" {script_args}'
+
+                        log_pipeline.append(f"[{step_name}] Da kich hoat {scr_name}: Tien trinh doc lap da duoc len lich chay sau 3 giay de dang ky & cap nhat service.")
+                        logger.info("Da len lich chay Cai_Dat_Dich_Vu sau 3s: %s", scheduled_installer_cmd)
+
+                    elif wait_comp:
+                        logger.info("Dang chay script dong bo (cho hoan tat): %s", exec_cmd)
+                        res_sub = subprocess.run(
+                            exec_cmd,
+                            cwd=script_work_dir,
+                            shell=True,
+                            capture_output=True,
+                            text=True,
+                            timeout=120
+                        )
+                        if res_sub.returncode == 0:
+                            log_pipeline.append(f"[{step_name}] Chay {scr_name}: OK (ExitCode: 0)\n{res_sub.stdout.strip()}")
+                        else:
+                            log_pipeline.append(f"[{step_name}] Chay {scr_name}: FAILED (ExitCode: {res_sub.returncode})\n{res_sub.stderr.strip() or res_sub.stdout.strip()}")
+                            pipeline_success = False
+                            break
+
+                    else:
+                        creation_flags = 0
+                        if hasattr(subprocess, 'CREATE_NEW_CONSOLE'):
+                            creation_flags = subprocess.CREATE_NEW_CONSOLE
+                        p_sub = subprocess.Popen(
+                            exec_cmd,
+                            cwd=script_work_dir,
+                            shell=True,
+                            creationflags=creation_flags
+                        )
+                        log_pipeline.append(f"[{step_name}] Da bat {scr_name} o che do nen (PID: {p_sub.pid}).")
+
+                # ── BƯỚC: XÓA FILE TẠM (DELETE_FILE / CLEANUP) ──
+                elif step_type in ["DELETE_FILE", "CLEANUP", "REMOVE_FILE"]:
+                    del_target = step.get("file_path") or step.get("relative_path")
+                    del_full = os.path.join(target_folder, del_target) if del_target else target_file_path
+                    if os.path.isfile(del_full):
+                        os.remove(del_full)
+                        log_pipeline.append(f"[{step_name}] Da xoa file: {os.path.basename(del_full)}")
+                    elif os.path.isdir(del_full):
+                        shutil.rmtree(del_full, ignore_errors=True)
+                        log_pipeline.append(f"[{step_name}] Da xoa thu muc: {os.path.basename(del_full)}")
+
+                else:
+                    log_pipeline.append(f"[{step_name}] Loai buoc '{step_type}' chua duoc ho tro.")
+
+            success = pipeline_success
+            message = f"Trien khai goi '{file_name}' {'hoan tat 100%' if success else 'that bai'} ({len(steps)} buoc)."
+            output = "\n".join(log_pipeline)
+
+            if scheduled_installer_cmd:
+                try:
+                    subprocess.Popen(
+                        scheduled_installer_cmd,
+                        shell=True,
+                        creationflags=subprocess.DETACHED_PROCESS if hasattr(subprocess, 'DETACHED_PROCESS') else 0
+                    )
+                    logger.info("Da spawn tien trinh Cai_Dat_Dich_Vu doc lap thanh cong.")
+                except Exception as ex_sp:
+                    logger.warning("Loi spawn tien trinh installer: %s", ex_sp)
 
         else:
             message = f"Hanh dong '{action}' chua duoc ho tro."

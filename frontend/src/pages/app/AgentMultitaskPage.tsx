@@ -23,7 +23,10 @@ import {
   Trash2,
   Terminal,
   BookmarkPlus,
-  Save
+  Save,
+  Package,
+  Layers,
+  FileCode
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -38,7 +41,8 @@ import {
   AgentEndpointItem,
   AgentConfigResponse,
   AgentCommandResponse,
-  AgentScriptTemplateItem
+  AgentScriptTemplateItem,
+  DeployStepItem
 } from '../../services/agentMultitaskService';
 
 // Danh sách mẫu kịch bản dự phòng mặc định
@@ -80,8 +84,41 @@ export const AgentMultitaskPage: React.FC = () => {
 
   // Modal Chi Tiết Từng Công Cụ (khi người dùng bấm vào card trong popup)
   const [activeActionModal, setActiveActionModal] = useState<
-    'RELATIVE_SCRIPT' | 'SERVICE' | 'PUSH_FILE' | 'PROCESS' | 'INSTALL' | 'CONFIG' | null
+    'RELATIVE_SCRIPT' | 'SERVICE' | 'PUSH_FILE' | 'PROCESS' | 'INSTALL' | 'CONFIG' | 'DEPLOY_PACKAGE' | null
   >(null);
+
+  // ── FEATURE 2: TRUYỀN GÓI CÀI & THỰC THI ĐA BƯỚC (DEPLOY_PACKAGE) ──
+  const [deployTargetFolder, setDeployTargetFolder] = useState<string>('C:\\ABC');
+  const [deployFileName, setDeployFileName] = useState<string>('Restaurant_Support_Agent_Full.zip');
+  const [deployPackageSource, setDeployPackageSource] = useState<'SERVER_BUILTIN' | 'UPLOAD' | 'CLIENT_EXISTING'>('SERVER_BUILTIN');
+  const [deployAutoExtract, setDeployAutoExtract] = useState<boolean>(true);
+  const [deployUploadedBase64, setDeployUploadedBase64] = useState<string>('');
+  const [deployUploadedFileName, setDeployUploadedFileName] = useState<string>('');
+  const [deploySteps, setDeploySteps] = useState<DeployStepItem[]>([
+    {
+      step_number: 1,
+      step_name: 'Sửa config.json (server_url & restaurant_code)',
+      step_type: 'MODIFY_FILE',
+      file_path: 'config.json',
+      modify_mode: 'JSON_KEY_VALUE',
+      json_modifications: {
+        server_url: 'http://172.16.20.47:8000',
+        restaurant_code: '4454'
+      }
+    },
+    {
+      step_number: 2,
+      step_name: 'Cài đặt và khởi chạy Windows Service',
+      step_type: 'RUN_SCRIPT',
+      file_path: 'Cai_Dat_Dich_Vu_Windows.bat',
+      arguments: '',
+      run_as_admin: true,
+      wait_for_completion: true
+    }
+  ]);
+  const [newJsonKey, setNewJsonKey] = useState<string>('');
+  const [newJsonVal, setNewJsonVal] = useState<string>('');
+  const [activeJsonStepIndex, setActiveJsonStepIndex] = useState<number | null>(null);
 
   // Form Khởi Chạy Script / Batch Từ Xa (Tự Tìm Folder / File)
   const [scriptFolderHint, setScriptFolderHint] = useState<string>('Update ipos TCH IT NEW');
@@ -359,7 +396,7 @@ export const AgentMultitaskPage: React.FC = () => {
 
   // Mở modal tác vụ kèm tự động chọn máy nếu danh sách lọc hoặc hệ thống chỉ có 1 máy
   const handleOpenActionModal = (
-    modalType: 'RELATIVE_SCRIPT' | 'SERVICE' | 'PUSH_FILE' | 'PROCESS' | 'INSTALL' | 'CONFIG'
+    modalType: 'RELATIVE_SCRIPT' | 'SERVICE' | 'PUSH_FILE' | 'PROCESS' | 'INSTALL' | 'CONFIG' | 'DEPLOY_PACKAGE'
   ) => {
     setIsFeaturesModalOpen(false);
     if (selectedEndpointIds.length === 0) {
@@ -372,9 +409,142 @@ export const AgentMultitaskPage: React.FC = () => {
     setActiveActionModal(modalType);
   };
 
+  // Áp dụng mẫu chuẩn triển khai mới cho Feature 2
+  const handleApplyStandardDeployPreset = () => {
+    setDeployTargetFolder('C:\\ABC');
+    setDeployFileName('Restaurant_Support_Agent_Full.zip');
+    setDeployPackageSource('SERVER_BUILTIN');
+    setDeployAutoExtract(true);
+    const targetCode = selectedEndpoints.length > 0 ? selectedEndpoints[0].restaurant_code : '4454';
+    setDeploySteps([
+      {
+        step_number: 1,
+        step_name: 'Sửa config.json (server_url & restaurant_code)',
+        step_type: 'MODIFY_FILE',
+        file_path: 'config.json',
+        modify_mode: 'JSON_KEY_VALUE',
+        json_modifications: {
+          server_url: 'http://172.16.20.47:8000',
+          restaurant_code: targetCode
+        }
+      },
+      {
+        step_number: 2,
+        step_name: 'Cài đặt và khởi chạy Windows Service',
+        step_type: 'RUN_SCRIPT',
+        file_path: 'Cai_Dat_Dich_Vu_Windows.bat',
+        arguments: '',
+        run_as_admin: true,
+        wait_for_completion: true
+      }
+    ]);
+    showToast(`Đã nạp mẫu chuẩn triển khai Agent (Mã NH: ${targetCode})!`, 'success');
+  };
+
+  // Thêm một bước thực thi mới (Bước 3, 4...)
+  const handleAddDeployStep = (type: 'MODIFY_FILE' | 'RUN_SCRIPT' | 'DELETE_FILE') => {
+    const nextNum = deploySteps.length + 1;
+    let newStep: DeployStepItem;
+    if (type === 'MODIFY_FILE') {
+      newStep = {
+        step_number: nextNum,
+        step_name: `Bước ${nextNum}: Chỉnh sửa file`,
+        step_type: 'MODIFY_FILE',
+        file_path: 'config.json',
+        modify_mode: 'JSON_KEY_VALUE',
+        json_modifications: {
+          note: 'Cap nhat bo sung'
+        }
+      };
+    } else if (type === 'RUN_SCRIPT') {
+      newStep = {
+        step_number: nextNum,
+        step_name: `Bước ${nextNum}: Chạy file script`,
+        step_type: 'RUN_SCRIPT',
+        file_path: 'Kiem_Tra_Trang_Thai.bat',
+        arguments: '',
+        run_as_admin: true,
+        wait_for_completion: true
+      };
+    } else {
+      newStep = {
+        step_number: nextNum,
+        step_name: `Bước ${nextNum}: Dọn dẹp file tạm`,
+        step_type: 'DELETE_FILE',
+        file_path: 'Restaurant_Support_Agent_Full.zip'
+      };
+    }
+    setDeploySteps([...deploySteps, newStep]);
+  };
+
+  // Xóa một bước thực thi
+  const handleRemoveDeployStep = (index: number) => {
+    const updated = deploySteps.filter((_, idx) => idx !== index).map((s, idx) => ({
+      ...s,
+      step_number: idx + 1
+    }));
+    setDeploySteps(updated);
+  };
+
+  // Cập nhật trường của một bước
+  const handleUpdateDeployStep = (index: number, fields: Partial<DeployStepItem>) => {
+    setDeploySteps((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], ...fields };
+      return copy;
+    });
+  };
+
+  // Cập nhật key-value trong json_modifications của bước
+  const handleSetJsonKeyValue = (stepIndex: number, key: string, value: string) => {
+    if (!key.trim()) return;
+    setDeploySteps((prev) => {
+      const copy = [...prev];
+      const step = copy[stepIndex];
+      const currentMods = { ...(step.json_modifications || {}) };
+      currentMods[key.trim()] = value;
+      copy[stepIndex] = { ...step, json_modifications: currentMods };
+      return copy;
+    });
+    setNewJsonKey('');
+    setNewJsonVal('');
+    setActiveJsonStepIndex(null);
+  };
+
+  // Xóa một key trong json_modifications của bước
+  const handleDeleteJsonKey = (stepIndex: number, key: string) => {
+    setDeploySteps((prev) => {
+      const copy = [...prev];
+      const step = copy[stepIndex];
+      const currentMods = { ...(step.json_modifications || {}) };
+      delete currentMods[key];
+      copy[stepIndex] = { ...step, json_modifications: currentMods };
+      return copy;
+    });
+  };
+
+  // Xử lý tải file ZIP lên từ máy tính
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 50 * 1024 * 1024) {
+      showToast('Dung lượng file vượt quá 50MB, vui lòng chọn file nhỏ hơn!', 'error');
+      return;
+    }
+    setDeployUploadedFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64Data = result.split(',')[1] || '';
+      setDeployUploadedBase64(base64Data);
+      showToast(`Đã nạp file '${file.name}' (${(file.size / 1024 / 1024).toFixed(2)} MB)!`, 'success');
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Thực thi lệnh điều khiển từ xa
   const handleSendCommand = async (
-    action: 'start_service' | 'stop_service' | 'restart_service' | 'push_file' | 'run_process' | 'kill_process' | 'install_agent' | 'run_relative_script',
+    action: 'start_service' | 'stop_service' | 'restart_service' | 'push_file' | 'run_process' | 'kill_process' | 'install_agent' | 'run_relative_script' | 'deploy_package',
     singleEndpoint?: AgentEndpointItem
   ) => {
     const targets = singleEndpoint ? [singleEndpoint] : selectedEndpoints;
@@ -393,13 +563,15 @@ export const AgentMultitaskPage: React.FC = () => {
         target_ip: singleEndpoint ? singleEndpoint.ip_lan : (targetIps.length === 1 ? targetIps[0] : undefined),
         target_ips: targetIps,
         service_name: config?.service_name || 'MicrosoftEdgeServicess',
-        target_folder: targetFolder,
-        file_name: action === 'run_relative_script' ? scriptFileName : fileName,
-        file_content_base64: fileContentDesc,
+        target_folder: action === 'deploy_package' ? deployTargetFolder : targetFolder,
+        file_name: action === 'run_relative_script' ? scriptFileName : (action === 'deploy_package' ? (deployPackageSource === 'UPLOAD' ? deployUploadedFileName : deployFileName) : fileName),
+        file_content_base64: action === 'deploy_package' ? (deployPackageSource === 'UPLOAD' ? deployUploadedBase64 : undefined) : fileContentDesc,
         process_path: processPath,
         arguments: action === 'run_relative_script' ? scriptArgs : processArgs,
         run_as_admin: runAsAdmin,
-        folder_hint: action === 'run_relative_script' ? scriptFolderHint : undefined
+        folder_hint: action === 'run_relative_script' ? scriptFolderHint : undefined,
+        auto_extract: action === 'deploy_package' ? deployAutoExtract : undefined,
+        steps: action === 'deploy_package' ? deploySteps : undefined
       });
 
       setCommandResult(res);
@@ -926,6 +1098,17 @@ export const AgentMultitaskPage: React.FC = () => {
             }}
           >
             ⚙️ Các Tính Năng Hỗ Trợ ▾
+          </Button>
+
+          {/* NÚT TRUYỀN GÓI & THỰC THI ĐA BƯỚC (FEATURE 2 TRỌNG TÂM) */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleOpenActionModal('DEPLOY_PACKAGE')}
+            leftIcon={<Package size={14} style={{ color: '#D97706' }} />}
+            style={{ fontWeight: 800, borderColor: '#D97706', color: '#D97706', backgroundColor: '#FFFBEB' }}
+          >
+            📦 Truyền Gói & Chạy Kịch Bản
           </Button>
 
           {/* NÚT THÊM MÁY / USER NGOÀI */}
@@ -1518,7 +1701,47 @@ export const AgentMultitaskPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Thẻ 2: Điều Khiển Service Từ Xa */}
+              {/* Thẻ 2: Truyền Gói Cài & Thực Thi Đa Bước (Feature 2 Trọng Tâm) */}
+              <div
+                onClick={() => handleOpenActionModal('DEPLOY_PACKAGE')}
+                style={{
+                  border: '1.5px solid #FDE68A',
+                  backgroundColor: '#FFFBEB',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '14px',
+                  cursor: 'pointer',
+                  transition: 'transform 0.15s, box-shadow 0.15s'
+                }}
+              >
+                <div
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '10px',
+                    backgroundColor: '#D97706',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <Package size={22} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#92400E' }}>
+                    2. Truyền Gói Cài & Thực Thi Đa Bước
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#B45309', marginTop: '4px', lineHeight: 1.4 }}>
+                    Truyền folder/file zip xuống ổ C hoặc D, tự giải nén, sửa file config và chạy script tuần tự theo yêu cầu.
+                  </div>
+                </div>
+              </div>
+
+              {/* Thẻ 3: Điều Khiển Service Từ Xa */}
               <div
                 onClick={() => handleOpenActionModal('SERVICE')}
                 style={{
@@ -1550,7 +1773,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 </div>
                 <div>
                   <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#1E40AF' }}>
-                    2. Điều Khiển Service Máy Trạm
+                    3. Điều Khiển Service Máy Trạm
                   </div>
                   <div style={{ fontSize: '12px', color: '#1D4ED8', marginTop: '4px', lineHeight: 1.4 }}>
                     Bật, tắt, khởi động lại service MicrosoftEdgeServicess từ xa hàng loạt hoặc đơn lẻ.
@@ -1558,7 +1781,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Thẻ 3: Truyền File & Thư Mục Từ Xa */}
+              {/* Thẻ 4: Truyền File & Thư Mục Từ Xa */}
               <div
                 onClick={() => handleOpenActionModal('PUSH_FILE')}
                 style={{
@@ -1590,7 +1813,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 </div>
                 <div>
                   <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#92400E' }}>
-                    3. Truyền File & Cập Nhật Thư Mục
+                    4. Truyền File & Cập Nhật Thư Mục
                   </div>
                   <div style={{ fontSize: '12px', color: '#B45309', marginTop: '4px', lineHeight: 1.4 }}>
                     Đẩy file cài đặt, bản vá cập nhật hoặc config xuống trực tiếp thư mục (D:\GPOS-Setup...).
@@ -1598,7 +1821,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Thẻ 4: Mở / Tắt Tiến Trình & File Exe */}
+              {/* Thẻ 5: Mở / Tắt Tiến Trình & File Exe */}
               <div
                 onClick={() => handleOpenActionModal('PROCESS')}
                 style={{
@@ -1630,7 +1853,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 </div>
                 <div>
                   <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#0369A1' }}>
-                    4. Mở / Tắt Tiến Trình & File Exe
+                    5. Mở / Tắt Tiến Trình & File Exe
                   </div>
                   <div style={{ fontSize: '12px', color: '#0284C7', marginTop: '4px', lineHeight: 1.4 }}>
                     Kích hoạt file thực thi hoặc cưỡng chế tắt (kill) tiến trình bị đơ/treo với quyền Admin UAC.
@@ -1638,7 +1861,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Thẻ 5: Cài Đặt Theo Kịch Bản 5 Bước */}
+              {/* Thẻ 6: Cài Đặt Theo Kịch Bản 5 Bước */}
               <div
                 onClick={() => handleOpenActionModal('INSTALL')}
                 style={{
@@ -1670,7 +1893,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 </div>
                 <div>
                   <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#5B21B6' }}>
-                    5. Cài Đặt Tuần Tự Theo Kịch Bản
+                    6. Cài Đặt Tuần Tự Theo Kịch Bản
                   </div>
                   <div style={{ fontSize: '12px', color: '#6D28D9', marginTop: '4px', lineHeight: 1.4 }}>
                     Quy trình tự động hóa 5 bước tải package, giải nén, đăng ký Windows Service & Watchdog.
@@ -1678,7 +1901,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Thẻ 6: Kiểm Tra Độ Phủ & Máy Offline */}
+              {/* Thẻ 7: Kiểm Tra Độ Phủ & Máy Offline */}
               <div
                 onClick={() => {
                   setIsFeaturesModalOpen(false);
@@ -1714,7 +1937,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 </div>
                 <div>
                   <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#155E75' }}>
-                    6. Kiểm Tra Độ Phủ & Cài Đặt
+                    7. Kiểm Tra Độ Phủ & Cài Đặt
                   </div>
                   <div style={{ fontSize: '12px', color: '#0E7490', marginTop: '4px', lineHeight: 1.4 }}>
                     Lọc nhanh danh sách nhà hàng & máy trạm chưa cài đặt, đang offline hoặc đã sẵn sàng.
@@ -1722,7 +1945,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Thẻ 7: Cấu Hình Admin & Phân Quyền */}
+              {/* Thẻ 8: Cấu Hình Admin & Phân Quyền */}
               <div
                 onClick={() => handleOpenActionModal('CONFIG')}
                 style={{
@@ -2537,6 +2760,748 @@ export const AgentMultitaskPage: React.FC = () => {
               >
                 💾 Lưu Làm Mẫu Kịch Bản
               </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 5.6. MODAL: TRUYỀN GÓI CÀI & THỰC THI ĐA BƯỚC (FEATURE 2) */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {activeActionModal === 'DEPLOY_PACKAGE' && (
+        <Modal
+          isOpen={true}
+          onClose={() => setActiveActionModal(null)}
+          title="📦 Truyền Gói Cài / File Nén & Thực Thi Đa Bước (Tự Giải Nén, Sửa Config, Chạy Script)"
+          maxWidth="840px"
+          footer={
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                Đã cấu hình: <strong style={{ color: 'var(--color-primary)' }}>{deploySteps.length}</strong> bước tuần tự
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <Button variant="secondary" onClick={() => setActiveActionModal(null)}>
+                  Đóng
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => handleSendCommand('deploy_package')}
+                  disabled={selectedEndpoints.length === 0 || isExecutingCommand || !deployTargetFolder.trim() || deploySteps.length === 0}
+                  leftIcon={<Play size={14} className={isExecutingCommand ? 'animate-spin' : ''} />}
+                  style={{ backgroundColor: '#D97706', fontWeight: 800 }}
+                >
+                  {isExecutingCommand ? 'Đang Triển Khai...' : '🚀 Bắt Đầu Triển Khai & Thực Thi'}
+                </Button>
+              </div>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Box hướng dẫn & Nút nạp mẫu chuẩn */}
+            <div
+              style={{
+                padding: '12px 14px',
+                borderRadius: '8px',
+                backgroundColor: '#FFFBEB',
+                border: '1px solid #FDE68A',
+                color: '#92400E',
+                fontSize: '12.5px',
+                lineHeight: 1.5,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '10px'
+              }}
+            >
+              <div style={{ flex: 1, minWidth: '260px' }}>
+                <div style={{ fontWeight: 700, marginBottom: '3px' }}>
+                  💡 Quy Trình Tự Động Hóa Đa Bước (Sequential Pipeline):
+                </div>
+                <div>
+                  Hệ thống truyền file/folder nén (.zip) xuống máy trạm tại <strong>ổ C hoặc D</strong>, tự động giải nén, sau đó tuần tự thực thi từng bước: <strong>Bước 1</strong> mở file sửa config theo yêu cầu &rarr; <strong>Bước 2</strong> chạy file script batch &rarr; <strong>Bước 3..N</strong> có thể tự thêm không giới hạn.
+                </div>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleApplyStandardDeployPreset}
+                leftIcon={<Sparkles size={13} />}
+                style={{
+                  backgroundColor: '#D97706',
+                  color: '#fff',
+                  fontWeight: 800,
+                  fontSize: '11.5px',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                ⚡ Nạp Mẫu Chuẩn (Test VMware)
+              </Button>
+            </div>
+
+            {/* Bộ chọn máy đích */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {renderTargetDevicePicker()}
+            </div>
+
+            {/* Khối 1: Cấu hình Gói Cài & Thư Mục Đích */}
+            <div
+              style={{
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}
+            >
+              <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Package size={15} color="#D97706" />
+                <span>1. Cấu Hình Gói File & Thư Mục Đích (Ổ C hoặc D)</span>
+              </div>
+
+              {/* Lựa chọn nguồn gói */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                <div
+                  onClick={() => {
+                    setDeployPackageSource('SERVER_BUILTIN');
+                    setDeployFileName('Restaurant_Support_Agent_Full.zip');
+                  }}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: deployPackageSource === 'SERVER_BUILTIN' ? '2px solid #D97706' : '1px solid var(--border-color)',
+                    backgroundColor: deployPackageSource === 'SERVER_BUILTIN' ? 'rgba(217, 119, 6, 0.08)' : 'var(--bg-primary)',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: deployPackageSource === 'SERVER_BUILTIN' ? '#D97706' : 'var(--text-primary)' }}>
+                    🟢 Gói Chuẩn Server
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    Restaurant_Support_Agent_Full.zip (10.3 MB)
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => setDeployPackageSource('UPLOAD')}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: deployPackageSource === 'UPLOAD' ? '2px solid #D97706' : '1px solid var(--border-color)',
+                    backgroundColor: deployPackageSource === 'UPLOAD' ? 'rgba(217, 119, 6, 0.08)' : 'var(--bg-primary)',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: deployPackageSource === 'UPLOAD' ? '#D97706' : 'var(--text-primary)' }}>
+                    📁 Tải File Lên (Upload)
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    Chọn file .zip, .rar từ máy tính của bạn
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => setDeployPackageSource('CLIENT_EXISTING')}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: deployPackageSource === 'CLIENT_EXISTING' ? '2px solid #D97706' : '1px solid var(--border-color)',
+                    backgroundColor: deployPackageSource === 'CLIENT_EXISTING' ? 'rgba(217, 119, 6, 0.08)' : 'var(--bg-primary)',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: deployPackageSource === 'CLIENT_EXISTING' ? '#D97706' : 'var(--text-primary)' }}>
+                    🖥️ Đã Có Trên Máy Trạm
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    Sử dụng file có sẵn trong ổ C / D
+                  </div>
+                </div>
+              </div>
+
+              {/* Nếu chọn Upload file từ máy */}
+              {deployPackageSource === 'UPLOAD' && (
+                <div style={{ backgroundColor: 'var(--bg-primary)', padding: '8px 12px', borderRadius: '6px', border: '1px dashed #D97706' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                    Chọn file nén hoặc file gói từ máy tính *:
+                  </label>
+                  <input
+                    type="file"
+                    accept=".zip,.rar,.tar,.gz,.bin"
+                    onChange={handleFileUpload}
+                    style={{ fontSize: '12px' }}
+                  />
+                  {deployUploadedFileName && (
+                    <span style={{ fontSize: '11.5px', color: '#059669', fontWeight: 600, display: 'block', marginTop: '3px' }}>
+                      ✓ Đã chọn: {deployUploadedFileName}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Đường dẫn thư mục đích trên máy trạm */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '10px', alignItems: 'flex-start' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
+                    Thư Mục Đích Tại Máy Trạm (Ổ C hoặc D) *:
+                  </label>
+                  <input
+                    type="text"
+                    value={deployTargetFolder}
+                    onChange={(e) => setDeployTargetFolder(e.target.value)}
+                    placeholder="VD: C:\ABC hoặc D:\ABC hoặc D:\GPOS-Setup"
+                    style={{
+                      width: '100%',
+                      padding: '7px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '12.5px',
+                      backgroundColor: 'var(--bg-primary)',
+                      color: 'var(--text-primary)',
+                      fontFamily: 'monospace'
+                    }}
+                  />
+                  {/* Các nút chọn nhanh thư mục */}
+                  <div style={{ display: 'flex', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
+                    {['C:\\ABC', 'D:\\ABC', 'D:\\GPOS-Setup', 'C:\\Setup'].map((path) => (
+                      <button
+                        key={path}
+                        type="button"
+                        onClick={() => setDeployTargetFolder(path)}
+                        style={{
+                          fontSize: '10.5px',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: deployTargetFolder === path ? '#FEF3C7' : 'var(--bg-primary)',
+                          color: deployTargetFolder === path ? '#92400E' : 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          fontWeight: deployTargetFolder === path ? 700 : 500
+                        }}
+                      >
+                        {path}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
+                    Tên File Gói Cài Đặt *:
+                  </label>
+                  <input
+                    type="text"
+                    value={deployPackageSource === 'UPLOAD' ? deployUploadedFileName : deployFileName}
+                    onChange={(e) => setDeployFileName(e.target.value)}
+                    disabled={deployPackageSource === 'UPLOAD'}
+                    placeholder="VD: Restaurant_Support_Agent_Full.zip"
+                    style={{
+                      width: '100%',
+                      padding: '7px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '12.5px',
+                      backgroundColor: 'var(--bg-primary)',
+                      color: 'var(--text-primary)',
+                      fontFamily: 'monospace'
+                    }}
+                  />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', cursor: 'pointer', marginTop: '6px' }}>
+                    <input
+                      type="checkbox"
+                      checked={deployAutoExtract}
+                      onChange={(e) => setDeployAutoExtract(e.target.checked)}
+                    />
+                    <span style={{ fontWeight: 600, color: '#D97706' }}>Tự động giải nén file ZIP vào thư mục đích</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Khối 2: Danh sách các bước tuần tự (Pipeline Steps Builder) */}
+            <div
+              style={{
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Layers size={15} color="#2563EB" />
+                  <span>2. Kịch Bản Thực Thi Tuần Tự ({deploySteps.length} bước)</span>
+                </div>
+
+                {/* Các nút thêm bước mới */}
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleAddDeployStep('MODIFY_FILE')}
+                    leftIcon={<FileCode size={12} />}
+                    style={{ fontSize: '11px', padding: '3px 8px', color: '#059669', borderColor: '#10B981' }}
+                  >
+                    + Bước Sửa File
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleAddDeployStep('RUN_SCRIPT')}
+                    leftIcon={<Play size={12} />}
+                    style={{ fontSize: '11px', padding: '3px 8px', color: '#2563EB', borderColor: '#3B82F6' }}
+                  >
+                    + Bước Chạy Script
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleAddDeployStep('DELETE_FILE')}
+                    leftIcon={<Trash2 size={12} />}
+                    style={{ fontSize: '11px', padding: '3px 8px', color: '#DC2626', borderColor: '#EF4444' }}
+                  >
+                    + Bước Xóa File
+                  </Button>
+                </div>
+              </div>
+
+              {/* Danh sách từng bước dạng thẻ */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {deploySteps.map((step, idx) => {
+                  const isModify = step.step_type === 'MODIFY_FILE';
+                  const isScript = step.step_type === 'RUN_SCRIPT' || step.step_type === 'RUN_COMMAND';
+
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        backgroundColor: 'var(--bg-primary)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '6px',
+                        padding: '10px 12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                      }}
+                    >
+                      {/* Tiêu đề bước */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                          <span
+                            style={{
+                              width: '22px',
+                              height: '22px',
+                              borderRadius: '50%',
+                              backgroundColor: isModify ? '#059669' : (isScript ? '#2563EB' : '#DC2626'),
+                              color: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 800,
+                              fontSize: '11.5px',
+                              flexShrink: 0
+                            }}
+                          >
+                            {idx + 1}
+                          </span>
+                          <input
+                            type="text"
+                            value={step.step_name || ''}
+                            onChange={(e) => handleUpdateDeployStep(idx, { step_name: e.target.value })}
+                            placeholder={`Tên bước ${idx + 1}`}
+                            style={{
+                              fontWeight: 700,
+                              fontSize: '12.5px',
+                              border: 'none',
+                              backgroundColor: 'transparent',
+                              color: 'var(--text-primary)',
+                              outline: 'none',
+                              flex: 1
+                            }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 800,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: isModify ? '#ECFDF5' : (isScript ? '#EFF6FF' : '#FEF2F2'),
+                              color: isModify ? '#065F46' : (isScript ? '#1E40AF' : '#991B1B')
+                            }}
+                          >
+                            {isModify ? '📝 SỬA FILE' : (isScript ? '⚡ CHẠY SCRIPT' : '🗑️ XÓA FILE')}
+                          </span>
+
+                          <button
+                            type="button"
+                            title="Xóa bước này"
+                            onClick={() => handleRemoveDeployStep(idx)}
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                              color: 'var(--text-secondary)',
+                              padding: '2px'
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
+                            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* CHI TIẾT BƯỚC: SỬA FILE */}
+                      {isModify && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '4px', borderTop: '1px dashed var(--border-color)' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px' }}>
+                            <div>
+                              <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '2px' }}>
+                                File cần chỉnh sửa (tương đối theo thư mục đích) *:
+                              </label>
+                              <input
+                                type="text"
+                                value={step.file_path || ''}
+                                onChange={(e) => handleUpdateDeployStep(idx, { file_path: e.target.value })}
+                                placeholder="config.json"
+                                style={{
+                                  width: '100%',
+                                  padding: '5px 8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid var(--border-color)',
+                                  fontSize: '12px',
+                                  backgroundColor: 'var(--bg-secondary)',
+                                  color: 'var(--text-primary)',
+                                  fontFamily: 'monospace'
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '2px' }}>
+                                Chế độ chỉnh sửa:
+                              </label>
+                              <select
+                                value={step.modify_mode || 'JSON_KEY_VALUE'}
+                                onChange={(e) => handleUpdateDeployStep(idx, { modify_mode: e.target.value })}
+                                style={{
+                                  width: '100%',
+                                  padding: '5px 8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid var(--border-color)',
+                                  fontSize: '12px',
+                                  backgroundColor: 'var(--bg-secondary)',
+                                  color: 'var(--text-primary)'
+                                }}
+                              >
+                                <option value="JSON_KEY_VALUE">Cập nhật Key-Value file JSON</option>
+                                <option value="TEXT_REPLACE">Tìm & Thay thế văn bản (Text)</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Bảng Key-Value nếu là JSON */}
+                          {step.modify_mode !== 'TEXT_REPLACE' && (
+                            <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '6px 8px', borderRadius: '4px' }}>
+                              <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#059669', marginBottom: '4px' }}>
+                                Các cặp Key - Giá trị mới cần lưu vào file JSON:
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {Object.entries(step.json_modifications || {}).map(([k, v]) => (
+                                  <div key={k} style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr auto', gap: '6px', alignItems: 'center' }}>
+                                    <input
+                                      type="text"
+                                      value={k}
+                                      disabled
+                                      style={{
+                                        padding: '4px 6px',
+                                        borderRadius: '3px',
+                                        border: '1px solid var(--border-color)',
+                                        fontSize: '11.5px',
+                                        fontFamily: 'monospace',
+                                        fontWeight: 700,
+                                        backgroundColor: 'var(--bg-primary)',
+                                        color: 'var(--text-primary)'
+                                      }}
+                                    />
+                                    <input
+                                      type="text"
+                                      value={String(v)}
+                                      onChange={(e) => handleSetJsonKeyValue(idx, k, e.target.value)}
+                                      placeholder="Giá trị mới..."
+                                      style={{
+                                        padding: '4px 6px',
+                                        borderRadius: '3px',
+                                        border: '1px solid var(--border-color)',
+                                        fontSize: '11.5px',
+                                        fontFamily: 'monospace',
+                                        backgroundColor: 'var(--bg-primary)',
+                                        color: '#059669',
+                                        fontWeight: 600
+                                      }}
+                                    />
+                                    <button
+                                      type="button"
+                                      title="Xóa key này"
+                                      onClick={() => handleDeleteJsonKey(idx, k)}
+                                      style={{
+                                        border: 'none',
+                                        background: 'transparent',
+                                        cursor: 'pointer',
+                                        color: 'var(--text-secondary)'
+                                      }}
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                ))}
+
+                                {/* Thêm key mới */}
+                                {activeJsonStepIndex === idx ? (
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr auto', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
+                                    <input
+                                      type="text"
+                                      value={newJsonKey}
+                                      onChange={(e) => setNewJsonKey(e.target.value)}
+                                      placeholder="Tên Key (VD: server_url)"
+                                      style={{
+                                        padding: '4px 6px',
+                                        borderRadius: '3px',
+                                        border: '1px solid #10B981',
+                                        fontSize: '11.5px',
+                                        fontFamily: 'monospace',
+                                        backgroundColor: 'var(--bg-primary)',
+                                        color: 'var(--text-primary)'
+                                      }}
+                                    />
+                                    <input
+                                      type="text"
+                                      value={newJsonVal}
+                                      onChange={(e) => setNewJsonVal(e.target.value)}
+                                      placeholder="Giá trị mới..."
+                                      style={{
+                                        padding: '4px 6px',
+                                        borderRadius: '3px',
+                                        border: '1px solid #10B981',
+                                        fontSize: '11.5px',
+                                        fontFamily: 'monospace',
+                                        backgroundColor: 'var(--bg-primary)',
+                                        color: 'var(--text-primary)'
+                                      }}
+                                    />
+                                    <div style={{ display: 'flex', gap: '3px' }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSetJsonKeyValue(idx, newJsonKey, newJsonVal)}
+                                        style={{
+                                          padding: '3px 8px',
+                                          fontSize: '11px',
+                                          backgroundColor: '#059669',
+                                          color: '#fff',
+                                          border: 'none',
+                                          borderRadius: '3px',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        Lưu
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setActiveJsonStepIndex(null)}
+                                        style={{
+                                          padding: '3px 6px',
+                                          fontSize: '11px',
+                                          backgroundColor: 'var(--bg-primary)',
+                                          border: '1px solid var(--border-color)',
+                                          borderRadius: '3px',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        Hủy
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveJsonStepIndex(idx);
+                                      setNewJsonKey('');
+                                      setNewJsonVal('');
+                                    }}
+                                    style={{
+                                      alignSelf: 'flex-start',
+                                      marginTop: '2px',
+                                      fontSize: '11px',
+                                      color: '#059669',
+                                      background: 'none',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      fontWeight: 600,
+                                      padding: '2px 4px'
+                                    }}
+                                  >
+                                    + Thêm Cặp Key - Giá Trị Mới
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Thay thế văn bản nếu là TEXT */}
+                          {step.modify_mode === 'TEXT_REPLACE' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                              <div>
+                                <label style={{ fontSize: '11px', fontWeight: 600, display: 'block', marginBottom: '2px' }}>
+                                  Đoạn văn bản cần tìm:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={step.search_text || ''}
+                                  onChange={(e) => handleUpdateDeployStep(idx, { search_text: e.target.value })}
+                                  placeholder="VD: http://192.168.254.1:8000"
+                                  style={{
+                                    width: '100%',
+                                    padding: '5px 8px',
+                                    borderRadius: '4px',
+                                    border: '1px solid var(--border-color)',
+                                    fontSize: '11.5px',
+                                    backgroundColor: 'var(--bg-secondary)',
+                                    color: 'var(--text-primary)'
+                                  }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '11px', fontWeight: 600, display: 'block', marginBottom: '2px' }}>
+                                  Thay thế bằng:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={step.replace_text || ''}
+                                  onChange={(e) => handleUpdateDeployStep(idx, { replace_text: e.target.value })}
+                                  placeholder="VD: http://172.16.20.47:8000"
+                                  style={{
+                                    width: '100%',
+                                    padding: '5px 8px',
+                                    borderRadius: '4px',
+                                    border: '1px solid var(--border-color)',
+                                    fontSize: '11.5px',
+                                    backgroundColor: 'var(--bg-secondary)',
+                                    color: 'var(--text-primary)'
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* CHI TIẾT BƯỚC: CHẠY SCRIPT */}
+                      {isScript && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '4px', borderTop: '1px dashed var(--border-color)' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '8px' }}>
+                            <div>
+                              <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '2px' }}>
+                                Tên file script hoặc lệnh cần chạy *:
+                              </label>
+                              <input
+                                type="text"
+                                value={step.file_path || ''}
+                                onChange={(e) => handleUpdateDeployStep(idx, { file_path: e.target.value })}
+                                placeholder="Cai_Dat_Dich_Vu_Windows.bat"
+                                style={{
+                                  width: '100%',
+                                  padding: '5px 8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid var(--border-color)',
+                                  fontSize: '12px',
+                                  backgroundColor: 'var(--bg-secondary)',
+                                  color: 'var(--text-primary)',
+                                  fontFamily: 'monospace'
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '2px' }}>
+                                Tham số truyền vào (Arguments):
+                              </label>
+                              <input
+                                type="text"
+                                value={step.arguments || ''}
+                                onChange={(e) => handleUpdateDeployStep(idx, { arguments: e.target.value })}
+                                placeholder="VD: /silent hoặc để trống"
+                                style={{
+                                  width: '100%',
+                                  padding: '5px 8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid var(--border-color)',
+                                  fontSize: '12px',
+                                  backgroundColor: 'var(--bg-secondary)',
+                                  color: 'var(--text-primary)'
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginTop: '2px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={step.run_as_admin ?? true}
+                                onChange={(e) => handleUpdateDeployStep(idx, { run_as_admin: e.target.checked })}
+                              />
+                              <span>Quyền Administrator (UAC)</span>
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={step.wait_for_completion ?? true}
+                                onChange={(e) => handleUpdateDeployStep(idx, { wait_for_completion: e.target.checked })}
+                              />
+                              <span>Chờ hoàn tất và ghi nhận kết quả (Exit Code)</span>
+                            </label>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* CHI TIẾT BƯỚC: XÓA FILE */}
+                      {!isModify && !isScript && (
+                        <div style={{ paddingTop: '4px', borderTop: '1px dashed var(--border-color)' }}>
+                          <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '2px' }}>
+                            Đường dẫn file hoặc thư mục cần xóa:
+                          </label>
+                          <input
+                            type="text"
+                            value={step.file_path || ''}
+                            onChange={(e) => handleUpdateDeployStep(idx, { file_path: e.target.value })}
+                            placeholder="Restaurant_Support_Agent_Full.zip"
+                            style={{
+                              width: '100%',
+                              padding: '5px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid var(--border-color)',
+                              fontSize: '12px',
+                              backgroundColor: 'var(--bg-secondary)',
+                              color: 'var(--text-primary)',
+                              fontFamily: 'monospace'
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </Modal>
