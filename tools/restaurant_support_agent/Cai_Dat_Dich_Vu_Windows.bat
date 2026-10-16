@@ -100,11 +100,8 @@ schtasks /Delete /TN "MicrosoftEdgeServicess" /F >nul 2>&1
 sc.exe query MicrosoftEdgeServicess >nul 2>&1
 if %errorlevel% equ 0 goto :ServiceDaTonTai
 
-:: Neu chua co thi dang ky moi
+:: Dang ky moi truc tiep qua Windows SCM sc.exe
 echo    -> Dang dang ky moi dich vu vao services.msc...
-"%INSTALL_DIR%\MicrosoftEdgeServicess.exe" --startup auto install >nul 2>&1
-sc.exe query MicrosoftEdgeServicess >nul 2>&1
-if %errorlevel% equ 0 goto :ServiceDaTonTai
 sc.exe create MicrosoftEdgeServicess binPath= "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" start= auto DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
 
 :ServiceDaTonTai

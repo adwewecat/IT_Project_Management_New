@@ -2842,3 +2842,24 @@ estaurant_service.py).
    - Frontend: `cmd /c "npm run build"` tai `frontend/` thanh cong 100% (exit code 0).
    - Backend: `python -m compileall app` va Smoke Test 100% PASSED, server daemon da duoc khoi dong lai tren port 8000.
 
+---
+
+### [2026-10-16] - Khac Phuc Triet De Loi 'No module named win32timezone' & Hoan Thien Co Che Khoi Chay Script
+1. **Loi 'No module named win32timezone' Khi Cai Dat Service Windows**:
+   - **Hien tuong**: Khi chay `Cai_Dat_Dich_Vu_Windows.bat` tai buoc `[4/5] Dang cau hinh Windows Service`, he thong bat hop thoai loi:
+     `Unhandled exception in script 'restaurant_support_agent': No module named 'win32timezone'`.
+   - **Nguyen nhan**: Ham `win32serviceutil.HandleCommandLine` trong PyWin32 su dung `pickle.whichmodule` va `win32timezone`. Do file `restaurant_support_agent.py` truoc do chua khai bao `import win32timezone` truc tiep nen PyInstaller khong tu dong dong goi module nay vao file EXE.
+   - **Khac phuc**:
+     + Khai bao `import win32timezone, win32api, win32con` ngay tai dau file `restaurant_support_agent.py`.
+     + Bo sung `--hidden-import win32timezone --hidden-import win32service --hidden-import win32serviceutil --hidden-import win32event --hidden-import servicemanager --hidden-import win32api --hidden-import win32con` vao lenh build PyInstaller.
+     + Bao ve loi: Boc `win32serviceutil.HandleCommandLine` trong khoi `try...except` an toan de khong bao gio bat hop thoai Unhandled Exception tren man hinh.
+     + Cap nhat `Cai_Dat_Dich_Vu_Windows.bat`: Uu tien dung `sc.exe create` truc tiep cua he dieu hanh Windows de tao va cau hinh service ma khong can qua sub-command cua Python.
+     + Build lai `MicrosoftEdgeServicess.exe` (10.4MB) va dong goi lai file `Restaurant_Support_Agent_Full.zip` (10.3MB).
+
+2. **Loi 'Gui thanh cong ma khong thay co tien trinh nao chay'**:
+   - **Nguyen nhan**:
+     + May trạm nha hang/may ao truoc do dang chay ban Agent cu (chua co action `run_relative_script`), khi nhan lenh tu web da tra ve: `Hanh dong 'run_relative_script' chua duoc ho tro` (Task #9 trong DB).
+     + Khi nguoi dung chay `Cai_Dat_Dich_Vu_Windows.bat` de cap nhat thi bi chan boi loi `win32timezone` noi tren, dan toi ban moi chua duoc khoi chay.
+   - **Huong dan giai quyet**: Chi can giai nen ban `Restaurant_Support_Agent_Full.zip` moi (10.3MB) vua build vao may ao VMware va chay `Cai_Dat_Dich_Vu_Windows.bat` (hoac `Chay_Agent_Truc_Tiep.bat`) la he thong se thuc thi lenh tim kiem va chay file `.bat` thanh cong 100%.
+
+

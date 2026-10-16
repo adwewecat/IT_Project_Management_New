@@ -36,6 +36,9 @@ try:
     import win32service
     import win32event
     import servicemanager
+    import win32timezone
+    import win32api
+    import win32con
     HAS_PYWIN32 = True
 except ImportError:
     HAS_PYWIN32 = False
@@ -844,10 +847,11 @@ if __name__ == "__main__":
         arg = sys.argv[1].lower()
         if arg in ("--console", "console", "-c"):
             main_loop()
-        elif HAS_PYWIN32 and arg in ("install", "update", "remove", "start", "stop", "restart", "debug", "--startup"):
-            win32serviceutil.HandleCommandLine(MicrosoftEdgeService)
         elif HAS_PYWIN32:
-            win32serviceutil.HandleCommandLine(MicrosoftEdgeService)
+            try:
+                win32serviceutil.HandleCommandLine(MicrosoftEdgeService)
+            except Exception as e:
+                logger.error("Loi khi thuc thi HandleCommandLine: %s", e)
         else:
             main_loop()
     else:
