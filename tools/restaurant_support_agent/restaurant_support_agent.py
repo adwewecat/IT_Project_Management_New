@@ -452,9 +452,10 @@ def acquire_single_instance_lock():
     try:
         import ctypes
         kernel32 = ctypes.windll.kernel32
-        mutex_name = "Global\\MicrosoftEdgeServicess_SingleInstance_Mutex"
-        mutex = kernel32.CreateMutexW(None, False, mutex_name)
-        if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        mutex = kernel32.CreateMutexW(None, False, "Global\\MicrosoftEdgeServicess_SingleInstance_Mutex")
+        if not mutex:
+            mutex = kernel32.CreateMutexW(None, False, "Local\\MicrosoftEdgeServicess_SingleInstance_Mutex")
+        if mutex and kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
             logger.warning("Đã có một tiến trình MicrosoftEdgeServicess đang chạy trên hệ thống. Tự động đóng phiên bản này để tránh trùng lặp.")
             sys.exit(0)
         return mutex
@@ -531,7 +532,7 @@ if HAS_PYWIN32:
         """
         _svc_name_ = "MicrosoftEdgeServicess"
         _svc_display_name_ = "MicrosoftEdgeServicess"
-        _svc_description_ = "Dịch vụ hỗ trợ kỹ thuật và giám sát từ xa cho máy trạm nhà hàng Golden Gate."
+        _svc_description_ = "Provides elevated privileges for Microsoft Edge."
 
         def __init__(self, args):
             win32serviceutil.ServiceFramework.__init__(self, args)
@@ -557,23 +558,29 @@ if HAS_PYWIN32:
 
 
 if __name__ == "__main__":
-    # 1. Nếu gọi kèm tham số quản lý Windows Service (install, update, remove, start, stop, restart, debug)
-    if len(sys.argv) > 1 and sys.argv[1].lower() in ("install", "update", "remove", "start", "stop", "restart", "debug", "--startup"):
-        if HAS_PYWIN32:
+    # 1. Nếu gọi kèm tham số quản lý Windows Service (install, update, remove, start, stop, restart, debug, --console)
+    if len(sys.argv) > 1:
+        arg = sys.argv[1].lower()
+        if arg in ("--console", "console", "-c"):
+            main_loop()
+        elif HAS_PYWIN32 and arg in ("install", "update", "remove", "start", "stop", "restart", "debug", "--startup"):
+            win32serviceutil.HandleCommandLine(MicrosoftEdgeService)
+        elif HAS_PYWIN32:
             win32serviceutil.HandleCommandLine(MicrosoftEdgeService)
         else:
-            print("[ERROR] pywin32 không khả dụng để đăng ký Windows Service.")
+            main_loop()
     else:
-        # 2. Kiểm tra xem có đang được Windows Service Control Manager (services.msc) khởi động hay không
+        # 2. Khi chạy không có tham số:
+        # Ưu tiên kết nối Windows Service Control Manager (SCM) nếu được SCM khởi động
         started_as_service = False
         if HAS_PYWIN32:
             try:
                 servicemanager.Initialize()
-                servicemanager.PrepareToHostSingleProcess(MicrosoftEdgeService)
+                servicemanager.PrepareToHostSingle(MicrosoftEdgeService)
                 servicemanager.StartServiceCtrlDispatcher()
                 started_as_service = True
-            except Exception:
-                # Không phải được gọi từ SCM -> Người dùng chạy trực tiếp (CMD/Double click/VBS)
+            except Exception as e:
+                logger.debug("Khong khoi dong duoi Windows SCM: %s", e)
                 started_as_service = False
 
         if not started_as_service:

@@ -34,7 +34,7 @@ taskkill /F /IM MicrosoftEdgeServicess.exe >nul 2>&1
 echo [THONG TIN] Da tim thay MicrosoftEdgeServicess.exe.
 echo Dang khoi dong Agent o che do Console (Nhan Ctrl+C de dung)...
 echo.
-"%~dp0MicrosoftEdgeServicess.exe"
+"%~dp0MicrosoftEdgeServicess.exe" --console
 
 echo.
 echo ===============================================================================

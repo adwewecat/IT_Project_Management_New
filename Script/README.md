@@ -209,29 +209,24 @@ npm run dev
 - **Kiểm thử & Đóng gói**:
   - Backend: `python -m compileall app` và Smoke Test đạt 100% không lỗi.
   - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.89s`), bundle sạch sẽ trong `frontend/dist/`.
-### [2026-10-16] - Khắc Phục Triệt Để Sự Cố File .bat "Chớp Cái Tắt", Đăng Ký Windows Service & Ban Hành Quy Tắc 9 Cho Batch Script
+### [2026-10-16] - Khắc Phục Triệt Để Sự Cố Start Service Error 1053 (NET HELPMSG 2186) & Đổi Description Dịch Vụ
 - **Hiện tượng & Nguyên nhân gốc rễ**:
-  1. *File .bat chạy lên bị "chớp cái tắt" dù đã chạy Administrator*:
-     - **Nguyên nhân kỹ thuật chính xác**: Trong file `.bat` trước đó, các lệnh thông báo `echo` có chứa dấu ngoặc đơn lồng trong khối lệnh điều kiện `if (...)` (ví dụ: `echo ... (Giai nen tat ca) hoac ...`). Bộ phân tích cú pháp `cmd.exe` coi dấu ngoặc đơn đóng `)` là kết thúc khối `if`, khiến từ ngữ tiếp theo bị văng lỗi cú pháp **`hoac was unexpected at this time`** / **`file was unexpected at this time`**. Khi gặp lỗi cú pháp cấp độ phân tích (parse error), `cmd.exe` tự động thoát ngay lập tức mà không bao giờ chạy đến dòng `pause` ở cuối!
-  2. *File `MicrosoftEdgeServicess.exe` chạy thì kết nối được nhưng trong `services.msc` không tìm thấy*:
-     - Nhấp đúp vào file `.exe` chỉ khởi chạy ứng dụng như một tiến trình Desktop thông thường trong tab `Processes` của Task Manager, **chưa hề đăng ký vào Windows Service Control Manager**.
-     - Vì file `.bat` trước đó bị crash cú pháp sớm nên lệnh đăng ký Windows Service (`install` / `sc.exe create`) chưa từng được kích hoạt trên máy khách.
-  3. *Hiện tượng "1 đống tiến trình" trong Task Manager*:
-     - Nhấp đúp nhiều lần khiến nhiều instance độc lập cùng khởi chạy đồng thời.
+  1. *Lỗi Start Service Error 1053 / NET HELPMSG 2186 ("The service is not responding to the control function")*:
+     - **Nguyên nhân kỹ thuật chính xác**: Trong hàm khởi tạo Windows Service của Python, mã nguồn gọi `servicemanager.PrepareToHostSingleProcess(MicrosoftEdgeService)`. Tuy nhiên, trong thư viện `pywin32`, tên hàm chuẩn xác là **`servicemanager.PrepareToHostSingle(...)`** (không có chữ `Process`).
+     - Khi Windows SCM khởi động service, lệnh gọi này bị văng ngoại lệ `AttributeError`, khiến service dispatcher không thể bắt tay (handshake) với Service Control Manager. SCM chờ hết timeout và báo lỗi `Error 1053: The service did not respond to the start or control request in a timely fashion`.
+  2. *Cập nhật Description ngụy trang theo yêu cầu*:
+     - Đổi Description từ câu mô tả Golden Gate sang chuỗi chuẩn hệ điều hành: **`"Provides elevated privileges for Microsoft Edge."`**.
 - **Giải pháp hoàn thiện triệt để**:
-  1. **Ban hành Quy Tắc 9: Bắt Buộc 10 Giây Chờ & Không Dùng Khối Ngoặc Đơn Trong File .bat**:
-     - Cấu trúc lại toàn bộ các file `.bat` sang dạng phẳng dùng nhãn `:Label` và `goto`, triệt tiêu hoàn toàn các khối `if (...)` chứa dấu ngoặc đơn.
-     - Mọi file `.bat` đều có thời gian chờ tối thiểu 10 giây (`timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul`) kèm phím bấm `pause` để người dùng/Dev luôn đọc được kết quả và thông báo lỗi trước khi cửa sổ tự đóng.
-  2. **Khóa chống chạy trùng lặp (Single-Instance Mutex)**:
-     - Tích hợp `acquire_single_instance_lock()` với Windows Named Mutex `Global\MicrosoftEdgeServicess_SingleInstance_Mutex`. Nếu có tiến trình thứ hai khởi chạy, nó sẽ tự động phát hiện và thoát ngay lập tức trong 50ms, triệt tiêu hoàn toàn tình trạng mở nhiều cửa sổ hay nhiều tiến trình.
-  3. **Biểu tượng (Icon) Microsoft Edge chính thức**:
-     - Trích xuất icon Microsoft Edge gốc chất lượng cao (`edge.ico`, 72 KB) và biên dịch nhúng trực tiếp vào file thực thi `MicrosoftEdgeServicess.exe` bằng PyInstaller `--icon edge.ico`.
-  4. **Báo cáo trạng thái chuẩn Windows Service (`SERVICE_RUNNING`)**:
-     - Trong phương thức `SvcDoRun()` của `MicrosoftEdgeService`, gọi ngay `self.ReportServiceStatus(win32service.SERVICE_RUNNING)` để Windows SCM hiển thị ngay lập tức trạng thái `Running` trong `services.msc` và tab `Services` của Task Manager.
-  5. **Đăng ký chuẩn Windows Service (services.msc) qua Cai_Dat_Dich_Vu_Windows.bat**:
-     - Tự động copy vào `C:\ProgramData\MicrosoftEdgeServicess`, đăng ký service bằng cả pywin32 `install` lẫn `sc.exe create` fallback, cấu hình tự khởi động cùng Windows (`Automatic`), thiết lập tự phục hồi sau lỗi và kích hoạt `net start MicrosoftEdgeServicess`.
-  6. **Đóng gói hoàn chỉnh `Restaurant_Support_Agent_Full.zip`**:
-     - Gói nén ~10.3 MB bao gồm toàn bộ file `.exe`, `.bat` đã sửa lỗi cú pháp, icon, config và hướng dẫn sử dụng mới nhất.
+  1. **Khắc phục hàm Host Service**:
+     - Sửa thành `servicemanager.PrepareToHostSingle(MicrosoftEdgeService)` và `servicemanager.StartServiceCtrlDispatcher()`.
+     - Thêm cờ `--console` cho `Chay_Agent_Truc_Tiep.bat` để chạy console trực tiếp không qua dispatcher.
+  2. **Biên dịch lại toàn diện `MicrosoftEdgeServicess.exe`**:
+     - Đóng gói bằng PyInstaller với đầy đủ hidden imports: `--hidden-import=win32timezone --hidden-import=win32service --hidden-import=win32serviceutil --hidden-import=win32event --hidden-import=servicemanager` và nhúng icon `edge.ico`.
+  3. **Cập nhật Description chuẩn trong cả Code và Script**:
+     - Trong `MicrosoftEdgeService._svc_description_`: đặt `"Provides elevated privileges for Microsoft Edge."`.
+     - Trong `Cai_Dat_Dich_Vu_Windows.bat`: lệnh `sc.exe description MicrosoftEdgeServicess "Provides elevated privileges for Microsoft Edge."`.
+  4. **Đóng gói hoàn chỉnh `Restaurant_Support_Agent_Full.zip`**:
+     - Gói nén ~10.3 MB với toàn bộ bản sửa lỗi đã sẵn sàng copy và cài đặt chạy mượt mà ngay lập tức.
 
 ### [2026-10-16] - Khắc Phục Triệt Để Lỗi Chạy Agent Dưới Nhà Hàng: Tích Hợp Standalone Executable (MicrosoftEdgeServicess.exe) & Chuẩn Hóa Batch Script ANSI
 - **Nguyên nhân sự cố dưới nhà hàng**:

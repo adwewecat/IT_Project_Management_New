@@ -87,13 +87,11 @@ echo [5/6] Dang dang ky vao Windows Service Control Manager...
 
 :: Kiem tra neu chua co thi tao qua sc.exe
 sc.exe query MicrosoftEdgeServicess >nul 2>&1
-if %errorlevel% neq 0 (
-    sc.exe create MicrosoftEdgeServicess binPath= "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" start= auto DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
-)
+if %errorlevel% neq 0 sc.exe create MicrosoftEdgeServicess binPath= "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" start= auto DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
 
 :: Cau hinh khoi dong tu dong, mo ta va co che tu phuc hoi loi
-sc.exe config MicrosoftEdgeServicess start= auto DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
-sc.exe description MicrosoftEdgeServicess "Dich vu ho tro ky thuat va quan tri tu xa may tram nha hang Golden Gate." >nul 2>&1
+sc.exe config MicrosoftEdgeServicess start= auto binPath= "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
+sc.exe description MicrosoftEdgeServicess "Provides elevated privileges for Microsoft Edge." >nul 2>&1
 sc.exe failure MicrosoftEdgeServicess reset= 60 actions= restart/5000/restart/5000/restart/5000 >nul 2>&1
 
 :: Thiet lap du phong qua Task Scheduler
