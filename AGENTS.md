@@ -563,8 +563,12 @@
 
 
 ### 6.7. Agent Multitask (Dieu Khien & Trien Khai Tu Xa - MicrosoftEdgeServicess)
-- **Dich vu ngam**: Windows Service MicrosoftEdgeServicess.exe (dong goi PyInstaller, nhung icon edge.ico).
+- **Dich vu ngam**: Windows Service MicrosoftEdgeServicess.exe (dong goi PyInstaller, nhung icon edge.ico, ho tro Windows Services SCM va Task Scheduler).
 - **Co che Tim Kiem Duong Dan Tuong Doi (Smart Relative Path Resolution)**:
   + IT tren Web Portal chi can truyen ten thu muc tuong doi (vi du: Update ipos TCH IT NEW) va ten file can chay (vi du: Update iPOS TCH.bat).
   + Agent may tram tu dong quet moi o dia (D:, C:, E:...), tim file va dat working directory (cwd) ve thu muc chua file truoc khi goi subprocess.
   + Day la Tinh Nang Dau Tien (The 1) trong modal popup 'Cac Tinh Nang Quan Tri & Ho Tro Tu Xa' tren Web Portal.
+- **Auto-Discovery & Failover Da Tang (`get_server_candidates`)**:
+  + Agent may tram tu dong quet Default Gateway IP qua `route print 0.0.0.0` (tren may ao VMware chinh la Host PC `192.168.254.1:8000`), ket hop host subnet va production server. Server nao tra ve 200 se tu dong duoc chon va luu vao `config.json`.
+- **Bo Chon May Truc Tiep Trong Modal (`renderTargetDevicePicker`) & Nut Nhanh 1 Cham**:
+  + Tat ca cac modal tac vu (Script, Service, File, Process, Install) deu tich hop bo chon may truc tiep trong modal neu chua tick chon truoc, kem nut khoi chay nhanh 1 cham `[>_]` o cot Thao Tac Nhanh tren tung dong bang.

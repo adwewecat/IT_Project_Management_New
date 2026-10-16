@@ -213,17 +213,75 @@ def send_http_get(url, timeout=12):
             return {"raw": resp_body}
 
 
+def get_gateway_ip():
+    """Lay dia chi IP Gateway mac dinh tren Windows."""
+    try:
+        res = subprocess.run("route print 0.0.0.0", shell=True, capture_output=True, text=True, timeout=5)
+        for line in res.stdout.splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 5 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
+                gw = parts[2]
+                if gw and not gw.startswith("127.") and not gw.startswith("0."):
+                    return gw
+    except Exception:
+        pass
+    return None
+
+
+def get_server_candidates(config):
+    """
+    Tong hop danh sach tat ca cac server dich ung vien de auto-discover va failover:
+    1. Cau hinh server_url trong config.json
+    2. Server Host qua Default Gateway (Dac biet tren may ao VMware/VirtualBox: gateway thuong la Host PC chay port 8000)
+    3. Host dev 192.168.254.1:8000 va 172.16.20.47:8000
+    4. Server Production 172.16.8.25:8000
+    5. Localhost 127.0.0.1:8000
+    """
+    candidates = []
+    current_srv = config.get("server_url", "").strip().rstrip("/")
+    if current_srv:
+        candidates.append(current_srv)
+
+    # 1. Gateway IP (tren VMware NAT, gateway .1 hoac .2 la Host PC dang chay backend)
+    gw = get_gateway_ip()
+    if gw:
+        gw_srv = f"http://{gw}:8000"
+        if gw_srv not in candidates:
+            candidates.append(gw_srv)
+
+    # 2. Host VMware pho bien (.1 va .2)
+    local_ip = get_local_ip()
+    if local_ip and "." in local_ip:
+        octets = local_ip.split(".")
+        if len(octets) == 4:
+            host_dot1 = f"http://{octets[0]}.{octets[1]}.{octets[2]}.1:8000"
+            host_dot2 = f"http://{octets[0]}.{octets[1]}.{octets[2]}.2:8000"
+            if host_dot1 not in candidates:
+                candidates.append(host_dot1)
+            if host_dot2 not in candidates:
+                candidates.append(host_dot2)
+
+    # 3. Server dev / may tram noi bo
+    well_known = [
+        "http://192.168.254.1:8000",
+        "http://172.16.20.47:8000",
+        "http://127.0.0.1:8000",
+        CENTRAL_PRODUCTION_SERVER.rstrip("/")
+    ]
+    for wk in well_known:
+        if wk not in candidates:
+            candidates.append(wk)
+
+    return candidates
+
+
 def send_heartbeat(config, ip_lan, machine_name, os_info):
     """
     Gui tin hieu Heartbeat len Central Server.
-    Tu dong thu qua Server du phong neu cau hinh hien tai bi loi ket noi.
+    Tu dong quet danh sach server ung vien (auto-discovery) va failover neu mot server loi 404/mat mang.
     """
-    server_candidates = []
-    current_srv = config.get("server_url", CENTRAL_PRODUCTION_SERVER).rstrip("/")
-    server_candidates.append(current_srv)
-
-    if CENTRAL_PRODUCTION_SERVER.rstrip("/") not in server_candidates:
-        server_candidates.append(CENTRAL_PRODUCTION_SERVER.rstrip("/"))
+    server_candidates = get_server_candidates(config)
+    current_srv = config.get("server_url", "").strip().rstrip("/")
 
     payload = {
         "restaurant_code": str(config.get("restaurant_code", "UNKNOWN")),
@@ -236,22 +294,20 @@ def send_heartbeat(config, ip_lan, machine_name, os_info):
         "startup_type": "Automatic"
     }
 
-    last_err = None
     for srv in server_candidates:
         endpoint = f"{srv}/api/v1/agent-multitask/heartbeat"
         try:
-            resp = send_http_post(endpoint, payload, timeout=10)
+            resp = send_http_post(endpoint, payload, timeout=6)
             logger.info("Heartbeat [OK] -> %s (IP: %s, Ma NH: %s)", endpoint, ip_lan, config.get("restaurant_code"))
             if srv != current_srv:
                 config["server_url"] = srv
                 save_config(config)
-                logger.info("Da cap nhat server_url chinh thuc: %s", srv)
+                logger.info("Tu dong cap nhat server_url ket noi thanh cong: %s", srv)
             return True
         except Exception as e:
-            last_err = e
             logger.warning("Khong the gui Heartbeat toi %s: %s", endpoint, e)
 
-    logger.error("That bai gui Heartbeat toi tat ca server dich.")
+    logger.error("That bai gui Heartbeat toi tat ca server ung vien.")
     return False
 
 
@@ -263,11 +319,24 @@ def poll_pending_tasks(config, ip_lan=None):
     endpoint = f"{server_url}/api/v1/agent-multitask/poll-tasks?restaurant_code={r_code}{ip_param}"
 
     try:
-        tasks = send_http_get(endpoint, timeout=10)
+        tasks = send_http_get(endpoint, timeout=8)
         if isinstance(tasks, list) and len(tasks) > 0:
             return tasks
         return []
     except Exception:
+        # Neu server_url hien tai loi, thu nhanh cac ung vien khac
+        for srv in get_server_candidates(config):
+            if srv == server_url:
+                continue
+            alt_ep = f"{srv}/api/v1/agent-multitask/poll-tasks?restaurant_code={r_code}{ip_param}"
+            try:
+                tasks = send_http_get(alt_ep, timeout=5)
+                if isinstance(tasks, list):
+                    config["server_url"] = srv
+                    save_config(config)
+                    return tasks
+            except Exception:
+                continue
         return []
 
 
@@ -288,8 +357,23 @@ def report_task_result(config, task_id, success, message, output="", ip_lan=None
     try:
         send_http_post(endpoint, payload, timeout=10)
         logger.info("Bao cao ket qua Task #%s [OK]: %s", task_id, message)
+        return True
     except Exception as e:
-        logger.error("Loi gui bao cao Task #%s: %s", task_id, e)
+        logger.warning("Loi gui bao cao Task #%s toi %s: %s. Thu cac server ung vien...", task_id, endpoint, e)
+        for srv in get_server_candidates(config):
+            if srv == server_url:
+                continue
+            alt_ep = f"{srv}/api/v1/agent-multitask/report-task-result"
+            try:
+                send_http_post(alt_ep, payload, timeout=6)
+                config["server_url"] = srv
+                save_config(config)
+                logger.info("Bao cao ket qua Task #%s [OK] qua %s", task_id, alt_ep)
+                return True
+            except Exception:
+                continue
+        logger.error("That bai bao cao ket qua Task #%s toi tat ca server.", task_id)
+        return False
 
 
 def smart_find_file(folder_hint="", file_name="", max_depth=6):

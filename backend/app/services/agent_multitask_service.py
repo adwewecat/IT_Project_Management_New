@@ -496,14 +496,28 @@ class AgentMultitaskService:
         success_count = 0
         failed_count = 0
 
-        endpoints = db.query(AgentMultitaskEndpoint).filter(
-            AgentMultitaskEndpoint.restaurant_code.in_(payload.restaurant_codes)
-        ).all()
-        ep_map = {e.restaurant_code: e for e in endpoints}
+        target_ip_list = [ip.strip() for ip in (payload.target_ips or []) if ip and ip.strip()]
+        if payload.target_ip and payload.target_ip.strip() not in target_ip_list:
+            target_ip_list.append(payload.target_ip.strip())
 
-        for r_code in payload.restaurant_codes:
-            ep = ep_map.get(r_code)
-            ip = payload.target_ip or (ep.ip_lan if ep else "")
+        if target_ip_list:
+            endpoints = db.query(AgentMultitaskEndpoint).filter(
+                AgentMultitaskEndpoint.ip_lan.in_(target_ip_list)
+            ).all()
+        else:
+            endpoints = db.query(AgentMultitaskEndpoint).filter(
+                AgentMultitaskEndpoint.restaurant_code.in_(payload.restaurant_codes)
+            ).all()
+
+        targets_to_run = []
+        if endpoints:
+            for ep in endpoints:
+                targets_to_run.append((ep.restaurant_code, ep.ip_lan, ep))
+        else:
+            for r_code in payload.restaurant_codes:
+                targets_to_run.append((r_code, payload.target_ip or "", None))
+
+        for r_code, ip, ep in targets_to_run:
             action = payload.action
 
             # Ghi nhận log tác vụ
@@ -600,7 +614,7 @@ class AgentMultitaskService:
 
         return AgentCommandResponse(
             success=failed_count == 0,
-            total_targets=len(payload.restaurant_codes),
+            total_targets=len(targets_to_run),
             success_count=success_count,
             failed_count=failed_count,
             results=results

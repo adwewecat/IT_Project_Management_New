@@ -2817,3 +2817,28 @@ estaurant_service.py).
    - Recompile MicrosoftEdgeServicess.exe bang PyInstaller kem edge.ico.
    - Dong goi tools/Restaurant_Support_Agent_Full.zip.
    - Frontend npm run build exit code 0, Backend compileall & smoke test 100% PASSED.
+
+---
+
+### [2026-10-16] - Khac Phuc Trinh Trang Service Running Nhung Web Bao Offline & Nang Cap Bo Chon Thiet Bi Truc Tiep Trong Modal (Target Device Picker)
+1. **Khac Phuc Hien Tuong Service Running Trong VMware Nhung Web Bao Offline**:
+   - **Nguyen nhan goc**:
+     + Service `MicrosoftEdgeServicess` trong may ao VMware (192.168.254.129) dang `Running` (PID 868), nhung file `config.json` mac dinh tro toi `http://172.16.8.25:8000` (Server Production .25 chua duoc deploy cac endpoint moi cua Agent Multitask nen tra ve HTTP 404).
+     + Trong khi do may chu backend test dang chay tren may Host (`http://192.168.254.1:8000`). Vi may ao khong the gui Heartbeat ve duoc tu 14:35:20, he thong sau 90 giay danh gia thiet bi la `⚪ Offline`.
+   - **Giai phap da xu ly**:
+     + **Auto-Discovery & Failover da tang (`get_server_candidates`)**: Agent may tram tu dong lay Default Gateway IP tren Windows qua `route print 0.0.0.0` (tren VMware NAT, Gateway chinh la Host PC `192.168.254.1:8000`), ket hop cac subnet `.1`, `.2`, localhost va production server de do tim. Khi server nao phan hoi HTTP 200, Agent tu dong luu `server_url` vao `config.json` va duy tri ket noi thong suot.
+     + Bien dich moi `MicrosoftEdgeServicess.exe` va cap nhat lai `Restaurant_Support_Agent_Full.zip`.
+
+2. **Khac Phuc Nut 'Bat Dau Khoi Chay' Bi Khoa & Nang Cap Bo Chon May Ngay Trong Modal**:
+   - **Nguyen nhan**:
+     + Nguoi dung mo popup "Khoi Chay File Script / Batch Tu Xa" tu thanh menu tren cung nhung chua tick chon o checkbox tren dong may `vmwave`. Modal bao `0 thiet bi dang duoc chon` va disable nut `🚀 Bat Dau Khoi Chay`, khien nguoi dung hieu lam la bi chan do Offline.
+   - **Cai tien toan dien**:
+     + **Bo Chon Thiet Bi Ngay Trong Modal (`renderTargetDevicePicker`)**: Tich hop vao tat ca cac modal tac vu (Chay Script, Dieu khien Service, Truyen File, Mo Tien Trinh, Cai Dat). Neu chua chon may nao, modal se hien thi o Dropdown danh sach tat ca thiet bi kem nut "Chon tat ca" va "Chon may nay", cho phep click chon may truc tiep ngay trong modal ma khong can thoat ra ngoai tick lai.
+     + **Nut Khoi Chay Nhanh 1 Cham Tren Tung Dong Bang**: Bo sung nut Terminal `[>_]` o cot "Thao Tac Nhanh". Nguoi dung chi can bam nut nay o dong may `vmwave`, he thong lap tuc chon may va mo ngay popup khoi chay script.
+     + **Tu Dong Chon May Dich Thong Minh (`handleOpenActionModal`)**: Neu nguoi dung da loc danh sach hoac he thong chi co 1 may, khi mo tinh nang he thong tu dong dien luon may do vao tac vu, khong bao gio bi trang thai `0 thiet bi dang duoc chon`.
+     + **Truyen Exact IP Danh Cho Multi-Device (`target_ips`)**: Backend ho tro danh sach IP thuc thi dich xac, dam bao lenh duoc xep hang dung may tram muc tieu.
+
+3. **Kiem Thu & Build Hoan Tat**:
+   - Frontend: `cmd /c "npm run build"` tai `frontend/` thanh cong 100% (exit code 0).
+   - Backend: `python -m compileall app` va Smoke Test 100% PASSED, server daemon da duoc khoi dong lai tren port 8000.
+

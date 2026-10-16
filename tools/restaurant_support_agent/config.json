@@ -1,5 +1,5 @@
 {
-  "server_url": "http://172.16.8.25:8000",
+  "server_url": "http://192.168.254.1:8000",
   "restaurant_code": "TEST_NH",
   "service_name": "MicrosoftEdgeServicess",
   "heartbeat_interval_seconds": 30,

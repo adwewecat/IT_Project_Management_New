@@ -85,9 +85,10 @@ class AgentOverviewResponse(BaseModel):
 
 
 class AgentCommandRequest(BaseModel):
-    action: str  # start_service, stop_service, restart_service, push_file, run_process, kill_process, install_agent
+    action: str  # start_service, stop_service, restart_service, push_file, run_process, kill_process, install_agent, run_relative_script
     restaurant_codes: List[str]
     target_ip: Optional[str] = None
+    target_ips: Optional[List[str]] = None
     service_name: Optional[str] = "MicrosoftEdgeServicess"
     # Dành cho Push File
     target_folder: Optional[str] = "D:\\GPOS-Setup\\app"

@@ -307,6 +307,21 @@ export const AgentMultitaskPage: React.FC = () => {
     return endpoints.filter((ep) => ep.id && selectedEndpointIds.includes(ep.id));
   }, [endpoints, selectedEndpointIds]);
 
+  // Mở modal tác vụ kèm tự động chọn máy nếu danh sách lọc hoặc hệ thống chỉ có 1 máy
+  const handleOpenActionModal = (
+    modalType: 'RELATIVE_SCRIPT' | 'SERVICE' | 'PUSH_FILE' | 'PROCESS' | 'INSTALL' | 'CONFIG'
+  ) => {
+    setIsFeaturesModalOpen(false);
+    if (selectedEndpointIds.length === 0) {
+      if (filteredEndpoints.length === 1 && filteredEndpoints[0].id) {
+        setSelectedEndpointIds([filteredEndpoints[0].id]);
+      } else if (endpoints.length === 1 && endpoints[0].id) {
+        setSelectedEndpointIds([endpoints[0].id]);
+      }
+    }
+    setActiveActionModal(modalType);
+  };
+
   // Thực thi lệnh điều khiển từ xa
   const handleSendCommand = async (
     action: 'start_service' | 'stop_service' | 'restart_service' | 'push_file' | 'run_process' | 'kill_process' | 'install_agent' | 'run_relative_script',
@@ -314,17 +329,19 @@ export const AgentMultitaskPage: React.FC = () => {
   ) => {
     const targets = singleEndpoint ? [singleEndpoint] : selectedEndpoints;
     if (targets.length === 0) {
-      showToast('Vui lòng tích chọn ít nhất 1 thiết bị để thực thi lệnh!', 'error');
+      showToast('Vui lòng chọn ít nhất 1 thiết bị để thực thi lệnh!', 'error');
       return;
     }
 
     setIsExecutingCommand(true);
     try {
-      const targetCodes = targets.map((t) => t.restaurant_code);
+      const targetCodes = Array.from(new Set(targets.map((t) => t.restaurant_code)));
+      const targetIps = targets.map((t) => t.ip_lan).filter(Boolean);
       const res = await agentMultitaskService.sendCommand({
         action,
         restaurant_codes: targetCodes,
-        target_ip: singleEndpoint ? singleEndpoint.ip_lan : undefined,
+        target_ip: singleEndpoint ? singleEndpoint.ip_lan : (targetIps.length === 1 ? targetIps[0] : undefined),
+        target_ips: targetIps,
         service_name: config?.service_name || 'MicrosoftEdgeServicess',
         target_folder: targetFolder,
         file_name: action === 'run_relative_script' ? scriptFileName : fileName,
@@ -583,6 +600,118 @@ export const AgentMultitaskPage: React.FC = () => {
       </div>
     );
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // HELPER: BỘ CHỌN THIẾT BỊ ĐÍCH TRONG CÁC MODAL HÀNH ĐỘNG
+  // ══════════════════════════════════════════════════════════════════════════
+  const renderTargetDevicePicker = () => (
+    <div
+      style={{
+        padding: '10px 12px',
+        borderRadius: '8px',
+        backgroundColor: selectedEndpoints.length === 0 ? '#FEF2F2' : 'var(--bg-secondary)',
+        border: `1px solid ${selectedEndpoints.length === 0 ? '#FECACA' : 'var(--border-color)'}`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px'
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '8px',
+          fontSize: '13px'
+        }}
+      >
+        <div>
+          🎯 Thiết Bị Thực Thi:{' '}
+          {selectedEndpoints.length > 0 ? (
+            <strong style={{ color: '#059669' }}>
+              {selectedEndpoints.length} máy đã chọn: {selectedEndpoints.map((e) => e.machine_name || e.ip_lan).join(', ')}
+            </strong>
+          ) : (
+            <strong style={{ color: '#DC2626' }}>
+              ⚠️ Chưa chọn máy nào (chọn máy bên dưới để tiếp tục)
+            </strong>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {filteredEndpoints.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const allIds = filteredEndpoints.map((e) => e.id).filter(Boolean) as number[];
+                setSelectedEndpointIds(allIds);
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#2563EB',
+                fontSize: '12px',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                padding: 0
+              }}
+            >
+              Chọn tất cả ({filteredEndpoints.length} máy)
+            </button>
+          )}
+          {selectedEndpoints.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedEndpointIds([])}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#64748B',
+                fontSize: '12px',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                padding: 0
+              }}
+            >
+              Bỏ chọn
+            </button>
+          )}
+        </div>
+      </div>
+
+      {selectedEndpoints.length === 0 && (
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <select
+            style={{
+              width: '100%',
+              padding: '7px 10px',
+              borderRadius: '6px',
+              border: '1px solid #FCA5A5',
+              backgroundColor: '#FFFFFF',
+              fontSize: '13px',
+              color: '#1E293B',
+              fontWeight: 600
+            }}
+            value=""
+            onChange={(e) => {
+              const id = Number(e.target.value);
+              if (id) {
+                setSelectedEndpointIds([id]);
+              }
+            }}
+          >
+            <option value="">👉 Nhấp vào đây để chọn máy đích muốn thực thi...</option>
+            {endpoints.map((ep) => (
+              <option key={ep.id} value={ep.id}>
+                {ep.restaurant_name ? `${ep.restaurant_name} (${ep.restaurant_code})` : ep.machine_name || 'Thiết bị'} - {ep.machine_name || ep.ip_lan} ({ep.ip_lan}) - {ep.is_online ? '🟢 Online' : '⚪ Offline'}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+    </div>
+  );
 
   // ══════════════════════════════════════════════════════════════════════════
   // GIAO DIỆN CHÍNH (SINGLE-SCREEN VIEWPORT, TOP TOOLBAR & SCROLL TABLE)
@@ -1129,6 +1258,20 @@ export const AgentMultitaskPage: React.FC = () => {
                             <Edit size={12} />
                           </Button>
 
+                          {/* Nút Khởi Chạy Script / Batch Nhanh 1 Chạm */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              if (ep.id) setSelectedEndpointIds([ep.id]);
+                              setActiveActionModal('RELATIVE_SCRIPT');
+                            }}
+                            title="Khởi chạy file script/batch (.bat, .cmd, .exe) từ xa trên máy này"
+                            style={{ padding: '4px 7px', color: '#059669', borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}
+                          >
+                            <Terminal size={12} />
+                          </Button>
+
                           <Button
                             variant="outline"
                             size="sm"
@@ -1218,10 +1361,7 @@ export const AgentMultitaskPage: React.FC = () => {
             >
               {/* Thẻ 1: Khởi Chạy File Script / Batch Từ Xa (Tự Tìm Folder / File) */}
               <div
-                onClick={() => {
-                  setIsFeaturesModalOpen(false);
-                  setActiveActionModal('RELATIVE_SCRIPT');
-                }}
+                onClick={() => handleOpenActionModal('RELATIVE_SCRIPT')}
                 style={{
                   border: '1.5px solid #A7F3D0',
                   backgroundColor: '#F0FDF4',
@@ -1261,10 +1401,7 @@ export const AgentMultitaskPage: React.FC = () => {
 
               {/* Thẻ 2: Điều Khiển Service Từ Xa */}
               <div
-                onClick={() => {
-                  setIsFeaturesModalOpen(false);
-                  setActiveActionModal('SERVICE');
-                }}
+                onClick={() => handleOpenActionModal('SERVICE')}
                 style={{
                   border: '1.5px solid #BFDBFE',
                   backgroundColor: '#EFF6FF',
@@ -1304,10 +1441,7 @@ export const AgentMultitaskPage: React.FC = () => {
 
               {/* Thẻ 3: Truyền File & Thư Mục Từ Xa */}
               <div
-                onClick={() => {
-                  setIsFeaturesModalOpen(false);
-                  setActiveActionModal('PUSH_FILE');
-                }}
+                onClick={() => handleOpenActionModal('PUSH_FILE')}
                 style={{
                   border: '1.5px solid #FDE68A',
                   backgroundColor: '#FFFBEB',
@@ -1347,10 +1481,7 @@ export const AgentMultitaskPage: React.FC = () => {
 
               {/* Thẻ 4: Mở / Tắt Tiến Trình & File Exe */}
               <div
-                onClick={() => {
-                  setIsFeaturesModalOpen(false);
-                  setActiveActionModal('PROCESS');
-                }}
+                onClick={() => handleOpenActionModal('PROCESS')}
                 style={{
                   border: '1.5px solid #BAE6FD',
                   backgroundColor: '#F0F9FF',
@@ -1390,10 +1521,7 @@ export const AgentMultitaskPage: React.FC = () => {
 
               {/* Thẻ 5: Cài Đặt Theo Kịch Bản 5 Bước */}
               <div
-                onClick={() => {
-                  setIsFeaturesModalOpen(false);
-                  setActiveActionModal('INSTALL');
-                }}
+                onClick={() => handleOpenActionModal('INSTALL')}
                 style={{
                   border: '1.5px solid #DDD6FE',
                   backgroundColor: '#FAF5FF',
@@ -1477,10 +1605,7 @@ export const AgentMultitaskPage: React.FC = () => {
 
               {/* Thẻ 7: Cấu Hình Admin & Phân Quyền */}
               <div
-                onClick={() => {
-                  setIsFeaturesModalOpen(false);
-                  setActiveActionModal('CONFIG');
-                }}
+                onClick={() => handleOpenActionModal('CONFIG')}
                 style={{
                   border: '1.5px solid #FECDD3',
                   backgroundColor: '#FFF1F2',
@@ -1964,21 +2089,10 @@ export const AgentMultitaskPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Thông tin số máy đang chọn & Nút mẫu nhanh */}
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '8px',
-                fontSize: '13px'
-              }}
-            >
-              <div>
-                Đang áp dụng cho: <strong>{selectedEndpoints.length} thiết bị</strong> đang được chọn.
-              </div>
-              <div style={{ display: 'flex', gap: '6px' }}>
+            {/* Bộ chọn máy đích & Nút nạp mẫu */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {renderTargetDevicePicker()}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
                 <button
                   type="button"
                   onClick={() => {
@@ -2110,9 +2224,7 @@ export const AgentMultitaskPage: React.FC = () => {
           }
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Đang chọn: <strong>{selectedEndpoints.length} thiết bị</strong>. Bạn có thể gửi lệnh điều khiển trạng thái dịch vụ ngầm <code>{config?.service_name || 'MicrosoftEdgeServicess'}</code> tới các máy được chọn.
-            </div>
+            {renderTargetDevicePicker()}
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
               <Button
@@ -2179,9 +2291,7 @@ export const AgentMultitaskPage: React.FC = () => {
           }
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Đẩy file cập nhật / cấu hình tới <strong>{selectedEndpoints.length} thiết bị</strong> đang được chọn. Thư mục đích sẽ tự động được tạo trên máy khách nếu chưa tồn tại.
-            </div>
+            {renderTargetDevicePicker()}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
@@ -2288,9 +2398,7 @@ export const AgentMultitaskPage: React.FC = () => {
           }
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Áp dụng cho <strong>{selectedEndpoints.length} thiết bị</strong> đang được chọn. Khởi chạy ứng dụng hoặc dừng các tiến trình bị treo.
-            </div>
+            {renderTargetDevicePicker()}
 
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
               <div>
@@ -2378,6 +2486,7 @@ export const AgentMultitaskPage: React.FC = () => {
           }
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {renderTargetDevicePicker()}
             <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
               Quy trình thiết lập tự động Windows Service <code>MicrosoftEdgeServicess</code>:
             </div>

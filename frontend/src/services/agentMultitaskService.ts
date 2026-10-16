@@ -84,6 +84,7 @@ export interface AgentCommandRequest {
   action: 'start_service' | 'stop_service' | 'restart_service' | 'push_file' | 'run_process' | 'kill_process' | 'install_agent' | 'run_relative_script';
   restaurant_codes: string[];
   target_ip?: string;
+  target_ips?: string[];
   service_name?: string;
   target_folder?: string;
   file_name?: string;
