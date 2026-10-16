@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
@@ -525,11 +526,18 @@ class AgentMultitaskService:
             action = payload.action
 
             # Ghi nhận log tác vụ
+            # Chuẩn hóa payload tránh giá trị None/null khiến client agent bị lỗi 'NoneType' object has no attribute 'strip'
+            payload_dict = payload.model_dump(exclude={'file_content_base64'})
+            for str_k in ['arguments', 'folder_hint', 'file_name', 'process_path', 'service_name', 'target_folder']:
+                if payload_dict.get(str_k) is None:
+                    payload_dict[str_k] = ""
+            command_payload_json = json.dumps(payload_dict, ensure_ascii=False)
+
             log_entry = AgentMultitaskLog(
                 restaurant_code=r_code,
                 machine_ip=ip,
                 action_type=action,
-                command_payload=str(payload.model_dump(exclude={'file_content_base64'})),
+                command_payload=command_payload_json,
                 result_status="PENDING",
                 created_by=current_username,
                 created_at=datetime.now()
@@ -694,7 +702,7 @@ class AgentMultitaskService:
         log_entry = db.query(AgentMultitaskLog).filter(AgentMultitaskLog.id == task_id).first()
         if log_entry:
             log_entry.result_status = status_val.upper()
-            log_entry.result_message = message
+            log_entry.result_message = f"{message}\n\n[OUTPUT]\n{output}" if output else message
             db.commit()
 
         # Cập nhật trạng thái endpoint

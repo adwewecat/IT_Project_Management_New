@@ -2892,3 +2892,40 @@ estaurant_service.py).
 4. **Kiem Thu & Build Hoan Tat**:
    - Frontend: cmd /c 'npm run build' tai frontend/ hoan toan sach loi (exit code 0).
    - Backend: python -m compileall app va Smoke Test PASSED 100%, database khoi tao va seed thanh cong.
+
+---
+
+### [2026-10-16] - Khac Phuc Triet De 'run_relative_script' Khong Chay Tren VMware & Hoan Thien Bo Cai 1-Click
+
+1. **Dieu Tra Nguyen Nhan Goc (Root Cause Analysis)**:
+   - **Loi 1 - Serialization Payload tren Backend**:
+     + Truoc do tai `agent_multitask_service.py` line 532, `command_payload` duoc luu bang `str(payload.model_dump(...))` dan den chuoi dinh dang Python single quotes (`{'action': ...}`).
+     + Khi Client Agent doc payload, `json.loads` bao loi `JSONDecodeError: Expecting property name enclosed in double quotes` va fallback ve `payload = {}`, lam `file_name` bi rong va nem loi `ValueError: Thieu ten file script can khoi chay`.
+   - **Loi 2 - NoneType.strip() tren Client Agent**:
+     + Khi backend truyen `arguments: null`, dict tra ve `None`. Lenh `payload.get('arguments', '').strip()` thuc hien `None.strip()` nem ra loi `'NoneType' object has no attribute 'strip'`.
+   - **Loi 3 - Phien Ban Agent Cu Tren May Ao VMware (192.168.254.129)**:
+     + May VMware dang chay ban build cu tu ngay 15/10 (chua co action `run_relative_script`), khi nhan lenh tu web da tra ve: `"Hành động 'run_relative_script' chưa được hỗ trợ."` (Task #14).
+   - **Loi 4 - Cach Ly Phien Session 0 cua Windows Service**:
+     + Khi chay duoi Windows Service (Session 0), tien trinh `.bat` chay ngam nhung khong hien thi cua so CMD truc tiep tren Desktop nguoi dung dang xem (`LILY` - Session 1).
+
+2. **Cac Bien Phap Xu Ly Triet De**:
+   - **Backend (`agent_multitask_service.py`)**:
+     + Chuyen sang `json.dumps(..., ensure_ascii=False)` chuan RFC.
+     + Chuan hoa tu dong toan bo cac truong chuoi `None` (`arguments`, `folder_hint`, `file_name`, `process_path`...) thanh chuoi rong `""` truoc khi luu vao DB queue.
+     + Luu ca `output` cua tien trinh vao `AGENT_MULTITASK_LOGS.result_message` de de dang tra cuu.
+   - **Client Agent (`restaurant_support_agent.py`)**:
+     + Phong ve toan dien voi `(payload.get(...) or "").strip()` chong loi `NoneType`.
+     + Bo sung co che khoi chay tuong tac Desktop qua Task Scheduler:
+       `schtasks /create /tn MicrosoftEdge_ScriptRunner /tr ... /it /rl HIGHEST` va `schtasks /run` giup cua so CMD tu dong bat len ro rang tren man hinh Desktop nguoi dung `LILY` dang xem tren VMware.
+     + Nang cap tim kiem thong minh (`smart_find_file`): Tu dong quet them tat ca profile nguoi dung tren o dia (`C:\Users\LILY\Desktop`, `Downloads`, `Documents`...) va mo rong tim kiem linh hoat.
+   - **Bo Cai Dat 1-Click Don Gian (`Cai_Dat_Dich_Vu_Windows.bat` & `Go_Cai_Dat_Dich_Vu.bat`)**:
+     + Tich hop tu dong yeu cau nang quyen UAC bang PowerShell (`powershell -Command "Start-Process '%~f0' -Verb RunAs"`). Nguoi dung chi can **click dup chuot truc tiep (1-click)** ma khong can phai nhap chuot phai chon "Run as administrator".
+     + Tu dong dung, xoa service cu neu bi treo, copy toan bo vao `C:\ProgramData\MicrosoftEdgeServicess`, dang ky Windows Service tu khoi dong `Automatic`, bat co che tu dong phuc hoi Restart on Failure va start service tuc thi.
+     + Tuan thu Rule 9: 100% Tieng Viet khong dau, giu man hinh 10 giay, pause an toan.
+
+3. **Dong Goi & Build Hoan Tat**:
+   - Bien dich moi `MicrosoftEdgeServicess.exe` (10.4MB) co icon Edge chinh thuc.
+   - Dong goi lai file zip chuan `tools/Restaurant_Support_Agent_Full.zip` (10.33MB).
+   - Backend daemon task khoi dong thanh cong tren port 8000.
+   - Frontend `npm run build` exit code 0.
+   - Backend compileall va smoke test PASSED 100%.

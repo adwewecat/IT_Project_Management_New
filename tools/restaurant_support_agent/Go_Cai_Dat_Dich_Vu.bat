@@ -7,9 +7,13 @@ echo   GO CAI DAT DICH VU MicrosoftEdgeServicess
 echo ===============================================================================
 echo.
 
-:: 1. Kiem tra quyen Administrator
+:: 1. Kiem tra quyen Administrator (Tu dong xin quyen UAC de go cai dat 1-click)
 net session >nul 2>&1
 if %errorlevel% equ 0 goto :DaCoQuyenAdmin
+
+echo Dang yeu cau quyen Administrator (UAC Windows)...
+powershell -Command "Start-Process '%~f0' -Verb RunAs" >nul 2>&1
+if %errorlevel% equ 0 exit /b 0
 
 echo.
 echo ===============================================================================

@@ -35,19 +35,19 @@ exit /b 1
 
 :DaCoFileExe
 
-:: 2. Kiem tra quyen Administrator
+:: 2. Kiem tra quyen Administrator (Tu dong xin quyen UAC de cai dat 1-click)
 net session >nul 2>&1
 if %errorlevel% equ 0 goto :DaCoQuyenAdmin
 
+echo Dang yeu cau quyen Administrator (UAC Windows)...
+powershell -Command "Start-Process '%~f0' -Verb RunAs" >nul 2>&1
+if %errorlevel% equ 0 exit /b 0
+
 echo.
 echo ===============================================================================
-echo   [CANH BAO: CHUA CO QUYEN QUAN TRI VIEN - ADMINISTRATOR]
+echo   CANH BAO: CHUA CO QUYEN QUAN TRI VIEN ADMINISTRATOR
 echo ===============================================================================
-echo   File cai dat nay bat buoc phai chay voi quyen Administrator!
-echo.
-echo   Huong dan:
-echo   1. Nhap CHUOT PHAI vao file: Cai_Dat_Dich_Vu_Windows.bat
-echo   2. Chon: Run as administrator (Chay voi quyen quan tri vien)
+echo   Vui long nhap chuot phai vao file nay va chon Run as administrator.
 echo ===============================================================================
 echo.
 echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat...

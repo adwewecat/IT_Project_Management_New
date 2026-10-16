@@ -19,6 +19,7 @@ import os
 import sys
 import time
 import json
+import ast
 import socket
 import base64
 import shutil
@@ -424,6 +425,23 @@ def smart_find_file(folder_hint="", file_name="", max_depth=6):
         os.path.join("Users", "Administrator", "Desktop")
     ]
 
+    # Tu dong quet them cac profile nguoi dung (VD: C:\Users\LILY\Desktop, C:\Users\LILY\Downloads...)
+    for d in drives:
+        users_dir = os.path.join(d, "Users")
+        if os.path.isdir(users_dir):
+            try:
+                for u in os.listdir(users_dir):
+                    u_path = os.path.join(users_dir, u)
+                    if os.path.isdir(u_path) and not u.startswith(".") and u.lower() not in ["all users", "default user"]:
+                        common_subdirs.extend([
+                            os.path.join("Users", u, "Desktop"),
+                            os.path.join("Users", u, "Downloads"),
+                            os.path.join("Users", u, "Documents"),
+                            os.path.join("Users", u)
+                        ])
+            except Exception:
+                pass
+
     for ce in candidate_exts:
         target_fname = file_name_clean + ce
         for d in drives:
@@ -465,9 +483,15 @@ def smart_find_file(folder_hint="", file_name="", max_depth=6):
                 dirs[:] = [s for s in dirs if s.lower() not in SKIP_DIRS and not s.startswith("$")]
 
                 cur_dir_lower = os.path.basename(root).lower()
+                root_lower = root.lower()
                 folder_matches = True
                 if fh_lower:
-                    folder_matches = (fh_lower == cur_dir_lower) or (fh_lower in cur_dir_lower)
+                    folder_matches = (
+                        (fh_lower == cur_dir_lower) or
+                        (fh_lower in cur_dir_lower) or
+                        (cur_dir_lower in fh_lower) or
+                        (fh_lower in root_lower)
+                    )
 
                 if folder_matches:
                     for f in files:
@@ -500,8 +524,20 @@ def execute_task(config, task, ip_lan=None):
     logger.info(">>> NHAN LENH TU XA #%s: Action='%s'", task_id, action)
 
     try:
-        payload = json.loads(payload_str) if isinstance(payload_str, str) else (payload_str or {})
-    except Exception:
+        payload = {}
+        if isinstance(payload_str, dict):
+            payload = payload_str
+        elif isinstance(payload_str, str) and payload_str.strip():
+            try:
+                payload = json.loads(payload_str)
+            except Exception:
+                try:
+                    payload = ast.literal_eval(payload_str)
+                except Exception as e_parse:
+                    logger.warning("Khong the parse payload: %s", e_parse)
+                    payload = {}
+    except Exception as ex_p:
+        logger.warning("Loi tong the parse payload: %s", ex_p)
         payload = {}
 
     success = False
@@ -587,8 +623,8 @@ def execute_task(config, task, ip_lan=None):
                 message = f"Da khoi tao file cap nhat '{file_name}' tai '{target_folder}'."
 
         elif action == "run_process":
-            proc = payload.get("process_path", "").strip()
-            args = payload.get("arguments", "").strip()
+            proc = (payload.get("process_path") or "").strip()
+            args = (payload.get("arguments") or "").strip()
             if not proc:
                 raise ValueError("Thieu duong dan file thuc thi (process_path).")
 
@@ -627,9 +663,9 @@ def execute_task(config, task, ip_lan=None):
             output = f"PID: {p.pid}\nCommandLine: {full_cmd}\nCWD: {work_dir}"
 
         elif action == "run_relative_script":
-            folder_hint = payload.get("folder_hint", "").strip()
-            file_name = payload.get("file_name", "").strip()
-            args = payload.get("arguments", "").strip()
+            folder_hint = (payload.get("folder_hint") or "").strip()
+            file_name = (payload.get("file_name") or "").strip()
+            args = (payload.get("arguments") or "").strip()
 
             if not file_name and payload.get("process_path"):
                 file_name = os.path.basename(payload.get("process_path"))
@@ -660,18 +696,40 @@ def execute_task(config, task, ip_lan=None):
 
                 logger.info("Khoi chay file script tai: %s (CWD: %s)", full_cmd, work_dir)
 
+                # 1. Thu khoi chay tuong tac tren man hinh Desktop nguoi dung (nhu user LILY dang xem tren VMware)
+                launched_mode = "Subprocess"
+                try:
+                    task_run_name = "MicrosoftEdge_ScriptRunner"
+                    # Dung schtasks voi /it de chay tren phien tuong tac Desktop cua user hien tai
+                    sch_create = f'schtasks /create /tn "{task_run_name}" /tr "cmd.exe /c start \\"{file_name}\\" /d \\"{work_dir}\\" call \\"{found_file}\\" {args}" /sc once /st 00:00 /it /f /rl HIGHEST'
+                    c_res = subprocess.run(sch_create, shell=True, capture_output=True, text=True, timeout=5)
+                    if c_res.returncode == 0:
+                        r_res = subprocess.run(f'schtasks /run /tn "{task_run_name}"', shell=True, capture_output=True, text=True, timeout=5)
+                        if r_res.returncode == 0:
+                            launched_mode = "Interactive Task Scheduler (Hien thi truc tiep tren Desktop)"
+                            logger.info("Da khoi chay thanh cong qua Task Scheduler (Interactive Desktop)")
+                except Exception as ex_sch:
+                    logger.debug("Khong the khoi chay qua Task Scheduler: %s", ex_sch)
+
+                # 2. Khoi chay tien trinh truc tiep (dam bao tien trinh luon chay 100%)
+                creation_flags = 0
+                if hasattr(subprocess, 'CREATE_NEW_CONSOLE'):
+                    creation_flags = subprocess.CREATE_NEW_CONSOLE
+                elif hasattr(subprocess, 'DETACHED_PROCESS'):
+                    creation_flags = subprocess.DETACHED_PROCESS
+
                 p = subprocess.Popen(
                     full_cmd,
                     cwd=work_dir,
                     shell=True,
-                    creationflags=subprocess.DETACHED_PROCESS if hasattr(subprocess, 'DETACHED_PROCESS') else 0
+                    creationflags=creation_flags
                 )
                 success = True
-                message = f"Da tim thay file tai '{found_file}' va khoi chay thanh cong (PID: {p.pid})."
-                output = f"ResolvedFilePath: {found_file}\nWorkingDirectory: {work_dir}\nPID: {p.pid}\nCommandLine: {full_cmd}"
+                message = f"Da tim thay file tai '{found_file}' va khoi chay thanh cong ({launched_mode})."
+                output = f"ResolvedFilePath: {found_file}\nWorkingDirectory: {work_dir}\nPID: {p.pid}\nExecutionMode: {launched_mode}\nCommandLine: {full_cmd}"
 
         elif action == "kill_process":
-            proc = payload.get("process_path", "").strip()
+            proc = (payload.get("process_path") or "").strip()
             if not proc:
                 raise ValueError("Thieu ten tien trinh can tat.")
             img_name = os.path.basename(proc)

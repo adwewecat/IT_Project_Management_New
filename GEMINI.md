@@ -580,4 +580,9 @@
   + Luu truc tiep form hien tai thanh mau moi voi ten goi nho va mo ta rieng.
   + San 2 mau chuan he thong: `Update iPOS TCH` va `Khoi Dong Lai GPOS Service`.
   + Tu dong phong ve: Khoi tao bang tu dong trong `lifespan` (`main.py`) va DDL trong `Script/Full_SCRIPT_SQL_TABLE.sql`.
+- **Bo Cai Dat 1-Click & Khoi Chay Tuong Tac Desktop (Interactive Session Execution)**:
+  + **1-Click Auto-Elevation**: File `Cai_Dat_Dich_Vu_Windows.bat` va `Go_Cai_Dat_Dich_Vu.bat` tich hop tu dong yeu cau quyen UAC qua PowerShell (`Start-Process '%~f0' -Verb RunAs`). Nguoi dung chi can click dup chuot la he thong tu dong xin quyen va cai dat/go bo thanh cong 100%.
+  + **Khoi chay tuong tac tren man hinh nguoi dung (Interactive Desktop)**: Do Windows Service chay o Session 0 cach ly voi Desktop cua nguoi dung (Session 1), khi khoi chay `.bat` tu xa, Agent su dung Task Scheduler voi co `/it` (`schtasks /create ... /it /rl HIGHEST` va `schtasks /run`) giup cua so CMD hien thi truc tiep len man hinh Desktop cua nguoi dung dang xem.
+  + **Tim kiem mo rong User Profiles**: Tu dong quet them `C:\Users\<user>\Desktop`, `Downloads`, `Documents` dam bao tim duoc cac file bat ky nguoi dung luu o dau.
+  + **Serialization Chuan RFC**: Backend dung `json.dumps` chuan va tu dong lam sach cac gia tri `None` thanh chuoi rong `""` de client agent khong bao gio bi loi `'NoneType' object has no attribute 'strip'`.
 
