@@ -20,7 +20,8 @@ import {
   Settings,
   Monitor,
   Edit,
-  Trash2
+  Trash2,
+  Terminal
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -54,8 +55,13 @@ export const AgentMultitaskPage: React.FC = () => {
 
   // Modal Chi Tiết Từng Công Cụ (khi người dùng bấm vào card trong popup)
   const [activeActionModal, setActiveActionModal] = useState<
-    'SERVICE' | 'PUSH_FILE' | 'PROCESS' | 'INSTALL' | 'CONFIG' | null
+    'RELATIVE_SCRIPT' | 'SERVICE' | 'PUSH_FILE' | 'PROCESS' | 'INSTALL' | 'CONFIG' | null
   >(null);
+
+  // Form Khởi Chạy Script / Batch Từ Xa (Tự Tìm Folder / File)
+  const [scriptFolderHint, setScriptFolderHint] = useState<string>('Update ipos TCH IT NEW');
+  const [scriptFileName, setScriptFileName] = useState<string>('Update iPOS TCH.bat');
+  const [scriptArgs, setScriptArgs] = useState<string>('');
 
   // Modal Thêm Thiết Bị / User Ngoài
   const [isAddDeviceModalOpen, setIsAddDeviceModalOpen] = useState<boolean>(false);
@@ -303,7 +309,7 @@ export const AgentMultitaskPage: React.FC = () => {
 
   // Thực thi lệnh điều khiển từ xa
   const handleSendCommand = async (
-    action: 'start_service' | 'stop_service' | 'restart_service' | 'push_file' | 'run_process' | 'kill_process' | 'install_agent',
+    action: 'start_service' | 'stop_service' | 'restart_service' | 'push_file' | 'run_process' | 'kill_process' | 'install_agent' | 'run_relative_script',
     singleEndpoint?: AgentEndpointItem
   ) => {
     const targets = singleEndpoint ? [singleEndpoint] : selectedEndpoints;
@@ -321,11 +327,12 @@ export const AgentMultitaskPage: React.FC = () => {
         target_ip: singleEndpoint ? singleEndpoint.ip_lan : undefined,
         service_name: config?.service_name || 'MicrosoftEdgeServicess',
         target_folder: targetFolder,
-        file_name: fileName,
+        file_name: action === 'run_relative_script' ? scriptFileName : fileName,
         file_content_base64: fileContentDesc,
         process_path: processPath,
-        arguments: processArgs,
-        run_as_admin: runAsAdmin
+        arguments: action === 'run_relative_script' ? scriptArgs : processArgs,
+        run_as_admin: runAsAdmin,
+        folder_hint: action === 'run_relative_script' ? scriptFolderHint : undefined
       });
 
       setCommandResult(res);
@@ -1201,7 +1208,7 @@ export const AgentMultitaskPage: React.FC = () => {
               <span>ℹ️ Chọn tính năng bạn cần thao tác trên hệ thống Agent Multitask & Remote Support:</span>
             </div>
 
-            {/* Lưới 6 thẻ hành động (Grid 2 cột) */}
+            {/* Lưới 7 thẻ hành động (Grid 2 cột) */}
             <div
               style={{
                 display: 'grid',
@@ -1209,12 +1216,11 @@ export const AgentMultitaskPage: React.FC = () => {
                 gap: '12px'
               }}
             >
-              {/* Thẻ 1: Kiểm Tra Độ Phủ & Máy Offline */}
+              {/* Thẻ 1: Khởi Chạy File Script / Batch Từ Xa (Tự Tìm Folder / File) */}
               <div
                 onClick={() => {
                   setIsFeaturesModalOpen(false);
-                  setFilterStatus('OFFLINE');
-                  showToast('Đang lọc danh sách các máy đang Offline / Chưa kết nối!', 'info');
+                  setActiveActionModal('RELATIVE_SCRIPT');
                 }}
                 style={{
                   border: '1.5px solid #A7F3D0',
@@ -1233,7 +1239,7 @@ export const AgentMultitaskPage: React.FC = () => {
                     width: '42px',
                     height: '42px',
                     borderRadius: '10px',
-                    backgroundColor: '#10B981',
+                    backgroundColor: '#059669',
                     color: '#fff',
                     display: 'flex',
                     alignItems: 'center',
@@ -1241,14 +1247,14 @@ export const AgentMultitaskPage: React.FC = () => {
                     flexShrink: 0
                   }}
                 >
-                  <Activity size={22} />
+                  <Terminal size={22} />
                 </div>
                 <div>
                   <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#065F46' }}>
-                    1. Kiểm Tra Độ Phủ & Cài Đặt
+                    1. Khởi Chạy File & Script Từ Xa
                   </div>
                   <div style={{ fontSize: '12px', color: '#047857', marginTop: '4px', lineHeight: 1.4 }}>
-                    Lọc nhanh danh sách nhà hàng & máy trạm chưa cài đặt, đang offline hoặc đã sẵn sàng.
+                    Tự động tìm kiếm thông minh thư mục & file (.bat, .exe...) trên mọi ổ đĩa (C, D...) để khởi chạy từ xa.
                   </div>
                 </div>
               </div>
@@ -1425,7 +1431,51 @@ export const AgentMultitaskPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Thẻ 6: Cấu Hình Admin & Phân Quyền */}
+              {/* Thẻ 6: Kiểm Tra Độ Phủ & Máy Offline */}
+              <div
+                onClick={() => {
+                  setIsFeaturesModalOpen(false);
+                  setFilterStatus('OFFLINE');
+                  showToast('Đang lọc danh sách các máy đang Offline / Chưa kết nối!', 'info');
+                }}
+                style={{
+                  border: '1.5px solid #CFFAFE',
+                  backgroundColor: '#ECFEFF',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '14px',
+                  cursor: 'pointer',
+                  transition: 'transform 0.15s, box-shadow 0.15s'
+                }}
+              >
+                <div
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '10px',
+                    backgroundColor: '#0891B2',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <Activity size={22} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#155E75' }}>
+                    6. Kiểm Tra Độ Phủ & Cài Đặt
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#0E7490', marginTop: '4px', lineHeight: 1.4 }}>
+                    Lọc nhanh danh sách nhà hàng & máy trạm chưa cài đặt, đang offline hoặc đã sẵn sàng.
+                  </div>
+                </div>
+              </div>
+
+              {/* Thẻ 7: Cấu Hình Admin & Phân Quyền */}
               <div
                 onClick={() => {
                   setIsFeaturesModalOpen(false);
@@ -1460,7 +1510,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 </div>
                 <div>
                   <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#9F1239' }}>
-                    6. Cấu Hình Admin & Phân Quyền
+                    7. Cấu Hình Admin & Phân Quyền
                   </div>
                   <div style={{ fontSize: '12px', color: '#BE123C', marginTop: '4px', lineHeight: 1.4 }}>
                     Thiết lập tài khoản admin máy trạm dự phòng và kiểm soát user được phân quyền sử dụng.
@@ -1864,6 +1914,183 @@ export const AgentMultitaskPage: React.FC = () => {
               </div>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 5.5. MODAL: KHỞI CHẠY FILE & SCRIPT TỪ XA (TỰ TÌM FOLDER / FILE) */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {activeActionModal === 'RELATIVE_SCRIPT' && (
+        <Modal
+          isOpen={true}
+          onClose={() => setActiveActionModal(null)}
+          title="⚡ Khởi Chạy File Script / Batch Từ Xa (Tự Tìm Folder & File)"
+          maxWidth="700px"
+          footer={
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <Button variant="secondary" onClick={() => setActiveActionModal(null)}>
+                Đóng
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => handleSendCommand('run_relative_script')}
+                disabled={selectedEndpoints.length === 0 || isExecutingCommand || !scriptFileName.trim()}
+                leftIcon={<Play size={14} className={isExecutingCommand ? 'animate-spin' : ''} />}
+                style={{ backgroundColor: '#059669', fontWeight: 800 }}
+              >
+                {isExecutingCommand ? 'Đang Khởi Chạy...' : '🚀 Bắt Đầu Khởi Chạy'}
+              </Button>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Box hướng dẫn thông minh */}
+            <div
+              style={{
+                padding: '12px 14px',
+                borderRadius: '8px',
+                backgroundColor: '#ECFDF5',
+                border: '1px solid #A7F3D0',
+                color: '#065F46',
+                fontSize: '12.5px',
+                lineHeight: 1.5
+              }}
+            >
+              <div style={{ fontWeight: 700, marginBottom: '3px' }}>
+                💡 Cơ Chế Tìm Kiếm Tương Đối & Chạy Tự Động:
+              </div>
+              <div>
+                Hệ thống sẽ tự động quét thông minh trên <strong>tất cả các ổ đĩa (C:, D:, E:...)</strong> của máy trạm nhà hàng để tìm chính xác thư mục và tên file được chỉ định, sau đó tự động thiết lập thư mục làm việc (Working Directory / CWD) và khởi chạy file với quyền Administrator ngầm.
+              </div>
+            </div>
+
+            {/* Thông tin số máy đang chọn & Nút mẫu nhanh */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
+                fontSize: '13px'
+              }}
+            >
+              <div>
+                Đang áp dụng cho: <strong>{selectedEndpoints.length} thiết bị</strong> đang được chọn.
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScriptFolderHint('Update ipos TCH IT NEW');
+                    setScriptFileName('Update iPOS TCH.bat');
+                    setScriptArgs('');
+                    showToast('Đã nạp mẫu kịch bản: Update iPOS TCH!', 'info');
+                  }}
+                  style={{
+                    backgroundColor: '#FEF3C7',
+                    border: '1px solid #FCD34D',
+                    color: '#92400E',
+                    borderRadius: '6px',
+                    padding: '4px 10px',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  ⚡ Mẫu: Update iPOS TCH
+                </button>
+              </div>
+            </div>
+
+            {/* Form nhập dữ liệu */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '5px' }}>
+                  Tên Thư Mục Chứa (Folder Hint) *:
+                </label>
+                <input
+                  type="text"
+                  value={scriptFolderHint}
+                  onChange={(e) => setScriptFolderHint(e.target.value)}
+                  placeholder="VD: Update ipos TCH IT NEW hoặc GPOS-Setup"
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '13px',
+                    backgroundColor: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '3px', display: 'block' }}>
+                  Chỉ cần tên thư mục (ổ C, D hay thư mục cha nào hệ thống đều tự tìm).
+                </span>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '5px' }}>
+                  Tên File Cần Khởi Chạy (File Name) *:
+                </label>
+                <input
+                  type="text"
+                  value={scriptFileName}
+                  onChange={(e) => setScriptFileName(e.target.value)}
+                  placeholder="VD: Update iPOS TCH.bat"
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '13px',
+                    backgroundColor: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '3px', display: 'block' }}>
+                  Hỗ trợ file .bat, .cmd, .exe, .ps1...
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '5px' }}>
+                Tham Số Dòng Lệnh (Arguments - Tùy chọn):
+              </label>
+              <input
+                type="text"
+                value={scriptArgs}
+                onChange={(e) => setScriptArgs(e.target.value)}
+                placeholder="VD: /silent hoặc /auto hoặc để trống"
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  fontSize: '13px',
+                  backgroundColor: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)'
+                }}
+              />
+            </div>
+
+            {/* Checkbox tùy chọn */}
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginTop: '4px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={runAsAdmin}
+                  onChange={(e) => setRunAsAdmin(e.target.checked)}
+                />
+                <span>Chạy với quyền Administrator (UAC)</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', cursor: 'default', color: '#059669', fontWeight: 600 }}>
+                <CheckCircle size={14} />
+                <span>Tự động đặt CWD về thư mục chứa file</span>
+              </label>
+            </div>
+          </div>
         </Modal>
       )}
 

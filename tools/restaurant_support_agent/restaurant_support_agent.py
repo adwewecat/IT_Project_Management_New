@@ -292,6 +292,118 @@ def report_task_result(config, task_id, success, message, output="", ip_lan=None
         logger.error("Loi gui bao cao Task #%s: %s", task_id, e)
 
 
+def smart_find_file(folder_hint="", file_name="", max_depth=6):
+    """
+    Tim kiem thong minh file va thu muc tuong doi tren cac o dia may tram (khong can biet o C hay D).
+    Tra ve tuple: (file_path_tuyet_doi, working_directory) hoac (None, None).
+    """
+    if not file_name:
+        return None, None
+
+    file_name_clean = file_name.strip()
+    folder_hint_clean = (folder_hint or "").strip()
+
+    # Neu file_name da la duong dan tuyet doi dang ton tai tren he thong
+    if os.path.isabs(file_name_clean) and os.path.isfile(file_name_clean):
+        return os.path.abspath(file_name_clean), os.path.dirname(os.path.abspath(file_name_clean))
+
+    # Danh sach cac phan mo rong thu nghiem
+    _, ext = os.path.splitext(file_name_clean)
+    candidate_exts = [""] if ext else ["", ".bat", ".cmd", ".exe", ".ps1"]
+
+    # Tim tat ca cac o dia dang san sang tren Windows (Uu tien D: truoc C: vi nha hang thuong luu tren D)
+    drives = []
+    for letter in "DCBAEFGHIJKLMNOPQRSTUVWXYZ":
+        d = f"{letter}:\\"
+        if os.path.exists(d):
+            drives.append(d)
+
+    # Buoc 1: Kiem tra nhanh cac vi tri ung vien pho bien (Fast Candidates: < 1ms)
+    common_subdirs = [
+        "",
+        "ABC",
+        "GPOS-Setup",
+        "GPOS",
+        "iPOS",
+        "Setup",
+        "Tools",
+        "Softwares",
+        "Download",
+        "Downloads",
+        "Backup",
+        "Update",
+        "Patch",
+        os.path.join("Users", "Public", "Desktop"),
+        os.path.join("Users", "Administrator", "Desktop")
+    ]
+
+    for ce in candidate_exts:
+        target_fname = file_name_clean + ce
+        for d in drives:
+            for sub in common_subdirs:
+                if folder_hint_clean:
+                    candidate_dir = os.path.join(d, sub, folder_hint_clean) if sub else os.path.join(d, folder_hint_clean)
+                    candidate_file = os.path.join(candidate_dir, target_fname)
+                    if os.path.isfile(candidate_file):
+                        logger.info("Fast candidate match: %s", candidate_file)
+                        return os.path.abspath(candidate_file), os.path.abspath(candidate_dir)
+                else:
+                    candidate_file = os.path.join(d, sub, target_fname) if sub else os.path.join(d, target_fname)
+                    if os.path.isfile(candidate_file):
+                        logger.info("Fast candidate match: %s", candidate_file)
+                        return os.path.abspath(candidate_file), os.path.dirname(os.path.abspath(candidate_file))
+
+    # Buoc 2: Quet de quy co cat tia thu muc he thong (Pruned Recursive Walk)
+    SKIP_DIRS = {
+        "windows", "winnt", "program files", "program files (x86)",
+        "system volume information", "$recycle.bin", "$windows.~bt",
+        "$windows.~ws", "appdata", "node_modules", ".git", ".svn",
+        "winsxs", "assembly"
+    }
+
+    fh_lower = folder_hint_clean.lower()
+    fn_lower = file_name_clean.lower()
+
+    for d in drives:
+        try:
+            for root, dirs, files in os.walk(d, topdown=True):
+                # Gioi han do sau
+                rel = os.path.relpath(root, d)
+                depth = 0 if rel == "." else len(rel.split(os.sep))
+                if depth >= max_depth:
+                    dirs[:] = []
+                    continue
+
+                # Bo qua cac thu muc he thong tranh crash / treo
+                dirs[:] = [s for s in dirs if s.lower() not in SKIP_DIRS and not s.startswith("$")]
+
+                cur_dir_lower = os.path.basename(root).lower()
+                folder_matches = True
+                if fh_lower:
+                    folder_matches = (fh_lower == cur_dir_lower) or (fh_lower in cur_dir_lower)
+
+                if folder_matches:
+                    for f in files:
+                        f_lower = f.lower()
+                        matched = False
+                        if f_lower == fn_lower:
+                            matched = True
+                        elif not ext:
+                            for ce in candidate_exts[1:]:
+                                if f_lower == (fn_lower + ce):
+                                    matched = True
+                                    break
+                        if matched:
+                            full_found = os.path.abspath(os.path.join(root, f))
+                            logger.info("Recursive walk matched: %s", full_found)
+                            return full_found, os.path.abspath(root)
+        except Exception as walk_ex:
+            logger.debug("Loi quet o dia %s: %s", d, walk_ex)
+            continue
+
+    return None, None
+
+
 def execute_task(config, task, ip_lan=None):
     """Thuc thi mot tac vu ho tro tu xa nhan tu Server."""
     task_id = task.get("id") or task.get("task_id", 0)
@@ -393,17 +505,83 @@ def execute_task(config, task, ip_lan=None):
             if not proc:
                 raise ValueError("Thieu duong dan file thuc thi (process_path).")
 
-            full_cmd = f'"{proc}" {args}'.strip()
-            logger.info("Chay tien trinh: %s", full_cmd)
+            # Neu file khong ton tai o duong dan truc tiep, thu tim kiem thong minh
+            work_dir = None
+            if not os.path.isfile(proc):
+                f_name = os.path.basename(proc)
+                f_dir = os.path.basename(os.path.dirname(proc))
+                found_f, found_d = smart_find_file(f_dir, f_name)
+                if found_f:
+                    proc = found_f
+                    work_dir = found_d
+
+            if not work_dir and os.path.isfile(proc):
+                work_dir = os.path.dirname(proc)
+
+            _, file_ext = os.path.splitext(proc)
+            file_ext = file_ext.lower()
+            if file_ext in [".bat", ".cmd"]:
+                full_cmd = f'cmd.exe /c "call \"{proc}\" {args}"'.strip()
+            elif file_ext in [".ps1"]:
+                full_cmd = f'powershell.exe -ExecutionPolicy Bypass -File "{proc}" {args}'.strip()
+            else:
+                full_cmd = f'"{proc}" {args}'.strip()
+
+            logger.info("Chay tien trinh: %s (CWD: %s)", full_cmd, work_dir)
 
             p = subprocess.Popen(
                 full_cmd,
+                cwd=work_dir,
                 shell=True,
                 creationflags=subprocess.DETACHED_PROCESS if hasattr(subprocess, 'DETACHED_PROCESS') else 0
             )
             success = True
             message = f"Da kich hoat tien trinh '{proc}' thanh cong (PID: {p.pid})."
-            output = f"PID: {p.pid}\nCommandLine: {full_cmd}"
+            output = f"PID: {p.pid}\nCommandLine: {full_cmd}\nCWD: {work_dir}"
+
+        elif action == "run_relative_script":
+            folder_hint = payload.get("folder_hint", "").strip()
+            file_name = payload.get("file_name", "").strip()
+            args = payload.get("arguments", "").strip()
+
+            if not file_name and payload.get("process_path"):
+                file_name = os.path.basename(payload.get("process_path"))
+                if not folder_hint:
+                    folder_hint = os.path.basename(os.path.dirname(payload.get("process_path")))
+
+            if not file_name:
+                raise ValueError("Thieu ten file script can khoi chay (file_name).")
+
+            logger.info("Bat dau tim kiem thong minh: folder='%s', file='%s'", folder_hint, file_name)
+            found_file, found_dir = smart_find_file(folder_hint, file_name)
+
+            if not found_file or not os.path.isfile(found_file):
+                success = False
+                message = f"Khong tim thay file '{file_name}' trong thu muc '{folder_hint}' tren cac o dia may tram (C:, D:, E:...)."
+                output = f"SearchFailed: FolderHint='{folder_hint}', FileName='{file_name}'"
+            else:
+                work_dir = found_dir or os.path.dirname(found_file)
+                _, file_ext = os.path.splitext(found_file)
+                file_ext = file_ext.lower()
+
+                if file_ext in [".bat", ".cmd"]:
+                    full_cmd = f'cmd.exe /c "call \"{found_file}\" {args}"'.strip()
+                elif file_ext in [".ps1"]:
+                    full_cmd = f'powershell.exe -ExecutionPolicy Bypass -File "{found_file}" {args}'.strip()
+                else:
+                    full_cmd = f'"{found_file}" {args}'.strip()
+
+                logger.info("Khoi chay file script tai: %s (CWD: %s)", full_cmd, work_dir)
+
+                p = subprocess.Popen(
+                    full_cmd,
+                    cwd=work_dir,
+                    shell=True,
+                    creationflags=subprocess.DETACHED_PROCESS if hasattr(subprocess, 'DETACHED_PROCESS') else 0
+                )
+                success = True
+                message = f"Da tim thay file tai '{found_file}' va khoi chay thanh cong (PID: {p.pid})."
+                output = f"ResolvedFilePath: {found_file}\nWorkingDirectory: {work_dir}\nPID: {p.pid}\nCommandLine: {full_cmd}"
 
         elif action == "kill_process":
             proc = payload.get("process_path", "").strip()

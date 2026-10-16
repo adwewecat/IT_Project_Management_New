@@ -97,6 +97,9 @@ class AgentCommandRequest(BaseModel):
     process_path: Optional[str] = None
     arguments: Optional[str] = None
     run_as_admin: Optional[bool] = True
+    # Dành cho Khởi Chạy Script Tương Đối (Tự Tìm Folder / File)
+    folder_hint: Optional[str] = None
+    working_directory: Optional[str] = None
     # Dành cho Install App
     install_script_steps: Optional[List[Dict[str, Any]]] = None
 

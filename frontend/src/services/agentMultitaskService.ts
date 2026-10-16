@@ -81,7 +81,7 @@ export interface AgentOverviewResponse {
 }
 
 export interface AgentCommandRequest {
-  action: 'start_service' | 'stop_service' | 'restart_service' | 'push_file' | 'run_process' | 'kill_process' | 'install_agent';
+  action: 'start_service' | 'stop_service' | 'restart_service' | 'push_file' | 'run_process' | 'kill_process' | 'install_agent' | 'run_relative_script';
   restaurant_codes: string[];
   target_ip?: string;
   service_name?: string;
@@ -91,6 +91,8 @@ export interface AgentCommandRequest {
   process_path?: string;
   arguments?: string;
   run_as_admin?: boolean;
+  folder_hint?: string;
+  working_directory?: string;
   install_script_steps?: any[];
 }
 

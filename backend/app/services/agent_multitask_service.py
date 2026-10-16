@@ -561,6 +561,14 @@ class AgentMultitaskService:
                 out = f"[KILL] Process '{proc}' terminated successfully."
                 if ep:
                     ep.last_action = f"Tắt tiến trình {proc}"
+            elif action == "run_relative_script":
+                folder_hint = payload.folder_hint or "Update ipos TCH IT NEW"
+                fname = payload.file_name or "Update iPOS TCH.bat"
+                args = payload.arguments or ""
+                msg = f"Đã gửi lệnh tìm và kích hoạt '{fname}' (folder: '{folder_hint}') tới {ip}."
+                out = f"[RELATIVE_EXEC] Smart search initialized for folder '{folder_hint}', file '{fname}', args: '{args}'."
+                if ep:
+                    ep.last_action = f"Chạy script tương đối: {fname}"
             elif action == "install_agent":
                 msg = f"Đã triển khai cài đặt Service {config.service_name} tới {ip} theo kịch bản cấu hình."
                 out = f"[INSTALL] 1. Download agent package -> OK\n2. Extract -> OK\n3. Register service '{config.service_name}' -> OK\n4. Config auto-restart on error -> OK\n5. Start service -> RUNNING"

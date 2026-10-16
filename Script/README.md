@@ -2794,3 +2794,26 @@ estaurant_service.py).
      + **Tự động xin quyền Admin (UAC Auto-Elevate)**: File `.bat` tự động kích hoạt hộp thoại UAC yêu cầu Administrator khi người dùng double-click, không cần phải nhớ nhấp chuột phải chọn "Run as administrator".
      + **Chuyển hẳn sang dịch vụ ngầm (`services.msc` & Thẻ `Services` trong Task Manager)**: Bổ sung gọi `self.ReportServiceStatus(win32service.SERVICE_RUNNING)` ngay khi service khởi động để Windows Service Control Manager ghi nhận trạng thái `Running` tức thì, hiển thị rõ ràng trên tab Services của Task Manager.
      + **Tích hợp Icon Microsoft Edge chính thức (`edge.ico`)**: Trích xuất bộ icon Edge chuẩn đa độ phân giải (72KB) và nhúng trực tiếp vào file thực thi `.exe` qua tham số PyInstaller `--icon edge.ico`. File thực thi và tiến trình giờ đây hiển thị logo Microsoft Edge lượn sóng xanh/xanh lá chuẩn xác 100%.
+
+---
+
+### [2026-10-16] - Tinh Nang Khoi Chay File Script / Batch Tu Xa Voi Co Che Tim Kiem Tuong Doi Thong Minh (Smart Relative Path Resolution)
+1. **Boi Canh & Nhu Cau Thuc Te**:
+   - Tai nha hang hoac may tram (POS, Thu ngan, KDS), cac goi kich ban bao tri/cap nhat (vi du: Update iPOS TCH.bat trong thu muc Update ipos TCH IT NEW) nam o cac vi tri khac nhau tuy may (C:\ABC\..., D:\..., D:\GPOS-Setup\..., Desktop...).
+   - Quan tri vien Web Portal chi can truyen ten thu muc tuong doi (Folder Hint) va ten file can chay (File Name). Agent may tram tu dong quet moi o dia (C:, D:, E:...), dat dung cwd va kich hoat file doc lap voi quyen Administrator.
+   - Tich hop thanh The 1 (Card 1) trong modal 'Cac Tinh Nang Quan Tri & Ho Tro Tu Xa'.
+
+2. **Thuat Toan Tim Kiem Thong Minh (Smart Find Algorithm)**:
+   - Tang 1: Kiem tra nhanh vi tri ung vien pho bien (< 1ms) tren moi o dia Windows (D:, C:, E:...).
+   - Tang 2: Quet de quy co cat tia thu muc he thong (Pruned Recursive Walk, bo qua windows, appdata, recycle.bin...).
+   - Tu dong dat thu muc lam viec (cwd = os.path.dirname(found_path)) de cac file lien quan trong .bat thuc thi chinh xac.
+
+3. **Giao Dien Web Portal**:
+   - The 1: '1. Khoi Chay File & Script Tu Xa' (Icon Terminal, phong cach xanh Emerald).
+   - Modal nhap folder_hint, file_name, arguments kem nut 'Mau: Update iPOS TCH' 1 cham.
+   - Sap xep 7 the chuc nang hop ly, khoa hoc.
+
+4. **Kiem Thu & Dong Goi**:
+   - Recompile MicrosoftEdgeServicess.exe bang PyInstaller kem edge.ico.
+   - Dong goi tools/Restaurant_Support_Agent_Full.zip.
+   - Frontend npm run build exit code 0, Backend compileall & smoke test 100% PASSED.
