@@ -7,10 +7,19 @@ echo   GO CAI DAT DICH VU MicrosoftEdgeServicess
 echo ===============================================================================
 echo.
 
+:: 1. Kiem tra quyen Administrator va tu dong yeu cau UAC neu chua co
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [CANH BAO] Ban can chay file nay bang quyen Quan tri vien (Administrator)!
-    echo Vui long nhap chuot phai va chon "Run as administrator".
+    echo [THONG BAO] Dang yeu cau quyen Quan tri vien (Run as Administrator UAC)...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/k \"\"%~f0\"\"' -Verb RunAs" 2>nul
+    if %errorlevel% equ 0 exit /b 0
+    echo.
+    echo ===============================================================================
+    echo   [CANH BAO QUYEN HAN QUAN TRI VIEN]
+    echo ===============================================================================
+    echo   Khong the tu dong cap quyen Administrator.
+    echo   Vui long nhap chuot phai va chon "Run as administrator"!
+    echo ===============================================================================
     echo.
     pause
     exit /b 1

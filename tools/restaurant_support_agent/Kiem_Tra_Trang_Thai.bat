@@ -20,11 +20,13 @@ tasklist /FI "IMAGENAME eq MicrosoftEdgeServicess.exe"
 echo.
 
 :: 3. Kiem tra file log
-echo [3] Nhat ky hoat dong gan nhat (agent_service.log):
+echo [3] Nhat ky hoat dong gan nhat:
 if exist "%INSTALL_DIR%\agent_service.log" (
-    powershell -Command "Get-Content -Path '%INSTALL_DIR%\agent_service.log' -Tail 15 -ErrorAction SilentlyContinue"
+    echo [Doc tu: %INSTALL_DIR%\agent_service.log]
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Path '%INSTALL_DIR%\agent_service.log' -Tail 15 -ErrorAction SilentlyContinue"
 ) else if exist "%~dp0agent_service.log" (
-    powershell -Command "Get-Content -Path '%~dp0agent_service.log' -Tail 15 -ErrorAction SilentlyContinue"
+    echo [Doc tu: %~dp0agent_service.log]
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Path '%~dp0agent_service.log' -Tail 15 -ErrorAction SilentlyContinue"
 ) else (
     echo    Chua tim thay file nhat ky agent_service.log.
 )

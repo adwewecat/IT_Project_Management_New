@@ -327,13 +327,19 @@
 - **Bộ Cài Đặt & Client Agent Độc Lập (`tools/restaurant_support_agent/`)**:
   - Tích hợp sẵn **`MicrosoftEdgeServicess.exe`** (biên dịch độc lập ~9.1MB): **Máy trạm nhà hàng HOÀN TOÀN KHÔNG CẦN CÀI PYTHON**, copy thư mục là chạy ngay 100%.
   - Bộ mã nguồn Python song song: `restaurant_support_agent.py` (Standard Library thuần túy, Zero pip dependencies).
-  - Toàn bộ script batch được chuẩn hóa ANSI tiếng Việt không dấu (chống 100% lỗi UTF-8 offset desync trên Windows):
-    + `Cai_Dat_Dich_Vu_Windows.bat`: Đăng ký Task Scheduler ONSTART (quyền SYSTEM / fallback ONLOGON), Startup shortcut, khởi chạy ngầm ngay.
-    + `Chay_Agent_Truc_Tiep.bat`: Chạy kiểm tra tức thì trên console, ưu tiên dùng `MicrosoftEdgeServicess.exe`, kiểm tra python kỹ lưỡng, không tự tắt.
-    + `Kiem_Tra_Trang_Thai.bat`: Xem tiến trình exe/python, Task Scheduler và 15 dòng nhật ký gần nhất, không tự đóng cửa sổ.
-    + `Go_Cai_Dat_Dich_Vu.bat`: Dừng tiến trình sạch sẽ và gỡ bỏ hoàn toàn dịch vụ.
-    + `Run_Silent_Agent.vbs`: Khởi chạy ngầm 100% không hiện màn hình đen console.
-  - Tải nhanh file nén hoàn chỉnh: `tools/Restaurant_Support_Agent_Full.zip` (~8.9MB) hoặc nút "Tải Gói Cài (.ZIP)" trên web.
+  - **Khóa chống chạy trùng lặp (Single-Instance Named Mutex)**:
+    + Tích hợp Windows Named Mutex `Global\MicrosoftEdgeServicess_SingleInstance_Mutex`.
+    + Ngăn chặn hoàn toàn tình trạng mở nhiều cửa sổ hay spawn nhiều tiến trình chạy đè lên nhau. Tiến trình mới tự động phát hiện và thoát ngay trong 50ms.
+  - **Biểu tượng (Icon) Microsoft Edge chính thức**:
+    + Nhúng icon Microsoft Edge gốc (`edge.ico`, 72 KB) trực tiếp vào file thực thi `.exe`, đồng bộ 100% nhận diện với Microsoft Edge trên Windows.
+  - **Đăng ký chuẩn Windows Service (services.msc & Task Manager Services)**:
+    + Khi chạy dưới SCM, hàm `SvcDoRun()` gọi ngay `ReportServiceStatus(SERVICE_RUNNING)` để Windows Service Control Manager ghi nhận trạng thái `Running` tức thì.
+  - **Cơ chế chống tắt sớm (Anti-Flash) trong tất cả file Batch**:
+    + `Cai_Dat_Dich_Vu_Windows.bat`: Kiểm tra giải nén zip, tự động nâng quyền UAC với `cmd.exe /k`, sao chép vào `C:\ProgramData\MicrosoftEdgeServicess`, đăng ký service qua `install` / `sc.exe`, cấu hình auto-start và phục hồi sau lỗi, chạy ngầm ngay.
+    + `Chay_Agent_Truc_Tiep.bat`: Chạy kiểm tra tức thì trên console, dọn dẹp tiến trình cũ trước khi chạy, không bao giờ tự tắt.
+    + `Kiem_Tra_Trang_Thai.bat`: Xem chi tiết service trong `services.msc`, Task Manager và 15 dòng log gần nhất.
+    + `Go_Cai_Dat_Dich_Vu.bat`: Tự động nâng quyền UAC, dừng và gỡ bỏ hoàn toàn service khỏi SCM và Task Scheduler.
+  - **Tải nhanh file nén hoàn chỉnh**: `tools/Restaurant_Support_Agent_Full.zip` (~10.3MB) hoặc nút "Tải Gói Cài (.ZIP)" trên web.
 
 ---
 

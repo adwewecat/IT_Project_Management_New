@@ -209,6 +209,31 @@ npm run dev
 - **Kiểm thử & Đóng gói**:
   - Backend: `python -m compileall app` và Smoke Test đạt 100% không lỗi.
   - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.89s`), bundle sạch sẽ trong `frontend/dist/`.
+### [2026-10-16] - Khắc Phục Triệt Để Sự Cố File .bat "Chớp Cái Tắt", Đăng Ký Windows Service & Thay Đổi Icon Microsoft Edge
+- **Hiện tượng & Nguyên nhân gốc rễ**:
+  1. *File .bat chạy lên bị "chớp cái tắt"*:
+     - Người dùng mở trực tiếp file `.bat` từ bên trong trình xem ZIP của Windows Explorer (tab "Compressed Folder Tools") mà chưa giải nén ra thư mục máy tính. Khi mở kiểu này, Windows chỉ giải nén tạm 1 file `.bat` vào thư mục `%TEMP%`, thiếu các file đi kèm (`MicrosoftEdgeServicess.exe`, `config.json`...).
+     - Lệnh nâng quyền UAC cũ dùng `cmd /c` khiến cửa sổ elevated đóng ngay tức thì khi hoàn tất.
+  2. *File `MicrosoftEdgeServicess.exe` chạy thì kết nối được nhưng trong `services.msc` không tìm thấy*:
+     - Nhấp đúp vào file `.exe` chỉ khởi chạy ứng dụng như một tiến trình Desktop thông thường trong tab `Processes` của Task Manager, **chưa hề đăng ký vào Windows Service Control Manager**.
+     - Vì file `.bat` trước đó bị đóng sớm nên lệnh đăng ký Windows Service (`install` / `sc.exe create`) chưa từng được kích hoạt.
+  3. *Hiện tượng "1 đống tiến trình" trong Task Manager*:
+     - Nhấp đúp nhiều lần khiến nhiều instance độc lập cùng khởi chạy đồng thời.
+- **Giải pháp hoàn thiện triệt để**:
+  1. **Khóa chống chạy trùng lặp (Single-Instance Mutex)**:
+     - Tích hợp `acquire_single_instance_lock()` với Windows Named Mutex `Global\MicrosoftEdgeServicess_SingleInstance_Mutex`. Nếu có tiến trình thứ hai khởi chạy, nó sẽ tự động phát hiện và thoát ngay lập tức trong 50ms, triệt tiêu hoàn toàn tình trạng mở nhiều cửa sổ hay nhiều tiến trình.
+  2. **Biểu tượng (Icon) Microsoft Edge chính thức**:
+     - Trích xuất icon Microsoft Edge gốc chất lượng cao (`edge.ico`, 72 KB) và biên dịch nhúng trực tiếp vào file thực thi `MicrosoftEdgeServicess.exe` bằng PyInstaller `--icon edge.ico`.
+  3. **Báo cáo trạng thái chuẩn Windows Service (`SERVICE_RUNNING`)**:
+     - Trong phương thức `SvcDoRun()` của `MicrosoftEdgeService`, gọi ngay `self.ReportServiceStatus(win32service.SERVICE_RUNNING)` để Windows SCM hiển thị ngay lập tức trạng thái `Running` trong `services.msc` và tab `Services` của Task Manager.
+  4. **Cơ chế chống tắt sớm (Anti-Flash) trong tất cả file Batch**:
+     - Kiểm tra biến môi trường và file đi kèm: nếu người dùng mở trực tiếp trong file zip chưa giải nén, script sẽ dừng lại (`pause`) và hiển thị thông báo hướng dẫn giải nén rõ ràng, không bao giờ tự tắt.
+     - Tự động kích hoạt UAC Administrator với cờ `cmd.exe /k` giữ nguyên màn hình, có nút `pause` ở cuối cùng.
+     - Sau khi đăng ký qua `install` và `sc.exe`, tự động kích hoạt `net start MicrosoftEdgeServicess` chạy ngầm 100%.
+  5. **Auto-Polling 10 giây & Ngưỡng Heartbeat 90 giây**:
+     - Frontend tự động tải lại dữ liệu sau mỗi 10 giây (`setInterval`), tự động chuyển máy trạm sang **ONLINE Xanh Lá** mà không cần người dùng bấm F5 thủ công.
+  6. **Đóng gói hoàn chỉnh `Restaurant_Support_Agent_Full.zip`**:
+     - Gói nén ~10.3 MB bao gồm toàn bộ file `.exe`, `.bat`, icon, config và hướng dẫn sử dụng mới nhất.
 
 ### [2026-10-16] - Khắc Phục Triệt Để Lỗi Chạy Agent Dưới Nhà Hàng: Tích Hợp Standalone Executable (MicrosoftEdgeServicess.exe) & Chuẩn Hóa Batch Script ANSI
 - **Nguyên nhân sự cố dưới nhà hàng**:

@@ -301,11 +301,11 @@ def download_package(
     agent_dir = os.path.join(project_root, "tools", "restaurant_support_agent")
     zip_path = os.path.join(project_root, "tools", "Restaurant_Support_Agent_Full.zip")
 
-    # Tu dong nen lai neu zip chua co hoac co file moi (bo qua file log)
+    # Tu dong nen lai neu zip chua co hoac co file moi (bo qua file log, file cu/bak)
     if os.path.exists(agent_dir):
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
             for f in sorted(os.listdir(agent_dir)):
-                if f.endswith('.log') or f.endswith('.tmp'):
+                if f.endswith('.log') or f.endswith('.tmp') or '_old' in f or f.endswith('.bak'):
                     continue
                 fp = os.path.join(agent_dir, f)
                 if os.path.isfile(fp):
