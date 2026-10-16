@@ -47,6 +47,15 @@
 >    - **Bảng dữ liệu có thanh scroll riêng**: Tất cả các danh sách/bảng dữ liệu phải được đặt trong container `flex: 1, minHeight: 0` có thanh cuộn riêng (`overflowY: 'auto'`), không được để bảng dữ liệu dài kéo giãn cả trang web làm mất tiêu đề và thanh công cụ bên trên.
 >    - **Cố định hàng tiêu đề (`position: 'sticky', top: 0, zIndex: 10`)**: Giữ hàng tiêu đề luôn cố định trên đỉnh bảng khi cuộn duyệt dữ liệu.
 >    - **Thanh cuộn ngang phụ trên đỉnh (`TopScrollTable`)**: Với các bảng có chiều rộng vượt quá màn hình (phải cuộn ngang): **BẮT BUỘC** bọc trong component `TopScrollTable` (`frontend/src/components/ui/TopScrollTable.tsx`) để có thêm thanh cuộn ngang (Scroll X) nằm ngay trên đỉnh/kế thanh header tiêu đề, giúp người dùng cuộn ngang sang trái/phải tức thì mà không cần phải cuộn chuột xuống đáy trang.
+>
+> 9. **Quy tắc Bất Di Bất Dịch Về File Kịch Bản Batch (.bat) Trên Windows (Không Chớp Tắt, Giữ Màn Hình Tối Thiểu 10 Giây)**:
+>    - **Tuyệt đối không để cửa sổ CMD chớp rồi tắt**: Mọi file `.bat` khi kết thúc (cả khi thành công lẫn khi gặp lỗi) **bắt buộc phải có thời gian chờ tối thiểu 10 giây hoặc để người dùng tự bấm phím tắt** trước khi đóng để lập trình viên/người dùng đọc được đầy đủ thông báo lỗi:
+>      ```bat
+>      echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat ngay...
+>      timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
+>      exit /b 0
+>      ```
+>    - **Tuyệt đối không dùng khối ngoặc đơn `(...)` chứa văn bản `echo (...)`**: Trong cú pháp `cmd.exe`, dấu ngoặc đơn `(` hoặc `)` bên trong khối `if (...)` sẽ làm vỡ bộ phân tích cú pháp (`was unexpected at this time`) khiến CMD crash và tắt phụt ngay lập tức. Luôn dùng cấu trúc phẳng `if condition goto :Label`.
 
 ---
 

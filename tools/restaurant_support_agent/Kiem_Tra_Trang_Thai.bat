@@ -21,19 +21,28 @@ echo.
 
 :: 3. Kiem tra file log
 echo [3] Nhat ky hoat dong gan nhat:
-if exist "%INSTALL_DIR%\agent_service.log" (
-    echo [Doc tu: %INSTALL_DIR%\agent_service.log]
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Path '%INSTALL_DIR%\agent_service.log' -Tail 15 -ErrorAction SilentlyContinue"
-) else if exist "%~dp0agent_service.log" (
-    echo [Doc tu: %~dp0agent_service.log]
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Path '%~dp0agent_service.log' -Tail 15 -ErrorAction SilentlyContinue"
-) else (
-    echo    Chua tim thay file nhat ky agent_service.log.
-)
-echo.
+if exist "%INSTALL_DIR%\agent_service.log" goto :DocLogInstall
+if exist "%~dp0agent_service.log" goto :DocLogCurrent
+echo    Chua tim thay file nhat ky agent_service.log.
+goto :KetThucLog
 
+:DocLogInstall
+echo [Doc tu: %INSTALL_DIR%\agent_service.log]
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Path '%INSTALL_DIR%\agent_service.log' -Tail 15 -ErrorAction SilentlyContinue"
+goto :KetThucLog
+
+:DocLogCurrent
+echo [Doc tu: %~dp0agent_service.log]
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Path '%~dp0agent_service.log' -Tail 15 -ErrorAction SilentlyContinue"
+goto :KetThucLog
+
+:KetThucLog
+echo.
 echo ===============================================================================
 echo   Hoan tat kiem tra.
+echo   Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat ngay...
 echo ===============================================================================
 echo.
+timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
 pause
+exit /b 0
