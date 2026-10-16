@@ -112,6 +112,8 @@ export interface AgentCommandRequest {
   run_as_admin?: boolean;
   folder_hint?: string;
   working_directory?: string;
+  run_mode?: 'interactive' | 'hidden';
+  run_hidden?: boolean;
   install_script_steps?: any[];
   auto_extract?: boolean;
   download_url?: string;

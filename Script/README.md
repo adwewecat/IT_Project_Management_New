@@ -3022,3 +3022,45 @@ estaurant_service.py).
    - Backend Smoke Test: `from app.main import app; print('>>> PASSED 100%')` -> PASSED 100%.
    - Frontend build: `cmd /c "npm run build"` tai `frontend/` -> Exit code 0 (`built in 6.33s`), san sang trong `frontend/dist/`.
 
+---
+
+## [2026-10-16] - KHẮC PHỤC TRIỆT ĐỂ LỖI TIẾN TRÌNH .BAT KHÔNG TỰ TẮT, KHÔNG CHẠY LẶP 2 LẦN & BỔ SUNG CHẾ ĐỘ CHẠY NGẦM 100% (AGENT MULTITASK)
+
+### 1. Hiện Tượng & Nguyên Nhân Gốc Rễ
+1. **Lỗi cửa sổ CMD không tự tắt sau khi chạy file .bat (treo tại dấu nhắc lệnh `C:\...>`)**:
+   - **Nguyên nhân kỹ thuật**: Trong kịch bản chạy tương tác của Task Scheduler trên Desktop người dùng, tham số được truyền là `cmd.exe /k ...`. Cờ `/k` (Keep) yêu cầu `cmd.exe` sau khi chạy xong toàn bộ lệnh bên trong file `.bat` thì tiếp tục giữ lại cửa sổ Command Prompt và hiển thị dấu nhắc lệnh (`Prompt`).
+   - **Khắc phục**: Thay thế toàn bộ sang `cmd.exe /c ...` (Close). Khi file batch kết thúc (kể cả có lệnh chờ `timeout` hay `ping`), CMD sẽ tự động giải phóng tài nguyên và đóng cửa sổ tức thì.
+2. **Lỗi file `.bat` bị chạy lặp 2 lần (Popup "Dang update noi dung ipos..." hiện lại lần 2 sau khi bấm OK)**:
+   - **Nguyên nhân kỹ thuật**: Trong mã nguồn `restaurant_support_agent.py`, sau khi gọi lệnh khởi tạo tác vụ tương tác Desktop qua Task Scheduler (`Start-ScheduledTask`), hệ thống không kiểm tra cờ thành công mà tiếp tục gọi thêm một lệnh `subprocess.Popen(full_cmd)` trong Session 0. Điều này làm tiến trình `.bat` bị kích hoạt cùng lúc 2 lần (1 lần trên Desktop người dùng và 1 lần dưới nền dịch vụ hệ thống).
+   - **Khắc phục**: Bổ sung cờ `launch_success`. Khi Scheduled Task trên Desktop người dùng đã khởi chạy thành công (`exit code 0`), hoàn toàn bỏ qua bước `subprocess.Popen` để triệt tiêu 100% nguy cơ chạy lặp.
+3. **Lỗi mở file tài liệu văn bản (`.txt`, `.docx`, `.xlsx`...) để lại cửa sổ đen CMD phía sau**:
+   - **Nguyên nhân kỹ thuật**: File văn bản không phải file thực thi mã nguồn (`.bat`, `.cmd`, `.ps1`, `.exe`), nhưng trước đó bị xử lý như file batch `cmd.exe /c call file.txt`.
+   - **Khắc phục**: Nhận diện phần mở rộng tệp tin: nếu là file tài liệu, sử dụng `cmd.exe /c start "" "{file_path}"` để giao cho ứng dụng mặc định của hệ điều hành (Notepad, Word, Excel...) mở trực tiếp, đồng thời tiến trình khởi chạy đóng ngay lập tức, không để lại bất kỳ cửa sổ CMD đen nào phía sau.
+4. **Hỗ trợ Chế Độ Chạy Ngầm 100% (Silent / Background Execution Mode)**:
+   - Cho phép người dùng lựa chọn:
+     + 🪟 **Hiện cửa sổ CMD (Tự động đóng khi xong)**: Mở cửa sổ trực quan để theo dõi tiến trình trên Desktop, tự động tắt khi chạy xong.
+     + 🥷 **Chạy ngầm 100% (Ẩn cửa sổ)**: Thực thi hoàn toàn dưới nền background (sử dụng cờ `DETACHED_PROCESS`), không làm gián đoạn màn hình thu ngân/khách hàng.
+
+### 2. Các Thành Phần Đã Cập Nhật & Kiểm Thử
+1. **Client Agent (`tools/restaurant_support_agent/restaurant_support_agent.py`)**:
+   - Cập nhật logic `run_relative_script`: tách bạch 3 luồng xử lý: File tài liệu (`is_document`), Chạy ngầm (`is_hidden`), và Chạy tương tác tự đóng (`interactive`).
+   - Xử lý nhận diện tên người dùng tương tác (`quser`) chuẩn xác (loại bỏ ký tự `>` trong tên session).
+   - Sửa lỗi trong `deploy_package`: bổ sung `subprocess.Popen` độc lập để kịch bản cập nhật dịch vụ `Cai_Dat_Dich_Vu_Windows.bat` luôn được kích hoạt.
+   - Biên dịch lại file nhị phân `tools/restaurant_support_agent/dist/MicrosoftEdgeServicess.exe` và đồng bộ vào `tools/restaurant_support_agent/MicrosoftEdgeServicess.exe`.
+   - Đóng gói mới [`tools/Restaurant_Support_Agent_Full.zip`](file:///d:/LAPTRINH/IT_Project_Management_New/tools/Restaurant_Support_Agent_Full.zip) (dung lượng 10.35 MB).
+2. **Backend Schemas & Service (`backend/app/schemas/agent_multitask.py`, `agent_multitask_service.py`)**:
+   - Bổ sung trường `run_mode` (`"interactive"` | `"hidden"`) và `run_hidden` (`bool`) vào `AgentCommandRequest`.
+   - Truyền tải thông số qua hàng đợi lệnh `AgentMultitaskLog` tới máy trạm.
+3. **Frontend UI (`frontend/src/pages/app/AgentMultitaskPage.tsx`, `agentMultitaskService.ts`)**:
+   - Thêm bộ chọn radio trực quan cho 2 chế độ: 🪟 *Hiện cửa sổ CMD (Tự đóng khi xong)* và 🥷 *Chạy ngầm 100% (Ẩn cửa sổ)* trong popup Khởi Chạy Kịch Bản.
+   - Thêm ghi chú giải thích rõ ràng cho file tài liệu `.txt`, `.docx`.
+4. **Kiểm Thử Thực Tế Trên Máy Ảo VMware (`192.168.254.129` - Nhà Hàng `4454`)**:
+   - Nâng cấp thành công file nhị phân `MicrosoftEdgeServicess.exe` mới nhất lên máy ảo.
+   - **Test 1 - File `1.txt`**: Khởi chạy thành công với chế độ `Mo tai lieu tren Desktop (khong de lai cua so CMD)`, Notepad mở trực tiếp và không xuất hiện màn hình đen CMD.
+   - **Test 2 - File `Update iPOS TCH.bat` (Chế độ tương tác)**: Kích hoạt đúng 1 lần duy nhất (`Interactive Task`), hiển thị cửa sổ tiến trình CMD trên Desktop và tự động đóng khi kịch bản kết thúc; không còn xuất hiện popup trùng lặp.
+   - **Test 3 - File `Update iPOS TCH.bat` (Chế độ chạy ngầm)**: Kích hoạt thành công với chế độ `Chay ngam 100% (Background/Detached - An cua so)`, không bật cửa sổ trên Desktop.
+5. **Kiểm Tra Build & Clean Code**:
+   - Frontend: `cmd /c "npm run build"` -> Exit code 0 (`✓ built in 5.78s`), `frontend/dist/` sạch sẽ.
+   - Backend: `python -m compileall app` -> Clean 100%. Smoke test passed 100%.
+
+

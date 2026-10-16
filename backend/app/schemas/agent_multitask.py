@@ -101,6 +101,9 @@ class AgentCommandRequest(BaseModel):
     # Dành cho Khởi Chạy Script Tương Đối (Tự Tìm Folder / File)
     folder_hint: Optional[str] = None
     working_directory: Optional[str] = None
+    # Chế độ hiển thị: interactive (hiện cửa sổ CMD, tự đóng khi xong), hidden (chạy ngầm 100%)
+    run_mode: Optional[str] = "interactive"
+    run_hidden: Optional[bool] = False
     # Dành cho Install App
     install_script_steps: Optional[List[Dict[str, Any]]] = None
     # Dành cho Truyền Gói Cài & Thực Thi Đa Bước (deploy_package)

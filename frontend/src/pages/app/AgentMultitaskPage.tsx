@@ -124,6 +124,7 @@ export const AgentMultitaskPage: React.FC = () => {
   const [scriptFolderHint, setScriptFolderHint] = useState<string>('Update ipos TCH IT NEW');
   const [scriptFileName, setScriptFileName] = useState<string>('Update iPOS TCH.bat');
   const [scriptArgs, setScriptArgs] = useState<string>('');
+  const [scriptRunMode, setScriptRunMode] = useState<'interactive' | 'hidden'>('interactive');
 
   // Thư Viện Mẫu Kịch Bản Script / Batch (Script Templates Library)
   const [scriptTemplates, setScriptTemplates] = useState<AgentScriptTemplateItem[]>(DEFAULT_SCRIPT_TEMPLATES);
@@ -570,6 +571,8 @@ export const AgentMultitaskPage: React.FC = () => {
         arguments: action === 'run_relative_script' ? scriptArgs : processArgs,
         run_as_admin: runAsAdmin,
         folder_hint: action === 'run_relative_script' ? scriptFolderHint : undefined,
+        run_mode: action === 'run_relative_script' ? scriptRunMode : 'interactive',
+        run_hidden: action === 'run_relative_script' ? scriptRunMode === 'hidden' : false,
         auto_extract: action === 'deploy_package' ? deployAutoExtract : undefined,
         steps: action === 'deploy_package' ? deploySteps : undefined
       });
@@ -2714,7 +2717,7 @@ export const AgentMultitaskPage: React.FC = () => {
               />
             </div>
 
-            {/* Checkbox tùy chọn */}
+            {/* Checkbox tùy chọn & Chế độ chạy */}
             <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginTop: '4px' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', cursor: 'pointer' }}>
                 <input
@@ -2728,6 +2731,77 @@ export const AgentMultitaskPage: React.FC = () => {
                 <CheckCircle size={14} />
                 <span>Tự động đặt CWD về thư mục chứa file</span>
               </label>
+            </div>
+
+            {/* Chế độ chạy: Hiện cửa sổ (Tự tắt) hoặc Chạy ngầm 100% */}
+            <div style={{ marginTop: '8px', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '8px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>⚡ Chế Độ Khởi Chạy:</span>
+                <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                  File văn bản (.txt, .docx...) tự mở bằng phần mềm tương ứng không để lại CMD
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '8px',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    border: `1.5px solid ${scriptRunMode === 'interactive' ? 'var(--primary-color, #2563EB)' : 'var(--border-color)'}`,
+                    backgroundColor: scriptRunMode === 'interactive' ? 'rgba(37, 99, 235, 0.08)' : 'transparent',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="scriptRunMode"
+                    checked={scriptRunMode === 'interactive'}
+                    onChange={() => setScriptRunMode('interactive')}
+                    style={{ marginTop: '2px' }}
+                  />
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      🪟 Hiện cửa sổ CMD (Tự đóng khi xong)
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      Mở cửa sổ CMD để xem tiến trình trên màn hình Desktop; tự động tắt ngay khi script kết thúc.
+                    </div>
+                  </div>
+                </label>
+
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '8px',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    border: `1.5px solid ${scriptRunMode === 'hidden' ? '#059669' : 'var(--border-color)'}`,
+                    backgroundColor: scriptRunMode === 'hidden' ? 'rgba(5, 150, 105, 0.08)' : 'transparent',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="scriptRunMode"
+                    checked={scriptRunMode === 'hidden'}
+                    onChange={() => setScriptRunMode('hidden')}
+                    style={{ marginTop: '2px' }}
+                  />
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      🥷 Chạy ngầm 100% (Ẩn cửa sổ)
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      Thực thi ẩn hoàn toàn dưới nền background không làm gián đoạn màn hình thu ngân/khách hàng.
+                    </div>
+                  </div>
+                </label>
+              </div>
             </div>
 
             {/* Thanh thao tác nhanh lưu thông số */}

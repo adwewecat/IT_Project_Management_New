@@ -688,53 +688,143 @@ def execute_task(config, task, ip_lan=None):
                 _, file_ext = os.path.splitext(found_file)
                 file_ext = file_ext.lower()
 
-                if file_ext in [".bat", ".cmd", ".txt"]:
-                    full_cmd = f'cmd.exe /c "call \"{found_file}\" {args}"'.strip()
-                elif file_ext in [".ps1"]:
-                    full_cmd = f'powershell.exe -ExecutionPolicy Bypass -File "{found_file}" {args}'.strip()
-                else:
-                    full_cmd = f'"{found_file}" {args}'.strip()
+                clean_work_dir = work_dir.replace('"', '')
+                clean_found_file = found_file.replace('"', '')
 
-                logger.info("Khoi chay file script tai: %s (CWD: %s)", full_cmd, work_dir)
+                is_script = file_ext in [".bat", ".cmd", ".ps1", ".vbs"]
+                is_exe = file_ext in [".exe"]
+                is_document = not is_script and not is_exe
 
-                # 1. Khoi chay tuong tac tren man hinh Desktop nguoi dung (Hien thi ro rang cua so Console CMD mau den)
-                launched_mode = "Subprocess"
-                try:
-                    clean_work_dir = work_dir.replace('"', '')
-                    clean_found_file = found_file.replace('"', '')
-                    ps_task_cmd = (
-                        f"$u = (Get-CimInstance Win32_ComputerSystem).UserName; "
-                        f"if (-not $u) {{ $u = (quser 2>$null | Select-String 'Active' | ForEach-Object {{ ($_ -split '\\s+')[1] }}) }}; "
-                        f"if (-not $u) {{ $u = 'Users' }}; "
-                        f"$argStr = '/k cd /d \"{clean_work_dir}\" & title [TIEN TRINH TU XA] {file_name} & call \"{clean_found_file}\" {args}'; "
-                        f"$act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $argStr; "
-                        f"$p = New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Highest; "
-                        f"Register-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' -Action $act -Principal $p -Force >$null 2>&1; "
-                        f"Start-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' >$null 2>&1"
+                run_mode = (payload.get("run_mode") or "interactive").strip().lower()
+                is_hidden = bool(payload.get("run_hidden")) or run_mode in ("hidden", "background")
+
+                launched_mode = ""
+                launch_success = False
+                launched_pid = None
+
+                # ── TRƯỜNG HỢP 1: TÀI LIỆU KHÔNG PHẢI FILE THỰC THI (.txt, .docx, .xlsx, .pdf, ảnh...) ──
+                if is_document:
+                    logger.info("Mo tai lieu: %s (Khong de lai man hinh CMD den)", clean_found_file)
+                    try:
+                        ps_doc_cmd = (
+                            "$u = (Get-CimInstance Win32_ComputerSystem).UserName; "
+                            "if (-not $u) { "
+                            "  $line = (quser 2>$null | Select-String 'Active' | Out-String).Trim(); "
+                            "  if ($line) { "
+                            "    $clean = ($line -replace '^>', '').Trim() -split '\\s+'; "
+                            "    $u = $clean[0]; "
+                            "  } "
+                            "} "
+                            "if (-not $u) { $u = 'Users' }; "
+                            f"$act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c start \"\" \"{clean_found_file}\"'; "
+                            "$p = New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Highest; "
+                            "Register-ScheduledTask -TaskName 'MicrosoftEdge_DocOpener' -Action $act -Principal $p -Force >$null 2>&1; "
+                            "Start-ScheduledTask -TaskName 'MicrosoftEdge_DocOpener' >$null 2>&1"
+                        )
+                        res_ps = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_doc_cmd], capture_output=True, text=True, timeout=10)
+                        if res_ps.returncode == 0:
+                            launch_success = True
+                            launched_mode = "Mo tai lieu tren Desktop (khong de lai cua so CMD)"
+                            logger.info("Da mo tai lieu '%s' tren Desktop nguoi dung", clean_found_file)
+                    except Exception as ex_doc:
+                        logger.debug("Loi mo tai lieu qua Scheduled Task: %s", ex_doc)
+
+                    if not launch_success:
+                        p_sub = subprocess.Popen(
+                            f'cmd.exe /c start "" "{clean_found_file}"',
+                            cwd=work_dir,
+                            shell=True
+                        )
+                        launch_success = True
+                        launched_pid = p_sub.pid
+                        launched_mode = "Mo tai lieu qua start command"
+
+                # ── TRƯỜNG HỢP 2: FILE SCRIPT / THỰC THI (.bat, .cmd, .ps1, .exe) CHẠY NGẦM (HIDDEN) ──
+                elif is_hidden:
+                    logger.info("Khoi chay ngam 100%% (Hidden): %s (CWD: %s)", clean_found_file, clean_work_dir)
+                    if file_ext in [".bat", ".cmd"]:
+                        full_cmd = f'cmd.exe /c "call \"{clean_found_file}\" {args}"'.strip()
+                    elif file_ext in [".ps1"]:
+                        full_cmd = f'powershell.exe -ExecutionPolicy Bypass -File "{clean_found_file}" {args}'.strip()
+                    else:
+                        full_cmd = f'"{clean_found_file}" {args}'.strip()
+
+                    p_sub = subprocess.Popen(
+                        full_cmd,
+                        cwd=work_dir,
+                        shell=True,
+                        creationflags=subprocess.DETACHED_PROCESS if hasattr(subprocess, 'DETACHED_PROCESS') else 0
                     )
-                    res_ps = subprocess.run(["powershell.exe", "-ExecutionPolicy", "Bypass", "-Command", ps_task_cmd], capture_output=True, text=True, timeout=10)
-                    if res_ps.returncode == 0:
-                        launched_mode = "Interactive Task (Hien thi cua so CMD mau den tren Desktop)"
-                        logger.info("Da khoi chay thanh cong cua so CMD tuong tac tren Desktop qua PowerShell Task")
-                except Exception as ex_ps:
-                    logger.debug("Loi khoi chay qua PowerShell Task: %s", ex_ps)
+                    launch_success = True
+                    launched_pid = p_sub.pid
+                    launched_mode = "Chay ngam 100% (Background/Detached - An cua so)"
+                    logger.info("Da khoi chay ngam thanh cong (PID: %s)", p_sub.pid)
 
-                # 2. Khoi chay tien trinh truc tiep du phong
-                creation_flags = 0
-                if hasattr(subprocess, 'CREATE_NEW_CONSOLE'):
-                    creation_flags = subprocess.CREATE_NEW_CONSOLE
-                elif hasattr(subprocess, 'DETACHED_PROCESS'):
-                    creation_flags = subprocess.DETACHED_PROCESS
+                # ── TRƯỜNG HỢP 3: FILE SCRIPT / THỰC THI HIỆN CỬA SỔ CMD (TỰ TẮT KHI XONG) ──
+                else:
+                    logger.info("Khoi chay tuong tac Desktop (Tu dong dong khi xong): %s", clean_found_file)
+                    try:
+                        if file_ext in [".bat", ".cmd"]:
+                            arg_str = f'/c cd /d \"{clean_work_dir}\" & title [TIEN TRINH TU XA] {file_name} & call \"{clean_found_file}\" {args}'
+                        elif file_ext in [".ps1"]:
+                            arg_str = f'/c cd /d \"{clean_work_dir}\" & title [TIEN TRINH TU XA] {file_name} & powershell.exe -ExecutionPolicy Bypass -File \"{clean_found_file}\" {args}'
+                        else:
+                            arg_str = f'/c cd /d \"{clean_work_dir}\" & title [TIEN TRINH TU XA] {file_name} & \"{clean_found_file}\" {args}'
 
-                p = subprocess.Popen(
-                    full_cmd,
-                    cwd=work_dir,
-                    shell=True,
-                    creationflags=creation_flags
-                )
-                success = True
+                        ps_task_cmd = (
+                            "$u = (Get-CimInstance Win32_ComputerSystem).UserName; "
+                            "if (-not $u) { "
+                            "  $line = (quser 2>$null | Select-String 'Active' | Out-String).Trim(); "
+                            "  if ($line) { "
+                            "    $clean = ($line -replace '^>', '').Trim() -split '\\s+'; "
+                            "    $u = $clean[0]; "
+                            "  } "
+                            "} "
+                            "if (-not $u) { $u = 'Users' }; "
+                            f"$argStr = '{arg_str}'; "
+                            "$act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $argStr; "
+                            "$p = New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Highest; "
+                            "Register-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' -Action $act -Principal $p -Force >$null 2>&1; "
+                            "Start-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' >$null 2>&1"
+                        )
+                        res_ps = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_task_cmd], capture_output=True, text=True, timeout=10)
+                        if res_ps.returncode == 0:
+                            launch_success = True
+                            launched_mode = "Interactive Task (Hien thi cua so CMD tren Desktop, tu dong dong khi xong)"
+                            logger.info("Da khoi chay thanh cong tren Desktop qua Scheduled Task: %s", arg_str)
+                    except Exception as ex_ps:
+                        logger.debug("Loi khoi chay qua Scheduled Task: %s", ex_ps)
+
+                    # Chi fallback ve subprocess neu Scheduled Task that bai (Tranh chay lap 2 lan)
+                    if not launch_success:
+                        creation_flags = 0
+                        if hasattr(subprocess, 'CREATE_NEW_CONSOLE'):
+                            creation_flags = subprocess.CREATE_NEW_CONSOLE
+                        elif hasattr(subprocess, 'DETACHED_PROCESS'):
+                            creation_flags = subprocess.DETACHED_PROCESS
+
+                        if file_ext in [".bat", ".cmd"]:
+                            full_cmd = f'cmd.exe /c "call \"{clean_found_file}\" {args}"'.strip()
+                        elif file_ext in [".ps1"]:
+                            full_cmd = f'powershell.exe -ExecutionPolicy Bypass -File "{clean_found_file}" {args}'.strip()
+                        else:
+                            full_cmd = f'"{clean_found_file}" {args}'.strip()
+
+                        p_sub = subprocess.Popen(
+                            full_cmd,
+                            cwd=work_dir,
+                            shell=True,
+                            creationflags=creation_flags
+                        )
+                        launch_success = True
+                        launched_pid = p_sub.pid
+                        launched_mode = "Subprocess Direct Fallback"
+                        logger.info("Da fallback khoi chay Subprocess truc tiep: %s (PID: %s)", full_cmd, p_sub.pid)
+
+                success = launch_success
+                pid_info = f"\nPID: {launched_pid}" if launched_pid else ""
                 message = f"Da tim thay file tai '{found_file}' va khoi chay thanh cong ({launched_mode})."
-                output = f"ResolvedFilePath: {found_file}\nWorkingDirectory: {work_dir}\nPID: {p.pid}\nExecutionMode: {launched_mode}\nCommandLine: {full_cmd}"
+                output = f"ResolvedFilePath: {found_file}\nWorkingDirectory: {work_dir}{pid_info}\nExecutionMode: {launched_mode}"
 
         elif action == "kill_process":
             proc = (payload.get("process_path") or "").strip()
@@ -964,6 +1054,17 @@ def execute_task(config, task, ip_lan=None):
                         except Exception as ex_run:
                             logger.warning("Loi tao runner bat: %s", ex_run)
                             scheduled_installer_cmd = f'cmd.exe /c cd /d "{clean_script_dir}" && call "{clean_script_file}" {script_args}'
+
+                        try:
+                            creation_flags = subprocess.DETACHED_PROCESS if hasattr(subprocess, 'DETACHED_PROCESS') else 0
+                            subprocess.Popen(
+                                scheduled_installer_cmd,
+                                cwd=clean_script_dir,
+                                shell=True,
+                                creationflags=creation_flags
+                            )
+                        except Exception as ex_launch:
+                            logger.error("Loi khi Popen scheduled_installer_cmd: %s", ex_launch)
 
                         log_pipeline.append(f"[{step_name}] Da kich hoat {scr_name}: Tien trinh doc lap da duoc len lich chay sau 3 giay de dang ky & cap nhat service.")
                         logger.info("Da len lich chay Cai_Dat_Dich_Vu sau 3s: %s", scheduled_installer_cmd)

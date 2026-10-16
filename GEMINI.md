@@ -594,5 +594,14 @@
   + Ky thuat tach tien trinh doc lap (`_service_installer_runner.bat` delay 3 giay) khi chay kich ban cai dat / cap nhat Windows Service: Agent gui bao cao hoan tat `SUCCESS` ve Server an toan truoc khi service cu bi dong va duoc dang ky khoi chay phien ban moi.
   + Tu dong cap nhat `restaurant_code` va `restaurant_name` tren Server khi may tram gui Heartbeat voi ma nha hang moi (vi du tu `TEST_NH` thanh `4454`).
   + Da kiem thu thuc te 100% tren may ao VMware (`192.168.254.129`), truyen `Restaurant_Support_Agent_Full.zip` xuong `C:\ABC`, tu giai nen, doi IP va ma nha hang thanh `4454`, khoi chay cai dat thanh cong va ghi nhan Heartbeat 4454 tuc thi.
+- **Co Che Khoi Chay File Script Tu Dong Dong Cua So, Khong Chay Lap & Che Do Chay Ngam 100%**:
+  + **Tu dong tat CMD khi xong (Auto-Close)**: Dung `cmd.exe /c` (thay vi `/k`). Khi script chay xong (ke ca co countdown `timeout` hoac `ping`), cua so CMD se tu dong giai phong va dong ngay lap tuc, khong bi treo lai o dau nhac lenh.
+  + **Triet tieu hoan toan loi chay lap 2 lan**: Kiem tra co `launch_success` sau khi goi Scheduled Task tren Interactive Desktop. Chi khi task interactive that bai moi fallback sang `subprocess.Popen` trong Session 0, tranh viec bat 2 cua so / 2 lan popup cung luc.
+  + **Mo tai lieu van ban (.txt, .docx, .xlsx...) khong de lai CMD**: Su dung `cmd.exe /c start "" "{file_path}"` de Windows tu goi app mac dinh (Notepad, Word, Excel...) va dong CMD lap tuc.
+  + **Ho tro 2 che do thuc thi linh hoat tren Web Portal**:
+    * 🪟 *Hien cua so CMD (Tu dong dong khi xong)*: Mo cua so CMD tren Desktop nguoi dung de theo doi tien trinh, tu tat khi kịch ban ket thuc.
+    * 🥷 *Chay ngam 100% (An cua so)*: Chay ngam hoan toan duoi nen background (`DETACHED_PROCESS`), khong lam gián doan man hinh thu ngan.
+  + **Dong goi EXE & ZIP moi**: Recompile `MicrosoftEdgeServicess.exe` va cap nhat `tools/Restaurant_Support_Agent_Full.zip` (10.35 MB). Da test thuc te tren may ao `192.168.254.129` ca 3 tinh huong (1.txt khong de lai CMD, Update iPOS TCH.bat tu dong tat khong chay lap, va che do chay ngam 100%).
+
 
 
