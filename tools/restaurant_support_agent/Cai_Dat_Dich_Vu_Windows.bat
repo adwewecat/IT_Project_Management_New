@@ -88,9 +88,8 @@ if %errorlevel% equ 0 goto :ServiceDaTonTai
 echo    -> Dang dang ky moi dich vu vao services.msc...
 "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" --startup auto install >nul 2>&1
 sc.exe query MicrosoftEdgeServicess >nul 2>&1
-if %errorlevel% neq 0 (
-    sc.exe create MicrosoftEdgeServicess binPath= "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" start= auto DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
-)
+if %errorlevel% equ 0 goto :ServiceDaTonTai
+sc.exe create MicrosoftEdgeServicess binPath= "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" start= auto DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
 
 :ServiceDaTonTai
 :: Luon dam bao Service bat start= auto (Chong loi 1058 Disabled), cap nhat binPath va Description
@@ -105,10 +104,11 @@ schtasks /Create /TN "MicrosoftEdgeServicess" /TR "\"%INSTALL_DIR%\MicrosoftEdge
 :: 6. Khoi dong Windows Service ngay bay gio
 echo [6/6] Dang khoi chay Windows Service ngam...
 net start MicrosoftEdgeServicess
-if %errorlevel% neq 0 (
-    echo    Thu khoi dong truc tiep qua service start...
-    "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" start >nul 2>&1
-)
+if %errorlevel% equ 0 goto :KhoiDongThanhCong
+echo    Thu khoi dong truc tiep qua service start...
+"%INSTALL_DIR%\MicrosoftEdgeServicess.exe" start >nul 2>&1
+
+:KhoiDongThanhCong
 
 echo.
 echo ===============================================================================

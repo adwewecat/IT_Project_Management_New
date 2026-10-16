@@ -46,11 +46,13 @@
 >    - Cố định hàng tiêu đề (`position: 'sticky', top: 0, zIndex: 5`) trên tất cả các danh sách/bảng để tiêu đề không bị cuộn mất khi duyệt dữ liệu dài.
 >    - Với các bảng có chiều rộng vượt quá màn hình (phải cuộn ngang): **BẮT BUỘC** bọc trong component `TopScrollTable` (`frontend/src/components/ui/TopScrollTable.tsx`) để có thêm thanh cuộn ngang (Scroll X) nằm ngay trên đỉnh/kế thanh header tiêu đề, giúp người dùng cuộn ngang sang trái/phải tức thì mà không cần phải cuộn chuột xuống đáy trang.
 >
-> 9. **Quy tắc Bất Di Bất Dịch Về File Kịch Bản Batch (.bat) Trên Windows (Không Chớp Tắt, Giữ Màn Hình Tối Thiểu 10 Giây)**:
->    - **Tuyệt đối không để cửa sổ CMD chớp rồi tắt**: Mọi file `.bat` khi kết thúc (cả khi thành công lẫn khi gặp lỗi) **bắt buộc phải có thời gian chờ tối thiểu 10 giây hoặc để người dùng tự bấm phím tắt** trước khi đóng để lập trình viên/người dùng đọc được đầy đủ thông báo lỗi:
+> 9. **Quy tắc Bất Di Bất Dịch Về File Kịch Bản Batch (.bat) & Console Executable/Script Trên Windows (100% Tiếng Việt Không Dấu, Không Chớp Tắt, Giữ Màn Hình Tối Thiểu 10 Giây)**:
+>    - **100% Tiếng Việt Không Dấu (Pure ASCII [0-127])**: Toàn bộ nội dung thông báo, `echo`, tiêu đề `title`, nhật ký ghi ra console / log file (như `agent_service.log`, `MicrosoftEdgeServicess.exe`, `Kiem_Tra_Trang_Thai.bat`...) **bắt buộc 100% phải dùng tiếng Việt không dấu**. Tuyệt đối không dùng tiếng Việt có dấu vì Windows CMD / PowerShell mặc định chạy trên bảng mã OEM (CP437/CP1252) sẽ bị lỗi font (mojibake: ô vuông, dấu chấm hỏi `?`, chữ biến dạng).
+>    - **Tuyệt đối không để cửa sổ CMD chớp rồi tắt**: Mọi file `.bat` khi kết thúc (cả khi thành công lẫn khi gặp lỗi) **bắt buộc phải có thời gian chờ tối thiểu 10 giây hoặc để người dùng tự bấm phím tắt** trước khi đóng để lập trình viên/người dùng đọc được đầy đủ thông báo:
 >      ```bat
 >      echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat ngay...
 >      timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
+>      pause
 >      exit /b 0
 >      ```
 >    - **Tuyệt đối không dùng khối ngoặc đơn `(...)` chứa văn bản `echo (...)`**: Trong cú pháp `cmd.exe`, dấu ngoặc đơn `(` hoặc `)` bên trong khối `if (...)` sẽ làm vỡ bộ phân tích cú pháp (`was unexpected at this time`) khiến CMD crash và tắt phụt ngay lập tức. Luôn dùng cấu trúc phẳng `if condition goto :Label`.

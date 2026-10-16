@@ -230,6 +230,20 @@ npm run dev
   3. **Đóng gói hoàn chỉnh `Restaurant_Support_Agent_Full.zip`**:
      - Gói nén ~10.3 MB với toàn bộ bản sửa lỗi đã sẵn sàng copy và cài đặt chạy mượt mà ngay lập tức.
 
+### [2026-10-16] - Ban Hanh Quy Tac 100% Tieng Viet Khong Dau (Pure ASCII) Cho File Batch (.bat) & Console Executable
+- **Hien tuong & Nguyen nhan**:
+  1. *Loi vo font chu (mojibake / font corruption)*: Khi chay file .bat hoac cac cong cu kiem tra trang thai (Kiem_Tra_Trang_Thai.bat, MicrosoftEdgeServicess.exe, gent_service.log), giao dien dong lenh Windows Command Prompt (cmd.exe) va PowerShell mac dinh chay tren bang ma OEM (CP437 hoac CP1252), khien tat ca cac ky tu tieng Viet co dau bi vo thanh cac dau hoi cham ? hoac ky tu rac KH?I ??NG D?CH V?.
+- **Giai phap & Quy tac cot loi ban hanh**:
+  1. **Chuyen doi 100% Tieng Viet Khong Dau (Pure ASCII [0-127])**:
+     - Toan bo chuoi thong bao, echo, 	itle, ngoai le, nhat ky log (gent_service.log) trong 
+estaurant_support_agent.py va tat ca cac file kich ban .bat duoc chuan hoa thanh tieng Viet khong dau tu nhien, ro rang.
+     - Kiem tra dam bao so luong byte non-ASCII bang 0 tuyet doi.
+  2. **Bien dich lai binary & Dong goi Zip**:
+     - Dung PyInstaller bien dich lai MicrosoftEdgeServicess.exe (~10.4 MB) sach 100% font chu.
+     - Dong goi cap nhat vao Restaurant_Support_Agent_Full.zip (~10.3 MB).
+  3. **Luu thanh Quy tac Bat Di Bat Dich trong tai lieu du an (Rule 9)**:
+     - Bo sung quy dinh bat buoc 100% Pure ASCII (khong dau) cho moi file .bat, script kiem tra va console executable trong AGENTS.md, GEMINI.md, PROJECT_GUIDELINES.md va Script/README.md.
+
 ### [2026-10-16] - Khắc Phục Triệt Để Lỗi Chạy Agent Dưới Nhà Hàng: Tích Hợp Standalone Executable (MicrosoftEdgeServicess.exe) & Chuẩn Hóa Batch Script ANSI
 - **Nguyên nhân sự cố dưới nhà hàng**:
   1. *Lỗi cú pháp file `.bat` (`'dgeServicess'`, `'1.'`, `'ộng'`, `'100'`, `'Background'` is not recognized...)*: File `.bat` trước đó dùng mã hóa UTF-8 chứa tiếng Việt có dấu và ký tự `%` trần trụi. Bộ phân tích cú pháp của `cmd.exe` trên Windows đọc theo ANSI/OEM codepage dẫn đến lệch byte offset (`offset desync`), nuốt dòng lệnh và phân tách sai tên biến/lệnh.
