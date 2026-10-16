@@ -663,14 +663,22 @@ class AgentMultitaskService:
 
         query = db.query(AgentMultitaskLog).filter(AgentMultitaskLog.result_status == "PENDING")
         if clean_ip and clean_code:
+            # Nếu task chỉ định đích danh machine_ip -> CHỈ máy có đúng IP đó mới được nhận!
+            # Nếu task không chỉ định IP (rỗng hoặc NULL) -> Bất kỳ máy nào cùng mã nhà hàng đều được nhận
             query = query.filter(
-                (AgentMultitaskLog.restaurant_code == clean_code) |
-                (AgentMultitaskLog.machine_ip == clean_ip)
+                (AgentMultitaskLog.machine_ip == clean_ip) |
+                (
+                    ((AgentMultitaskLog.machine_ip == "") | (AgentMultitaskLog.machine_ip.is_(None))) &
+                    (AgentMultitaskLog.restaurant_code == clean_code)
+                )
             )
-        elif clean_code:
-            query = query.filter(AgentMultitaskLog.restaurant_code == clean_code)
         elif clean_ip:
             query = query.filter(AgentMultitaskLog.machine_ip == clean_ip)
+        elif clean_code:
+            query = query.filter(
+                (AgentMultitaskLog.restaurant_code == clean_code) &
+                ((AgentMultitaskLog.machine_ip == "") | (AgentMultitaskLog.machine_ip.is_(None)))
+            )
         else:
             return []
 

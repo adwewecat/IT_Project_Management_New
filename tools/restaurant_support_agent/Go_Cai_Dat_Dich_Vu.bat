@@ -56,6 +56,12 @@ del /F /Q "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\MicrosoftEdge
 echo 5. Dang tat tien trinh dang chay neu co...
 taskkill /F /IM MicrosoftEdgeServicess.exe >nul 2>&1
 
+echo 6. Dang don dep thu muc cai dat: %INSTALL_DIR%...
+if exist "%INSTALL_DIR%" (
+    del /F /Q "%INSTALL_DIR%\*.*" >nul 2>&1
+    rmdir /S /Q "%INSTALL_DIR%" >nul 2>&1
+)
+
 echo.
 echo ===============================================================================
 echo   DA GO CAI DAT DICH VU MicrosoftEdgeServicess THANH CONG!

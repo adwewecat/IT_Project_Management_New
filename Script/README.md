@@ -2929,3 +2929,32 @@ estaurant_service.py).
    - Backend daemon task khoi dong thanh cong tren port 8000.
    - Frontend `npm run build` exit code 0.
    - Backend compileall va smoke test PASSED 100%.
+
+---
+
+### [2026-10-16] - Dieu Tra & Khac Phuc Loi Cuop Lenh Giua Cac May Tram (IP Snatching) & Nang Cap Xoa Sach Khi Go Cai Dat
+
+1. **Phat Hien Loi Cuop Lenh Nghiem Trong (Cross-Endpoint Task Snatching Race Condition)**:
+   - **Hien tuong**: Nguoi dung da copy va cai ban zip moi vao may ao VMware (`192.168.254.129`), nhung khi phat lenh `run_relative_script` thi he thong van bao loi va may ao VMware khong thay file chay.
+   - **Nguyen nhan goc re**:
+     + Tren may Host ton tai tien trinh test cu (PID 13580) chay tu trua (12:16 PM) cung dang ky `restaurant_code=TEST_NH` (IP `172.16.20.47`).
+     + Trong ham `poll_pending_tasks` tai `agent_multitask_service.py`, menh de loc tac vu dung toan tu `OR` (`(restaurant_code == clean_code) | (machine_ip == clean_ip)`).
+     + Do do, khi Web Portal phat lenh huong toi may ao VMware (`machine_ip = 192.168.254.129`), ca 2 may trạm deu du dieu kien nhan lenh vi chung ma `TEST_NH`.
+     + Tien trinh tren may Host do ket noi mang noi bo nhanh hon da "cuop" (snatch) mat task nay truoc, va do tien trinh nay la ban cu chua co `run_relative_script` nen da tra ve loi `Hanh dong chua duoc ho tro` va cap nhat task thanh `FAILED`.
+     + Khi may ao VMware that su gui request poll len sau do 2 giay thi task da bi `FAILED` va bien mat khoi hang doi `PENDING`, dan toi may ao VMware khong he nhan duoc lenh!
+   - **Khac phuc triet de**:
+     + Sua logic `poll_pending_tasks`: Khi task co chi dinh `machine_ip` cu the, **BAT BUOC 100% chi may co dung IP do** moi duoc phep lay lenh. Cac may khac du chung ma nha hang deu bi chan tuyet doi.
+
+2. **Khac Phuc File Go Khong Xoa Thu Muc & File Cai Bi Khoa Handle Ghi De**:
+   - **Loi file go (`Go_Cai_Dat_Dich_Vu.bat`)**:
+     + Truoc do file go chi chay `sc delete` va dung service, nhung khong xoa thu muc `C:\ProgramData\MicrosoftEdgeServicess`.
+     + Do do cac file EXE cu, file config cu van nam nguyen trong thu muc he thong.
+     + **Khac phuc**: Bo sung buoc xoa sach toan bo thu muc `C:\ProgramData\MicrosoftEdgeServicess` (`del /F /Q` va `rmdir /S /Q`).
+   - **Loi file cai (`Cai_Dat_Dich_Vu_Windows.bat`)**:
+     + Khi chep de file EXE, neu Windows chua kip giai phong file handle, lenh `copy /Y` bi loi Access Denied nhung script van tiep tuc.
+     + **Khac phuc**: Thuc hien xoa file EXE cu truoc khi copy, bo sung co che thu lai (retry) kem taskkill cuong che, va xac thuc kiem tra su ton tai cua file EXE sau khi chep (neu copy fail thi dung ngay va canh bao ro rang, khong de chay file cu).
+
+3. **Dam Bao Dong Goi & Download Luon Tu Dong Cap Nhat**:
+   - API `download-client-agent` luon tu dong zip truc tiep cac file moi nhat tu `tools/restaurant_support_agent/`.
+   - File zip `tools/Restaurant_Support_Agent_Full.zip` tren o dia da duoc nen lai hoan chinh (10.33MB).
+   - Backend daemon khoi dong lai tren port 8000 voi logic phan phoi IP chinh xac 100%.

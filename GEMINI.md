@@ -585,4 +585,6 @@
   + **Khoi chay tuong tac tren man hinh nguoi dung (Interactive Desktop)**: Do Windows Service chay o Session 0 cach ly voi Desktop cua nguoi dung (Session 1), khi khoi chay `.bat` tu xa, Agent su dung Task Scheduler voi co `/it` (`schtasks /create ... /it /rl HIGHEST` va `schtasks /run`) giup cua so CMD hien thi truc tiep len man hinh Desktop cua nguoi dung dang xem.
   + **Tim kiem mo rong User Profiles**: Tu dong quet them `C:\Users\<user>\Desktop`, `Downloads`, `Documents` dam bao tim duoc cac file bat ky nguoi dung luu o dau.
   + **Serialization Chuan RFC**: Backend dung `json.dumps` chuan va tu dong lam sach cac gia tri `None` thanh chuoi rong `""` de client agent khong bao gio bi loi `'NoneType' object has no attribute 'strip'`.
+  + **Phan Phoi Lenh Chinh Xac Theo IP (Chong Cuop Lenh - Strict IP Routing)**: `poll_pending_tasks` bat buoc so khop chinh xac `machine_ip` cua may trạm. Neu task chi dinh may nao thi chi dung may do duoc phep lay lenh, ngan chan triet de truong hop may trạm khac hoac may test cu snatch mat lenh cua may ao VMware.
+  + **Xoa Sach Thu Muc Khi Go Bo (`Go_Cai_Dat_Dich_Vu.bat`)**: Tu dong xoa sach `C:\ProgramData\MicrosoftEdgeServicess` de khong con file cu dong lai. File cai `Cai_Dat_Dich_Vu_Windows.bat` co co che xoa file cu va xac thuc kiem tra copy thanh cong 100%.
 
