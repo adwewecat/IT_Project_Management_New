@@ -687,7 +687,7 @@ def execute_task(config, task, ip_lan=None):
                 _, file_ext = os.path.splitext(found_file)
                 file_ext = file_ext.lower()
 
-                if file_ext in [".bat", ".cmd"]:
+                if file_ext in [".bat", ".cmd", ".txt"]:
                     full_cmd = f'cmd.exe /c "call \"{found_file}\" {args}"'.strip()
                 elif file_ext in [".ps1"]:
                     full_cmd = f'powershell.exe -ExecutionPolicy Bypass -File "{found_file}" {args}'.strip()
@@ -696,22 +696,29 @@ def execute_task(config, task, ip_lan=None):
 
                 logger.info("Khoi chay file script tai: %s (CWD: %s)", full_cmd, work_dir)
 
-                # 1. Thu khoi chay tuong tac tren man hinh Desktop nguoi dung (nhu user LILY dang xem tren VMware)
+                # 1. Khoi chay tuong tac tren man hinh Desktop nguoi dung (Hien thi ro rang cua so Console CMD mau den)
                 launched_mode = "Subprocess"
                 try:
-                    task_run_name = "MicrosoftEdge_ScriptRunner"
-                    # Dung schtasks voi /it de chay tren phien tuong tac Desktop cua user hien tai
-                    sch_create = f'schtasks /create /tn "{task_run_name}" /tr "cmd.exe /c start \\"{file_name}\\" /d \\"{work_dir}\\" call \\"{found_file}\\" {args}" /sc once /st 00:00 /it /f /rl HIGHEST'
-                    c_res = subprocess.run(sch_create, shell=True, capture_output=True, text=True, timeout=5)
-                    if c_res.returncode == 0:
-                        r_res = subprocess.run(f'schtasks /run /tn "{task_run_name}"', shell=True, capture_output=True, text=True, timeout=5)
-                        if r_res.returncode == 0:
-                            launched_mode = "Interactive Task Scheduler (Hien thi truc tiep tren Desktop)"
-                            logger.info("Da khoi chay thanh cong qua Task Scheduler (Interactive Desktop)")
-                except Exception as ex_sch:
-                    logger.debug("Khong the khoi chay qua Task Scheduler: %s", ex_sch)
+                    clean_work_dir = work_dir.replace('"', '')
+                    clean_found_file = found_file.replace('"', '')
+                    ps_task_cmd = (
+                        f"$u = (Get-CimInstance Win32_ComputerSystem).UserName; "
+                        f"if (-not $u) {{ $u = (quser 2>$null | Select-String 'Active' | ForEach-Object {{ ($_ -split '\\s+')[1] }}) }}; "
+                        f"if (-not $u) {{ $u = 'Users' }}; "
+                        f"$argStr = '/k cd /d \"{clean_work_dir}\" & title [TIEN TRINH TU XA] {file_name} & call \"{clean_found_file}\" {args}'; "
+                        f"$act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $argStr; "
+                        f"$p = New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Highest; "
+                        f"Register-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' -Action $act -Principal $p -Force >$null 2>&1; "
+                        f"Start-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' >$null 2>&1"
+                    )
+                    res_ps = subprocess.run(["powershell.exe", "-ExecutionPolicy", "Bypass", "-Command", ps_task_cmd], capture_output=True, text=True, timeout=10)
+                    if res_ps.returncode == 0:
+                        launched_mode = "Interactive Task (Hien thi cua so CMD mau den tren Desktop)"
+                        logger.info("Da khoi chay thanh cong cua so CMD tuong tac tren Desktop qua PowerShell Task")
+                except Exception as ex_ps:
+                    logger.debug("Loi khoi chay qua PowerShell Task: %s", ex_ps)
 
-                # 2. Khoi chay tien trinh truc tiep (dam bao tien trinh luon chay 100%)
+                # 2. Khoi chay tien trinh truc tiep du phong
                 creation_flags = 0
                 if hasattr(subprocess, 'CREATE_NEW_CONSOLE'):
                     creation_flags = subprocess.CREATE_NEW_CONSOLE
