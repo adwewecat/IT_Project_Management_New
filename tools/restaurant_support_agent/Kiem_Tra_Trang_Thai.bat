@@ -11,7 +11,7 @@ set "INSTALL_DIR=C:\ProgramData\MicrosoftEdgeServicess"
 
 :: 1. Kiem tra Windows Service trong services.msc
 echo [1] Kiem tra trong Windows Services (services.msc):
-sc.exe query MicrosoftEdgeServicess
+sc.exe queryex MicrosoftEdgeServicess
 echo.
 
 :: 2. Kiem tra tien trinh chay ngam trong Task Manager

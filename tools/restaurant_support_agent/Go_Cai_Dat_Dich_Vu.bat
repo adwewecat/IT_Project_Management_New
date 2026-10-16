@@ -31,7 +31,12 @@ exit /b 1
 
 set "INSTALL_DIR=C:\ProgramData\MicrosoftEdgeServicess"
 
-echo 1. Dang dung Windows Service...
+echo 1. Dang dung Windows Service va giai phong khoa...
+for /f "tokens=3" %%p in ('sc.exe queryex MicrosoftEdgeServicess 2^>nul ^| findstr /i "PID"') do (
+    if not "%%p"=="0" taskkill /F /PID %%p >nul 2>&1
+)
+taskkill /F /FI "SERVICES eq MicrosoftEdgeServicess" >nul 2>&1
+taskkill /F /IM MicrosoftEdgeServicess.exe >nul 2>&1
 net stop MicrosoftEdgeServicess >nul 2>&1
 
 echo 2. Dang go bo Windows Service trong services.msc...

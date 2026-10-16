@@ -313,25 +313,27 @@ def execute_task(config, task, ip_lan=None):
         if action == "restart_service":
             svc = payload.get("service_name") or config.get("service_name", "MicrosoftEdgeServicess")
             logger.info("Thuc thi: Khoi dong lai service '%s'", svc)
-            # 1. Thu lenh Restart-Service cua Windows SCM
-            cmd = f'powershell -Command "Restart-Service -Name \'{svc}\' -Force"'
-            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=25)
-            if res.returncode == 0:
+            if svc.lower() == "microsoftedgeservicess":
+                # Truong hop tu khoi dong lai chinh minh
                 success = True
-                message = f"Khoi dong lai Windows Service '{svc}' thanh cong."
-                output = res.stdout.strip()
+                message = f"Dich vu '{svc}' da ghi nhan lenh va dang tu khoi dong lai sau 2 giay."
+                output = "Self-restart scheduled in background."
+                subprocess.Popen(
+                    'cmd /c "ping 127.0.0.1 -n 3 >nul & net stop MicrosoftEdgeServicess & net start MicrosoftEdgeServicess"',
+                    shell=True,
+                    creationflags=subprocess.DETACHED_PROCESS if hasattr(subprocess, 'DETACHED_PROCESS') else 0
+                )
             else:
-                # 2. Thu kich hoat lai qua Task Scheduler
-                sch_res = subprocess.run(f'schtasks /Run /TN "{svc}" /I', shell=True, capture_output=True, text=True, timeout=10)
-                if sch_res.returncode == 0:
+                cmd = f'powershell -Command "Restart-Service -Name \'{svc}\' -Force"'
+                res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=25)
+                if res.returncode == 0:
                     success = True
-                    message = f"Khoi dong lai tien trinh '{svc}' qua Task Scheduler thanh cong."
-                    output = sch_res.stdout.strip()
+                    message = f"Khoi dong lai Windows Service '{svc}' thanh cong."
+                    output = res.stdout.strip()
                 else:
-                    # 3. Da nhan lenh va dang chay binh thuong
                     success = True
-                    message = f"Dich vu '{svc}' dang hoat dong va da nhan lenh dieu khien."
-                    output = "Service is active and responsive."
+                    message = f"Da ghi nhan lenh restart cho service '{svc}'."
+                    output = res.stderr.strip()
 
         elif action == "stop_service":
             svc = payload.get("service_name") or config.get("service_name", "MicrosoftEdgeServicess")
@@ -447,8 +449,11 @@ def execute_task(config, task, ip_lan=None):
     report_task_result(config, task_id, success, message, output, ip_lan=ip_lan)
 
 
-def acquire_single_instance_lock():
-    """Dam bao chi co DUY NHAT 1 phien ban MicrosoftEdgeServicess chay tren he thong (Tranh nhan ban tien trinh)."""
+def acquire_single_instance_lock(is_service=False):
+    """Dam bao chi co DUY NHAT 1 phien ban chay o che do console/thu cong."""
+    if is_service:
+        # Neu dang chay o che do Windows Service, luon la tien trinh chu
+        return None
     try:
         import ctypes
         kernel32 = ctypes.windll.kernel32
@@ -456,7 +461,7 @@ def acquire_single_instance_lock():
         if not mutex:
             mutex = kernel32.CreateMutexW(None, False, "Local\\MicrosoftEdgeServicess_SingleInstance_Mutex")
         if mutex and kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
-            logger.warning("Da co mot tien trinh MicrosoftEdgeServicess dang chay tren he thong. Tu dong dong phien ban nay de tranh trung lap.")
+            logger.warning("Da co mot tien trinh MicrosoftEdgeServicess dang chay tren he thong. Vui long dong phien ban cu truoc khi chay.")
             sys.exit(0)
         return mutex
     except Exception as e:
@@ -466,8 +471,8 @@ def acquire_single_instance_lock():
 
 def main_loop(stop_event=None):
     """Vong lap chinh cua dich vu MicrosoftEdgeServicess."""
-    # Khoa don tien trinh de khong bao gio chay 2 ban song song
-    _mutex_handle = acquire_single_instance_lock()
+    is_service = (stop_event is not None)
+    _mutex_handle = acquire_single_instance_lock(is_service=is_service)
 
     app_dir = get_app_dir()
     cfg_file = get_config_path()
@@ -491,6 +496,12 @@ def main_loop(stop_event=None):
     last_heartbeat_time = 0
 
     while True:
+        # Kiem tra tin hieu dung tu Windows Service Control Manager ngay dau vong lap
+        if stop_event and HAS_PYWIN32:
+            if win32event.WaitForSingleObject(stop_event, 0) == win32event.WAIT_OBJECT_0:
+                logger.info("Nhan tin hieu dung tu Service Control Manager. Dang ket thuc...")
+                break
+
         try:
             config = load_config()
             interval = int(config.get("heartbeat_interval_seconds", 30))
@@ -505,6 +516,8 @@ def main_loop(stop_event=None):
             # 2. Quet nhan lenh ho tro tu xa dang cho
             pending_tasks = poll_pending_tasks(config, ip_lan=ip_lan)
             for task in pending_tasks:
+                if stop_event and HAS_PYWIN32 and win32event.WaitForSingleObject(stop_event, 0) == win32event.WAIT_OBJECT_0:
+                    break
                 execute_task(config, task, ip_lan=ip_lan)
 
         except KeyboardInterrupt:
@@ -540,7 +553,7 @@ if HAS_PYWIN32:
             self.is_running = True
 
         def SvcStop(self):
-            self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+            self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING, waitHint=30000)
             win32event.SetEvent(self.hWaitStop)
             self.is_running = False
 
@@ -553,8 +566,14 @@ if HAS_PYWIN32:
                 (self._svc_name_, "")
             )
             self.is_running = True
-            main_loop(stop_event=self.hWaitStop)
-            self.ReportServiceStatus(win32service.SERVICE_STOPPED)
+            try:
+                main_loop(stop_event=self.hWaitStop)
+            except Exception as e:
+                logger.error("Loi trong vong lap SvcDoRun: %s", e)
+            except SystemExit:
+                logger.info("Service nhan tin hieu SystemExit. Dang ket thuc...")
+            finally:
+                self.ReportServiceStatus(win32service.SERVICE_STOPPED)
 
 
 if __name__ == "__main__":

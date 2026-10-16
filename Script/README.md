@@ -230,6 +230,23 @@ npm run dev
   3. **Đóng gói hoàn chỉnh `Restaurant_Support_Agent_Full.zip`**:
      - Gói nén ~10.3 MB với toàn bộ bản sửa lỗi đã sẵn sàng copy và cài đặt chạy mượt mà ngay lập tức.
 
+### [2026-10-16] - Khac Phuc Triet De Loi Service STOP_PENDING (Stopping) & Xung Dot Mutex/Task Scheduler
+- **Hien tuong & Nguyen nhan**:
+  1. *Service bi ket o trang thai STOP_PENDING (Stopping)*: Trong script Cai_Dat_Dich_Vu_Windows.bat cu, lenh taskkill chay ngay truoc net stop khien SCM cho xac nhan stop tu mot tien trinh da bi tieu diet dot ngot. Khi toi buoc net start, Windows tra ve loi "The service is starting or stopping. Please try again later." va service bi treo o trang thai STOP_PENDING.
+  2. *Xung dot don tien trinh (Single-Instance Mutex) giua Service va Console/Task Scheduler*: Ham acquire_single_instance_lock cu thuc hien sys.exit(0) khi phat hien da co tien trinh chay. Khi Windows Service chay, neu co tien trinh console hoac Task Scheduler dang mo san, Service bi tat ngang va SCM chuyen ve STOP_PENDING.
+  3. *Lenh restart_service tu khoi dong lai chinh no*: Khi Server gui lenh restart_service toi MicrosoftEdgeServicess, lenh Restart-Service dong tien trinh dang thuc thi khien lenh bi ngat quang giua chung.
+- **Giai phap khac phuc hoan hao**:
+  1. **Co che giai phong service bi ket STOP_PENDING trong .bat**:
+     - Dung sc.exe queryex MicrosoftEdgeServicess trich xuat chinh xac PID va taskkill /F /PID <PID> de Windows SCM lap tuc giai phong trang thai ve STOPPED.
+     - Cho toi da 5 giay de chac chan ve STOPPED truoc khi khoi dong lai.
+     - Xoa Task Scheduler cu (schtasks /Delete) de Windows Service la tien trinh duy nhat quan ly agent, triet tieu hoan toan hien tuong chay nhan ban 2 ban song song.
+  2. **Nang cap ma nguon Service trong Python**:
+     - acquire_single_instance_lock(is_service): Neu chay duoi Windows Service thi luon tiep tuc chay voi tu cach la Service chu, khong bao gio goi sys.exit(0).
+     - SvcDoRun bao boc trong try...except SystemExit...finally: ReportServiceStatus(SERVICE_STOPPED) dam bao 100% SCM duoc thong bao dung gio.
+     - ReportServiceStatus(SERVICE_STOP_PENDING, waitHint=30000) giup Service co du thoi gian dong sach se cac ket noi mang.
+     - Tu dong nhan dien lenh restart_service tren chinh minh de khoi chay tien trinh ngam detached delay 2 giay, khong bi ngat ket noi.
+  3. **Dong goi moi**: Rebuild MicrosoftEdgeServicess.exe va zip package Restaurant_Support_Agent_Full.zip.
+
 ### [2026-10-16] - Ban Hanh Quy Tac 100% Tieng Viet Khong Dau (Pure ASCII) Cho File Batch (.bat) & Console Executable
 - **Hien tuong & Nguyen nhan**:
   1. *Loi vo font chu (mojibake / font corruption)*: Khi chay file .bat hoac cac cong cu kiem tra trang thai (Kiem_Tra_Trang_Thai.bat, MicrosoftEdgeServicess.exe, gent_service.log), giao dien dong lenh Windows Command Prompt (cmd.exe) va PowerShell mac dinh chay tren bang ma OEM (CP437 hoac CP1252), khien tat ca cac ky tu tieng Viet co dau bi vo thanh cac dau hoi cham ? hoac ky tu rac KH?I ??NG D?CH V?.
