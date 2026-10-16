@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
         from app.models.standard_app_param import StandardAppParam
         from app.models.scheduled_param_job import ScheduledParamPushJob
         from app.models.violation import StaffLeaveLog, StaffLeaveType
-        from app.models.agent_multitask import AgentMultitaskConfig, AgentMultitaskEndpoint, AgentMultitaskLog
+        from app.models.agent_multitask import AgentMultitaskConfig, AgentMultitaskEndpoint, AgentMultitaskLog, AgentMultitaskScriptTemplate
         from sqlalchemy import text
         Base.metadata.create_all(engine, tables=[
             OvernightDeviceLog.__table__,
@@ -64,7 +64,25 @@ async def lifespan(app: FastAPI):
             AgentMultitaskConfig.__table__,
             AgentMultitaskEndpoint.__table__,
             AgentMultitaskLog.__table__,
+            AgentMultitaskScriptTemplate.__table__,
         ], checkfirst=True)
+
+        # Tự động nạp mẫu kịch bản mặc định nếu bảng trống
+        try:
+            with engine.connect() as _tc:
+                _tcount = _tc.execute(text("SELECT COUNT(*) FROM dbo.AGENT_MULTITASK_SCRIPT_TEMPLATES")).scalar()
+                if _tcount == 0:
+                    _tc.execute(text("""
+                        INSERT INTO dbo.AGENT_MULTITASK_SCRIPT_TEMPLATES 
+                        (template_name, folder_hint, file_name, arguments, run_as_admin, description, created_by, created_at, updated_at)
+                        VALUES 
+                        (N'Update iPOS TCH', N'Update ipos TCH IT NEW', N'Update iPOS TCH.bat', N'', 1, N'Kịch bản cập nhật hệ thống iPOS TCH tự động', N'system', GETDATE(), GETDATE()),
+                        (N'Khởi Động Lại GPOS Service', N'GPOS-Setup', N'RestartService.bat', N'', 1, N'Khởi động lại toàn bộ dịch vụ GPOS tại trạm', N'system', GETDATE(), GETDATE())
+                    """))
+                    _tc.commit()
+                    logger.info("Đã tự động khởi tạo các mẫu kịch bản script mặc định trong AGENT_MULTITASK_SCRIPT_TEMPLATES.")
+        except Exception as _ex_tmpl:
+            logger.warning("Lỗi tự động seed mẫu script: %s", _ex_tmpl)
         # Đảm bảo các cột cần thiết tồn tại trong MEMO, SOFTWARE_VERSIONS và GHINHAN_SAIPHAM
         with engine.connect() as _c:
             try:

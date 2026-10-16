@@ -9,7 +9,8 @@ from fastapi import HTTPException, status
 from app.models.agent_multitask import (
     AgentMultitaskConfig,
     AgentMultitaskEndpoint,
-    AgentMultitaskLog
+    AgentMultitaskLog,
+    AgentMultitaskScriptTemplate
 )
 from app.models.restaurant import Restaurant
 from app.schemas.agent_multitask import (
@@ -23,7 +24,10 @@ from app.schemas.agent_multitask import (
     AgentCommandResponse,
     AgentCommandResultItem,
     AgentHeartbeatRequest,
-    AgentLogItem
+    AgentLogItem,
+    AgentScriptTemplateItem,
+    AgentScriptTemplateCreate,
+    AgentScriptTemplateUpdate
 )
 
 logger = logging.getLogger(__name__)
@@ -708,3 +712,126 @@ class AgentMultitaskService:
             db.commit()
 
         return {"status": "SUCCESS", "message": f"Updated task #{task_id} result"}
+
+    # ───────────────────────────────────────────────────────────────────────
+    # QUẢN LÝ MẪU KỊCH BẢN SCRIPT / BATCH ĐÃ LƯU (SCRIPT TEMPLATES LIBRARY)
+    # ───────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def get_script_templates(db: Session) -> List[AgentMultitaskScriptTemplate]:
+        """Lấy danh sách các mẫu script đã lưu trong hệ thống."""
+        return db.query(AgentMultitaskScriptTemplate).order_by(AgentMultitaskScriptTemplate.id.asc()).all()
+
+    @staticmethod
+    def create_script_template(
+        payload: AgentScriptTemplateCreate,
+        username: str,
+        db: Session
+    ) -> AgentMultitaskScriptTemplate:
+        """Tạo mới một mẫu script để tái sử dụng sau này."""
+        template_name = payload.template_name.strip()
+        folder_hint = payload.folder_hint.strip()
+        file_name = payload.file_name.strip()
+
+        if not template_name or not folder_hint or not file_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tên mẫu, Thư mục chứa (folder hint) và Tên file không được để trống!"
+            )
+
+        # Kiểm tra trùng tên mẫu
+        existing = db.query(AgentMultitaskScriptTemplate).filter(
+            AgentMultitaskScriptTemplate.template_name == template_name
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Mẫu kịch bản có tên '{template_name}' đã tồn tại! Vui lòng chọn tên khác."
+            )
+
+        new_tmpl = AgentMultitaskScriptTemplate(
+            template_name=template_name,
+            folder_hint=folder_hint,
+            file_name=file_name,
+            arguments=(payload.arguments or "").strip(),
+            run_as_admin=bool(payload.run_as_admin if payload.run_as_admin is not None else True),
+            description=(payload.description or "").strip() or None,
+            created_by=username or "system",
+            created_at=datetime.now(),
+            updated_at=datetime.now()
+        )
+        db.add(new_tmpl)
+        db.commit()
+        db.refresh(new_tmpl)
+        logger.info("Người dùng %s đã tạo mẫu script mới: %s", username, template_name)
+        return new_tmpl
+
+    @staticmethod
+    def update_script_template(
+        template_id: int,
+        payload: AgentScriptTemplateUpdate,
+        username: str,
+        db: Session
+    ) -> AgentMultitaskScriptTemplate:
+        """Cập nhật thông tin mẫu script đã lưu."""
+        tmpl = db.query(AgentMultitaskScriptTemplate).filter(AgentMultitaskScriptTemplate.id == template_id).first()
+        if not tmpl:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy mẫu script ID #{template_id}"
+            )
+
+        if payload.template_name is not None:
+            name = payload.template_name.strip()
+            if not name:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tên mẫu không được để trống!")
+            # Kiểm tra trùng tên khác
+            dup = db.query(AgentMultitaskScriptTemplate).filter(
+                AgentMultitaskScriptTemplate.template_name == name,
+                AgentMultitaskScriptTemplate.id != template_id
+            ).first()
+            if dup:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Tên mẫu '{name}' đã được sử dụng!")
+            tmpl.template_name = name
+
+        if payload.folder_hint is not None:
+            fh = payload.folder_hint.strip()
+            if not fh:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Thư mục chứa không được để trống!")
+            tmpl.folder_hint = fh
+
+        if payload.file_name is not None:
+            fn = payload.file_name.strip()
+            if not fn:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tên file không được để trống!")
+            tmpl.file_name = fn
+
+        if payload.arguments is not None:
+            tmpl.arguments = payload.arguments.strip()
+
+        if payload.run_as_admin is not None:
+            tmpl.run_as_admin = bool(payload.run_as_admin)
+
+        if payload.description is not None:
+            tmpl.description = payload.description.strip() or None
+
+        tmpl.updated_at = datetime.now()
+        db.commit()
+        db.refresh(tmpl)
+        logger.info("Người dùng %s đã cập nhật mẫu script ID #%s (%s)", username, template_id, tmpl.template_name)
+        return tmpl
+
+    @staticmethod
+    def delete_script_template(template_id: int, db: Session) -> bool:
+        """Xóa một mẫu script."""
+        tmpl = db.query(AgentMultitaskScriptTemplate).filter(AgentMultitaskScriptTemplate.id == template_id).first()
+        if not tmpl:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy mẫu script ID #{template_id}"
+            )
+        db.delete(tmpl)
+        db.commit()
+        logger.info("Đã xóa mẫu script ID #%s (%s)", template_id, tmpl.template_name)
+        return True
+

@@ -574,3 +574,10 @@
   + Agent may tram tu dong quet Default Gateway IP qua `route print 0.0.0.0` (tren may ao VMware chinh la Host PC `192.168.254.1:8000`), ket hop host subnet va production server. Server nao tra ve 200 se tu dong duoc chon va luu vao `config.json`.
 - **Bo Chon May Truc Tiep Trong Modal (`renderTargetDevicePicker`) & Nut Nhanh 1 Cham**:
   + Tat ca cac modal tac vu (Script, Service, File, Process, Install) deu tich hop bo chon may truc tiep trong modal neu chua tick chon truoc, kem nut khoi chay nhanh 1 cham `[>_]` o cot Thao Tac Nhanh tren tung dong bang.
+- **Thu Vien Mau Kich Ban Script / Batch (Script Templates Library)**:
+  + Luu khong gioi han cac mau kich ban thuong dung vao Database SQL Server (`dbo.AGENT_MULTITASK_SCRIPT_TEMPLATES`).
+  + 1 cham nap toan bo cau hinh mau (Folder Hint, File Name, Arguments, Run as Admin) vao form khoi chay tuc thi ma khong can go lai.
+  + Luu truc tiep form hien tai thanh mau moi voi ten goi nho va mo ta rieng.
+  + San 2 mau chuan he thong: `Update iPOS TCH` va `Khoi Dong Lai GPOS Service`.
+  + Tu dong phong ve: Khoi tao bang tu dong trong `lifespan` (`main.py`) va DDL trong `Script/Full_SCRIPT_SQL_TABLE.sql`.
+

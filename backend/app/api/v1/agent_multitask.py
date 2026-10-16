@@ -20,7 +20,10 @@ from app.schemas.agent_multitask import (
     AgentCommandRequest,
     AgentCommandResponse,
     AgentHeartbeatRequest,
-    AgentLogItem
+    AgentLogItem,
+    AgentScriptTemplateItem,
+    AgentScriptTemplateCreate,
+    AgentScriptTemplateUpdate
 )
 from app.services.agent_multitask_service import AgentMultitaskService
 
@@ -287,6 +290,60 @@ def report_task_result(
         output=output,
         db=db
     )
+
+
+# ───────────────────────────────────────────────────────────────────────
+# API QUẢN LÝ MẪU KỊCH BẢN SCRIPT / BATCH (SCRIPT TEMPLATES)
+# ───────────────────────────────────────────────────────────────────────
+
+@router.get("/script-templates", response_model=List[AgentScriptTemplateItem])
+def get_script_templates(
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """Lấy danh sách các mẫu script đã lưu trong hệ thống."""
+    return AgentMultitaskService.get_script_templates(db=db)
+
+
+@router.post("/script-templates", response_model=AgentScriptTemplateItem)
+def create_script_template(
+    payload: AgentScriptTemplateCreate,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """Tạo mới một mẫu script để tái sử dụng."""
+    return AgentMultitaskService.create_script_template(
+        payload=payload,
+        username=current_user.username or "system",
+        db=db
+    )
+
+
+@router.put("/script-templates/{template_id}", response_model=AgentScriptTemplateItem)
+def update_script_template(
+    template_id: int,
+    payload: AgentScriptTemplateUpdate,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """Cập nhật thông tin một mẫu script."""
+    return AgentMultitaskService.update_script_template(
+        template_id=template_id,
+        payload=payload,
+        username=current_user.username or "system",
+        db=db
+    )
+
+
+@router.delete("/script-templates/{template_id}")
+def delete_script_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """Xóa một mẫu script."""
+    AgentMultitaskService.delete_script_template(template_id=template_id, db=db)
+    return {"status": "SUCCESS", "message": f"Đã xóa mẫu script #{template_id}"}
 
 
 @router.get("/download-package")

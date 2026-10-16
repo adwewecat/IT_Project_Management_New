@@ -1591,4 +1591,35 @@ BEGIN
 END
 GO
 
+-- ----------------------------------------------------------------------------
+-- BẢNG: [dbo].[AGENT_MULTITASK_SCRIPT_TEMPLATES] (Thư Viện Mẫu Kịch Bản Script / Batch Khởi Chạy Từ Xa)
+-- ----------------------------------------------------------------------------
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[AGENT_MULTITASK_SCRIPT_TEMPLATES]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[AGENT_MULTITASK_SCRIPT_TEMPLATES] (
+        [id] int IDENTITY(1,1) NOT NULL,
+        [template_name] nvarchar(150) NOT NULL,
+        [folder_hint] nvarchar(255) NOT NULL,
+        [file_name] nvarchar(255) NOT NULL,
+        [arguments] nvarchar(500) NULL,
+        [run_as_admin] bit NOT NULL DEFAULT (1),
+        [description] nvarchar(255) NULL,
+        [created_by] nvarchar(100) NULL,
+        [created_at] datetime NOT NULL DEFAULT (getdate()),
+        [updated_at] datetime NULL DEFAULT (getdate()),
+        CONSTRAINT [PK_AGENT_MULTITASK_SCRIPT_TEMPLATES] PRIMARY KEY CLUSTERED ([id] ASC)
+    );
+    CREATE NONCLUSTERED INDEX [IX_AGENT_SCRIPT_TEMPLATES_NAME] ON [dbo].[AGENT_MULTITASK_SCRIPT_TEMPLATES] ([template_name] ASC);
+    PRINT N'Created table [dbo].[AGENT_MULTITASK_SCRIPT_TEMPLATES] successfully.';
+
+    -- Nạp sẵn các mẫu kịch bản chuẩn nếu chưa có
+    INSERT INTO [dbo].[AGENT_MULTITASK_SCRIPT_TEMPLATES] 
+    ([template_name], [folder_hint], [file_name], [arguments], [run_as_admin], [description], [created_by], [created_at], [updated_at])
+    VALUES 
+    (N'Update iPOS TCH', N'Update ipos TCH IT NEW', N'Update iPOS TCH.bat', N'', 1, N'Kịch bản cập nhật hệ thống iPOS TCH tự động', N'system', GETDATE(), GETDATE()),
+    (N'Khởi Động Lại GPOS Service', N'GPOS-Setup', N'RestartService.bat', N'', 1, N'Khởi động lại toàn bộ dịch vụ GPOS tại trạm', N'system', GETDATE(), GETDATE());
+END
+GO
+
+
 

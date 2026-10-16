@@ -144,3 +144,38 @@ class AgentLogItem(BaseModel):
     result_message: Optional[str] = None
     created_by: str
     created_at: datetime
+
+
+class AgentScriptTemplateItem(BaseModel):
+    id: int
+    template_name: str
+    folder_hint: str
+    file_name: str
+    arguments: Optional[str] = ""
+    run_as_admin: bool = True
+    description: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AgentScriptTemplateCreate(BaseModel):
+    template_name: str
+    folder_hint: str
+    file_name: str
+    arguments: Optional[str] = ""
+    run_as_admin: Optional[bool] = True
+    description: Optional[str] = None
+
+
+class AgentScriptTemplateUpdate(BaseModel):
+    template_name: Optional[str] = None
+    folder_hint: Optional[str] = None
+    file_name: Optional[str] = None
+    arguments: Optional[str] = None
+    run_as_admin: Optional[bool] = None
+    description: Optional[str] = None
+

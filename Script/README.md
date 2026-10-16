@@ -2863,3 +2863,32 @@ estaurant_service.py).
    - **Huong dan giai quyet**: Chi can giai nen ban `Restaurant_Support_Agent_Full.zip` moi (10.3MB) vua build vao may ao VMware va chay `Cai_Dat_Dich_Vu_Windows.bat` (hoac `Chay_Agent_Truc_Tiep.bat`) la he thong se thuc thi lenh tim kiem va chay file `.bat` thanh cong 100%.
 
 
+
+---
+
+### [2026-10-16] - Tinh Nang Thu Vien Mau Kich Ban Script / Batch (Script Templates Library) Khoi Chay Tu Xa
+1. **Yeu Cau & Boi Canh Nghiep Vu**:
+   - Nguoi dung quan tri can chay nhieu file script/batch khac nhau trong cung thu muc hoac nhieu thu muc tren may tram nha hang qua thoi gian.
+   - Thay vi phai nhap lai thu cong moi lan chay (Folder Hint, File Name, Arguments, Run as Admin), he thong cung cap **Thu Vien Mau Kich Ban Da Luu (Script Templates Library)**:
+     + Luu khong gioi han cac mau kich ban thuong dung vao Database SQL Server (dbo.AGENT_MULTITASK_SCRIPT_TEMPLATES).
+     + 1 cham nap toan bo cau hinh mau vao form khoi chay tuc thi ma khong phai go lai.
+     + Luu truc tiep form hien tai thanh mau moi voi ten goi nho va mo ta rieng.
+     + Xoa / quan ly cac mau kich ban linh hoat.
+     + Co san co che tu dong phong ve va nap mau mac dinh: Update iPOS TCH va Khoi Dong Lai GPOS Service.
+
+2. **Kien Truc Co So Du Lieu & Backend**:
+   - Bang SQL Server: dbo.AGENT_MULTITASK_SCRIPT_TEMPLATES (id, template_name, folder_hint, file_name, arguments, run_as_admin, description, created_by, created_at, updated_at).
+   - Tu dong phong ve: Khai bao trong lifespan (main.py) va DDL chuan trong Script/Full_SCRIPT_SQL_TABLE.sql.
+   - API Endpoints: GET/POST/PUT/DELETE /api/v1/agent-multitask/script-templates.
+
+3. **Giao Dien Frontend (AgentMultitaskPage.tsx)**:
+   - Thu vien mau hien thi dang luoi the responsive (Grid Cards) voi vien xanh emerald, icon BookmarkPlus va so dem tong so mau.
+   - The hien thi: Ten mau, badge Admin, duong dan Folder \ File, mo ta va nut xoa nhanh Trash2.
+   - The dang duoc chon tu dong doi mau noi bat vien dam 2px solid #059669.
+   - Nut + Luu Mau Moi mo form inline nhap Ten mau va Mo ta, tu dong bat cap Folder & File dang dien.
+   - Thanh huong dan duoi form: 'Muon dung lai cac thong so tren cho cac lan sau ma khong can dien lai?' kem nut Luu Lam Mau Kich Ban.
+   - Co co che cache du phong (localStorage & DEFAULT_SCRIPT_TEMPLATES) dam bao UI luon hien thi muot ma.
+
+4. **Kiem Thu & Build Hoan Tat**:
+   - Frontend: cmd /c 'npm run build' tai frontend/ hoan toan sach loi (exit code 0).
+   - Backend: python -m compileall app va Smoke Test PASSED 100%, database khoi tao va seed thanh cong.

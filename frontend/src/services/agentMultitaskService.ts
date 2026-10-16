@@ -192,5 +192,58 @@ export const agentMultitaskService = {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+  },
+
+  // ── QUẢN LÝ MẪU KỊCH BẢN SCRIPT / BATCH ──
+  getScriptTemplates: async (): Promise<AgentScriptTemplateItem[]> => {
+    const res = await api.get('/agent-multitask/script-templates');
+    return res.data;
+  },
+
+  createScriptTemplate: async (payload: AgentScriptTemplateCreate): Promise<AgentScriptTemplateItem> => {
+    const res = await api.post('/agent-multitask/script-templates', payload);
+    return res.data;
+  },
+
+  updateScriptTemplate: async (id: number, payload: AgentScriptTemplateUpdate): Promise<AgentScriptTemplateItem> => {
+    const res = await api.put(`/agent-multitask/script-templates/${id}`, payload);
+    return res.data;
+  },
+
+  deleteScriptTemplate: async (id: number): Promise<{ status: string; message: string }> => {
+    const res = await api.delete(`/agent-multitask/script-templates/${id}`);
+    return res.data;
   }
 };
+
+export interface AgentScriptTemplateItem {
+  id: number;
+  template_name: string;
+  folder_hint: string;
+  file_name: string;
+  arguments?: string;
+  run_as_admin: boolean;
+  description?: string;
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AgentScriptTemplateCreate {
+  template_name: string;
+  folder_hint: string;
+  file_name: string;
+  arguments?: string;
+  run_as_admin?: boolean;
+  description?: string;
+}
+
+export interface AgentScriptTemplateUpdate {
+  template_name?: string;
+  folder_hint?: string;
+  file_name?: string;
+  arguments?: string;
+  run_as_admin?: boolean;
+  description?: string;
+}
+

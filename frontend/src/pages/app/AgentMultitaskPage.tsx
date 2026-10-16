@@ -21,7 +21,9 @@ import {
   Monitor,
   Edit,
   Trash2,
-  Terminal
+  Terminal,
+  BookmarkPlus,
+  Save
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -35,8 +37,31 @@ import {
   AgentOverviewResponse,
   AgentEndpointItem,
   AgentConfigResponse,
-  AgentCommandResponse
+  AgentCommandResponse,
+  AgentScriptTemplateItem
 } from '../../services/agentMultitaskService';
+
+// Danh sách mẫu kịch bản dự phòng mặc định
+const DEFAULT_SCRIPT_TEMPLATES: AgentScriptTemplateItem[] = [
+  {
+    id: 1,
+    template_name: 'Update iPOS TCH',
+    folder_hint: 'Update ipos TCH IT NEW',
+    file_name: 'Update iPOS TCH.bat',
+    arguments: '',
+    run_as_admin: true,
+    description: 'Kịch bản cập nhật hệ thống iPOS TCH tự động'
+  },
+  {
+    id: 2,
+    template_name: 'Khởi Động Lại GPOS Service',
+    folder_hint: 'GPOS-Setup',
+    file_name: 'RestartService.bat',
+    arguments: '',
+    run_as_admin: true,
+    description: 'Khởi động lại toàn bộ dịch vụ GPOS tại trạm'
+  }
+];
 
 export const AgentMultitaskPage: React.FC = () => {
   const { user } = useAuth();
@@ -62,6 +87,15 @@ export const AgentMultitaskPage: React.FC = () => {
   const [scriptFolderHint, setScriptFolderHint] = useState<string>('Update ipos TCH IT NEW');
   const [scriptFileName, setScriptFileName] = useState<string>('Update iPOS TCH.bat');
   const [scriptArgs, setScriptArgs] = useState<string>('');
+
+  // Thư Viện Mẫu Kịch Bản Script / Batch (Script Templates Library)
+  const [scriptTemplates, setScriptTemplates] = useState<AgentScriptTemplateItem[]>(DEFAULT_SCRIPT_TEMPLATES);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(1);
+  const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState<boolean>(false);
+  const [saveTemplateName, setSaveTemplateName] = useState<string>('');
+  const [saveTemplateDesc, setSaveTemplateDesc] = useState<string>('');
+  const [isSavingTemplate, setIsSavingTemplate] = useState<boolean>(false);
+  const [deletingTemplateId, setDeletingTemplateId] = useState<number | null>(null);
 
   // Modal Thêm Thiết Bị / User Ngoài
   const [isAddDeviceModalOpen, setIsAddDeviceModalOpen] = useState<boolean>(false);
@@ -145,6 +179,20 @@ export const AgentMultitaskPage: React.FC = () => {
     return () => clearInterval(intervalTimer);
   }, []);
 
+  // Tải danh sách mẫu kịch bản script đã lưu
+  const loadScriptTemplates = async () => {
+    try {
+      const tmpls = await agentMultitaskService.getScriptTemplates();
+      if (tmpls && tmpls.length > 0) {
+        setScriptTemplates(tmpls);
+      } else {
+        setScriptTemplates(DEFAULT_SCRIPT_TEMPLATES);
+      }
+    } catch {
+      // Giữ nguyên danh sách hiện tại nếu có lỗi mạng
+    }
+  };
+
   const loadAllData = async () => {
     setLoading(true);
     try {
@@ -162,6 +210,8 @@ export const AgentMultitaskPage: React.FC = () => {
         setDefaultAdminPass(cfgRes.default_admin_pass || '');
         setAllowedUsers(cfgRes.allowed_users || 'dung.nguyenanh,admin');
         setAutoRestartOnFailure(cfgRes.auto_restart_on_failure);
+        // Tải mẫu kịch bản
+        loadScriptTemplates();
       }
     } catch (err: any) {
       showToast('Lỗi khi tải dữ liệu Agent Multitask: ' + (err.response?.data?.detail || err.message), 'error');
@@ -513,6 +563,75 @@ export const AgentMultitaskPage: React.FC = () => {
       showToast('Lỗi khi tải bộ cài: ' + (err?.response?.data?.detail || err.message), 'error');
     }
   };
+
+  // ── XỬ LÝ MẪU KỊCH BẢN SCRIPT / BATCH ──
+  const handleSelectTemplate = (tmpl: AgentScriptTemplateItem) => {
+    setSelectedTemplateId(tmpl.id);
+    setScriptFolderHint(tmpl.folder_hint);
+    setScriptFileName(tmpl.file_name);
+    setScriptArgs(tmpl.arguments || '');
+    setRunAsAdmin(tmpl.run_as_admin);
+    showToast(`Đã nạp mẫu: ${tmpl.template_name}`, 'info');
+  };
+
+  const handleSaveAsTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = saveTemplateName.trim();
+    const folder = scriptFolderHint.trim();
+    const file = scriptFileName.trim();
+
+    if (!name) {
+      showToast('Vui lòng nhập tên cho mẫu kịch bản!', 'error');
+      return;
+    }
+    if (!folder || !file) {
+      showToast('Vui lòng nhập Thư mục chứa (Folder Hint) và Tên File trước khi lưu!', 'error');
+      return;
+    }
+
+    setIsSavingTemplate(true);
+    try {
+      const created = await agentMultitaskService.createScriptTemplate({
+        template_name: name,
+        folder_hint: folder,
+        file_name: file,
+        arguments: scriptArgs.trim(),
+        run_as_admin: runAsAdmin,
+        description: saveTemplateDesc.trim() || undefined
+      });
+      showToast(`Đã lưu mẫu kịch bản "${created.template_name}" thành công!`, 'success');
+      setSaveTemplateName('');
+      setSaveTemplateDesc('');
+      setIsSaveTemplateOpen(false);
+      setSelectedTemplateId(created.id);
+      await loadScriptTemplates();
+    } catch (err: any) {
+      showToast('Lỗi khi lưu mẫu kịch bản: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (tmplId: number, tmplName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa mẫu kịch bản "${tmplName}" không?`)) {
+      return;
+    }
+    setDeletingTemplateId(tmplId);
+    try {
+      await agentMultitaskService.deleteScriptTemplate(tmplId);
+      showToast(`Đã xóa mẫu kịch bản "${tmplName}".`, 'success');
+      if (selectedTemplateId === tmplId) {
+        setSelectedTemplateId(null);
+      }
+      await loadScriptTemplates();
+    } catch (err: any) {
+      showToast('Lỗi khi xóa mẫu: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setDeletingTemplateId(null);
+    }
+  };
+
 
   // ══════════════════════════════════════════════════════════════════════════
   // NẾU USER KHÔNG CÓ QUYỀN: HIỂN THỊ TRANG "TÍNH NĂNG ĐANG PHÁT TRIỂN"
@@ -2089,31 +2208,214 @@ export const AgentMultitaskPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Bộ chọn máy đích & Nút nạp mẫu */}
+            {/* Bộ chọn máy đích */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {renderTargetDevicePicker()}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
-                <button
-                  type="button"
+            </div>
+
+            {/* ── THƯ VIỆN MẪU KỊCH BẢN ĐÃ LƯU (SCRIPT TEMPLATES LIBRARY) ── */}
+            <div
+              style={{
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '8px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '13px' }}>
+                  <BookmarkPlus size={16} color="#059669" />
+                  <span>Mẫu Kịch Bản Đã Lưu ({scriptTemplates.length})</span>
+                  <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                    (Bấm 1 chạm để nạp & chạy ngay)
+                  </span>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => {
-                    setScriptFolderHint('Update ipos TCH IT NEW');
-                    setScriptFileName('Update iPOS TCH.bat');
-                    setScriptArgs('');
-                    showToast('Đã nạp mẫu kịch bản: Update iPOS TCH!', 'info');
+                    setIsSaveTemplateOpen(!isSaveTemplateOpen);
+                    if (!saveTemplateName && scriptFileName) {
+                      setSaveTemplateName(scriptFileName.replace(/\.(bat|cmd|exe|ps1)$/i, ''));
+                    }
                   }}
+                  leftIcon={<Plus size={13} />}
+                  style={{ fontSize: '12px', padding: '4px 10px', color: '#059669', borderColor: '#10B981' }}
+                >
+                  {isSaveTemplateOpen ? 'Đóng Form Lưu' : '+ Lưu Mẫu Mới'}
+                </Button>
+              </div>
+
+              {/* Form lưu mẫu mới khi bấm nút */}
+              {isSaveTemplateOpen && (
+                <div
                   style={{
-                    backgroundColor: '#FEF3C7',
-                    border: '1px solid #FCD34D',
-                    color: '#92400E',
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1.5px solid #10B981',
                     borderRadius: '6px',
-                    padding: '4px 10px',
-                    fontSize: '11.5px',
-                    fontWeight: 700,
-                    cursor: 'pointer'
+                    padding: '10px 12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
                   }}
                 >
-                  ⚡ Mẫu: Update iPOS TCH
-                </button>
+                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#059669' }}>
+                    💾 Lưu cấu hình hiện tại thành mẫu kịch bản để tái sử dụng:
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px' }}>
+                    <div>
+                      <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '3px' }}>
+                        Tên Mẫu Kịch Bản *:
+                      </label>
+                      <input
+                        type="text"
+                        value={saveTemplateName}
+                        onChange={(e) => setSaveTemplateName(e.target.value)}
+                        placeholder="VD: Update iPOS TCH Mới, Restart POS..."
+                        style={{
+                          width: '100%',
+                          padding: '6px 8px',
+                          borderRadius: '4px',
+                          border: '1px solid var(--border-color)',
+                          fontSize: '12px',
+                          backgroundColor: 'var(--bg-secondary)',
+                          color: 'var(--text-primary)'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '3px' }}>
+                        Mô Tả / Ghi Chú (Tùy chọn):
+                      </label>
+                      <input
+                        type="text"
+                        value={saveTemplateDesc}
+                        onChange={(e) => setSaveTemplateDesc(e.target.value)}
+                        placeholder="VD: Cập nhật bản vá tháng 10..."
+                        style={{
+                          width: '100%',
+                          padding: '6px 8px',
+                          borderRadius: '4px',
+                          border: '1px solid var(--border-color)',
+                          fontSize: '12px',
+                          backgroundColor: 'var(--bg-secondary)',
+                          color: 'var(--text-primary)'
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                    Sẽ lưu: Folder = <strong>"{scriptFolderHint || '(chưa nhập)'}"</strong> | File = <strong>"{scriptFileName || '(chưa nhập)'}"</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginTop: '2px' }}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setIsSaveTemplateOpen(false)}
+                      style={{ fontSize: '11.5px', padding: '3px 8px' }}
+                    >
+                      Hủy
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={handleSaveAsTemplate}
+                      disabled={isSavingTemplate || !saveTemplateName.trim()}
+                      leftIcon={<Save size={12} />}
+                      style={{ fontSize: '11.5px', padding: '3px 12px', backgroundColor: '#059669' }}
+                    >
+                      {isSavingTemplate ? 'Đang Lưu...' : 'Xác Nhận Lưu Mẫu'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Danh sách các card mẫu */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                  gap: '8px',
+                  maxHeight: '185px',
+                  overflowY: 'auto',
+                  paddingRight: '2px'
+                }}
+              >
+                {scriptTemplates.map((tmpl) => {
+                  const isSelected = selectedTemplateId === tmpl.id;
+                  return (
+                    <div
+                      key={tmpl.id}
+                      onClick={() => handleSelectTemplate(tmpl)}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: isSelected ? '2px solid #059669' : '1px solid var(--border-color)',
+                        backgroundColor: isSelected ? 'rgba(5, 150, 105, 0.08)' : 'var(--bg-primary)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        position: 'relative',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '3px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ fontWeight: 700, fontSize: '12.5px', color: isSelected ? '#059669' : 'var(--text-primary)' }}>
+                          ⚡ {tmpl.template_name}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          {tmpl.run_as_admin && (
+                            <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#FEE2E2', color: '#991B1B', fontWeight: 700 }}>
+                              Admin
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            title="Xóa mẫu kịch bản này"
+                            onClick={(e) => handleDeleteTemplate(tmpl.id, tmpl.template_name, e)}
+                            disabled={deletingTemplateId === tmpl.id}
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                              color: 'var(--text-secondary)',
+                              padding: '2px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              borderRadius: '4px'
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
+                            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                        📂 {tmpl.folder_hint} \ {tmpl.file_name}
+                      </div>
+
+                      {tmpl.description && (
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {tmpl.description}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -2203,6 +2505,38 @@ export const AgentMultitaskPage: React.FC = () => {
                 <CheckCircle size={14} />
                 <span>Tự động đặt CWD về thư mục chứa file</span>
               </label>
+            </div>
+
+            {/* Thanh thao tác nhanh lưu thông số */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                backgroundColor: 'rgba(5, 150, 105, 0.05)',
+                border: '1px dashed #10B981',
+                borderRadius: '6px',
+                padding: '8px 12px',
+                marginTop: '4px'
+              }}
+            >
+              <div style={{ fontSize: '12px', color: '#065F46' }}>
+                💡 Muốn dùng lại các thông số trên cho các lần sau mà không cần điền lại?
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setIsSaveTemplateOpen(true);
+                  if (!saveTemplateName && scriptFileName) {
+                    setSaveTemplateName(scriptFileName.replace(/\.(bat|cmd|exe|ps1)$/i, ''));
+                  }
+                }}
+                leftIcon={<BookmarkPlus size={13} />}
+                style={{ fontSize: '11.5px', padding: '3px 10px', color: '#059669', borderColor: '#10B981' }}
+              >
+                💾 Lưu Làm Mẫu Kịch Bản
+              </Button>
             </div>
           </div>
         </Modal>

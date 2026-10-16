@@ -70,3 +70,23 @@ class AgentMultitaskLog(Base):
     result_message: Mapped[Optional[str]] = mapped_column(UnicodeText, nullable=True)
     created_by: Mapped[str] = mapped_column(Unicode(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+
+
+class AgentMultitaskScriptTemplate(Base):
+    """
+    Bảng lưu danh sách mẫu kịch bản/file cần chạy từ xa (Script Presets / Templates).
+    Cho phép lưu tên mẫu, tên thư mục (folder_hint), tên file (.bat, .cmd, .exe, .ps1), tham số, quyền Admin.
+    """
+    __tablename__ = "AGENT_MULTITASK_SCRIPT_TEMPLATES"
+    __table_args__ = {"schema": "dbo"}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    template_name: Mapped[str] = mapped_column(Unicode(150), nullable=False)
+    folder_hint: Mapped[str] = mapped_column(Unicode(255), nullable=False)
+    file_name: Mapped[str] = mapped_column(Unicode(255), nullable=False)
+    arguments: Mapped[Optional[str]] = mapped_column(Unicode(500), nullable=True)
+    run_as_admin: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Unicode(255), nullable=True)
+    created_by: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
