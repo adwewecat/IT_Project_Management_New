@@ -516,6 +516,113 @@ def smart_find_file(folder_hint="", file_name="", max_depth=6):
     return None, None
 
 
+def smart_extract_archive(archive_path, extract_dir):
+    """
+    Giai nen thong minh ho tro da dinh dang: .zip, .rar, .7z, .tar, .gz, .tgz, .bz2, .xz, .cab, .iso
+    Thu tu uu tien toi uu nhat:
+      1. Python zipfile (neu la .zip): Chay cuc nhanh truc tiep trong Python.
+      2. Windows tar.exe (System32\\tar.exe / libarchive): Ho tro tu nhien .zip, .rar, .7z, .tar, .gz tren Win 10/11.
+      3. WinRAR (WinRAR.exe / UnRAR.exe): Chuyen tri file .rar, .zip, .7z neu may co cai dat.
+      4. 7-Zip (7z.exe / 7za.exe): Chuyen tri .7z, .rar, .zip neu may co cai dat.
+      5. PowerShell Expand-Archive (neu la .zip).
+    Tra ve: tuple (success: bool, method: str, count: int, err_msg: str)
+    """
+    if not os.path.isfile(archive_path):
+        return False, "none", 0, f"Tep nen khong ton tai tai: {archive_path}"
+
+    os.makedirs(extract_dir, exist_ok=True)
+    f_lower = archive_path.lower()
+    errors = []
+
+    # 1. Neu la file .zip -> Thu truoc bang Python zipfile
+    if f_lower.endswith(".zip"):
+        try:
+            with zipfile.ZipFile(archive_path, "r") as zf:
+                zf.extractall(extract_dir)
+                names = zf.namelist()
+                return True, "Python zipfile", len(names), ""
+        except Exception as ex_zip:
+            errors.append(f"zipfile: {ex_zip}")
+            logger.debug("zipfile extract failed, falling back: %s", ex_zip)
+
+    # 2. Windows tar.exe (libarchive tren Windows 10/11 ho tro .rar, .7z, .zip, .tar, .gz)
+    tar_exe = shutil.which("tar") or (r"C:\Windows\System32\tar.exe" if os.path.isfile(r"C:\Windows\System32\tar.exe") else None)
+    if tar_exe:
+        try:
+            p_tar = subprocess.run(
+                [tar_exe, "-xf", archive_path, "-C", extract_dir],
+                capture_output=True,
+                text=True,
+                timeout=180
+            )
+            if p_tar.returncode == 0:
+                extracted_items = os.listdir(extract_dir)
+                if extracted_items:
+                    return True, "Windows tar.exe (libarchive)", len(extracted_items), ""
+            else:
+                errors.append(f"tar.exe exit {p_tar.returncode}: {p_tar.stderr.strip()}")
+        except Exception as ex_tar:
+            errors.append(f"tar.exe: {ex_tar}")
+
+    # 3. WinRAR (WinRAR.exe hoac UnRAR.exe)
+    winrar_candidates = [
+        r"C:\Program Files\WinRAR\WinRAR.exe",
+        r"C:\Program Files\WinRAR\UnRAR.exe",
+        r"C:\Program Files (x86)\WinRAR\WinRAR.exe",
+        r"C:\Program Files (x86)\WinRAR\UnRAR.exe",
+    ]
+    for w_cand in winrar_candidates:
+        if os.path.isfile(w_cand):
+            try:
+                is_unrar = w_cand.lower().endswith("unrar.exe")
+                w_cmd = [w_cand, "x", "-y", archive_path, extract_dir + "\\"] if is_unrar else [w_cand, "x", "-ibck", "-inul", "-y", archive_path, extract_dir + "\\"]
+                p_rar = subprocess.run(w_cmd, capture_output=True, text=True, timeout=180)
+                if p_rar.returncode in (0, 1):
+                    extracted_items = os.listdir(extract_dir)
+                    if extracted_items:
+                        return True, f"WinRAR ({os.path.basename(w_cand)})", len(extracted_items), ""
+                else:
+                    errors.append(f"WinRAR exit {p_rar.returncode}")
+            except Exception as ex_rar:
+                errors.append(f"WinRAR: {ex_rar}")
+
+    # 4. 7-Zip (7z.exe / 7za.exe)
+    sevenzip_candidates = [
+        r"C:\Program Files\7-Zip\7z.exe",
+        r"C:\Program Files (x86)\7-Zip\7z.exe",
+        r"C:\Program Files\7-Zip\7za.exe",
+    ]
+    for sz_cand in sevenzip_candidates:
+        if os.path.isfile(sz_cand):
+            try:
+                p_sz = subprocess.run([sz_cand, "x", "-y", f"-o{extract_dir}", archive_path], capture_output=True, text=True, timeout=180)
+                if p_sz.returncode == 0:
+                    extracted_items = os.listdir(extract_dir)
+                    if extracted_items:
+                        return True, f"7-Zip ({os.path.basename(sz_cand)})", len(extracted_items), ""
+                else:
+                    errors.append(f"7-Zip exit {p_sz.returncode}")
+            except Exception as ex_sz:
+                errors.append(f"7-Zip: {ex_sz}")
+
+    # 5. PowerShell Expand-Archive (neu la .zip)
+    if f_lower.endswith(".zip"):
+        try:
+            ps_cmd = f"Expand-Archive -LiteralPath '{archive_path}' -DestinationPath '{extract_dir}' -Force"
+            p_ps = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True, text=True, timeout=180)
+            if p_ps.returncode == 0:
+                extracted_items = os.listdir(extract_dir)
+                if extracted_items:
+                    return True, "PowerShell Expand-Archive", len(extracted_items), ""
+            else:
+                errors.append(f"PowerShell: {p_ps.stderr.strip()}")
+        except Exception as ex_ps:
+            errors.append(f"PowerShell: {ex_ps}")
+
+    err_summary = " | ".join(errors) if errors else "He thong khong tim thay cong cu giai nen phu hop (can tar.exe, WinRAR hoac 7-Zip)."
+    return False, "none", 0, err_summary
+
+
 def execute_task(config, task, ip_lan=None):
     """Thuc thi mot tac vu ho tro tu xa nhan tu Server."""
     task_id = task.get("id") or task.get("task_id", 0)
@@ -922,18 +1029,17 @@ def execute_task(config, task, ip_lan=None):
                 else:
                     raise FileNotFoundError(f"Khong the tim thay hoac tai file '{file_name}' vao '{target_folder}'.")
 
-            # 3. Tu dong giai nen neu la file zip
+            # 3. Tu dong giai nen neu la file nen (ZIP, RAR, 7Z, TAR, GZ, TGZ, CAB, ISO...)
             auto_extract = payload.get("auto_extract", True)
-            if auto_extract and target_file_path.lower().endswith((".zip",)):
-                logger.info("Bat dau giai nen: %s vao %s", target_file_path, target_folder)
-                try:
-                    with zipfile.ZipFile(target_file_path, "r") as zf:
-                        zf.extractall(target_folder)
-                        extracted_list = zf.namelist()
-                    log_pipeline.append(f"[Giai Nen] Da giai nen {len(extracted_list)} file vao {target_folder}.")
-                    logger.info("Giai nen thanh cong %d file vao %s", len(extracted_list), target_folder)
-                except Exception as ex_unzip:
-                    raise RuntimeError(f"Loi giai nen file zip: {ex_unzip}")
+            ARCHIVE_EXTS = (".zip", ".rar", ".7z", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".cab", ".iso")
+            if auto_extract and target_file_path.lower().endswith(ARCHIVE_EXTS):
+                logger.info("Bat dau giai nen thong minh: %s vao %s", target_file_path, target_folder)
+                ok_extract, method_used, count_items, err_extract = smart_extract_archive(target_file_path, target_folder)
+                if ok_extract:
+                    log_pipeline.append(f"[Giai Nen] Da giai nen thanh cong bang {method_used} vao {target_folder} ({count_items} tep/thu muc).")
+                    logger.info("Giai nen thanh cong bang %s: %s (%d items)", method_used, target_folder, count_items)
+                else:
+                    raise RuntimeError(f"Loi giai nen file '{os.path.basename(target_file_path)}': {err_extract}")
 
             # 4. Thuc thi tuan tu cac buoc (steps)
             steps = payload.get("steps") or []
@@ -958,10 +1064,17 @@ def execute_task(config, task, ip_lan=None):
                             if os.path.isfile(modify_file_path):
                                 break
 
-                    if not os.path.isfile(modify_file_path):
-                        raise FileNotFoundError(f"Khong tim thay file can sua '{rel_file}' tai '{target_folder}'.")
-
+                    # Neu van khong tim thay file va nguoi dung muon ghi de / tao moi file
                     mod_mode = str(step.get("modify_mode") or step.get("mode") or "").upper().strip()
+                    if not os.path.isfile(modify_file_path):
+                        if mod_mode in ["TEXT_OVERWRITE", "OVERWRITE", "CREATE_FILE"] or not step.get("search_text"):
+                            os.makedirs(os.path.dirname(modify_file_path), exist_ok=True)
+                            with open(modify_file_path, "w", encoding="utf-8") as f_new:
+                                f_new.write("")
+                            log_pipeline.append(f"[{step_name}] Tao moi file '{rel_file}' tai: {modify_file_path}")
+                        else:
+                            raise FileNotFoundError(f"Khong tim thay file can sua '{rel_file}' tai '{target_folder}'.")
+
                     if not mod_mode:
                         mod_mode = "JSON_KEY_VALUE" if modify_file_path.lower().endswith(".json") else "TEXT_REPLACE"
 
@@ -981,6 +1094,21 @@ def execute_task(config, task, ip_lan=None):
                         log_pipeline.append(f"[{step_name}] Sua JSON {os.path.basename(modify_file_path)}: OK ({', '.join(applied_changes)})")
                         logger.info("Da sua JSON file %s: %s", modify_file_path, applied_changes)
 
+                    elif mod_mode in ["TEXT_OVERWRITE", "OVERWRITE"]:
+                        new_content = step.get("content") or step.get("replace_text") or ""
+                        with open(modify_file_path, "w", encoding="utf-8") as f_txt:
+                            f_txt.write(new_content)
+                        log_pipeline.append(f"[{step_name}] Ghi de noi dung {os.path.basename(modify_file_path)}: OK ({len(new_content)} ky tu)")
+                        logger.info("Da ghi de noi dung vao file %s", modify_file_path)
+
+                    elif mod_mode in ["TEXT_APPEND", "APPEND"]:
+                        append_content = step.get("content") or step.get("replace_text") or ""
+                        prefix = "\n" if (os.path.isfile(modify_file_path) and os.path.getsize(modify_file_path) > 0) else ""
+                        with open(modify_file_path, "a", encoding="utf-8") as f_txt:
+                            f_txt.write(prefix + append_content)
+                        log_pipeline.append(f"[{step_name}] Noi them vao {os.path.basename(modify_file_path)}: OK ({len(append_content)} ky tu)")
+                        logger.info("Da noi them vao file %s", modify_file_path)
+
                     else:
                         text_replacements = list(step.get("text_replacements") or [])
                         search_t = step.get("search_text")
@@ -991,18 +1119,25 @@ def execute_task(config, task, ip_lan=None):
                         with open(modify_file_path, "r", encoding="utf-8", errors="ignore") as f_txt:
                             content_txt = f_txt.read()
 
-                        applied_count = 0
-                        for r_item in text_replacements:
-                            s_str = r_item.get("search", "")
-                            r_str = r_item.get("replace", "")
-                            if s_str and s_str in content_txt:
-                                content_txt = content_txt.replace(s_str, r_str)
-                                applied_count += 1
+                        # Neu nguoi dung de trong search_text va chi nhap replace_text -> Tu dong hieu la ghi / dien doan van ban vao file
+                        if not text_replacements and (replace_t or not content_txt.strip()):
+                            with open(modify_file_path, "w", encoding="utf-8") as f_txt:
+                                f_txt.write(replace_t)
+                            log_pipeline.append(f"[{step_name}] Dien noi dung vao {os.path.basename(modify_file_path)}: OK ('{replace_t}')")
+                            logger.info("Da dien noi dung vao file %s", modify_file_path)
+                        else:
+                            applied_count = 0
+                            for r_item in text_replacements:
+                                s_str = r_item.get("search", "")
+                                r_str = r_item.get("replace", "")
+                                if s_str and s_str in content_txt:
+                                    content_txt = content_txt.replace(s_str, r_str)
+                                    applied_count += 1
 
-                        with open(modify_file_path, "w", encoding="utf-8") as f_txt:
-                            f_txt.write(content_txt)
-                        log_pipeline.append(f"[{step_name}] Sua Text {os.path.basename(modify_file_path)}: Da thay the {applied_count} vi tri.")
-                        logger.info("Da thay the text file %s", modify_file_path)
+                            with open(modify_file_path, "w", encoding="utf-8") as f_txt:
+                                f_txt.write(content_txt)
+                            log_pipeline.append(f"[{step_name}] Sua Text {os.path.basename(modify_file_path)}: Da thay the {applied_count} vi tri.")
+                            logger.info("Da thay the text file %s", modify_file_path)
 
                 # ── BƯỚC: CHẠY FILE SCRIPT / LỆNH (RUN_SCRIPT / RUN_COMMAND) ──
                 elif step_type in ["RUN_SCRIPT", "RUN_COMMAND", "EXECUTE_FILE"]:

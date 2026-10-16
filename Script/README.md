@@ -3063,4 +3063,51 @@ estaurant_service.py).
    - Frontend: `cmd /c "npm run build"` -> Exit code 0 (`✓ built in 5.78s`), `frontend/dist/` sạch sẽ.
    - Backend: `python -m compileall app` -> Clean 100%. Smoke test passed 100%.
 
+---
+
+## 🚀 NHẬT KÝ LƯU VẾT: NÂNG CẤP GIẢI NÉN ĐA ĐỊNH DẠNG (ZIP/RAR/7Z) & CẢI TIẾN BƯỚC SỬA FILE TRONG DEPLOY_PACKAGE [2026-10-16]
+
+### 1. Bối Cảnh & Nguyên Nhân Gặp Phải
+- **Vấn đề 1 (Chỉ hỗ trợ file .zip)**:
+  + Khi người dùng upload/truyền gói file nén định dạng `.rar` (như `TEST.rar`), `.7z`, `.tar`, `.gz`, `.tgz`... và tích chọn "Tự động giải nén", hệ thống trước đây chỉ kiểm tra `target_file_path.lower().endswith((".zip",))` nên bỏ qua hoàn toàn bước giải nén.
+  + Dẫn đến ở Bước 1 chỉnh sửa file `2.txt` (nằm trong file nén `TEST.rar`), agent không tìm thấy file và báo lỗi: `FileNotFoundError: Khong tim thay file can sua '2.txt' tai 'C:\ABC'`.
+- **Vấn đề 2 (Bỏ qua khi ô tìm kiếm để trống)**:
+  + Trong Bước Sửa File với chế độ "Tìm & Thay thế văn bản (Text)", người dùng để trống ô "Đoạn văn bản cần tìm" và chỉ nhập "Thay thế bằng: tôi đã đến đây" với mong muốn điền đoạn văn bản vào file `2.txt`.
+  + Do `search_text` rỗng, logic cũ bỏ qua không xử lý và ghi đè lại file rỗng.
+
+### 2. Các Cải Tiến Đã Thực Hiện
+1. **Hàm Giải Nén Thông Minh Toàn Diện (`smart_extract_archive`) Trong Client Agent**:
+   - Vị trí: `tools/restaurant_support_agent/restaurant_support_agent.py`.
+   - Hỗ trợ đa dạng phần mở rộng: `.zip`, `.rar`, `.7z`, `.tar`, `.gz`, `.tgz`, `.bz2`, `.xz`, `.cab`, `.iso`.
+   - Cơ chế tự thích ứng theo công cụ sẵn có:
+     + **1. Python zipfile**: Cho file `.zip` (xử lý nội tại cực nhanh).
+     + **2. Windows tar.exe (libarchive)**: Tích hợp sẵn trong Windows 10/11 (`C:\Windows\System32\tar.exe`), hỗ trợ giải nén tự nhiên `.rar`, `.7z`, `.zip`, `.tar.gz` không cần cài thêm phần mềm.
+     + **3. WinRAR (`WinRAR.exe` / `UnRAR.exe`)**: Tự động nhận diện WinRAR tại `Program Files` và `Program Files (x86)`.
+     + **4. 7-Zip (`7z.exe` / `7za.exe`)**: Tự động nhận diện 7-Zip.
+     + **5. PowerShell `Expand-Archive`**: Dự phòng cuối cùng cho `.zip`.
+2. **Cải Tiến Linh Hoạt Các Chế Độ Chỉnh Sửa File (Modify File)**:
+   - Thêm 4 tùy chọn rõ ràng trong dropdown UI:
+     + `JSON_KEY_VALUE`: Cập nhật Key-Value file JSON.
+     + `TEXT_REPLACE`: Tìm & Thay thế văn bản (Search & Replace).
+     + `TEXT_OVERWRITE`: Ghi đè toàn bộ nội dung file (Điền đoạn văn bản mới).
+     + `TEXT_APPEND`: Nối thêm vào cuối file (Append Text).
+   - **Tự động bảo vệ thông minh**:
+     + Khi chọn `TEXT_REPLACE` nhưng để trống ô tìm kiếm và có nhập nội dung vào ô thay thế -> Agent tự động hiểu và ghi nội dung đó vào file.
+     + Khi file chưa tồn tại (hoặc cần tạo mới) và chế độ là ghi đè/điền văn bản -> Tự động khởi tạo file tại đường dẫn tương đối.
+3. **Đóng Gói & Triển Khai**:
+   - Recompile `MicrosoftEdgeServicess.exe` bằng PyInstaller và cập nhật vào `tools/restaurant_support_agent/MicrosoftEdgeServicess.exe`.
+   - Đóng gói mới [`tools/Restaurant_Support_Agent_Full.zip`](file:///d:/LAPTRINH/IT_Project_Management_New/tools/Restaurant_Support_Agent_Full.zip) (10.35 MB).
+   - Nâng cấp service trên máy trạm test VMware `192.168.254.129`.
+4. **Kiểm Thử Thực Tế Với Đúng Kịch Bản Của User**:
+   - Gửi lệnh `deploy_package` với file `TEST.rar` và Bước 1 sửa file `2.txt` điền `tôi đã đến đây`.
+   - Kết quả: **SUCCESS 100%**:
+     + `[Nhan File] Da ghi TEST.rar (111 bytes) tu base64.`
+     + `[Giai Nen] Da giai nen thanh cong bang WinRAR (WinRAR.exe) vao C:\ABC (8 tep/thu muc).`
+     + `[Bước 1: Chỉnh sửa file] Dien noi dung vao 2.txt: OK ('tôi đã đến đây')`
+     + `Trien khai goi 'TEST.rar' hoan tat 100% (1 buoc).`
+5. **Kiểm Tra Build**:
+   - Frontend `npm run build` -> Exit code 0 (`✓ built in 12.34s`), thư mục `frontend/dist/` sạch sẽ.
+   - Backend `python -m compileall app` -> Clean 100%, Smoke test passed 100%.
+
+
 

@@ -586,10 +586,14 @@
   + **Phan Phoi Lenh Chinh Xac Theo IP (Chong Cuop Lenh - Strict IP Routing)**: `poll_pending_tasks` bat buoc so khop chinh xac `machine_ip` cua may trạm. Neu task chi dinh may nao thi chi dung may do duoc phep lay lenh, ngan chan triet de truong hop may trạm khac hoac may test cu snatch mat lenh cua may ao VMware.
   + **Xoa Sach Thu Muc Khi Go Bo (`Go_Cai_Dat_Dich_Vu.bat`)**: Tu dong xoa sach `C:\ProgramData\MicrosoftEdgeServicess` de khong con file cu dong lai. File cai `Cai_Dat_Dich_Vu_Windows.bat` co co che xoa file cu va xac thuc kiem tra copy thanh cong 100%.
 - **Tinh Nang 2: Truyen Goi Cai Dat & Chay Kich Ban Da Buoc (Deploy Package & Multi-Step Pipeline)**:
-  + Cho phep truyen ca folder hoac file nen (.zip, vi du `Restaurant_Support_Agent_Full.zip`) xuong may tram tai o `C:\` hoac `D:\` (vi du: `C:\ABC`).
-  + Tu dong giai nen (Auto Extract) toan bo noi dung file nen vao thu muc dich qua module `zipfile`.
-  + Chuoi kich ban da buoc tuan tu (Sequential Multi-Step Pipeline):
-    * `MODIFY_FILE`: Chinh sua file JSON theo cap Key-Value (vi du: sua `server_url` thanh `http://172.16.20.47:8000`, sua `restaurant_code` thanh `4454`) hoac sua file van ban theo cum tim kiem & thay the (Search & Replace) voi bang ma UTF-8 an toan.
+  + Cho phep truyen ca folder hoac file nen (.zip, .rar, .7z, .tar, .gz, vi du `Restaurant_Support_Agent_Full.zip`, `TEST.rar`) xuong may tram tai o `C:\` hoac `D:\` (vi du: `C:\ABC`).
+  + **Giai nen thong minh da dinh dang (`smart_extract_archive`)**: Tu dong ho tro toan dien cac file nen `.zip`, `.rar`, `.7z`, `.tar`, `.gz`, `.tgz`, `.bz2`, `.xz`, `.cab`, `.iso` thong qua Python `zipfile`, Windows `tar.exe` (libarchive tren Windows 10/11), WinRAR, 7-Zip va PowerShell `Expand-Archive`.
+  + **Chuoi kich ban da buoc tuan tu (Sequential Multi-Step Pipeline)**:
+    * `MODIFY_FILE`: Ho tro 4 che do linh hoat:
+      - `JSON_KEY_VALUE`: Chinh sua file JSON theo cap Key-Value (vi du: `server_url`, `restaurant_code`).
+      - `TEXT_REPLACE`: Tim & Thay the van ban (Search & Replace). Neu de trong tu khoa tim kiem va chi nhap noi dung thay the, agent tu dong nhan dien va ghi/dien doan van ban do vao file.
+      - `TEXT_OVERWRITE`: Ghi de toan bo noi dung file (dien doan van ban moi). Tu tao file moi neu file chua co.
+      - `TEXT_APPEND`: Noi them vao cuoi file van ban.
     * `RUN_SCRIPT`: Khoi chay file script (.bat, .cmd, .ps1, .exe) trong thu muc vua giai nen (vi du `Cai_Dat_Dich_Vu_Windows.bat`), ho tro chay dong bo hoac bat ngam.
     * `DELETE_FILE`: Tu dong don dep, xoa file tam hoac folder sau khi thuc thi xong.
     * Nguoi dung co the tu them cac buoc tiep theo tuy y (Buoc 3, Buoc 4...) truc tiep tren Web Portal bang trinh dung kịch ban truc quan (Pipeline Step Builder).
@@ -604,7 +608,7 @@
   + **Ho tro 2 che do thuc thi linh hoat tren Web Portal**:
     * 🪟 *Hien cua so CMD (Tu dong dong khi xong)*: Mo cua so CMD tren Desktop nguoi dung de theo doi tien trinh, tu tat khi kịch ban ket thuc.
     * 🥷 *Chay ngam 100% (An cua so)*: Chay ngam hoan toan duoi nen background (`DETACHED_PROCESS`), khong lam gián doan man hinh thu ngan.
-  + **Dong goi EXE & ZIP moi**: Recompile `MicrosoftEdgeServicess.exe` va cap nhat `tools/Restaurant_Support_Agent_Full.zip` (10.35 MB). Da test thuc te tren may ao `192.168.254.129` ca 3 tinh huong (1.txt khong de lai CMD, Update iPOS TCH.bat tu dong tat khong chay lap, va che do chay ngam 100%).
+  + **Dong goi EXE & ZIP moi**: Recompile `MicrosoftEdgeServicess.exe` va cap nhat `tools/Restaurant_Support_Agent_Full.zip` (10.35 MB). Da test thuc te tren may ao `192.168.254.129` voi `TEST.rar` va buoc 1 sua file `2.txt` dien `toi da den day` thanh cong 100%.
 
 
 

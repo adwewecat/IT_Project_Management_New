@@ -87,11 +87,12 @@ export interface DeployStepItem {
   file_path?: string;
   relative_path?: string;
   // Cho Modify file
-  modify_mode?: 'JSON_KEY_VALUE' | 'TEXT_REPLACE' | string;
+  modify_mode?: 'JSON_KEY_VALUE' | 'TEXT_REPLACE' | 'TEXT_OVERWRITE' | 'TEXT_APPEND' | string;
   json_modifications?: Record<string, any>;
   text_replacements?: Array<{ search: string; replace: string }>;
   search_text?: string;
   replace_text?: string;
+  content?: string;
   // Cho Run script
   arguments?: string;
   run_as_admin?: boolean;

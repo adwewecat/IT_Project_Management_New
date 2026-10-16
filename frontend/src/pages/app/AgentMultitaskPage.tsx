@@ -3091,7 +3091,7 @@ export const AgentMultitaskPage: React.FC = () => {
                       checked={deployAutoExtract}
                       onChange={(e) => setDeployAutoExtract(e.target.checked)}
                     />
-                    <span style={{ fontWeight: 600, color: '#D97706' }}>Tự động giải nén file ZIP vào thư mục đích</span>
+                    <span style={{ fontWeight: 600, color: '#D97706' }}>Tự động giải nén file nén (ZIP / RAR / 7Z / TAR...) vào thư mục đích</span>
                   </label>
                 </div>
               </div>
@@ -3279,13 +3279,15 @@ export const AgentMultitaskPage: React.FC = () => {
                                 }}
                               >
                                 <option value="JSON_KEY_VALUE">Cập nhật Key-Value file JSON</option>
-                                <option value="TEXT_REPLACE">Tìm & Thay thế văn bản (Text)</option>
+                                <option value="TEXT_REPLACE">Tìm & Thay thế văn bản (Search & Replace)</option>
+                                <option value="TEXT_OVERWRITE">Ghi đè nội dung file (Điền đoạn văn bản mới)</option>
+                                <option value="TEXT_APPEND">Nối thêm vào cuối file (Append Text)</option>
                               </select>
                             </div>
                           </div>
 
                           {/* Bảng Key-Value nếu là JSON */}
-                          {step.modify_mode !== 'TEXT_REPLACE' && (
+                          {(step.modify_mode === 'JSON_KEY_VALUE' || !step.modify_mode) && (
                             <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '6px 8px', borderRadius: '4px' }}>
                               <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#059669', marginBottom: '4px' }}>
                                 Các cặp Key - Giá trị mới cần lưu vào file JSON:
@@ -3432,7 +3434,7 @@ export const AgentMultitaskPage: React.FC = () => {
                             </div>
                           )}
 
-                          {/* Thay thế văn bản nếu là TEXT */}
+                          {/* Thay thế văn bản nếu là TEXT_REPLACE */}
                           {step.modify_mode === 'TEXT_REPLACE' && (
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                               <div>
@@ -3443,7 +3445,7 @@ export const AgentMultitaskPage: React.FC = () => {
                                   type="text"
                                   value={step.search_text || ''}
                                   onChange={(e) => handleUpdateDeployStep(idx, { search_text: e.target.value })}
-                                  placeholder="VD: http://192.168.254.1:8000"
+                                  placeholder="VD: http://192.168.254.1:8000 (Để trống nếu muốn điền nội dung bên phải)"
                                   style={{
                                     width: '100%',
                                     padding: '5px 8px',
@@ -3457,13 +3459,13 @@ export const AgentMultitaskPage: React.FC = () => {
                               </div>
                               <div>
                                 <label style={{ fontSize: '11px', fontWeight: 600, display: 'block', marginBottom: '2px' }}>
-                                  Thay thế bằng:
+                                  Thay thế bằng (hoặc Điền vào file):
                                 </label>
                                 <input
                                   type="text"
                                   value={step.replace_text || ''}
                                   onChange={(e) => handleUpdateDeployStep(idx, { replace_text: e.target.value })}
-                                  placeholder="VD: http://172.16.20.47:8000"
+                                  placeholder="VD: tôi đã đến đây"
                                   style={{
                                     width: '100%',
                                     padding: '5px 8px',
@@ -3475,6 +3477,31 @@ export const AgentMultitaskPage: React.FC = () => {
                                   }}
                                 />
                               </div>
+                            </div>
+                          )}
+
+                          {/* Ghi đè hoặc Nối thêm văn bản trực tiếp */}
+                          {(step.modify_mode === 'TEXT_OVERWRITE' || step.modify_mode === 'TEXT_APPEND') && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                {step.modify_mode === 'TEXT_OVERWRITE' ? 'Nội dung văn bản cần điền / ghi vào file:' : 'Nội dung văn bản cần nối vào cuối file:'}
+                              </label>
+                              <textarea
+                                value={step.replace_text || step.content || ''}
+                                onChange={(e) => handleUpdateDeployStep(idx, { replace_text: e.target.value, content: e.target.value })}
+                                placeholder="VD: tôi đã đến đây"
+                                rows={2}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid var(--border-color)',
+                                  fontSize: '11.5px',
+                                  backgroundColor: 'var(--bg-secondary)',
+                                  color: 'var(--text-primary)',
+                                  fontFamily: 'monospace'
+                                }}
+                              />
                             </div>
                           )}
                         </div>
