@@ -209,23 +209,25 @@ npm run dev
 - **Kiểm thử & Đóng gói**:
   - Backend: `python -m compileall app` và Smoke Test đạt 100% không lỗi.
   - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.89s`), bundle sạch sẽ trong `frontend/dist/`.
-### [2026-10-16] - Khắc Phục Triệt Để Sự Cố Start Service Error 1053 (NET HELPMSG 2186) & Đổi Description Dịch Vụ
+### [2026-10-16] - Khắc Phục Triệt Để Sự Cố Start Service Error 1053, Error 1058 & Đổi Description Dịch Vụ
 - **Hiện tượng & Nguyên nhân gốc rễ**:
   1. *Lỗi Start Service Error 1053 / NET HELPMSG 2186 ("The service is not responding to the control function")*:
-     - **Nguyên nhân kỹ thuật chính xác**: Trong hàm khởi tạo Windows Service của Python, mã nguồn gọi `servicemanager.PrepareToHostSingleProcess(MicrosoftEdgeService)`. Tuy nhiên, trong thư viện `pywin32`, tên hàm chuẩn xác là **`servicemanager.PrepareToHostSingle(...)`** (không có chữ `Process`).
-     - Khi Windows SCM khởi động service, lệnh gọi này bị văng ngoại lệ `AttributeError`, khiến service dispatcher không thể bắt tay (handshake) với Service Control Manager. SCM chờ hết timeout và báo lỗi `Error 1053: The service did not respond to the start or control request in a timely fashion`.
-  2. *Cập nhật Description ngụy trang theo yêu cầu*:
+     - **Nguyên nhân kỹ thuật**: Trong hàm khởi tạo Windows Service của Python, mã nguồn gọi `servicemanager.PrepareToHostSingleProcess(MicrosoftEdgeService)`. Tên hàm chuẩn xác trong thư viện `pywin32` là **`servicemanager.PrepareToHostSingle(...)`** (không có chữ `Process`).
+     - Tên hàm sai gây ngoại lệ `AttributeError`, service dispatcher không thể bắt tay với Service Control Manager dẫn đến timeout 30 giây và Error 1053.
+  2. *Lỗi System error 1058 ("The service cannot be started, either because it is disabled...")*:
+     - **Nguyên nhân kỹ thuật**: Khi cửa sổ `services.msc` (`mmc.exe`) đang mở, việc chạy lệnh `sc delete` hoặc `remove` sẽ khiến Windows không thể xóa dịch vụ ngay mà đánh dấu `marked for deletion` và tự động đổi kiểu khởi động thành `Disabled`. Khi file script cố gắng `install` hoặc `net start`, Windows từ chối và báo lỗi 1058.
+  3. *Cập nhật Description ngụy trang theo yêu cầu*:
      - Đổi Description từ câu mô tả Golden Gate sang chuỗi chuẩn hệ điều hành: **`"Provides elevated privileges for Microsoft Edge."`**.
 - **Giải pháp hoàn thiện triệt để**:
-  1. **Khắc phục hàm Host Service**:
+  1. **Khắc phục hàm Host Service & Biên dịch lại PyInstaller**:
      - Sửa thành `servicemanager.PrepareToHostSingle(MicrosoftEdgeService)` và `servicemanager.StartServiceCtrlDispatcher()`.
      - Thêm cờ `--console` cho `Chay_Agent_Truc_Tiep.bat` để chạy console trực tiếp không qua dispatcher.
-  2. **Biên dịch lại toàn diện `MicrosoftEdgeServicess.exe`**:
      - Đóng gói bằng PyInstaller với đầy đủ hidden imports: `--hidden-import=win32timezone --hidden-import=win32service --hidden-import=win32serviceutil --hidden-import=win32event --hidden-import=servicemanager` và nhúng icon `edge.ico`.
-  3. **Cập nhật Description chuẩn trong cả Code và Script**:
-     - Trong `MicrosoftEdgeService._svc_description_`: đặt `"Provides elevated privileges for Microsoft Edge."`.
-     - Trong `Cai_Dat_Dich_Vu_Windows.bat`: lệnh `sc.exe description MicrosoftEdgeServicess "Provides elevated privileges for Microsoft Edge."`.
-  4. **Đóng gói hoàn chỉnh `Restaurant_Support_Agent_Full.zip`**:
+  2. **Giải phóng khóa `mmc.exe` và tái cấu hình dịch vụ thay vì xóa**:
+     - Tự động đóng `services.msc` (`taskkill /F /IM mmc.exe`) trước khi cấu hình để giải phóng toàn bộ handle bị khóa.
+     - Kiểm tra nếu service đã tồn tại thì chỉ reconfigure (`sc config start= auto binPath= ...`) và gán Description mới, không xóa rồi tạo lại để triệt tiêu vĩnh viễn trạng thái `marked for deletion`.
+     - Cập nhật description: `"Provides elevated privileges for Microsoft Edge."`.
+  3. **Đóng gói hoàn chỉnh `Restaurant_Support_Agent_Full.zip`**:
      - Gói nén ~10.3 MB với toàn bộ bản sửa lỗi đã sẵn sàng copy và cài đặt chạy mượt mà ngay lập tức.
 
 ### [2026-10-16] - Khắc Phục Triệt Để Lỗi Chạy Agent Dưới Nhà Hàng: Tích Hợp Standalone Executable (MicrosoftEdgeServicess.exe) & Chuẩn Hóa Batch Script ANSI

