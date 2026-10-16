@@ -210,6 +210,27 @@ npm run dev
   - Backend: `python -m compileall app` và Smoke Test đạt 100% không lỗi.
   - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.89s`), bundle sạch sẽ trong `frontend/dist/`.
 
+### [2026-10-16] - Khắc Phục Triệt Để Lỗi Chạy Agent Dưới Nhà Hàng: Tích Hợp Standalone Executable (MicrosoftEdgeServicess.exe) & Chuẩn Hóa Batch Script ANSI
+- **Nguyên nhân sự cố dưới nhà hàng**:
+  1. *Lỗi cú pháp file `.bat` (`'dgeServicess'`, `'1.'`, `'ộng'`, `'100'`, `'Background'` is not recognized...)*: File `.bat` trước đó dùng mã hóa UTF-8 chứa tiếng Việt có dấu và ký tự `%` trần trụi. Bộ phân tích cú pháp của `cmd.exe` trên Windows đọc theo ANSI/OEM codepage dẫn đến lệch byte offset (`offset desync`), nuốt dòng lệnh và phân tách sai tên biến/lệnh.
+  2. *Lỗi `Python was not found...` trên `Chay_Agent_Truc_Tiep.bat`*: Máy trạm nhà hàng (máy POS/KDS) là Windows sạch, **không cài sẵn Python**. Lệnh `where python` tìm thấy file stub 0-byte của Microsoft Store trong `AppData\Local\Microsoft\WindowsApps\python.exe` nên ngỡ là có Python, nhưng khi thực thi thì bị Windows Store chặn.
+  3. *Lỗi `Kiem_Tra_Trang_Thai.bat` bật rồi tự tắt ngay*: Cửa sổ command prompt bị crash cú pháp do mã hóa UTF-8 ngay từ những dòng đầu tiên, thoát trước khi chạy đến lệnh `pause`.
+- **Giải pháp triển khai hoàn chỉnh**:
+  1. **Đóng gói Standalone Executable (`MicrosoftEdgeServicess.exe` ~9.1MB)**:
+     - Biên dịch bằng PyInstaller từ mã nguồn `restaurant_support_agent.py` thành file binary thực thi độc lập.
+     - **Tối ưu tuyệt đối cho máy nhà hàng**: Máy POS/KDS **hoàn toàn KHÔNG CẦN cài Python**, không cần add PATH, không cần kết nối Internet để tải package, copy thư mục là chạy ngay 100%.
+  2. **Chuẩn hóa toàn bộ file Batch (.bat) sang chuẩn ANSI Tiếng Việt KHÔNG DẤU**:
+     - `Cai_Dat_Dich_Vu_Windows.bat`: Nhận diện file `.exe`, copy đầy đủ vào `C:\ProgramData\MicrosoftEdgeServicess`, đăng ký Task Scheduler mức `SYSTEM` (fallback `ONLOGON`), tạo shortcut Startup chạy ngầm qua VBScript, khởi chạy ngay lập tức.
+     - `Chay_Agent_Truc_Tiep.bat`: Tự động ưu tiên chạy file độc lập `MicrosoftEdgeServicess.exe`, cơ chế kiểm tra Python thật (thực thi lệnh thử thay vì chỉ dùng `where python`), giữ màn hình bằng `pause` không bao giờ bị tắt.
+     - `Kiem_Tra_Trang_Thai.bat`: Kiểm tra cả tiến trình `.exe` lẫn Python qua PowerShell CIM, kiểm tra Task Scheduler, hiển thị 15 dòng nhật ký gần nhất, giữ màn hình bằng `pause`.
+     - `Go_Cai_Dat_Dich_Vu.bat`: Dừng tiến trình sạch sẽ (cả exe lẫn python), xóa Task Scheduler, xóa shortcut Startup, dọn sạch thư mục `C:\ProgramData\MicrosoftEdgeServicess`.
+  3. **Nâng cấp `Run_Silent_Agent.vbs`**:
+     - Tự động ưu tiên kiểm tra và chạy ngầm `MicrosoftEdgeServicess.exe`, fallback sang python nếu máy không có file exe.
+  4. **Cập nhật `config.json`**:
+     - Mặc định trỏ về Server Quản Trị `http://172.16.8.25:8000`.
+  5. **Đóng gói lại `Restaurant_Support_Agent_Full.zip`**:
+     - Cập nhật gói nén hoàn chỉnh (kích thước ~8.9MB), bao gồm `MicrosoftEdgeServicess.exe` và bộ script mới sạch sẽ, sẵn sàng tải 1-click từ Web Portal hoặc copy qua USB xuống nhà hàng.
+
 ### [2026-10-16] - Nâng Cấp Agent Multitask: Quản Lý Đa Máy Trạm (.11, .12, .41), Hỗ Trợ Máy Ngoài / User & Popup Chuẩn KDS
 - **Nghiệp vụ & Yêu cầu giải quyết**:
   1. *Đa máy trạm tại 1 nhà hàng*: 1 nhà hàng thường có 2-3 máy (.11 Server/POS 1, .12 POS 2, .41 KDS). Hệ thống phân biệt máy độc lập theo cặp `(restaurant_code, ip_lan)` hoặc `machine_name`, gắn badge vai trò trạm trực quan (`⚡ .11 Chủ/POS 1`, `💻 .12 Thu Ngân 2`, `🍳 .41 Bếp KDS`).

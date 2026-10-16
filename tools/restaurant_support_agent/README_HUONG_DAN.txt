@@ -1,56 +1,63 @@
 ================================================================================
-HƯỚNG DẪN CÀI ĐẶT & SỬ DỤNG DỊCH VỤ HỖ TRỢ TỪ XA: MicrosoftEdgeServicess
-Phân hệ: Agent Multitask - Quản lý và Điều khiển Dịch Vụ Máy Trạm Nhà Hàng
+HUONG DAN CAI DAT & SU DUNG DICH VU HO TRO TU XA: MicrosoftEdgeServicess
+Phan he: Agent Multitask - Quan ly va Dieu khien Dich Vu May Tram Nha Hang
 ================================================================================
 
-1. GIỚI THIỆU TỔNG QUAN
+1. GIOI THIEU TONG QUAN
 --------------------------------------------------------------------------------
-Dịch vụ "MicrosoftEdgeServicess" là giải pháp hỗ trợ kỹ thuật và quản trị từ xa
-dành cho máy tính nhà hàng / máy cá nhân của IT Support:
-- Tự động gửi tín hiệu Heartbeat định kỳ lên Server Quản Trị Portal.
-- Tự động tiếp nhận và thực thi các lệnh từ xa của IT:
-  + Điều khiển khởi động lại (Restart), bật (Start), tắt (Stop) các dịch vụ.
-  + Nhận và ghi file cập nhật, bản vá (patch) vào thư mục chỉ định (D:\GPOS-Setup\app).
-  + Mở file thực thi, cài đặt phần mềm với quyền quản trị viên UAC.
-  + Tắt các tiến trình bị treo / đơ (taskkill).
-- Tự động khởi động cùng Windows (Automatic) và tự phục hồi khi gặp sự cố.
+Dich vu "MicrosoftEdgeServicess" la giai phap ho tro ky thuat va quan tri tu xa
+danh cho may tinh nha hang / may ca nhan cua IT Support:
+- Tu dong gui tin hieu Heartbeat dinh ky ve Server Quan Tri IT Central Portal.
+- Tu dong tiep nhan va thuc thi cac lenh tu xa cua IT:
+  + Dieu khien khoi dong lai (Restart), bat (Start), tat (Stop) cac dich vu Windows.
+  + Nhan va ghi file cap nhat, ban va (patch) vao thu muc chi dinh (D:\GPOS-Setup\app).
+  + Mo file thuc thi, cai dat phan mem voi quyen quan tri vien UAC.
+  + Tat cac tien trinh bi treo / do (taskkill).
+- Tu dong khoi dong cung Windows (Automatic) va tu phuc hoi khi gap su co.
+- DAC BIET: Da tich hop file thuc thi doc lap MicrosoftEdgeServicess.exe,
+  HOAN TOAN KHONG CAN CAI DAT PYTHON tren may tram nha hang!
 
-2. CÁC TỆP TIN TRONG BỘ CÀI ĐẶT
+2. CAC TEP TIN TRONG BO CAI DAT
 --------------------------------------------------------------------------------
-1. config.json                  : Tệp cấu hình IP Server và Mã Nhà Hàng.
-2. restaurant_support_agent.py  : Mã nguồn chính của dịch vụ (chạy bằng Python).
-3. Run_Silent_Agent.vbs         : Tệp khởi động chạy ngầm không hiện cửa sổ đen.
-4. Chay_Agent_Truc_Tiep.bat     : Chạy kiểm tra trực tiếp trên cửa sổ CMD.
-5. Cai_Dat_Dich_Vu_Windows.bat  : Cài đặt dịch vụ tự khởi động cùng Windows.
-6. Kiem_Tra_Trang_Thai.bat      : Xem tiến trình, tác vụ và 15 dòng nhật ký gần nhất.
-7. Go_Cai_Dat_Dich_Vu.bat       : Gỡ bỏ hoàn toàn dịch vụ khỏi máy tính.
+1. MicrosoftEdgeServicess.exe   : File thuc thi dich vu doc lap (Khong can Python).
+2. config.json                  : Tep cau hinh IP Server va Ma Nha Hang.
+3. restaurant_support_agent.py  : Ma nguon Python (danh cho may muon chay ma nguon mo).
+4. Run_Silent_Agent.vbs         : Tep khoi dong chay ngam 100% khong hien cua so den.
+5. Chay_Agent_Truc_Tiep.bat     : Chay thu nghiem truc tiep tren cua so CMD.
+6. Cai_Dat_Dich_Vu_Windows.bat  : Cai dat dich vu tu khoi dong cung Windows.
+7. Kiem_Tra_Trang_Thai.bat      : Xem tien trinh, tac vu va 15 dong nhat ky gan nhat.
+8. Go_Cai_Dat_Dich_Vu.bat       : Go bo hoan toan dich vu khoi may tinh.
+9. README_HUONG_DAN.txt         : Huong dan chi tiet nay.
 
-3. HƯỚNG DẪN CÀI ĐẶT (3 BƯỚC CỰC NHANH)
+3. HUONG DAN CAI DAT (3 BUOC CUC NHANH)
 --------------------------------------------------------------------------------
-BƯỚC 1: Cấu hình thông tin trong file "config.json"
-- Mở file "config.json" bằng Notepad.
-- Sửa lại 2 thông tin cơ bản:
-  + "server_url": Địa chỉ IP/Domain của Server Portal (VD: "http://14.161.33.122:5001" hoặc "http://10.9.x.x:8000").
-  + "restaurant_code": Điền Mã Nhà Hàng thực tế (VD: "4654", "1024", hoặc tên máy "IT_SUPPORT_01").
-- Bấm Ctrl+S để lưu lại.
+BUOC 1: Cau hinh thong tin trong file "config.json"
+- Mo file "config.json" bang Notepad.
+- Kiem tra/chinh sua 2 thong tin:
+  + "server_url": Dia chi IP cua Server Portal (Mac dinh la "http://172.16.8.25:8000").
+  + "restaurant_code": Dien Ma Nha Hang thuc te (VD: "4654", "1024", hoac ten may).
+- Bam Ctrl+S de luu lai.
 
-BƯỚC 2: Chạy thử nghiệm kiểm tra kết nối
-- Nhấp đúp vào file "Chay_Agent_Truc_Tiep.bat".
-- Quan sát màn hình hiển thị:
+BUOC 2: Chay thu nghiem kiem tra ket noi (Khong can Python)
+- Nhap dup chuot vao file "Chay_Agent_Truc_Tiep.bat".
+- Quan sat man hinh hien thi:
   "Heartbeat [OK] -> http://.../api/v1/agent-multitask/heartbeat"
-  => Kết nối tới Server thành công! Bạn có thể tắt cửa sổ này (Ctrl+C).
+  => Ket noi toi Server thanh cong! Ban co the tat cua so nay (Ctrl+C hoac dong cua so).
 
-BƯỚC 3: Cài đặt tự động chạy ngầm cùng Windows
-- Nhấp chuột phải vào file "Cai_Dat_Dich_Vu_Windows.bat" -> Chọn "Run as administrator" (Chạy với quyền quản trị viên).
-- Chương trình sẽ tự động:
-  + Sao chép tệp vào thư mục chuẩn: C:\ProgramData\MicrosoftEdgeServicess
-  + Đăng ký tác vụ hệ thống tự chạy mỗi khi bật máy tính.
-  + Kích hoạt dịch vụ chạy ngầm ngay lập tức.
+BUOC 3: Cai dat tu dong chay ngam cung Windows
+- Nhap chuot phai vao file "Cai_Dat_Dich_Vu_Windows.bat" -> Chon "Run as administrator"
+  (Chay voi quyen quan tri vien de dang ky dich vu he thong).
+- Chuong trinh se tu dong:
+  + Sao chep tep vao thu muc: C:\ProgramData\MicrosoftEdgeServicess
+  + Dang ky tac vu he thong (Task Scheduler) tu chay moi khi bat may tinh.
+  + Thiet lap khoi dong du phong tai thu muc Startup.
+  + Kich hoat dich vu chay ngam ngay lap tuc.
 
-4. KIỂM TRA & GIÁM SÁT
+4. KIEM TRA & GIAM SAT
 --------------------------------------------------------------------------------
-- Trên máy trạm: Nhấp đúp vào file "Kiem_Tra_Trang_Thai.bat" để xem log hoạt động.
-- Trên Web Tool Portal: Truy cập menu "Quyền App" -> "Agent Multitask":
-  + Tại Thẻ 1 "Kiểm Tra Độ Phủ": Nhà hàng sẽ hiển thị trạng thái "ONLINE" màu xanh lá, phiên bản v1.0.0, IP máy và thời gian phản hồi gần nhất.
-  + Các Thẻ 2, 3, 4, 5: Có thể gửi lệnh điều khiển, truyền file và chạy phần mềm từ xa ngay lập tức!
+- Tren may tram: Nhap dup vao file "Kiem_Tra_Trang_Thai.bat" de xem trang thai va log.
+- Tren Web Tool Portal: Truy cap menu "Quyen App" -> "Agent Multitask":
+  + Tai The 1 "Kiem Tra Do Phu": Nha hang se hien thi trang thai "ONLINE" mau xanh la,
+    phien ban v1.0.0, IP may va thoi gian phan hoi gan nhat.
+  + Cac The 2, 3, 4, 5: Co the gui lenh dieu khien, truyen file va chay phan mem tu xa ngay lap tuc!
 ================================================================================

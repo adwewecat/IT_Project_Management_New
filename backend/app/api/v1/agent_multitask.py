@@ -255,10 +255,12 @@ def download_package(
     agent_dir = os.path.join(project_root, "tools", "restaurant_support_agent")
     zip_path = os.path.join(project_root, "tools", "Restaurant_Support_Agent_Full.zip")
 
-    # Tự động nén lại nếu zip chưa có hoặc có file mới
+    # Tu dong nen lai neu zip chua co hoac co file moi (bo qua file log)
     if os.path.exists(agent_dir):
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
-            for f in os.listdir(agent_dir):
+            for f in sorted(os.listdir(agent_dir)):
+                if f.endswith('.log') or f.endswith('.tmp'):
+                    continue
                 fp = os.path.join(agent_dir, f)
                 if os.path.isfile(fp):
                     z.write(fp, arcname=f)

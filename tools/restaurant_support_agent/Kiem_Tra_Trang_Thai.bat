@@ -1,33 +1,38 @@
 @echo off
-chcp 65001 >nul
 title Kiem Tra Trang Thai Dich Vu MicrosoftEdgeServicess
 cd /d "%~dp0"
 
 echo ===============================================================================
-echo   KIỂM TRA TRẠNG THÁI DỊCH VỤ: MicrosoftEdgeServicess
+echo   KIEM TRA TRANG THAI DICH VU: MicrosoftEdgeServicess
 echo ===============================================================================
 echo.
 
-echo 1. Kiểm tra tiến trình Python chạy nền:
-powershell -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*restaurant_support_agent.py*' } | Select-Object ProcessId, Name, CreationDate, CommandLine | Format-Table -AutoSize"
+:: 1. Kiem tra tien trinh chay ngam (ca ban EXE va ban Python)
+echo 1. Kiem tra tien trinh he thong dang chay ngam:
+powershell -NoProfile -Command "$procs = Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*MicrosoftEdgeServicess*' -or $_.CommandLine -like '*restaurant_support_agent.py*' }; if ($procs) { $procs | Select-Object ProcessId, Name, CommandLine | Format-Table -AutoSize } else { Write-Host '   -> KHONG CO tien trinh MicrosoftEdgeServicess hoac Python agent nao dang chay.' -ForegroundColor Yellow }"
 
 echo.
-echo 2. Kiểm tra Task Scheduler:
+echo 2. Kiem tra tac vu tu dong khoi dong Task Scheduler:
 schtasks /Query /TN "MicrosoftEdgeServicess" /FO LIST 2>nul
 if %errorlevel% neq 0 (
-    echo [THÔNG BÁO] Chưa tìm thấy tác vụ Task Scheduler 'MicrosoftEdgeServicess'.
+    echo    -> Chua tim thay tac vu Task Scheduler 'MicrosoftEdgeServicess'.
 )
 
 echo.
-echo 3. Xem 15 dòng nhật ký gần nhất (C:\ProgramData\MicrosoftEdgeServicess\agent_service.log hoặc tại thư mục hiện tại):
+echo 3. Kiem tra thu muc cai dat va file nhat ky hoat dong (Log):
 if exist "C:\ProgramData\MicrosoftEdgeServicess\agent_service.log" (
-    powershell -Command "Get-Content -Path 'C:\ProgramData\MicrosoftEdgeServicess\agent_service.log' -Tail 15"
-) else if exist "agent_service.log" (
-    powershell -Command "Get-Content -Path 'agent_service.log' -Tail 15"
+    echo [OK] Nhat ky tai C:\ProgramData\MicrosoftEdgeServicess\agent_service.log:
+    powershell -NoProfile -Command "Get-Content -Path 'C:\ProgramData\MicrosoftEdgeServicess\agent_service.log' -Tail 15"
+) else if exist "%~dp0agent_service.log" (
+    echo [OK] Nhat ky tai %~dp0agent_service.log:
+    powershell -NoProfile -Command "Get-Content -Path '%~dp0agent_service.log' -Tail 15"
 ) else (
-    echo Chưa có tệp log nào được tạo.
+    echo    -> Chua co tep nhat ky nao duoc tao.
 )
 
 echo.
 echo ===============================================================================
+echo   KIEM TRA HOAN TAT.
+echo ===============================================================================
+echo.
 pause

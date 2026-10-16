@@ -325,10 +325,16 @@
     5. *Cài Đặt Tuần Tự Theo Kịch Bản*: Tự động hóa 5 bước tải package, giải nén, đăng ký service & watchdog.
     6. *Cấu Hình Admin & Phân Quyền*: Lưu user/pass admin máy trạm dự phòng và danh sách `allowed_users` (chỉ Super Admin).
   - Ẩn hoàn toàn cột "Service Name" trong bảng dữ liệu để tối ưu không gian hiển thị.
-- **Bộ Mã Nguồn Client Agent (`tools/restaurant_support_agent/`)**:
-  - Viết bằng chuẩn Python tiêu chuẩn (Standard Library thuần túy, Zero pip dependencies).
-  - Tích hợp sẵn bộ script: `Run_Silent_Agent.vbs`, `Chay_Agent_Truc_Tiep.bat`, `Cai_Dat_Dich_Vu_Windows.bat` (đăng ký Task Scheduler ONSTART, HIGHEST, Startup shortcut), `Kiem_Tra_Trang_Thai.bat`, `Go_Cai_Dat_Dich_Vu.bat`.
-  - Tải nhanh file nén hoàn chỉnh: `tools/Restaurant_Support_Agent_Full.zip` hoặc nút "Tải Gói Cài (.ZIP)" trên web.
+- **Bộ Cài Đặt & Client Agent Độc Lập (`tools/restaurant_support_agent/`)**:
+  - Tích hợp sẵn **`MicrosoftEdgeServicess.exe`** (biên dịch độc lập ~9.1MB): **Máy trạm nhà hàng HOÀN TOÀN KHÔNG CẦN CÀI PYTHON**, copy thư mục là chạy ngay 100%.
+  - Bộ mã nguồn Python song song: `restaurant_support_agent.py` (Standard Library thuần túy, Zero pip dependencies).
+  - Toàn bộ script batch được chuẩn hóa ANSI tiếng Việt không dấu (chống 100% lỗi UTF-8 offset desync trên Windows):
+    + `Cai_Dat_Dich_Vu_Windows.bat`: Đăng ký Task Scheduler ONSTART (quyền SYSTEM / fallback ONLOGON), Startup shortcut, khởi chạy ngầm ngay.
+    + `Chay_Agent_Truc_Tiep.bat`: Chạy kiểm tra tức thì trên console, ưu tiên dùng `MicrosoftEdgeServicess.exe`, kiểm tra python kỹ lưỡng, không tự tắt.
+    + `Kiem_Tra_Trang_Thai.bat`: Xem tiến trình exe/python, Task Scheduler và 15 dòng nhật ký gần nhất, không tự đóng cửa sổ.
+    + `Go_Cai_Dat_Dich_Vu.bat`: Dừng tiến trình sạch sẽ và gỡ bỏ hoàn toàn dịch vụ.
+    + `Run_Silent_Agent.vbs`: Khởi chạy ngầm 100% không hiện màn hình đen console.
+  - Tải nhanh file nén hoàn chỉnh: `tools/Restaurant_Support_Agent_Full.zip` (~8.9MB) hoặc nút "Tải Gói Cài (.ZIP)" trên web.
 
 ---
 
