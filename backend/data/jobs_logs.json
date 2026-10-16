@@ -1,5 +1,17 @@
 [
   {
+    "id": "5409a3a9",
+    "job_id": "job_sync_pim_requests",
+    "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",
+    "started_at": "2026-10-16 12:00:17",
+    "finished_at": "2026-10-16 12:00:17",
+    "duration_seconds": 13.02,
+    "status": "success",
+    "message": "Thành công lúc 12:00 (Quét: 9 | Mới: 2 | Cập nhật: 7)",
+    "details": "Tự động quét PIM theo lịch 3 khung giờ lúc 12:00:\n- Tổng quét: 9\n- Mới: 2\n- Cập nhật: 7",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
     "id": "b0cc8092",
     "job_id": "job_sync_sales_daily_server",
     "job_name": "Lấy dữ liệu tổng sales, tổng khách từ SERVER Dcorp về Server IT Daily Sales",

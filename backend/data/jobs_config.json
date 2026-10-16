@@ -60,11 +60,11 @@
       "time_3": "16:30"
     },
     "status": "idle",
-    "last_run_at": "2026-10-16 03:00:11",
-    "last_duration": 15.72,
+    "last_run_at": "2026-10-16 12:00:17",
+    "last_duration": 13.02,
     "last_status": "success",
-    "total_runs": 28,
-    "success_runs": 28,
+    "total_runs": 29,
+    "success_runs": 29,
     "failed_runs": 0,
     "is_hidden": false,
     "restricted_to_dung": false

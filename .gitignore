@@ -31,3 +31,4 @@ Thumbs.db
 *.user
 *.tsbuildinfo
 *.log
+*_old.exe

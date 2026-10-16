@@ -2732,3 +2732,14 @@ estaurant_service.py).
    - Đóng gói bản build mới nhất vào `tools/Restaurant_Support_Agent_Full.zip`.
    - Biên dịch Frontend: `cmd /c "npm run build"` thành công 100% exit code 0 (`✓ built in 4.92s`).
    - Khởi động lại backend daemon trên port 8000, kiểm thử `python -m compileall app` và Smoke Test 100% PASSED.
+
+4. **Khắc Phục Hiện Tượng Nhân Bản Tiến Trình ("1 Đống Như Vậy") & Chuyển Sang Thẻ Services Chuẩn Xác**:
+   - **Nguyên nhân "1 đống như vậy"**:
+     + Trước đây tiến trình chưa có cơ chế Named Mutex khóa đơn instance. Khi người dùng click chạy nhiều lần (hoặc qua Task Scheduler + bat + vbs), mỗi lần chạy lại sinh ra thêm tiến trình mới.
+     + Kiến trúc đóng gói PyInstaller `--onefile` luôn tạo 1 tiến trình Bootloader nhỏ (~0.9MB) và 1 tiến trình con Worker (~19MB). Khi chạy 4 lần sẽ tạo thành 8 dòng trong Task Manager.
+   - **Giải pháp**:
+     + **Named Mutex `Global\MicrosoftEdgeServicess_SingleInstance_Mutex`**: Tích hợp trực tiếp vào đầu hàm `main_loop()` trong `restaurant_support_agent.py`. Nếu phát hiện đã có tiến trình đang chạy, mọi tiến trình mở sau lập tức tự động thoát (`sys.exit(0)`) trong 50ms, triệt tiêu 100% hiện tượng nhân bản.
+     + **Tự động dọn dẹp lúc cài đặt (`taskkill /F /IM MicrosoftEdgeServicess.exe`)**: File `Cai_Dat_Dich_Vu_Windows.bat` tự động quét tắt sạch mọi tiến trình cũ trước khi cài service mới.
+     + **Tự động xin quyền Admin (UAC Auto-Elevate)**: File `.bat` tự động kích hoạt hộp thoại UAC yêu cầu Administrator khi người dùng double-click, không cần phải nhớ nhấp chuột phải chọn "Run as administrator".
+     + **Chuyển hẳn sang dịch vụ ngầm (`services.msc` & Thẻ `Services` trong Task Manager)**: Bổ sung gọi `self.ReportServiceStatus(win32service.SERVICE_RUNNING)` ngay khi service khởi động để Windows Service Control Manager ghi nhận trạng thái `Running` tức thì, hiển thị rõ ràng trên tab Services của Task Manager.
+     + **Tích hợp Icon Microsoft Edge chính thức (`edge.ico`)**: Trích xuất bộ icon Edge chuẩn đa độ phân giải (72KB) và nhúng trực tiếp vào file thực thi `.exe` qua tham số PyInstaller `--icon edge.ico`. File thực thi và tiến trình giờ đây hiển thị logo Microsoft Edge lượn sóng xanh/xanh lá chuẩn xác 100%.

@@ -447,8 +447,27 @@ def execute_task(config, task, ip_lan=None):
     report_task_result(config, task_id, success, message, output, ip_lan=ip_lan)
 
 
+def acquire_single_instance_lock():
+    """Đảm bảo chỉ có DUY NHẤT 1 phiên bản MicrosoftEdgeServicess chạy trên hệ thống (Tránh nhân bản tiến trình)."""
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        mutex_name = "Global\\MicrosoftEdgeServicess_SingleInstance_Mutex"
+        mutex = kernel32.CreateMutexW(None, False, mutex_name)
+        if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+            logger.warning("Đã có một tiến trình MicrosoftEdgeServicess đang chạy trên hệ thống. Tự động đóng phiên bản này để tránh trùng lặp.")
+            sys.exit(0)
+        return mutex
+    except Exception as e:
+        logger.debug("Không thể tạo Mutex: %s", e)
+        return None
+
+
 def main_loop(stop_event=None):
     """Vòng lặp chính của dịch vụ MicrosoftEdgeServicess."""
+    # Khóa đơn tiến trình để không bao giờ chạy 2 bản song song
+    _mutex_handle = acquire_single_instance_lock()
+
     app_dir = get_app_dir()
     cfg_file = get_config_path()
     log_file = get_log_path()
@@ -525,6 +544,8 @@ if HAS_PYWIN32:
             self.is_running = False
 
         def SvcDoRun(self):
+            # Báo cho Windows SCM biết Service đã khởi động thành công và đang RUNNING
+            self.ReportServiceStatus(win32service.SERVICE_RUNNING)
             servicemanager.LogMsg(
                 servicemanager.EVENTLOG_INFORMATION_TYPE,
                 servicemanager.PYS_SERVICE_STARTED,
@@ -532,6 +553,7 @@ if HAS_PYWIN32:
             )
             self.is_running = True
             main_loop(stop_event=self.hWaitStop)
+            self.ReportServiceStatus(win32service.SERVICE_STOPPED)
 
 
 if __name__ == "__main__":
