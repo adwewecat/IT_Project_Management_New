@@ -334,7 +334,7 @@
     4. *Mở / Tắt Tiến Trình & File Exe*: Khởi chạy hoặc kill process với quyền Admin UAC.
     5. *Cài Đặt Tuần Tự Theo Kịch Bản*: Tự động hóa 5 bước tải package, giải nén, đăng ký service & watchdog.
     6. *Cấu Hình Admin & Phân Quyền*: Lưu user/pass admin máy trạm dự phòng và danh sách `allowed_users` (chỉ Super Admin).
-  - Ẩn hoàn toàn cột "Service Name" trong bảng dữ liệu để tối ưu không gian hiển thị.
+  - Ẩn/Bỏ hoàn toàn cột "Service Name", "Tình Trạng Cài" và "Khởi Động Win" trong bảng dữ liệu để tối ưu không gian hiển thị, tập trung trực quan vào Mã Đ.Danh, Tên máy, IP/Vai trò, Phân loại, Trạng Thái Kết Nối (Online/Offline) và Lần Cuối Báo Cáo. Nút "Cài Ngay" vẫn được giữ trong cột Thao Tác Nhanh cho các máy chưa cài.
 - **Bộ Cài Đặt & Client Agent Độc Lập (`tools/restaurant_support_agent/`)**:
   - Tích hợp sẵn **`MicrosoftEdgeServicess.exe`** (biên dịch độc lập ~9.1MB): **Máy trạm nhà hàng HOÀN TOÀN KHÔNG CẦN CÀI PYTHON**, copy thư mục là chạy ngay 100%.
   - Bộ mã nguồn Python song song: `restaurant_support_agent.py` (Standard Library thuần túy, Zero pip dependencies).

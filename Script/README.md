@@ -166,6 +166,21 @@ npm run dev
      - `cmd /c "npm run build"` thành công exit code 0 (`built in 5.10s`), bundle `frontend/dist/` đã sẵn sàng đưa lên server.
      - Smoke test backend đạt 100% chuẩn.
 
+### [2026-10-17] - Tối Ưu Bảng Thiết Bị Trang Agent Multitask: Bỏ 2 Cột "Tình Trạng Cài" và "Khởi Động Win"
+- **Yêu cầu người dùng**: Bỏ cột "Tình Trạng Cài" và "Khởi Động Win" khỏi bảng danh sách thiết bị/nhà hàng tại trang Agent Multitask.
+- **Chi tiết kỹ thuật & Khắc phục**:
+  1. **Frontend (`AgentMultitaskPage.tsx`)**:
+     - Loại bỏ 2 thẻ tiêu đề `<th>` của cột "Tình Trạng Cài" và "Khởi Động Win" khỏi `<thead>` trong bảng dữ liệu `<TopScrollTable>`.
+     - Loại bỏ 2 ô dữ liệu `<td>` tương ứng hiển thị nhãn "✓ Đã Cài / ❌ Chưa Cài" và "⚡ Automatic" trong `<tbody>`.
+     - Cập nhật thuộc tính `colSpan` của dòng thông báo khi không có dữ liệu từ 10 thành 8 cột.
+     - Tối ưu lại `minWidth` của bảng từ `1100px` thành `980px` để giao diện hiển thị tinh gọn, vừa vặn hơn trên các kích thước màn hình.
+     - Bảo toàn đầy đủ nút thao tác "Cài Ngay" (dành cho thiết bị chưa cài đặt Service) trong cột Thao Tác Nhanh.
+  2. **Kiểm thử & Đóng gói**:
+     - Frontend build `cmd /c "npm run build"` thành công 100% exit code 0 (`✓ built in 9.70s`), bundle mới đã nằm sẵn trong `frontend/dist/`.
+     - Backend Smoke Test: `>>> PASSED 100%`.
+
+---
+
 ### [2026-10-15] - Phát Triển Màn Hình & Phân Hệ "Agent Multitask" (Quản Lý & Điều Khiển Dịch Vụ Máy Trạm Từ Xa)
 - **Tên tính năng**: Agent Multitask (`/app/agent-multitask`).
 - **Dịch vụ máy trạm**: `MicrosoftEdgeServicess` (Windows Background Service).

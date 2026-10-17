@@ -1,5 +1,29 @@
 [
   {
+    "id": "55b3b2db",
+    "job_id": "job_sync_sales_daily_server",
+    "job_name": "Lấy dữ liệu tổng sales, tổng khách từ SERVER Dcorp về Server IT Daily Sales",
+    "started_at": "2026-10-17 05:45:04",
+    "finished_at": "2026-10-17 05:45:22",
+    "duration_seconds": 17.87,
+    "status": "success",
+    "message": "Đồng bộ thành công dữ liệu doanh số ngày 2026-10-16 từ Server RK7 (172.16.8.26) về bảng SO_LIEU_CHECK_SALES_DAILY trên DB ITSS (172.16.20.103).",
+    "details": "Kết quả thực thi thực tế:\n- Ngày chốt doanh số: 2026-10-16\n- Tổng số nhà hàng lấy về: 319\n- Số nhà hàng có doanh số: 313\n- Tổng doanh thu hệ thống: 12,788,098,958 VNĐ\n- Tổng lượng khách (TC): 31,238\n- Database đích: ITDEPT (172.16.20.103)\n- Bảng dữ liệu: dbo.SO_LIEU_CHECK_SALES_DAILY & dbo.TOTAL_SALES_DAILY",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
+    "id": "91895986",
+    "job_id": "job_sync_pim_requests",
+    "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",
+    "started_at": "2026-10-17 03:00:00",
+    "finished_at": "2026-10-17 03:00:00",
+    "duration_seconds": 17.05,
+    "status": "success",
+    "message": "Thành công lúc 03:00 (Quét: 10 | Mới: 1 | Cập nhật: 9)",
+    "details": "Tự động quét PIM theo lịch 3 khung giờ lúc 03:00:\n- Tổng quét: 10\n- Mới: 1\n- Cập nhật: 9",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
     "id": "e550253a",
     "job_id": "job_sync_pim_requests",
     "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",

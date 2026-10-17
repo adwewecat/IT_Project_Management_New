@@ -1357,7 +1357,7 @@ export const AgentMultitaskPage: React.FC = () => {
         }}
       >
         <TopScrollTable maxHeight="calc(100vh - 225px)">
-          <table style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+          <table style={{ width: '100%', minWidth: '980px', borderCollapse: 'collapse', fontSize: '12.5px' }}>
             <thead>
               <tr
                 style={{
@@ -1382,9 +1382,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 <th style={{ padding: '8px 10px', textAlign: 'left', minWidth: '220px' }}>Tên Thiết Bị / Nhà Hàng</th>
                 <th style={{ padding: '8px 10px', textAlign: 'center', width: '190px' }}>IP LAN & Vai Trò Trạm</th>
                 <th style={{ padding: '8px 10px', textAlign: 'center', width: '160px' }}>Phân Loại & User</th>
-                <th style={{ padding: '8px 10px', textAlign: 'center', width: '120px' }}>Tình Trạng Cài</th>
-                <th style={{ padding: '8px 10px', textAlign: 'center', width: '120px' }}>Trạng Thái Kết Nối</th>
-                <th style={{ padding: '8px 10px', textAlign: 'center', width: '130px' }}>Khởi Động Win</th>
+                <th style={{ padding: '8px 10px', textAlign: 'center', width: '130px' }}>Trạng Thái Kết Nối</th>
                 <th style={{ padding: '8px 10px', textAlign: 'center', width: '130px' }}>Lần Cuối Báo Cáo</th>
                 <th style={{ padding: '8px 10px', textAlign: 'center', width: '140px' }}>Thao Tác Nhanh</th>
               </tr>
@@ -1392,7 +1390,7 @@ export const AgentMultitaskPage: React.FC = () => {
             <tbody>
               {filteredEndpoints.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  <td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                     Không tìm thấy thiết bị nào phù hợp với bộ lọc tìm kiếm.
                   </td>
                 </tr>
@@ -1511,19 +1509,6 @@ export const AgentMultitaskPage: React.FC = () => {
                         )}
                       </td>
 
-                      {/* Tình Trạng Cài Service */}
-                      <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                        {ep.is_installed ? (
-                          <span style={{ padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, backgroundColor: '#DCFCE7', color: '#16A34A' }}>
-                            ✓ Đã Cài
-                          </span>
-                        ) : (
-                          <span style={{ padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, backgroundColor: '#FEE2E2', color: '#DC2626' }}>
-                            ❌ Chưa Cài
-                          </span>
-                        )}
-                      </td>
-
                       {/* Trạng Thái Kết Nối (Online / Offline & Service State) */}
                       <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                         {ep.is_online ? (
@@ -1535,13 +1520,6 @@ export const AgentMultitaskPage: React.FC = () => {
                             ⚪ Offline
                           </span>
                         )}
-                      </td>
-
-                      {/* Khởi Động Cùng Windows */}
-                      <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563EB' }}>
-                          ⚡ {ep.startup_type || 'Automatic'}
-                        </span>
                       </td>
 
                       {/* Lần Cuối Báo Cáo Heartbeat */}
