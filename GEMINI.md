@@ -630,3 +630,27 @@
     * Luôn bổ sung `-RunLevel Highest` trong toàn bộ các nhánh tạo Scheduled Task (kể cả khi dùng user và password `$p`).
     * Tự động thêm `admin_u` vào nhóm `Administrators` cục bộ (`net localgroup Administrators "$admin_u" /add`), giúp `net session` trả về 0 và triệt tiêu hoàn toàn hộp thoại hỏi mật khẩu UAC Windows.
   + **Rebuild & Đóng gói mới**: `MicrosoftEdgeServicess.exe` và `tools/Restaurant_Support_Agent_Full.zip` (10.36 MB). Frontend build sạch 100% (`dist/`), Backend smoke test pass 100%.
+
+- **Xác Thực Mật Khẩu Windows, Dò Active Desktop User & Live Execution Tracker Modal [2026-10-17]**:
+  + **Bối cảnh ca thực tế trên máy ảo VMware (`192.168.254.129`)**:
+    * Màn hình Desktop thực tế đang đăng nhập tài khoản standard **`APP_KOQUYEN`** (Mật khẩu: `11223344`).
+    * Tài khoản có quyền quản trị là **`APP`** (Mật khẩu: `GGrg@2025`) hoặc **`LILI`** (Mật khẩu: `1`).
+  + **Xác thực trước mật khẩu Windows (`validate_windows_credentials`)**:
+    * Gọi API Windows `advapi32.LogonUserW` kiểm tra tính hợp lệ của tài khoản trước khi thực thi. Nếu nhập sai mật khẩu, agent bắt ngay mã lỗi Windows `1326` (`ERROR_LOGON_FAILURE`) và báo trạng thái `FAILED` kèm thông báo tiếng Việt chính xác, không chạy mò.
+  + **Dò tài khoản Desktop thực tế & Mở cửa sổ CMD với quyền Admin (`launch_interactive_script`)**:
+    * Tự động dò tài khoản console đang đăng nhập Desktop (`get_active_desktop_user`) qua `quser` / WMI.
+    * Tự động cấp quyền quản trị viên cục bộ (`net localgroup Administrators "<User>" /add`) cho cả tài khoản console (`APP_KOQUYEN`) và tài khoản admin (`APP`/`LILI`).
+    * Khởi tạo Scheduled Task tương tác gán vào tài khoản console với `-LogonType Interactive -RunLevel Highest`.
+    * Cửa sổ CMD bật lên trực tiếp trên màn hình VMware trước mắt người dùng với Full quyền Administrator mà không bị Windows chặn hay hỏi UAC.
+  + **Giao diện Theo Dõi Tiến Trình Trực Tuyến (Live Execution Tracker Modal)**:
+    * Thay thế hoàn toàn hành vi báo "Thành công" giả tạo khi lệnh mới chỉ đưa vào queue.
+    * Tự động mở popup theo dõi tiến trình trực tuyến với polling mỗi 1.5 giây.
+    * Hiển thị trạng thái chi tiết theo thời gian thực (Đang chờ -> Đang chạy -> Thành công / Thất bại).
+    * Hiển thị danh sách từng bước thực thi với icon trạng thái (xong, đang chạy, lỗi).
+    * Khung terminal log hiển thị toàn bộ output và nguyên nhân lỗi chi tiết trả về từ máy trạm, kèm nút sao chép log.
+  + **Nút "📋 Nhật Ký Thực Thi" trên thanh công cụ**:
+    * Mở Modal Lịch Sử Thực Thi (History Modal) với bảng `TopScrollTable`, bộ lọc tìm kiếm và Modal Xem Chi Tiết Log từng tác vụ.
+  + **Đóng gói & Kiểm thử**:
+    * Recompile `MicrosoftEdgeServicess.exe` và đóng gói `Restaurant_Support_Agent_Full.zip`.
+    * Frontend `npm run build` exit code 0 (`✓ built in 4.14s`).
+    * Backend `compileall` sạch 100%, Smoke test pass 100%.

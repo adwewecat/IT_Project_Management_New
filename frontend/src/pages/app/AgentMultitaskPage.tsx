@@ -26,7 +26,12 @@ import {
   Save,
   Package,
   Layers,
-  FileCode
+  FileCode,
+  History,
+  Eye,
+  Copy,
+  Check,
+  FileText
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -42,7 +47,8 @@ import {
   AgentConfigResponse,
   AgentCommandResponse,
   AgentScriptTemplateItem,
-  DeployStepItem
+  DeployStepItem,
+  AgentLogItem
 } from '../../services/agentMultitaskService';
 
 // Danh sách mẫu kịch bản dự phòng mặc định
@@ -212,10 +218,89 @@ export const AgentMultitaskPage: React.FC = () => {
   const [isExecutingCommand, setIsExecutingCommand] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
+  // ── STATE THEO DÕI TIẾN TRÌNH THỰC THI THỜI GIAN THỰC (LIVE EXECUTION TRACKER) ──
+  const [trackingModalOpen, setTrackingModalOpen] = useState<boolean>(false);
+  const [trackingTaskIds, setTrackingTaskIds] = useState<number[]>([]);
+  const [trackingLogs, setTrackingLogs] = useState<Record<number, AgentLogItem>>({});
+  const [isTrackingPolling, setIsTrackingPolling] = useState<boolean>(false);
+  const [trackingAction, setTrackingAction] = useState<string>('');
+  const [trackingTargets, setTrackingTargets] = useState<Array<{ code: string; ip: string; name?: string }>>([]);
+  const [trackingElapsedSeconds, setTrackingElapsedSeconds] = useState<number>(0);
+  const [copiedTaskId, setCopiedTaskId] = useState<number | null>(null);
+
+  // ── STATE MODAL NHẬT KÝ THỰC THI TỔNG QUAN (EXECUTION LOGS HISTORY) ──
+  const [isLogsHistoryModalOpen, setIsLogsHistoryModalOpen] = useState<boolean>(false);
+  const [logsHistoryList, setLogsHistoryList] = useState<AgentLogItem[]>([]);
+  const [logsHistoryLoading, setLogsHistoryLoading] = useState<boolean>(false);
+  const [selectedDetailLog, setSelectedDetailLog] = useState<AgentLogItem | null>(null);
+  const [logsSearchFilter, setLogsSearchFilter] = useState<string>('');
+  const [logsStatusFilter, setLogsStatusFilter] = useState<'ALL' | 'SUCCESS' | 'FAILED' | 'PENDING'>('ALL');
+
   const showToast = (text: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 3500);
   };
+
+  // Polling theo dõi trạng thái tiến trình thực thi của các task_ids
+  useEffect(() => {
+    if (!isTrackingPolling || trackingTaskIds.length === 0) return;
+
+    const secTimer = setInterval(() => {
+      setTrackingElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+
+    const pollTaskStatus = async () => {
+      try {
+        const fetchPromises = trackingTaskIds.map(async (tid) => {
+          try {
+            const logItem = await agentMultitaskService.getTaskStatus(tid);
+            return { tid, logItem };
+          } catch {
+            return null;
+          }
+        });
+
+        const results = await Promise.all(fetchPromises);
+        let allCompleted = true;
+
+        setTrackingLogs((prev) => {
+          const next = { ...prev };
+          for (const r of results) {
+            if (r && r.logItem) {
+              next[r.tid] = r.logItem;
+              if (r.logItem.result_status === 'PENDING') {
+                allCompleted = false;
+              }
+            } else {
+              allCompleted = false;
+            }
+          }
+          return next;
+        });
+
+        if (allCompleted) {
+          setIsTrackingPolling(false);
+          // Tự động nạp lại danh sách máy
+          agentMultitaskService.getEndpoints().then((eps) => setEndpoints(eps)).catch(() => {});
+        }
+      } catch {
+        // Tiếp tục thử lần sau
+      }
+    };
+
+    pollTaskStatus();
+    const pollInterval = setInterval(pollTaskStatus, 1500);
+
+    const timeoutTimer = setTimeout(() => {
+      setIsTrackingPolling(false);
+    }, 90000);
+
+    return () => {
+      clearInterval(secTimer);
+      clearInterval(pollInterval);
+      clearTimeout(timeoutTimer);
+    };
+  }, [isTrackingPolling, trackingTaskIds]);
 
   // Nạp dữ liệu ban đầu và thiết lập tự động làm mới ngầm mỗi 10 giây (Auto-polling)
   useEffect(() => {
@@ -609,9 +694,26 @@ export const AgentMultitaskPage: React.FC = () => {
       });
 
       setCommandResult(res);
-      showToast(`Đã gửi lệnh '${action}' tới ${res.total_targets} thiết bị thành công.`, 'success');
-      // Đóng modal tác vụ con nếu đang mở
+      // Đóng modal tác vụ con đang mở để nhường chỗ cho bảng theo dõi thời gian thực
       setActiveActionModal(null);
+
+      // Thu thập task_ids để kích hoạt theo dõi tiến trình trực tiếp
+      const returnedTaskIds = (res.task_ids && res.task_ids.length > 0)
+        ? res.task_ids
+        : res.results.map((r) => r.task_id).filter((id): id is number => typeof id === 'number');
+
+      if (returnedTaskIds.length > 0) {
+        setTrackingTaskIds(returnedTaskIds);
+        setTrackingAction(action);
+        setTrackingTargets(targets.map((t) => ({ code: t.restaurant_code, ip: t.ip_lan, name: t.restaurant_name })));
+        setTrackingLogs({});
+        setTrackingElapsedSeconds(0);
+        setIsTrackingPolling(true);
+        setTrackingModalOpen(true);
+      } else {
+        showToast(`Đã gửi lệnh '${action}' tới ${res.total_targets} thiết bị thành công.`, 'success');
+      }
+
       // Tải lại dữ liệu mới nhất
       const updatedEndpoints = await agentMultitaskService.getEndpoints();
       setEndpoints(updatedEndpoints);
@@ -619,6 +721,20 @@ export const AgentMultitaskPage: React.FC = () => {
       showToast('Lỗi khi gửi lệnh điều khiển: ' + (err.response?.data?.detail || err.message), 'error');
     } finally {
       setIsExecutingCommand(false);
+    }
+  };
+
+  // Mở modal lịch sử nhật ký thực thi (Logs History)
+  const handleOpenLogsHistory = async () => {
+    setIsLogsHistoryModalOpen(true);
+    setLogsHistoryLoading(true);
+    try {
+      const logs = await agentMultitaskService.getLogs(undefined, 200);
+      setLogsHistoryList(logs);
+    } catch (err: any) {
+      showToast('Lỗi khi tải lịch sử logs: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setLogsHistoryLoading(false);
     }
   };
 
@@ -1320,6 +1436,17 @@ export const AgentMultitaskPage: React.FC = () => {
             leftIcon={<Download size={14} style={{ color: 'var(--color-primary)' }} />}
           >
             Tải Gói Cài (.ZIP)
+          </Button>
+
+          {/* NHẬT KÝ THỰC THI & LOGS CHI TIẾT */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleOpenLogsHistory}
+            leftIcon={<History size={14} style={{ color: '#6366F1' }} />}
+            style={{ fontWeight: 700, borderColor: '#6366F1', color: '#6366F1' }}
+          >
+            📋 Nhật Ký Thực Thi
           </Button>
 
           {/* LÀM MỚI DỮ LIỆU */}
@@ -4517,6 +4644,704 @@ export const AgentMultitaskPage: React.FC = () => {
   null,
   2
 )}
+              </pre>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* MODAL 1: THEO DÕI TIẾN TRÌNH THỰC THI THỜI GIAN THỰC (LIVE TRACKER) */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {trackingModalOpen && (
+        <Modal
+          isOpen={trackingModalOpen}
+          onClose={() => setTrackingModalOpen(false)}
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {isTrackingPolling ? (
+                <RefreshCw size={20} className="animate-spin" style={{ color: '#2563EB' }} />
+              ) : Object.values(trackingLogs).some((l) => l.result_status === 'FAILED') ? (
+                <AlertTriangle size={20} style={{ color: '#EF4444' }} />
+              ) : (
+                <CheckCircle size={20} style={{ color: '#10B981' }} />
+              )}
+              <span style={{ fontSize: '16px', fontWeight: 800 }}>
+                {isTrackingPolling
+                  ? '⏳ Đang Thực Thi Lệnh Từ Xa (Thời Gian Thực)...'
+                  : Object.values(trackingLogs).some((l) => l.result_status === 'FAILED')
+                  ? '❌ Lệnh Thực Thi Thất Bại / Có Lỗi Phát Sinh'
+                  : '✅ Lệnh Thực Thi Hoàn Tất Thành Công 100%'}
+              </span>
+            </div>
+          }
+          maxWidth="880px"
+          footer={
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                ⏱️ Thời gian: <strong>{trackingElapsedSeconds}s</strong>{' '}
+                {isTrackingPolling ? '(Đang lắng nghe phản hồi từ máy trạm qua Heartbeat...)' : '(Đã hoàn tất)'}
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    const eps = await agentMultitaskService.getEndpoints();
+                    setEndpoints(eps);
+                    showToast('Đã làm mới danh sách thiết bị!', 'info');
+                  }}
+                >
+                  🔄 Tải Lại Thiết Bị
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setTrackingModalOpen(false)}
+                >
+                  Đóng
+                </Button>
+              </div>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '72vh', overflowY: 'auto' }}>
+            {/* Thanh trạng thái tổng quan */}
+            <div
+              style={{
+                padding: '12px 16px',
+                borderRadius: '8px',
+                backgroundColor: isTrackingPolling
+                  ? 'rgba(37, 99, 235, 0.08)'
+                  : Object.values(trackingLogs).some((l) => l.result_status === 'FAILED')
+                  ? 'rgba(239, 68, 68, 0.08)'
+                  : 'rgba(16, 185, 129, 0.08)',
+                border: `1.5px solid ${
+                  isTrackingPolling
+                    ? '#93C5FD'
+                    : Object.values(trackingLogs).some((l) => l.result_status === 'FAILED')
+                    ? '#FCA5A5'
+                    : '#6EE7B7'
+                }`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '10px'
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '2px' }}>
+                  🎯 Tác Vụ:{' '}
+                  <span style={{ color: '#2563EB', textTransform: 'uppercase' }}>
+                    {trackingAction}
+                  </span>{' '}
+                  | Thiết bị: {trackingTargets.map((t) => `${t.code} (${t.ip})`).join(', ')}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  {isTrackingPolling
+                    ? 'Server đã gửi lệnh vào hàng đợi. Client Agent máy trạm đang tiếp nhận và chạy các bước...'
+                    : Object.values(trackingLogs).some((l) => l.result_status === 'FAILED')
+                    ? '⚠️ Quá trình thực thi gặp lỗi. Vui lòng xem chi tiết nguyên nhân bên dưới để khắc phục!'
+                    : '🎉 Toàn bộ các bước cài đặt / cấu hình đã hoàn tất chuẩn xác trên máy trạm.'}
+                </div>
+              </div>
+
+              {isTrackingPolling && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#2563EB', fontWeight: 700 }}>
+                  <RefreshCw size={14} className="animate-spin" /> Đang chạy... ({trackingElapsedSeconds}s)
+                </div>
+              )}
+            </div>
+
+            {/* Chi tiết từng thiết bị thực thi */}
+            {trackingTaskIds.map((tid, idx) => {
+              const log = trackingLogs[tid];
+              const target = trackingTargets[idx] || { code: 'N/A', ip: 'N/A', name: '' };
+              const isPending = !log || log.result_status === 'PENDING';
+              const isFailed = log && log.result_status === 'FAILED';
+              const isSuccess = log && log.result_status === 'SUCCESS';
+
+              // Tách thông báo thành các bước nhỏ
+              const msgLines = (log?.result_message || '')
+                .split('\n')
+                .map((l) => l.trim())
+                .filter(Boolean);
+
+              // Tìm dòng lỗi nổi bật nếu có
+              const errorLine = msgLines.find(
+                (l) => l.includes('❌') || l.toLowerCase().includes('lỗi') || l.toLowerCase().includes('failed')
+              );
+
+              return (
+                <div
+                  key={tid}
+                  style={{
+                    borderRadius: '8px',
+                    border: `1.5px solid ${isFailed ? '#EF4444' : isSuccess ? '#10B981' : '#CBD5E1'}`,
+                    backgroundColor: 'var(--bg-secondary)',
+                    overflow: 'hidden'
+                  }}
+                >
+                  {/* Header thẻ thiết bị */}
+                  <div
+                    style={{
+                      padding: '10px 14px',
+                      backgroundColor: isFailed ? '#FEF2F2' : isSuccess ? '#F0FDF4' : '#F8FAFC',
+                      borderBottom: '1px solid var(--border-color)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '8px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Monitor size={16} style={{ color: isFailed ? '#EF4444' : isSuccess ? '#10B981' : '#64748B' }} />
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                        {target.name || target.code} ({target.ip})
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                        (Task #{tid})
+                      </span>
+                    </div>
+
+                    <div>
+                      {isPending && (
+                        <Badge variant="warning" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <RefreshCw size={11} className="animate-spin" /> Đang Chờ Agent Nhận ({trackingElapsedSeconds}s)
+                        </Badge>
+                      )}
+                      {isSuccess && (
+                        <Badge variant="success" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <CheckCircle size={11} /> Thành Công 100%
+                        </Badge>
+                      )}
+                      {isFailed && (
+                        <Badge variant="danger" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <AlertTriangle size={11} /> Thất Bại (Có Lỗi)
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {/* Cảnh báo lỗi nổi bật nếu thất bại */}
+                    {isFailed && (
+                      <div
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: '6px',
+                          backgroundColor: '#FEE2E2',
+                          border: '1px solid #FECACA',
+                          color: '#991B1B',
+                          fontSize: '12.5px',
+                          fontWeight: 700,
+                          lineHeight: 1.4
+                        }}
+                      >
+                        <div>⚠️ <strong>CHI TIẾT LỖI PHÁT SINH TẠI MÁY TRẠM:</strong></div>
+                        <div style={{ marginTop: '4px', color: '#B91C1C', fontFamily: 'monospace' }}>
+                          {errorLine || log?.result_message || 'Không xác định được nguyên nhân cụ thể.'}
+                        </div>
+                        {errorLine && errorLine.toLowerCase().includes('1326') && (
+                          <div style={{ marginTop: '6px', fontSize: '11.5px', fontWeight: 500, color: '#7F1D1D' }}>
+                            💡 <strong>Gợi ý khắc phục:</strong> Bạn đang nhập sai mật khẩu của tài khoản Windows (Lỗi 1326: Logon failure). Vui lòng tích chọn User khác hoặc nhập đúng mật khẩu của User có quyền Administrator như <code>APP</code> hoặc <code>LILI</code>.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Danh sách các bước tuần tự được thực hiện */}
+                    {msgLines.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                          📋 Tiến trình từng bước:
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {msgLines.map((line, lIdx) => {
+                            const isLineErr = line.includes('❌') || line.toLowerCase().includes('lỗi') || line.toLowerCase().includes('failed');
+                            const isLineSuccess = line.startsWith('✓') || line.includes('OK') || line.includes('thành công') || line.includes('[Nhan File]') || line.includes('[Giai Nen]');
+
+                            return (
+                              <div
+                                key={lIdx}
+                                style={{
+                                  fontSize: '12px',
+                                  padding: '5px 8px',
+                                  borderRadius: '4px',
+                                  backgroundColor: isLineErr
+                                    ? '#FEF2F2'
+                                    : isLineSuccess
+                                    ? '#F0FDF4'
+                                    : 'var(--bg-primary)',
+                                  color: isLineErr ? '#DC2626' : isLineSuccess ? '#15803D' : 'var(--text-primary)',
+                                  border: `1px solid ${isLineErr ? '#FECACA' : isLineSuccess ? '#BBF7D0' : 'var(--border-color)'}`,
+                                  fontFamily: 'monospace'
+                                }}
+                              >
+                                {line}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Hộp đen Terminal hiển thị nhật ký gốc */}
+                    {log && (
+                      <div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '4px'
+                          }}
+                        >
+                          <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                            💻 Hộp đen Console / Nhật ký phản hồi từ máy trạm:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const raw = `${log.result_message || ''}\n\n[PAYLOAD]\n${log.command_payload || ''}`;
+                              navigator.clipboard.writeText(raw);
+                              setCopiedTaskId(tid);
+                              setTimeout(() => setCopiedTaskId(null), 2000);
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: copiedTaskId === tid ? '#10B981' : '#2563EB',
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontWeight: 600,
+                              padding: 0
+                            }}
+                          >
+                            {copiedTaskId === tid ? <Check size={12} /> : <Copy size={12} />}
+                            {copiedTaskId === tid ? 'Đã sao chép!' : 'Sao chép nhật ký'}
+                          </button>
+                        </div>
+                        <pre
+                          style={{
+                            margin: 0,
+                            padding: '10px 12px',
+                            borderRadius: '6px',
+                            backgroundColor: '#0B1120',
+                            border: '1px solid #1E293B',
+                            color: '#38BDF8',
+                            fontSize: '11px',
+                            fontFamily: 'Consolas, Monaco, monospace',
+                            maxHeight: '180px',
+                            overflowY: 'auto',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                            lineHeight: 1.4
+                          }}
+                        >
+                          {log.result_message || 'Chưa có thông báo chi tiết từ Agent.'}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Modal>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* MODAL 2: LỊCH SỬ THỰC THI & NHẬT KÝ TỔNG QUAN (LOGS HISTORY) */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {isLogsHistoryModalOpen && (
+        <Modal
+          isOpen={isLogsHistoryModalOpen}
+          onClose={() => setIsLogsHistoryModalOpen(false)}
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <History size={18} style={{ color: '#6366F1' }} />
+              <span style={{ fontSize: '16px', fontWeight: 800 }}>
+                📋 Lịch Sử Thực Thi Lệnh & Nhật Ký Agent Multitask
+              </span>
+            </div>
+          }
+          maxWidth="1100px"
+          footer={
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                Hiển thị <strong>{logsHistoryList.length}</strong> nhật ký gần nhất
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setIsLogsHistoryModalOpen(false)}
+              >
+                Đóng
+              </Button>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', height: '70vh' }}>
+            {/* Thanh tìm kiếm & bộ lọc trạng thái */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '10px',
+                paddingBottom: '8px',
+                borderBottom: '1px solid var(--border-color)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '220px' }}>
+                <Search size={14} style={{ color: 'var(--text-secondary)' }} />
+                <input
+                  type="text"
+                  placeholder="Tìm theo Mã NH, IP, Tác vụ, Người tạo, Lỗi..."
+                  value={logsSearchFilter}
+                  onChange={(e) => setLogsSearchFilter(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '12px',
+                    backgroundColor: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+              </div>
+
+              {/* Lọc theo trạng thái */}
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {(['ALL', 'SUCCESS', 'FAILED', 'PENDING'] as const).map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setLogsStatusFilter(st)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      border: '1px solid',
+                      backgroundColor:
+                        logsStatusFilter === st
+                          ? st === 'SUCCESS' ? '#10B981' : st === 'FAILED' ? '#EF4444' : st === 'PENDING' ? '#F59E0B' : '#2563EB'
+                          : 'var(--bg-primary)',
+                      color: logsStatusFilter === st ? '#FFFFFF' : 'var(--text-secondary)',
+                      borderColor: logsStatusFilter === st ? 'transparent' : 'var(--border-color)'
+                    }}
+                  >
+                    {st === 'ALL' ? 'Tất cả' : st === 'SUCCESS' ? 'Thành công' : st === 'FAILED' ? 'Thất bại' : 'Đang chờ'}
+                  </button>
+                ))}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    setLogsHistoryLoading(true);
+                    try {
+                      const logs = await agentMultitaskService.getLogs(undefined, 200);
+                      setLogsHistoryList(logs);
+                      showToast('Đã làm mới danh sách logs!', 'info');
+                    } catch {
+                      showToast('Lỗi làm mới logs', 'error');
+                    } finally {
+                      setLogsHistoryLoading(false);
+                    }
+                  }}
+                  disabled={logsHistoryLoading}
+                  leftIcon={<RefreshCw size={13} className={logsHistoryLoading ? 'animate-spin' : ''} />}
+                >
+                  Làm mới
+                </Button>
+              </div>
+            </div>
+
+            {/* Bảng dữ liệu nhật ký với TopScrollTable */}
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+              <TopScrollTable maxHeight="calc(70vh - 70px)">
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '2px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 10 }}>
+                      <th style={{ padding: '8px 10px', width: '60px' }}># ID</th>
+                      <th style={{ padding: '8px 10px', width: '140px' }}>Thời Gian</th>
+                      <th style={{ padding: '8px 10px', width: '150px' }}>Thiết Bị</th>
+                      <th style={{ padding: '8px 10px', width: '130px' }}>Tác Vụ</th>
+                      <th style={{ padding: '8px 10px', width: '110px' }}>Người Tạo</th>
+                      <th style={{ padding: '8px 10px', width: '120px' }}>Trạng Thái</th>
+                      <th style={{ padding: '8px 10px' }}>Thông Báo Tóm Tắt</th>
+                      <th style={{ padding: '8px 10px', width: '110px', textAlign: 'center' }}>Thao Tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {logsHistoryList
+                      .filter((l) => {
+                        if (logsStatusFilter !== 'ALL' && l.result_status !== logsStatusFilter) return false;
+                        if (!logsSearchFilter.trim()) return true;
+                        const s = logsSearchFilter.toLowerCase().trim();
+                        return (
+                          l.restaurant_code.toLowerCase().includes(s) ||
+                          l.machine_ip.toLowerCase().includes(s) ||
+                          l.action_type.toLowerCase().includes(s) ||
+                          (l.created_by && l.created_by.toLowerCase().includes(s)) ||
+                          (l.result_message && l.result_message.toLowerCase().includes(s))
+                        );
+                      })
+                      .map((log) => {
+                        const isFail = log.result_status === 'FAILED';
+                        const isSucc = log.result_status === 'SUCCESS';
+                        const summary = (log.result_message || '').split('\n')[0] || '—';
+
+                        return (
+                          <tr
+                            key={log.id}
+                            style={{
+                              borderBottom: '1px solid var(--border-color)',
+                              backgroundColor: isFail ? 'rgba(239, 68, 68, 0.03)' : 'transparent'
+                            }}
+                          >
+                            <td style={{ padding: '8px 10px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                              #{log.id}
+                            </td>
+                            <td style={{ padding: '8px 10px', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                              {new Date(log.created_at).toLocaleString('vi-VN')}
+                            </td>
+                            <td style={{ padding: '8px 10px' }}>
+                              <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                                {log.restaurant_code}
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                                {log.machine_ip || '—'}
+                              </div>
+                            </td>
+                            <td style={{ padding: '8px 10px' }}>
+                              <Badge variant="neutral" style={{ fontSize: '11px', fontFamily: 'monospace' }}>
+                                {log.action_type}
+                              </Badge>
+                            </td>
+                            <td style={{ padding: '8px 10px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                              {log.created_by || 'system'}
+                            </td>
+                            <td style={{ padding: '8px 10px' }}>
+                              {isSucc && <Badge variant="success">SUCCESS</Badge>}
+                              {isFail && <Badge variant="danger">FAILED</Badge>}
+                              {!isSucc && !isFail && <Badge variant="warning">{log.result_status}</Badge>}
+                            </td>
+                            <td
+                              style={{
+                                padding: '8px 10px',
+                                maxWidth: '300px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                fontSize: '11.5px',
+                                color: isFail ? '#DC2626' : 'var(--text-primary)'
+                              }}
+                              title={log.result_message || ''}
+                            >
+                              {summary}
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSelectedDetailLog(log)}
+                                leftIcon={<Eye size={12} />}
+                                style={{ padding: '4px 8px', fontSize: '11px' }}
+                              >
+                                Chi Tiết
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </TopScrollTable>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* MODAL 3: XEM CHI TIẾT MỘT LOG BẤT KỲ (DETAIL LOG INSPECTOR) */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {selectedDetailLog && (
+        <Modal
+          isOpen={Boolean(selectedDetailLog)}
+          onClose={() => setSelectedDetailLog(null)}
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FileText size={18} style={{ color: '#2563EB' }} />
+              <span style={{ fontSize: '15px', fontWeight: 800 }}>
+                Chi Tiết Nhật Ký Tác Vụ #{selectedDetailLog.id} ({selectedDetailLog.action_type})
+              </span>
+            </div>
+          }
+          maxWidth="820px"
+          footer={
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const fullText = `[TASK #${selectedDetailLog.id}]\nAction: ${selectedDetailLog.action_type}\nTarget: ${selectedDetailLog.restaurant_code} (${selectedDetailLog.machine_ip})\nStatus: ${selectedDetailLog.result_status}\nCreated: ${selectedDetailLog.created_at}\n\n[PAYLOAD]\n${selectedDetailLog.command_payload || ''}\n\n[OUTPUT]\n${selectedDetailLog.result_message || ''}`;
+                  navigator.clipboard.writeText(fullText);
+                  showToast('Đã sao chép toàn bộ thông tin log!', 'success');
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#2563EB',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: 0
+                }}
+              >
+                <Copy size={13} /> Sao Chép Toàn Bộ Log
+              </button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setSelectedDetailLog(null)}
+              >
+                Đóng
+              </Button>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '72vh', overflowY: 'auto' }}>
+            {/* Thông tin metadata */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '10px',
+                padding: '12px',
+                borderRadius: '8px',
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                fontSize: '12px'
+              }}
+            >
+              <div>
+                <span style={{ color: 'var(--text-secondary)' }}>Mã Nhà Hàng:</span>{' '}
+                <strong>{selectedDetailLog.restaurant_code}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-secondary)' }}>Địa Chỉ IP:</span>{' '}
+                <strong style={{ fontFamily: 'monospace' }}>{selectedDetailLog.machine_ip || '—'}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-secondary)' }}>Trạng Thái:</span>{' '}
+                {selectedDetailLog.result_status === 'SUCCESS' ? (
+                  <Badge variant="success">SUCCESS</Badge>
+                ) : selectedDetailLog.result_status === 'FAILED' ? (
+                  <Badge variant="danger">FAILED</Badge>
+                ) : (
+                  <Badge variant="warning">{selectedDetailLog.result_status}</Badge>
+                )}
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-secondary)' }}>Người Thực Hiện:</span>{' '}
+                <strong>{selectedDetailLog.created_by || 'system'}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-secondary)' }}>Thời Gian:</span>{' '}
+                <span>{new Date(selectedDetailLog.created_at).toLocaleString('vi-VN')}</span>
+              </div>
+            </div>
+
+            {/* Cảnh báo nếu FAILED */}
+            {selectedDetailLog.result_status === 'FAILED' && (
+              <div
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '6px',
+                  backgroundColor: '#FEE2E2',
+                  border: '1px solid #FECACA',
+                  color: '#991B1B',
+                  fontSize: '12.5px',
+                  fontWeight: 700
+                }}
+              >
+                ⚠️ <strong>THÔNG BÁO LỖI:</strong>
+                <div style={{ marginTop: '4px', fontFamily: 'monospace', fontWeight: 600 }}>
+                  {(selectedDetailLog.result_message || '').split('\n')[0]}
+                </div>
+              </div>
+            )}
+
+            {/* Nội dung kết quả thực thi (Console output) */}
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                💻 Toàn Bộ Kết Quả & Nhật Ký Trả Về (Result Output):
+              </label>
+              <pre
+                style={{
+                  margin: 0,
+                  padding: '12px',
+                  borderRadius: '6px',
+                  backgroundColor: '#0B1120',
+                  border: '1px solid #1E293B',
+                  color: '#38BDF8',
+                  fontSize: '11.5px',
+                  fontFamily: 'Consolas, Monaco, monospace',
+                  maxHeight: '260px',
+                  overflowY: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  lineHeight: 1.45
+                }}
+              >
+                {selectedDetailLog.result_message || 'Không có dữ liệu đầu ra.'}
+              </pre>
+            </div>
+
+            {/* Lệnh đã gửi (Payload) */}
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                📦 Cấu Hình Lệnh Đã Gửi (Command Payload):
+              </label>
+              <pre
+                style={{
+                  margin: 0,
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  backgroundColor: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-primary)',
+                  fontSize: '11px',
+                  fontFamily: 'Consolas, Monaco, monospace',
+                  maxHeight: '160px',
+                  overflowY: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word'
+                }}
+              >
+                {selectedDetailLog.command_payload
+                  ? (() => {
+                      try {
+                        return JSON.stringify(JSON.parse(selectedDetailLog.command_payload), null, 2);
+                      } catch {
+                        return selectedDetailLog.command_payload;
+                      }
+                    })()
+                  : 'Không có payload.'}
               </pre>
             </div>
           </div>

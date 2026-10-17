@@ -672,6 +672,7 @@ class AgentMultitaskService:
             log_entry.result_status = "PENDING"
             log_entry.result_message = f"Đã gửi lệnh '{action}' vào hàng đợi chờ Agent máy trạm thực thi."
             db.add(log_entry)
+            db.flush()
             success_count += 1
 
             results.append(AgentCommandResultItem(
@@ -680,16 +681,20 @@ class AgentMultitaskService:
                 action=action,
                 success=success,
                 message=msg,
-                output=out
+                output=out,
+                task_id=log_entry.id
             ))
 
         db.commit()
+
+        task_id_list = [r.task_id for r in results if r.task_id is not None]
 
         return AgentCommandResponse(
             success=failed_count == 0,
             total_targets=len(targets_to_run),
             success_count=success_count,
             failed_count=failed_count,
+            task_ids=task_id_list,
             results=results
         )
 
@@ -715,6 +720,24 @@ class AgentMultitaskService:
             )
             for l in logs
         ]
+
+    @staticmethod
+    def get_task_status(task_id: int, db: Session) -> Optional[AgentLogItem]:
+        """Lấy thông tin và trạng thái thời gian thực của một task cụ thể theo task_id."""
+        log_entry = db.query(AgentMultitaskLog).filter(AgentMultitaskLog.id == task_id).first()
+        if not log_entry:
+            return None
+        return AgentLogItem(
+            id=log_entry.id,
+            restaurant_code=log_entry.restaurant_code,
+            machine_ip=log_entry.machine_ip,
+            action_type=log_entry.action_type,
+            command_payload=log_entry.command_payload,
+            result_status=log_entry.result_status,
+            result_message=log_entry.result_message,
+            created_by=log_entry.created_by,
+            created_at=log_entry.created_at
+        )
 
     @staticmethod
     def poll_pending_tasks(restaurant_code: str, ip_lan: Optional[str] = None, db: Session = None) -> List[Dict[str, Any]]:

@@ -256,6 +256,22 @@ def get_logs(
     return AgentMultitaskService.get_logs(restaurant_code=restaurant_code, limit=limit, db=db)
 
 
+@router.get("/task-status/{task_id}", response_model=AgentLogItem)
+def get_task_status(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """Lấy trạng thái và log chi tiết thời gian thực của một task cụ thể theo task_id."""
+    res = AgentMultitaskService.get_task_status(task_id=task_id, db=db)
+    if not res:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Không tìm thấy tác vụ #{task_id}"
+        )
+    return res
+
+
 @router.get("/poll-tasks")
 def poll_tasks(
     restaurant_code: str = Query(..., description="Mã nhà hàng đang yêu cầu kiểm tra tác vụ"),

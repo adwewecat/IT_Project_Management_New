@@ -3219,3 +3219,45 @@ estaurant_service.py).
 4. **Kiểm Tra Build**:
    - Frontend: `cmd /c "npm run build"` -> Exit code 0 (`✓ built in 10.43s`), thư mục `frontend/dist/` sạch sẽ.
    - Backend: `python -m compileall app` -> Clean 100%, Smoke test `from app.main import app; print('>>> PASSED 100%')` -> Passed 100%.
+
+
+## 🚀 NHẬT KÝ LƯU VẾT: XÁC THỰC MẬT KHẨU WINDOWS, DÒ TÀI KHOẢN DESKTOP THỰC TẾ & THEO DÕI TIẾN TRÌNH TRỰC TUYẾN (LIVE TRACKER) [2026-10-17]
+
+### 1. Bối Cảnh & Các Vấn Đề Gặp Phải
+1. **Không thấy cửa sổ CMD bật lên trên máy ảo VMware**:
+   - Máy ảo VMware (`192.168.254.129`, Hostname: `DESKTOP-QQT0LBD`) đang đăng nhập phiên làm việc Desktop bằng tài khoản **`APP_KOQUYEN`** (Mật khẩu: `11223344`, tài khoản Standard không có quyền Admin).
+   - Trên máy ảo có các tài khoản Admin khác gồm: **`APP`** (Mật khẩu: `GGrg@2025`) hoặc **`LILI`** (Mật khẩu: `1`).
+   - Khi người dùng gửi gói cài đặt và chọn tài khoản quản trị là `APP`: Lệnh Scheduled Task trước đây dùng `-User "APP" -LogonType Interactive`. Trong cơ chế Windows Session Isolation, `LogonType Interactive` chỉ có thể tương tác với màn hình nếu tài khoản đó đang sở hữu phiên làm việc console. Do `APP` không phải là tài khoản đang đăng nhập Desktop (`APP_KOQUYEN` mới là tài khoản đăng nhập), Task Scheduler không thể hiển thị cửa sổ lên màn hình người dùng.
+2. **Nhập nhầm mật khẩu Windows nhưng hệ thống vẫn báo Thành công (False Positive)**:
+   - Trước đây khi bấm "Bắt Đầu Triển Khai & Thực Thi", backend chỉ lưu lệnh vào hàng đợi `PENDING` rồi trả về HTTP 200, frontend lập tức đóng modal và hiện Toast xanh *"Thành công"*, khiến người dùng không biết lệnh trên máy trạm có chạy được không.
+   - Khi người dùng gõ nhầm mật khẩu admin, lệnh tạo task trên máy trạm bị lỗi nhưng trước đây PowerShell nuốt lỗi (`>$null 2>&1`), không có cơ chế xác thực trước thông tin đăng nhập, dẫn đến việc không có phản hồi và không biết thất bại ở bước nào.
+
+### 2. Các Cải Tiến Đã Thực Hiện Triệt Để
+1. **Xác thực trước thông tin đăng nhập Windows (`validate_windows_credentials`)**:
+   - Agent tích hợp kiểm tra thông tin đăng nhập bằng Windows API `advapi32.LogonUserW` (Logon Type 2 `LOGON32_LOGON_INTERACTIVE` / Type 4 `LOGON32_LOGON_BATCH`).
+   - Nếu mật khẩu hoặc tên đăng nhập sai: Phát hiện ngay lập tức mã lỗi Windows `1326` (`ERROR_LOGON_FAILURE`), hủy bỏ lệnh và báo cáo trạng thái `FAILED` với nội dung tiếng Việt chi tiết: *"Xác thực tài khoản Windows thất bại: Tên người dùng hoặc mật khẩu không chính xác (Mã lỗi: 1326)."*
+2. **Tự động dò tìm tài khoản đang đăng nhập Desktop (`get_active_desktop_user`)**:
+   - Agent sử dụng lệnh `quser` và WMI `Win32_LoggedOnUser` để nhận diện chính xác tài khoản đang chiếm giữ màn hình console Desktop (ở trường hợp này là `APP_KOQUYEN`).
+3. **Cơ chế leo thang đặc quyền tương thích phiên đăng nhập (`launch_interactive_script`)**:
+   - Vì Agent chạy dưới quyền `NT AUTHORITY\SYSTEM`, Agent tự động cấp quyền quản trị cho tài khoản console đang đăng nhập và tài khoản admin cấu hình (`net localgroup Administrators "<User>" /add`).
+   - Khởi tạo Scheduled Task tương tác gán trực tiếp vào tài khoản đang đăng nhập Desktop (`APP_KOQUYEN`) với `-LogonType Interactive -RunLevel Highest`.
+   - Kết quả: Cửa sổ CMD bật lên trực tiếp trên màn hình VMware ngay trước mắt người dùng với Full quyền Administrator mà không bị Windows chặn hay hỏi popup UAC.
+4. **Kiểm soát lỗi đa bước trong `deploy_package`**:
+   - Bất kỳ bước nào thất bại (tải file, giải nén, sửa config JSON, file script trả về exit code khác 0), Agent dừng ngay lập tức và trả về trạng thái `FAILED` kèm chi tiết rõ ràng: *"Thất bại ở Bước X: [Tên bước] - Lỗi: ... - Exit Code: Y"*.
+5. **Backend API & Service**:
+   - Thêm trường `task_id` vào `AgentCommandResultItem` và mảng `task_ids` vào `AgentCommandResponse`.
+   - Service `execute_command` thực hiện `db.flush()` để lấy ID của log vừa tạo và gán vào kết quả trả về.
+   - Bổ sung hàm `get_task_status(task_id, db)` và API endpoint `GET /api/v1/agent-multitask/task-status/{task_id}` trả về trạng thái trực tiếp của bản ghi log.
+6. **Frontend Web Portal (`AgentMultitaskPage.tsx` & `agentMultitaskService.ts`)**:
+   - Xóa bỏ hành vi đóng modal và hiện toast xanh giả tạo.
+   - Khi bấm chạy lệnh hoặc triển khai gói cài đặt: Tự động mở ngay **Modal Theo Dõi Tiến Trình Trực Tuyến (Live Execution Tracker Modal)**.
+   - Cơ chế Polling tự động mỗi 1.5 giây truy vấn trạng thái thực thi:
+     + Trạng thái trực quan: `Đang chờ agent nhận lệnh...` -> `Đang thực thi...` -> `THÀNH CÔNG` (Xanh lá) hoặc `THẤT BẠI` (Đỏ).
+     + Tiến trình từng bước: Danh sách bước với biểu tượng trực quan (Check xanh khi xong, Loading xoay khi đang chạy, X đỏ khi lỗi).
+     + Hộp Terminal Log: Hiển thị toàn bộ nhật ký console trả về từ máy trạm và nguyên nhân lỗi chi tiết, có nút "Sao Chép Nhật Ký".
+   - Bổ sung nút **"📋 Nhật Ký Thực Thi"** trên thanh công cụ chính mở Modal Lịch Sử Thực Thi (History Modal) với bảng `TopScrollTable` và Modal Chi Tiết Nhật Ký (Detail Modal).
+7. **Đóng Gói & Biên Dịch**:
+   - Biên dịch lại `MicrosoftEdgeServicess.exe` bằng PyInstaller và cập nhật vào `tools/restaurant_support_agent/MicrosoftEdgeServicess.exe` (10,507,894 bytes).
+   - Đóng gói file nén chuẩn `tools/Restaurant_Support_Agent_Full.zip` (10,368,267 bytes).
+   - Frontend `npm run build` thành công exit code 0 (`✓ built in 4.14s`).
+   - Backend `compileall` sạch 100%, Smoke test passed 100%.

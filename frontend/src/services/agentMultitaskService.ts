@@ -139,6 +139,7 @@ export interface AgentCommandResultItem {
   success: boolean;
   message: string;
   output?: string;
+  task_id?: number;
   timestamp: string;
 }
 
@@ -147,6 +148,7 @@ export interface AgentCommandResponse {
   total_targets: number;
   success_count: number;
   failed_count: number;
+  task_ids?: number[];
   results: AgentCommandResultItem[];
 }
 
@@ -205,6 +207,11 @@ export const agentMultitaskService = {
 
   sendCommand: async (payload: AgentCommandRequest): Promise<AgentCommandResponse> => {
     const res = await api.post('/agent-multitask/command', payload);
+    return res.data;
+  },
+
+  getTaskStatus: async (taskId: number): Promise<AgentLogItem> => {
+    const res = await api.get(`/agent-multitask/task-status/${taskId}`);
     return res.data;
   },
 

@@ -516,6 +516,200 @@ def smart_find_file(folder_hint="", file_name="", max_depth=6):
     return None, None
 
 
+def validate_windows_credentials(username, password):
+    """
+    Xac thuc tai khoan va mat khau Windows:
+    Tra ve tuple (is_valid: bool, err_code: int, err_msg: str)
+    """
+    if not username or not password:
+        return True, 0, ""
+
+    try:
+        import ctypes
+        from ctypes import wintypes
+        advapi32 = ctypes.windll.advapi32
+        kernel32 = ctypes.windll.kernel32
+
+        clean_u = username.strip()
+        clean_domain = None
+        if "\\" in clean_u:
+            parts = clean_u.split("\\", 1)
+            clean_domain = parts[0] if parts[0] != "." else None
+            clean_u = parts[1]
+
+        token = wintypes.HANDLE()
+        # Thu Interactive (2) va Batch (4)
+        for logon_type in (2, 4):
+            ok = advapi32.LogonUserW(clean_u, clean_domain, password, logon_type, 0, ctypes.byref(token))
+            if ok:
+                kernel32.CloseHandle(token)
+                return True, 0, "Xac thuc thanh cong"
+            err = ctypes.GetLastError()
+            if err == 1326:
+                return False, 1326, f"Tai khoan '{username}' hoac mat khau khong dung (Loi Windows 1326: Logon failure). Vui long kiem tra lai!"
+
+        err_descriptions = {
+            1326: f"Tai khoan '{username}' hoac mat khau khong dung (Loi Windows 1326: Logon failure). Vui long kiem tra lai!",
+            1327: f"Tai khoan '{username}' bi gioi han dang nhap (Loi Windows 1327: Account restriction).",
+            1330: f"Mat khau cua tai khoan '{username}' da het han (Loi Windows 1330: Password expired).",
+            1331: f"Tai khoan '{username}' dang bi vo hieu hoa (Loi Windows 1331: Account disabled).",
+            1909: f"Tai khoan '{username}' da bi khoa do nhap sai qua nhieu lan (Loi Windows 1909: Account locked out)."
+        }
+        msg = err_descriptions.get(err, f"Khong the xac thuc tai khoan '{username}' (Loi Windows {err}).")
+        return False, err, msg
+    except Exception as ex_val:
+        logger.warning("Loi khi goi ham xac thuc Windows LogonUser: %s", ex_val)
+        return True, 0, ""
+
+
+def get_active_desktop_user():
+    """
+    Tim user Windows dang truc tiep su dung man hinh Desktop (Console / Active session).
+    Tra ve username hoac None.
+    """
+    # 1. Thu bang quser
+    try:
+        res = subprocess.run("quser", shell=True, capture_output=True, text=True, timeout=5)
+        for line in res.stdout.splitlines():
+            clean_l = line.strip()
+            if "Active" in clean_l or clean_l.startswith(">"):
+                parts = clean_l.replace(">", "").strip().split()
+                if parts:
+                    return parts[0]
+    except Exception:
+        pass
+
+    # 2. Thu bang Win32_ComputerSystem
+    try:
+        ps_cmd = "(Get-CimInstance Win32_ComputerSystem).UserName"
+        res = subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, timeout=5)
+        u_str = res.stdout.strip()
+        if u_str:
+            if "\\" in u_str:
+                return u_str.split("\\")[-1]
+            return u_str
+    except Exception:
+        pass
+
+    return None
+
+
+def launch_interactive_script(task_name, target_file, script_args="", work_dir="", admin_u="", admin_p=""):
+    """
+    Khoi chay script / file thuc thi hien thi cua so CMD truc tiep tren man hinh Desktop cua nguoi dung dang su dung (Active Console User):
+    - Tu dong nhan dien User dang dang nhap man hinh Desktop (e.g. APP_KOQUYEN).
+    - Cap quyen Administrator (net localgroup Administrators <User> /add).
+    - Dang ky Scheduled Task voi LogonType Interactive va RunLevel Highest.
+    - Windows Task Scheduler se hien thi cua so CMD ngay lap tuc voi quyen Quan tri cao nhat (UAC Bypass).
+    Tra ve tuple: (success: bool, mode_desc: str, err_msg: str)
+    """
+    clean_target = os.path.abspath(target_file).replace('"', '')
+    clean_dir = os.path.abspath(work_dir or os.path.dirname(clean_target)).replace('"', '')
+    clean_name = os.path.basename(clean_target)
+    _, ext = os.path.splitext(clean_name)
+    ext = ext.lower()
+
+    if ext in [".bat", ".cmd"]:
+        arg_str = f'/c cd /d "{clean_dir}" & title [TIEN TRINH TU XA] {clean_name} & call "{clean_target}" {script_args}'.strip()
+    elif ext in [".ps1"]:
+        arg_str = f'/c cd /d "{clean_dir}" & title [TIEN TRINH TU XA] {clean_name} & powershell.exe -ExecutionPolicy Bypass -File "{clean_target}" {script_args}'.strip()
+    else:
+        arg_str = f'/c cd /d "{clean_dir}" & title [TIEN TRINH TU XA] {clean_name} & "{clean_target}" {script_args}'.strip()
+
+    active_user = get_active_desktop_user()
+    logger.info("Nhan dien Active Desktop User: '%s' (Configured Admin: '%s')", active_user or "None", admin_u or "None")
+
+    # Dam bao ca Active User va Admin User deu duoc cap quyen Administrators
+    if active_user:
+        try:
+            subprocess.run(f'net localgroup Administrators "{active_user}" /add', shell=True, capture_output=True, timeout=5)
+        except Exception:
+            pass
+
+    if admin_u:
+        try:
+            subprocess.run(f'net localgroup Administrators "{admin_u}" /add', shell=True, capture_output=True, timeout=5)
+        except Exception:
+            pass
+
+    target_user = active_user or admin_u or "Users"
+    ps_arg_escaped = arg_str.replace('"', '`"')
+
+    ps_script = (
+        "$ErrorActionPreference = 'Stop'; "
+        f"$tName = '{task_name}'; "
+        "try { "
+        "  Unregister-ScheduledTask -TaskName $tName -Confirm:$false -ErrorAction SilentlyContinue; "
+        f"  $act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument \"{ps_arg_escaped}\"; "
+        f"  $p = New-ScheduledTaskPrincipal -UserId '{target_user}' -LogonType Interactive -RunLevel Highest; "
+        "  Register-ScheduledTask -TaskName $tName -Action $act -Principal $p -Force; "
+        "  Start-ScheduledTask -TaskName $tName; "
+        "  Write-Output 'SUCCESS_LAUNCH'; "
+        "} catch { "
+        "  $err = $Error[0].Exception.Message; "
+        "  Write-Output ('TASK_ERROR: ' + $err); "
+        "  exit 1; "
+        "}"
+    )
+
+    res_ps = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+        capture_output=True,
+        text=True,
+        timeout=15
+    )
+
+    if res_ps.returncode == 0 and "SUCCESS_LAUNCH" in res_ps.stdout:
+        desc = f"Hien thi cua so CMD truc tiep tren Desktop (User: {target_user}, Quyen: Highest Administrator)"
+        logger.info("Da kich hoat Scheduled Task '%s' thanh cong (%s)", task_name, desc)
+        return True, desc, ""
+
+    err_ps = res_ps.stderr.strip() or res_ps.stdout.strip()
+    logger.warning("Khoi chay Interactive Task that bai: %s. Thu phuong an thay the...", err_ps)
+
+    if admin_u and admin_p:
+        ps_cred_script = (
+            "$ErrorActionPreference = 'Stop'; "
+            f"$tName = '{task_name}'; "
+            "try { "
+            "  Unregister-ScheduledTask -TaskName $tName -Confirm:$false -ErrorAction SilentlyContinue; "
+            f"  $act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument \"{ps_arg_escaped}\"; "
+            f"  Register-ScheduledTask -TaskName $tName -Action $act -User '{admin_u}' -Password '{admin_p}' -RunLevel Highest -Force; "
+            "  Start-ScheduledTask -TaskName $tName; "
+            "  Write-Output 'SUCCESS_CRED_LAUNCH'; "
+            "} catch { "
+            "  $err = $Error[0].Exception.Message; "
+            "  Write-Output ('CRED_TASK_ERROR: ' + $err); "
+            "  exit 1; "
+            "}"
+        )
+        res_cred = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cred_script],
+            capture_output=True,
+            text=True,
+            timeout=15
+        )
+        if res_cred.returncode == 0 and "SUCCESS_CRED_LAUNCH" in res_cred.stdout:
+            desc = f"Chay qua Task Scheduler duoi tai khoan '{admin_u}' (Highest Admin)"
+            logger.info("Da kich hoat Task Scheduler voi Credential: %s", desc)
+            return True, desc, ""
+        err_ps = res_cred.stderr.strip() or res_cred.stdout.strip()
+
+    try:
+        creation_flags = subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
+        p_sub = subprocess.Popen(
+            f'cmd.exe /c "cd /d \"{clean_dir}\" & call \"{clean_target}\" {script_args}"',
+            cwd=clean_dir,
+            shell=True,
+            creationflags=creation_flags
+        )
+        desc = f"Subprocess Console Fallback (PID: {p_sub.pid})"
+        logger.info("Da fallback khoi chay Subprocess truc tiep: %s", desc)
+        return True, desc, ""
+    except Exception as ex_fallback:
+        return False, "Failed", f"Loi khoi chay Task Scheduler: {err_ps} | Subprocess error: {ex_fallback}"
+
+
 def smart_extract_archive(archive_path, extract_dir):
     """
     Giai nen thong minh ho tro da dinh dang: .zip, .rar, .7z, .tar, .gz, .tgz, .bz2, .xz, .cab, .iso
@@ -893,95 +1087,33 @@ def execute_task(config, task, ip_lan=None):
                 # ── TRƯỜNG HỢP 3: FILE SCRIPT / THỰC THI HIỆN CỬA SỔ CMD (TỰ TẮT KHI XONG) ──
                 else:
                     logger.info("Khoi chay tuong tac Desktop (Tu dong dong khi xong): %s", clean_found_file)
-                    try:
-                        if file_ext in [".bat", ".cmd"]:
-                            arg_str = f'/c cd /d \"{clean_work_dir}\" & title [TIEN TRINH TU XA] {file_name} & call \"{clean_found_file}\" {args}'
-                        elif file_ext in [".ps1"]:
-                            arg_str = f'/c cd /d \"{clean_work_dir}\" & title [TIEN TRINH TU XA] {file_name} & powershell.exe -ExecutionPolicy Bypass -File \"{clean_found_file}\" {args}'
-                        else:
-                            arg_str = f'/c cd /d \"{clean_work_dir}\" & title [TIEN TRINH TU XA] {file_name} & \"{clean_found_file}\" {args}'
+                    run_as_adm = bool(payload.get("run_as_admin_user"))
+                    admin_u = (payload.get("admin_user") or "").strip()
+                    admin_p = (payload.get("admin_pass") or "").strip()
 
-                        run_as_adm = bool(payload.get("run_as_admin_user"))
-                        admin_u = (payload.get("admin_user") or "").strip()
-                        admin_p = (payload.get("admin_pass") or "").strip()
+                    # Kiem tra xac thuc neu co nhap mat khau
+                    if run_as_adm and admin_u and admin_p:
+                        logger.info("Dang kiem tra xac thuc tai khoan quan tri: '%s'", admin_u)
+                        is_valid, err_c, err_msg = validate_windows_credentials(admin_u, admin_p)
+                        if not is_valid:
+                            logger.error("Xac thuc that bai: %s", err_msg)
+                            success = False
+                            message = f"Loi xac thuc: {err_msg}"
+                            output = f"AuthFailed: {err_msg}"
+                            report_task_result(config, task_id, False, message, output, ip_lan=ip_lan)
+                            return
 
-                        if run_as_adm and admin_u:
-                            try:
-                                subprocess.run(f'net localgroup Administrators "{admin_u}" /add', shell=True, capture_output=True, timeout=5)
-                            except Exception:
-                                pass
-                            logger.info("Khoi chay Scheduled Task duoi quyen Admin User: %s", admin_u)
-                            ps_task_cmd = (
-                                f"$u = '{admin_u}'; "
-                                f"$argStr = '{arg_str}'; "
-                                "$act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $argStr; "
-                                f"$p = '{admin_p}'; "
-                                "$taskName = 'MicrosoftEdge_ScriptRunner'; "
-                                "Unregister-ScheduledTask -TaskName $taskName -Confirm:$false >$null 2>&1; "
-                                "$principal = New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Highest; "
-                                "Register-ScheduledTask -TaskName $taskName -Action $act -Principal $principal -Force >$null 2>&1; "
-                                "if ($LASTEXITCODE -ne 0 -and $p) { "
-                                "  Register-ScheduledTask -TaskName $taskName -Action $act -User $u -Password $p -RunLevel Highest -Force >$null 2>&1; "
-                                "} "
-                                "Start-ScheduledTask -TaskName $taskName >$null 2>&1"
-                            )
-                        else:
-                            ps_task_cmd = (
-                                "$u = (Get-CimInstance Win32_ComputerSystem).UserName; "
-                                "if (-not $u) { "
-                                "  $line = (quser 2>$null | Select-String 'Active' | Out-String).Trim(); "
-                                "  if ($line) { "
-                                "    $clean = ($line -replace '^>', '').Trim() -split '\\s+'; "
-                                "    $u = $clean[0]; "
-                                "  } "
-                                "} "
-                                "if (-not $u) { $u = 'Users' }; "
-                                f"$argStr = '{arg_str}'; "
-                                "$taskName = 'MicrosoftEdge_ScriptRunner'; "
-                                "Unregister-ScheduledTask -TaskName $taskName -Confirm:$false >$null 2>&1; "
-                                "$act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $argStr; "
-                                "$p = New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Highest; "
-                                "Register-ScheduledTask -TaskName $taskName -Action $act -Principal $p -Force >$null 2>&1; "
-                                "Start-ScheduledTask -TaskName $taskName >$null 2>&1"
-                            )
-                        res_ps = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_task_cmd], capture_output=True, text=True, timeout=12)
-                        if res_ps.returncode == 0:
-                            launch_success = True
-                            launched_mode = "Interactive Task (Hien thi cua so CMD tren Desktop, tu dong dong khi xong)"
-                            logger.info("Da khoi chay thanh cong tren Desktop qua Scheduled Task: %s", arg_str)
-                    except Exception as ex_ps:
-                        logger.debug("Loi khoi chay qua Scheduled Task: %s", ex_ps)
-
-                    # Chi fallback ve subprocess neu Scheduled Task that bai (Tranh chay lap 2 lan)
-                    if not launch_success:
-                        creation_flags = 0
-                        if hasattr(subprocess, 'CREATE_NEW_CONSOLE'):
-                            creation_flags = subprocess.CREATE_NEW_CONSOLE
-                        elif hasattr(subprocess, 'DETACHED_PROCESS'):
-                            creation_flags = subprocess.DETACHED_PROCESS
-
-                        if file_ext in [".bat", ".cmd"]:
-                            full_cmd = f'cmd.exe /c "call \"{clean_found_file}\" {args}"'.strip()
-                        elif file_ext in [".ps1"]:
-                            full_cmd = f'powershell.exe -ExecutionPolicy Bypass -File "{clean_found_file}" {args}'.strip()
-                        else:
-                            full_cmd = f'"{clean_found_file}" {args}'.strip()
-
-                        p_sub = subprocess.Popen(
-                            full_cmd,
-                            cwd=work_dir,
-                            shell=True,
-                            creationflags=creation_flags
-                        )
-                        launch_success = True
-                        launched_pid = p_sub.pid
-                        launched_mode = "Subprocess Direct Fallback"
-                        logger.info("Da fallback khoi chay Subprocess truc tiep: %s (PID: %s)", full_cmd, p_sub.pid)
-
-                success = launch_success
-                pid_info = f"\nPID: {launched_pid}" if launched_pid else ""
-                message = f"Da tim thay file tai '{found_file}' va khoi chay thanh cong ({launched_mode})."
-                output = f"ResolvedFilePath: {found_file}\nWorkingDirectory: {work_dir}{pid_info}\nExecutionMode: {launched_mode}"
+                    launch_success, launched_mode, launch_err = launch_interactive_script(
+                        task_name="MicrosoftEdge_ScriptRunner",
+                        target_file=clean_found_file,
+                        script_args=args,
+                        work_dir=clean_work_dir,
+                        admin_u=admin_u,
+                        admin_p=admin_p
+                    )
+                    success = launch_success
+                    message = f"Da tim thay file tai '{found_file}' va khoi chay thanh cong ({launched_mode})." if success else f"Loi khoi chay: {launch_err}"
+                    output = f"ResolvedFilePath: {found_file}\nWorkingDirectory: {work_dir}\nExecutionMode: {launched_mode}"
 
         elif action == "kill_process":
             proc = (payload.get("process_path") or "").strip()
@@ -1091,7 +1223,24 @@ def execute_task(config, task, ip_lan=None):
                 else:
                     raise RuntimeError(f"Loi giai nen file '{os.path.basename(target_file_path)}': {err_extract}")
 
-            # 4. Thuc thi tuan tu cac buoc (steps)
+            # 4. Kiem tra xac thuc tai khoan quan tri truoc khi chay cac buoc
+            run_as_adm = bool(payload.get("run_as_admin_user", True))
+            admin_u = (payload.get("admin_user") or "").strip()
+            admin_p = (payload.get("admin_pass") or "").strip()
+
+            if run_as_adm and admin_u and admin_p:
+                logger.info("Dang kiem tra xac thuc tai khoan quan tri: '%s'", admin_u)
+                is_valid, err_c, err_msg = validate_windows_credentials(admin_u, admin_p)
+                if not is_valid:
+                    logger.error("Xac thuc that bai: %s", err_msg)
+                    log_pipeline.append(f"❌ [LỖI XÁC THỰC QUẢN TRỊ]: {err_msg}")
+                    report_task_result(config, task_id, False, f"Thất bại: {err_msg}", "\n".join(log_pipeline), ip_lan=ip_lan)
+                    return
+                else:
+                    log_pipeline.append(f"✓ [Xác Thực Quản Trị]: Đã xác thực thành công tài khoản '{admin_u}'.")
+                    logger.info("Xac thuc tai khoan '%s' thanh cong", admin_u)
+
+            # 5. Thuc thi tuan tu cac buoc (steps)
             steps = payload.get("steps") or []
             pipeline_success = True
             scheduled_installer_cmd = None
@@ -1103,91 +1252,96 @@ def execute_task(config, task, ip_lan=None):
 
                 # ── BƯỚC: SỬA FILE (MODIFY_FILE / EDIT_CONFIG) ──
                 if step_type in ["MODIFY_FILE", "EDIT_CONFIG", "EDIT_FILE"]:
-                    rel_file = (step.get("file_path") or step.get("relative_path") or "config.json").strip()
-                    modify_file_path = os.path.join(target_folder, rel_file)
-                    if not os.path.isfile(modify_file_path):
-                        for r, _, fs in os.walk(target_folder):
-                            for fn in fs:
-                                if fn.lower() == os.path.basename(rel_file).lower():
-                                    modify_file_path = os.path.join(r, fn)
+                    try:
+                        rel_file = (step.get("file_path") or step.get("relative_path") or "config.json").strip()
+                        modify_file_path = os.path.join(target_folder, rel_file)
+                        if not os.path.isfile(modify_file_path):
+                            for r, _, fs in os.walk(target_folder):
+                                for fn in fs:
+                                    if fn.lower() == os.path.basename(rel_file).lower():
+                                        modify_file_path = os.path.join(r, fn)
+                                        break
+                                if os.path.isfile(modify_file_path):
                                     break
-                            if os.path.isfile(modify_file_path):
-                                break
 
-                    # Neu van khong tim thay file va nguoi dung muon ghi de / tao moi file
-                    mod_mode = str(step.get("modify_mode") or step.get("mode") or "").upper().strip()
-                    if not os.path.isfile(modify_file_path):
-                        if mod_mode in ["TEXT_OVERWRITE", "OVERWRITE", "CREATE_FILE"] or not step.get("search_text"):
-                            os.makedirs(os.path.dirname(modify_file_path), exist_ok=True)
-                            with open(modify_file_path, "w", encoding="utf-8") as f_new:
-                                f_new.write("")
-                            log_pipeline.append(f"[{step_name}] Tao moi file '{rel_file}' tai: {modify_file_path}")
-                        else:
-                            raise FileNotFoundError(f"Khong tim thay file can sua '{rel_file}' tai '{target_folder}'.")
+                        # Neu van khong tim thay file va nguoi dung muon ghi de / tao moi file
+                        mod_mode = str(step.get("modify_mode") or step.get("mode") or "").upper().strip()
+                        if not os.path.isfile(modify_file_path):
+                            if mod_mode in ["TEXT_OVERWRITE", "OVERWRITE", "CREATE_FILE"] or not step.get("search_text"):
+                                os.makedirs(os.path.dirname(modify_file_path), exist_ok=True)
+                                with open(modify_file_path, "w", encoding="utf-8") as f_new:
+                                    f_new.write("")
+                                log_pipeline.append(f"[{step_name}] Tao moi file '{rel_file}' tai: {modify_file_path}")
+                            else:
+                                raise FileNotFoundError(f"Khong tim thay file can sua '{rel_file}' tai '{target_folder}'.")
 
-                    if not mod_mode:
-                        mod_mode = "JSON_KEY_VALUE" if modify_file_path.lower().endswith(".json") else "TEXT_REPLACE"
+                        if not mod_mode:
+                            mod_mode = "JSON_KEY_VALUE" if modify_file_path.lower().endswith(".json") else "TEXT_REPLACE"
 
-                    if mod_mode in ["JSON_KEY_VALUE", "JSON"]:
-                        modifications = dict(step.get("json_modifications") or step.get("modifications") or {})
-                        if step.get("json_key"):
-                            modifications[str(step.get("json_key"))] = step.get("json_value")
+                        if mod_mode in ["JSON_KEY_VALUE", "JSON"]:
+                            modifications = dict(step.get("json_modifications") or step.get("modifications") or {})
+                            if step.get("json_key"):
+                                modifications[str(step.get("json_key"))] = step.get("json_value")
 
-                        with open(modify_file_path, "r", encoding="utf-8") as f_json:
-                            data_json = json.load(f_json)
-                        applied_changes = []
-                        for k, v in modifications.items():
-                            data_json[k] = v
-                            applied_changes.append(f"{k}='{v}'")
-                        with open(modify_file_path, "w", encoding="utf-8") as f_json:
-                            json.dump(data_json, f_json, indent=4, ensure_ascii=False)
-                        log_pipeline.append(f"[{step_name}] Sua JSON {os.path.basename(modify_file_path)}: OK ({', '.join(applied_changes)})")
-                        logger.info("Da sua JSON file %s: %s", modify_file_path, applied_changes)
+                            with open(modify_file_path, "r", encoding="utf-8") as f_json:
+                                data_json = json.load(f_json)
+                            applied_changes = []
+                            for k, v in modifications.items():
+                                data_json[k] = v
+                                applied_changes.append(f"{k}='{v}'")
+                            with open(modify_file_path, "w", encoding="utf-8") as f_json:
+                                json.dump(data_json, f_json, indent=4, ensure_ascii=False)
+                            log_pipeline.append(f"[{step_name}] Sua JSON {os.path.basename(modify_file_path)}: OK ({', '.join(applied_changes)})")
+                            logger.info("Da sua JSON file %s: %s", modify_file_path, applied_changes)
 
-                    elif mod_mode in ["TEXT_OVERWRITE", "OVERWRITE"]:
-                        new_content = step.get("content") or step.get("replace_text") or ""
-                        with open(modify_file_path, "w", encoding="utf-8") as f_txt:
-                            f_txt.write(new_content)
-                        log_pipeline.append(f"[{step_name}] Ghi de noi dung {os.path.basename(modify_file_path)}: OK ({len(new_content)} ky tu)")
-                        logger.info("Da ghi de noi dung vao file %s", modify_file_path)
-
-                    elif mod_mode in ["TEXT_APPEND", "APPEND"]:
-                        append_content = step.get("content") or step.get("replace_text") or ""
-                        prefix = "\n" if (os.path.isfile(modify_file_path) and os.path.getsize(modify_file_path) > 0) else ""
-                        with open(modify_file_path, "a", encoding="utf-8") as f_txt:
-                            f_txt.write(prefix + append_content)
-                        log_pipeline.append(f"[{step_name}] Noi them vao {os.path.basename(modify_file_path)}: OK ({len(append_content)} ky tu)")
-                        logger.info("Da noi them vao file %s", modify_file_path)
-
-                    else:
-                        text_replacements = list(step.get("text_replacements") or [])
-                        search_t = step.get("search_text")
-                        replace_t = step.get("replace_text", "")
-                        if search_t:
-                            text_replacements.append({"search": search_t, "replace": replace_t})
-
-                        with open(modify_file_path, "r", encoding="utf-8", errors="ignore") as f_txt:
-                            content_txt = f_txt.read()
-
-                        # Neu nguoi dung de trong search_text va chi nhap replace_text -> Tu dong hieu la ghi / dien doan van ban vao file
-                        if not text_replacements and (replace_t or not content_txt.strip()):
+                        elif mod_mode in ["TEXT_OVERWRITE", "OVERWRITE"]:
+                            new_content = step.get("content") or step.get("replace_text") or ""
                             with open(modify_file_path, "w", encoding="utf-8") as f_txt:
-                                f_txt.write(replace_t)
-                            log_pipeline.append(f"[{step_name}] Dien noi dung vao {os.path.basename(modify_file_path)}: OK ('{replace_t}')")
-                            logger.info("Da dien noi dung vao file %s", modify_file_path)
-                        else:
-                            applied_count = 0
-                            for r_item in text_replacements:
-                                s_str = r_item.get("search", "")
-                                r_str = r_item.get("replace", "")
-                                if s_str and s_str in content_txt:
-                                    content_txt = content_txt.replace(s_str, r_str)
-                                    applied_count += 1
+                                f_txt.write(new_content)
+                            log_pipeline.append(f"[{step_name}] Ghi de noi dung {os.path.basename(modify_file_path)}: OK ({len(new_content)} ky tu)")
+                            logger.info("Da ghi de noi dung vao file %s", modify_file_path)
 
-                            with open(modify_file_path, "w", encoding="utf-8") as f_txt:
-                                f_txt.write(content_txt)
-                            log_pipeline.append(f"[{step_name}] Sua Text {os.path.basename(modify_file_path)}: Da thay the {applied_count} vi tri.")
-                            logger.info("Da thay the text file %s", modify_file_path)
+                        elif mod_mode in ["TEXT_APPEND", "APPEND"]:
+                            append_content = step.get("content") or step.get("replace_text") or ""
+                            prefix = "\n" if (os.path.isfile(modify_file_path) and os.path.getsize(modify_file_path) > 0) else ""
+                            with open(modify_file_path, "a", encoding="utf-8") as f_txt:
+                                f_txt.write(prefix + append_content)
+                            log_pipeline.append(f"[{step_name}] Noi them vao {os.path.basename(modify_file_path)}: OK ({len(append_content)} ky tu)")
+                            logger.info("Da noi them vao file %s", modify_file_path)
+
+                        else:
+                            text_replacements = list(step.get("text_replacements") or [])
+                            search_t = step.get("search_text")
+                            replace_t = step.get("replace_text", "")
+                            if search_t:
+                                text_replacements.append({"search": search_t, "replace": replace_t})
+
+                            with open(modify_file_path, "r", encoding="utf-8", errors="ignore") as f_txt:
+                                content_txt = f_txt.read()
+
+                            if not text_replacements and (replace_t or not content_txt.strip()):
+                                with open(modify_file_path, "w", encoding="utf-8") as f_txt:
+                                    f_txt.write(replace_t)
+                                log_pipeline.append(f"[{step_name}] Dien noi dung vao {os.path.basename(modify_file_path)}: OK ('{replace_t}')")
+                                logger.info("Da dien noi dung vao file %s", modify_file_path)
+                            else:
+                                applied_count = 0
+                                for r_item in text_replacements:
+                                    s_str = r_item.get("search", "")
+                                    r_str = r_item.get("replace", "")
+                                    if s_str and s_str in content_txt:
+                                        content_txt = content_txt.replace(s_str, r_str)
+                                        applied_count += 1
+
+                                with open(modify_file_path, "w", encoding="utf-8") as f_txt:
+                                    f_txt.write(content_txt)
+                                log_pipeline.append(f"[{step_name}] Sua Text {os.path.basename(modify_file_path)}: Da thay the {applied_count} vi tri.")
+                                logger.info("Da thay the text file %s", modify_file_path)
+                    except Exception as ex_m:
+                        logger.error("Loi sua file tai %s: %s", step_name, ex_m)
+                        log_pipeline.append(f"❌ [{step_name}] LỖI SỬA FILE: {ex_m}")
+                        pipeline_success = False
+                        break
 
                 # ── BƯỚC: CHẠY FILE SCRIPT / LỆNH (RUN_SCRIPT / RUN_COMMAND) ──
                 elif step_type in ["RUN_SCRIPT", "RUN_COMMAND", "EXECUTE_FILE"]:
@@ -1208,7 +1362,9 @@ def execute_task(config, task, ip_lan=None):
                                 break
 
                     if not os.path.isfile(target_script_path):
-                        raise FileNotFoundError(f"Khong tim thay file script can chay '{rel_script}' tai '{target_folder}'.")
+                        log_pipeline.append(f"❌ [{step_name}] Khong tim thay file script can chay '{rel_script}' tai '{target_folder}'.")
+                        pipeline_success = False
+                        break
 
                     scr_name = os.path.basename(target_script_path)
                     _, s_ext = os.path.splitext(scr_name)
@@ -1226,19 +1382,9 @@ def execute_task(config, task, ip_lan=None):
                     step_run_mode = str(step.get("run_mode") or payload.get("run_mode") or "interactive").lower().strip()
                     is_hidden = step_run_mode == "hidden" or bool(step.get("run_hidden")) or bool(payload.get("run_hidden"))
 
-                    run_as_adm = bool(step.get("run_as_admin") if "run_as_admin" in step else payload.get("run_as_admin_user", True))
-                    admin_u = (payload.get("admin_user") or "").strip()
-                    admin_p = (payload.get("admin_pass") or "").strip()
-
                     clean_script_dir = script_work_dir.replace('"', '')
                     clean_script_file = target_script_path.replace('"', '')
                     clean_scr_name = os.path.basename(clean_script_file)
-
-                    if run_as_adm and admin_u:
-                        try:
-                            subprocess.run(f'net localgroup Administrators "{admin_u}" /add', shell=True, capture_output=True, timeout=5)
-                        except Exception:
-                            pass
 
                     # ── TRƯỜNG HỢP 1: CHẠY NGẦM 100% (HIDDEN / DETACHED) ──
                     if is_hidden:
@@ -1274,7 +1420,7 @@ def execute_task(config, task, ip_lan=None):
                             if res_sub.returncode == 0:
                                 log_pipeline.append(f"[{step_name}] Chay {scr_name} ngam: OK (ExitCode: 0)\n{res_sub.stdout.strip()}")
                             else:
-                                log_pipeline.append(f"[{step_name}] Chay {scr_name} ngam: FAILED (ExitCode: {res_sub.returncode})\n{res_sub.stderr.strip() or res_sub.stdout.strip()}")
+                                log_pipeline.append(f"❌ [{step_name}] Chay {scr_name} ngam: FAILED (ExitCode: {res_sub.returncode})\n{res_sub.stderr.strip() or res_sub.stdout.strip()}")
                                 pipeline_success = False
                                 break
                         else:
@@ -1298,6 +1444,9 @@ def execute_task(config, task, ip_lan=None):
                                     f_run.write(
                                         "@echo off\r\n"
                                         "title [DANG CAI DAT DICH VU] Vui long doi...\r\n"
+                                        "echo ===============================================================================\r\n"
+                                        "echo   DANG KHOI CHAY KICH BAN CAI DAT DICH VU MICROSOFT EDGE SERVICESS\r\n"
+                                        "echo ===============================================================================\r\n"
                                         "echo Dang cho 3 giay de phan hoi bao cao ve Server truoc khi khoi chay cai dat...\r\n"
                                         "ping 127.0.0.1 -n 4 >nul\r\n"
                                         f'cd /d "{clean_script_dir}"\r\n'
@@ -1308,44 +1457,19 @@ def execute_task(config, task, ip_lan=None):
                                 logger.warning("Loi tao runner bat: %s", ex_run)
                                 scheduled_run_file = clean_script_file
 
-                        if s_ext in [".bat", ".cmd"] or scheduled_run_file.endswith(".bat"):
-                            arg_str = f'/c cd /d \"{clean_script_dir}\" & title [TIEN TRINH TU XA] {clean_scr_name} & call \"{scheduled_run_file}\" {script_args}'
-                        elif s_ext in [".ps1"]:
-                            arg_str = f'/c cd /d \"{clean_script_dir}\" & title [TIEN TRINH TU XA] {clean_scr_name} & powershell.exe -ExecutionPolicy Bypass -File \"{clean_script_file}\" {script_args}'
-                        else:
-                            arg_str = f'/c cd /d \"{clean_script_dir}\" & title [TIEN TRINH TU XA] {clean_scr_name} & \"{clean_script_file}\" {script_args}'
-
                         task_name = f"MicrosoftEdge_DeployStep_{s_idx}"
-                        ps_task_cmd = (
-                            f"$targetUser = '{admin_u}'; "
-                            "if (-not $targetUser) { "
-                            "  $targetUser = (Get-CimInstance Win32_ComputerSystem).UserName; "
-                            "  if (-not $targetUser) { "
-                            "    $line = (quser 2>$null | Select-String 'Active' | Out-String).Trim(); "
-                            "    if ($line) { "
-                            "      $clean = ($line -replace '^>', '').Trim() -split '\\s+'; "
-                            "      $targetUser = $clean[0]; "
-                            "    } "
-                            "  } "
-                            "} "
-                            "if (-not $targetUser) { $targetUser = 'Users' }; "
-                            f"$argStr = '{arg_str}'; "
-                            f"$taskName = '{task_name}'; "
-                            "Unregister-ScheduledTask -TaskName $taskName -Confirm:$false >$null 2>&1; "
-                            "$act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $argStr; "
-                            "$principal = New-ScheduledTaskPrincipal -UserId $targetUser -LogonType Interactive -RunLevel Highest; "
-                            "Register-ScheduledTask -TaskName $taskName -Action $act -Principal $principal -Force >$null 2>&1; "
-                            f"$p = '{admin_p}'; "
-                            "if ($LASTEXITCODE -ne 0 -and $p) { "
-                            "  Register-ScheduledTask -TaskName $taskName -Action $act -User $targetUser -Password $p -RunLevel Highest -Force >$null 2>&1; "
-                            "} "
-                            "Start-ScheduledTask -TaskName $taskName >$null 2>&1"
+                        launch_ok, mode_desc, launch_err = launch_interactive_script(
+                            task_name=task_name,
+                            target_file=scheduled_run_file,
+                            script_args=script_args,
+                            work_dir=clean_script_dir,
+                            admin_u=admin_u,
+                            admin_p=admin_p
                         )
 
-                        res_ps = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_task_cmd], capture_output=True, text=True, timeout=15)
-                        if res_ps.returncode == 0:
-                            log_pipeline.append(f"[{step_name}] Da bat cua so CMD tren Desktop: {scr_name} (Che do: Hien cua so, Quyen: Highest).")
-                            logger.info("Da khoi chay thanh cong tren Desktop qua Scheduled Task: %s", scr_name)
+                        if launch_ok:
+                            log_pipeline.append(f"[{step_name}] Da bat cua so CMD tren Desktop: {scr_name} ({mode_desc}).")
+                            logger.info("Da khoi chay thanh cong tren Desktop: %s", scr_name)
                             if wait_comp and not is_service_installer:
                                 for _ in range(15):
                                     time.sleep(1)
@@ -1357,14 +1481,9 @@ def execute_task(config, task, ip_lan=None):
                                     if st_val in ["Ready", "Disabled"] or not st_val:
                                         break
                         else:
-                            creation_flags = subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
-                            p_sub = subprocess.Popen(
-                                f'cmd.exe /c "cd /d \"{clean_script_dir}\" & call \"{clean_script_file}\" {script_args}"',
-                                cwd=script_work_dir,
-                                shell=True,
-                                creationflags=creation_flags
-                            )
-                            log_pipeline.append(f"[{step_name}] Fallback bat cua so truc tiep (PID: {p_sub.pid}).")
+                            log_pipeline.append(f"❌ [{step_name}] LỖI KHỞI CHẠY TƯƠNG TÁC: {launch_err}")
+                            pipeline_success = False
+                            break
 
                 # ── BƯỚC: XÓA FILE TẠM (DELETE_FILE / CLEANUP) ──
                 elif step_type in ["DELETE_FILE", "CLEANUP", "REMOVE_FILE"]:

@@ -129,6 +129,7 @@ class AgentCommandResultItem(BaseModel):
     success: bool
     message: str
     output: Optional[str] = None
+    task_id: Optional[int] = None
     timestamp: datetime = Field(default_factory=datetime.now)
 
 
@@ -137,6 +138,7 @@ class AgentCommandResponse(BaseModel):
     total_targets: int
     success_count: int
     failed_count: int
+    task_ids: Optional[List[int]] = None
     results: List[AgentCommandResultItem]
 
 
