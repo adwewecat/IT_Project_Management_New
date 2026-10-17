@@ -1323,28 +1323,6 @@ export const AgentMultitaskPage: React.FC = () => {
           >
             Restart Service
           </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleSendCommand('start_service')}
-            disabled={selectedEndpointIds.length === 0 || isExecutingCommand}
-            leftIcon={<Play size={13} />}
-            style={{ color: '#16A34A', borderColor: '#16A34A', fontWeight: 700 }}
-          >
-            Bật
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleSendCommand('stop_service')}
-            disabled={selectedEndpointIds.length === 0 || isExecutingCommand}
-            leftIcon={<Square size={13} />}
-            style={{ color: '#DC2626', borderColor: '#DC2626', fontWeight: 700 }}
-          >
-            Dừng
-          </Button>
         </div>
       </div>
 

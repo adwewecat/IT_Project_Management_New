@@ -173,6 +173,7 @@ npm run dev
   3. Ẩn nút `📦 Truyền Gói & Chạy Kịch Bản` ở ngoài toolbar (vì trong menu "Các Tính Năng Hỗ Trợ ▾" đã có).
   4. Nút `Tải Gói Cài (.ZIP)` bổ sung ô cấu hình IP / server_url và mã nhà hàng của file `config.json` trước khi tải, thay vì phải tải về mới sửa thủ công.
   5. Bỏ các nút thao tác nhanh phụ (Terminal, Restart Service, Cài Ngay) trong bảng, chỉ giữ lại nút Chỉnh Sửa và Xóa.
+  6. Bỏ đi 2 nút Bật và Dừng ở thanh thao tác hàng loạt, chỉ giữ lại nút Restart Service.
 - **Chi tiết kỹ thuật & Khắc phục**:
   1. **Backend (`agent_multitask.py`)**:
      - Cập nhật endpoint `/download-package`: Bổ sung 2 query parameters `server_url` và `restaurant_code`.
@@ -185,8 +186,9 @@ npm run dev
      - Ẩn nút `📦 Truyền Gói & Chạy Kịch Bản` ngoài thanh công cụ chính để tránh trùng lặp với menu tính năng bên trong.
      - Tạo Modal số 12: `📥 Cấu Hình & Tải Gói Cài Đặt Client Agent (.ZIP)` với ô nhập Backend Server URL (có nút 1 chạm tự lấy IP hiện tại), ô nhập mã trạm/nhà hàng, và khung Preview thời gian thực nội dung `config.json` sẽ nhúng vào file zip.
      - Cột thao tác trong bảng: Đổi tiêu đề `Thao Tác Nhanh` thành `Thao Tác`, loại bỏ các nút phụ (Terminal, Restart, Cài Ngay), chỉ giữ lại 2 nút trọng tâm: Sửa (`Edit`) và Xóa (`Trash2`).
+     - Thanh thao tác hàng loạt: Loại bỏ 2 nút `Bật` và `Dừng`, chỉ giữ lại nút `Restart Service` nhanh gọn.
   4. **Kiểm thử & Đóng gói**:
-     - Frontend build `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 12.01s`), bundle `frontend/dist/` đã hoàn thiện.
+     - Frontend build `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.45s`), bundle `frontend/dist/` đã hoàn thiện.
      - Backend Smoke Test: `>>> PASSED 100%`.
 
 ---
