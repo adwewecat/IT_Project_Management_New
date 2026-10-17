@@ -256,6 +256,27 @@ export const agentMultitaskService = {
   deleteScriptTemplate: async (id: number): Promise<{ status: string; message: string }> => {
     const res = await api.delete(`/agent-multitask/script-templates/${id}`);
     return res.data;
+  },
+
+  uploadPackageFile: async (
+    file: File,
+    onProgress?: (progress: { percent: number; loaded: number; total: number }) => void
+  ): Promise<{ success: boolean; file_name: string; file_size: number; file_size_mb: number; message: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await api.post('/agent-multitask/upload-package', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total && onProgress) {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress({ percent, loaded: progressEvent.loaded, total: progressEvent.total });
+        }
+      },
+      timeout: 600000, // 10 phút hỗ trợ file nén lớn lên đến 500MB
+    });
+    return res.data;
   }
 };
 

@@ -100,6 +100,9 @@ export const AgentMultitaskPage: React.FC = () => {
   const [deployAutoExtract, setDeployAutoExtract] = useState<boolean>(true);
   const [deployUploadedBase64, setDeployUploadedBase64] = useState<string>('');
   const [deployUploadedFileName, setDeployUploadedFileName] = useState<string>('');
+  const [deployUploadedFileSizeMb, setDeployUploadedFileSizeMb] = useState<number>(0);
+  const [deployUploadProgress, setDeployUploadProgress] = useState<number>(0);
+  const [isDeployUploading, setIsDeployUploading] = useState<boolean>(false);
   const [deploySteps, setDeploySteps] = useState<DeployStepItem[]>([
     {
       step_number: 1,
@@ -638,23 +641,49 @@ export const AgentMultitaskPage: React.FC = () => {
     });
   };
 
-  // Xử lý tải file ZIP lên từ máy tính
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Xử lý tải file nén / gói cài đặt lên server (hỗ trợ file lớn > 200MB, tối đa 500MB)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 50 * 1024 * 1024) {
-      showToast('Dung lượng file vượt quá 50MB, vui lòng chọn file nhỏ hơn!', 'error');
+
+    // Giới hạn an toàn lên tới 500MB (hơn 200MB)
+    const MAX_SIZE = 500 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      showToast('Dung lượng file vượt quá giới hạn 500MB, vui lòng chọn file nhỏ hơn!', 'error');
+      e.target.value = '';
       return;
     }
+
+    const fileSizeMb = Number((file.size / (1024 * 1024)).toFixed(2));
     setDeployUploadedFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64Data = result.split(',')[1] || '';
-      setDeployUploadedBase64(base64Data);
-      showToast(`Đã nạp file '${file.name}' (${(file.size / 1024 / 1024).toFixed(2)} MB)!`, 'success');
-    };
-    reader.readAsDataURL(file);
+    setDeployUploadedFileSizeMb(fileSizeMb);
+    setIsDeployUploading(true);
+    setDeployUploadProgress(0);
+    // Không dùng Base64 cho file lớn để tránh tràn RAM và đóng băng trình duyệt
+    setDeployUploadedBase64('');
+
+    try {
+      showToast(`Bắt đầu tải file '${file.name}' (${fileSizeMb} MB) lên máy chủ...`, 'info');
+      const res = await agentMultitaskService.uploadPackageFile(file, (progress) => {
+        setDeployUploadProgress(progress.percent);
+      });
+      if (res.success) {
+        setDeployUploadedFileName(res.file_name);
+        setDeployUploadProgress(100);
+        showToast(res.message || `Đã tải lên máy chủ file '${res.file_name}' (${fileSizeMb} MB) thành công!`, 'success');
+      } else {
+        showToast('Tải file lên máy chủ thất bại!', 'error');
+      }
+    } catch (err: any) {
+      console.error('Lỗi upload file gói:', err);
+      const errMsg = err.response?.data?.detail || err.message || 'Lỗi khi tải file lên máy chủ.';
+      showToast(`Tải file thất bại: ${errMsg}`, 'error');
+      setDeployUploadedFileName('');
+    } finally {
+      setIsDeployUploading(false);
+      // Reset input value để cho phép chọn lại cùng file nếu muốn
+      e.target.value = '';
+    }
   };
 
   // Thực thi lệnh điều khiển từ xa
@@ -666,6 +695,17 @@ export const AgentMultitaskPage: React.FC = () => {
     if (targets.length === 0) {
       showToast('Vui lòng chọn ít nhất 1 thiết bị để thực thi lệnh!', 'error');
       return;
+    }
+
+    if (action === 'deploy_package' && deployPackageSource === 'UPLOAD') {
+      if (isDeployUploading) {
+        showToast('File gói đang được tải lên máy chủ, vui lòng đợi hoàn tất trước khi bấm Bắt Đầu!', 'info');
+        return;
+      }
+      if (!deployUploadedFileName) {
+        showToast('Vui lòng chọn file nén / gói cài đặt từ máy tính để tải lên trước!', 'error');
+        return;
+      }
     }
 
     setIsExecutingCommand(true);
@@ -3350,20 +3390,52 @@ export const AgentMultitaskPage: React.FC = () => {
 
               {/* Nếu chọn Upload file từ máy */}
               {deployPackageSource === 'UPLOAD' && (
-                <div style={{ backgroundColor: 'var(--bg-primary)', padding: '8px 12px', borderRadius: '6px', border: '1px dashed #D97706' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
-                    Chọn file nén hoặc file gói từ máy tính *:
-                  </label>
+                <div style={{ backgroundColor: 'var(--bg-primary)', padding: '10px 14px', borderRadius: '6px', border: '1px dashed #D97706' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 600 }}>
+                      Chọn file nén hoặc file gói từ máy tính (hỗ trợ .zip, .rar, .7z, .tar, dung lượng lên tới 500MB) *:
+                    </label>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      Giới hạn: tối đa 500MB
+                    </span>
+                  </div>
                   <input
                     type="file"
-                    accept=".zip,.rar,.tar,.gz,.bin"
+                    accept=".zip,.rar,.7z,.tar,.gz,.tgz,.bin,.exe"
                     onChange={handleFileUpload}
-                    style={{ fontSize: '12px' }}
+                    disabled={isDeployUploading}
+                    style={{ fontSize: '12px', width: '100%' }}
                   />
-                  {deployUploadedFileName && (
-                    <span style={{ fontSize: '11.5px', color: '#059669', fontWeight: 600, display: 'block', marginTop: '3px' }}>
-                      ✓ Đã chọn: {deployUploadedFileName}
-                    </span>
+
+                  {/* Thanh tiến trình khi đang tải lên server */}
+                  {isDeployUploading && (
+                    <div style={{ marginTop: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', marginBottom: '3px', fontWeight: 600 }}>
+                        <span style={{ color: '#2563EB' }}>
+                          ⏳ Đang tải lên máy chủ: {deployUploadedFileName} ({deployUploadedFileSizeMb} MB)...
+                        </span>
+                        <span style={{ color: '#2563EB' }}>{deployUploadProgress}%</span>
+                      </div>
+                      <div style={{ width: '100%', height: '7px', backgroundColor: '#E2E8F0', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            width: `${deployUploadProgress}%`,
+                            height: '100%',
+                            backgroundColor: '#2563EB',
+                            transition: 'width 0.2s ease'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Trạng thái đã tải lên thành công */}
+                  {deployUploadedFileName && !isDeployUploading && (
+                    <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#059669', fontWeight: 700 }}>
+                        ✓ Đã sẵn sàng trên máy chủ: {deployUploadedFileName} ({deployUploadedFileSizeMb} MB)
+                      </span>
+                    </div>
                   )}
                 </div>
               )}

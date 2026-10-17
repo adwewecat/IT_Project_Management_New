@@ -3302,3 +3302,30 @@ estaurant_service.py).
    - Đóng gói mới file zip chuẩn `tools/Restaurant_Support_Agent_Full.zip` (10.37 MB).
    - Frontend `npm run build` thành công exit code 0 (`✓ built in 9.73s`).
    - Backend `compileall` sạch 100%, Smoke test passed 100%.
+
+---
+
+### [2026-10-17] - Nâng Cấp Hỗ Trợ Tải File Gói & File Nén Dung Lượng Lớn Lên Đến 500MB (Stream Trực Tiếp Ra Đĩa)
+- **Vấn đề & Yêu cầu**:
+  + Người dùng cần tải file gói cài đặt (như `GPOS-Setup.rar` dung lượng trên 200MB) lên hệ thống từ máy tính cá nhân để triển khai tự động xuống các nhà hàng.
+  + Hệ thống trước đây chặn cứng 50MB (`Dung lượng file vượt quá 50MB, vui lòng chọn file nhỏ hơn!`).
+  + Phương thức đọc `FileReader.readAsDataURL` sinh ra chuỗi Base64 ~270MB trong RAM trình duyệt, gây đơ lag hoặc sập tab browser, và vượt quá giới hạn request body mặc định của IIS (~28.6MB) cũng như FastAPI payload.
+- **Giải pháp Đã Triển Khai Toàn Diện**:
+  1. **Cấu hình IIS Reverse Proxy (`web.config`)**:
+     - Thêm `<security><requestFiltering><requestLimits maxAllowedContentLength="524288000" /></requestFiltering></security>` (cho phép request body lên đến 500MB). Cập nhật cả `frontend/public/web.config` và `frontend/dist/web.config`.
+  2. **Backend API Streaming (`POST /api/v1/agent-multitask/upload-package`)**:
+     - Nhận file qua `UploadFile`, stream từng chunk 1MB trực tiếp vào file trên ổ đĩa `tools/packages/{filename}` và `tools/{filename}` mà không nạp cả file vào RAM.
+     - Cập nhật `download-package-file/{package_name}` tự động quét cả `tools/packages/` và `tools/`.
+  3. **Frontend Upload Thông Minh & Thanh Tiến Trình (`AgentMultitaskPage.tsx` & `agentMultitaskService.ts`)**:
+     - Nâng giới hạn file lên 500MB.
+     - Tự động gọi `uploadPackageFile` với Axios `onUploadProgress` ngay khi chọn file, hiển thị thanh tiến trình 0% -> 100% kèm số MB đã tải.
+     - Lưu tên file đã tải lên server, bỏ hoàn toàn Base64 trong payload JSON của lệnh điều khiển, giúp payload gửi đi chỉ nặng vài KB.
+     - Hỗ trợ đầy đủ các định dạng nén: `.zip`, `.rar`, `.7z`, `.tar`, `.gz`, `.tgz`, `.bin`, `.exe`.
+  4. **Tối ưu Tải & Giải Nén Tại Máy Trạm (`restaurant_support_agent.py`)**:
+     - Tăng timeout download stream `urllib.request.urlopen` từ 60s lên 600s (10 phút) để đảm bảo file 200MB - 500MB tải mượt mà qua mạng WAN.
+     - Tăng timeout giải nén đa định dạng (`smart_extract_archive`) lên 300s (5 phút) cho các gói cài đặt lớn.
+  5. **Bảo vệ Git Repository (`.gitignore`)**:
+     - Thêm `tools/packages/`, `tools/*.rar`, `tools/*.7z`, `tools/*.iso`, `tools/*.cab` vào `.gitignore` để không bị chặn bởi GitHub 100MB file limit.
+- **Biên Dịch & Kiểm Thử**:
+  - Frontend: `cmd /c "npm run build"` exit code 0 (`✓ built in 4.58s`).
+  - Backend: `python -m compileall app` exit code 0, Smoke test passed 100%.

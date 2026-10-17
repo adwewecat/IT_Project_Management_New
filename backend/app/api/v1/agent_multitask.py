@@ -4,8 +4,9 @@ import zipfile
 import io
 import json
 import logging
+import shutil
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, File, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -431,17 +432,95 @@ def download_package(
     )
 
 
+@router.post("/upload-package")
+async def upload_package_file(
+    file: UploadFile = File(...),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """
+    Tải file gói cài đặt / tài nguyên lên server (hỗ trợ file lớn > 200MB, tối đa 500MB).
+    Lưu trữ dạng stream trực tiếp vào ổ đĩa thư mục tools/packages để không tốn RAM.
+    """
+    clean_name = os.path.basename(file.filename or "uploaded_package.zip").strip()
+    if not clean_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tên file không hợp lệ.")
+
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
+    packages_dir = os.path.join(project_root, "tools", "packages")
+    os.makedirs(packages_dir, exist_ok=True)
+
+    target_path = os.path.join(packages_dir, clean_name)
+
+    # Giới hạn an toàn: tối đa 500MB (524288000 bytes)
+    MAX_FILE_SIZE = 500 * 1024 * 1024
+    total_bytes = 0
+
+    try:
+        with open(target_path, "wb") as buffer:
+            while chunk := await file.read(1024 * 1024):  # Đọc từng chunk 1MB stream trực tiếp ra đĩa
+                total_bytes += len(chunk)
+                if total_bytes > MAX_FILE_SIZE:
+                    buffer.close()
+                    if os.path.exists(target_path):
+                        os.remove(target_path)
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail="Dung lượng file vượt quá giới hạn 500MB."
+                    )
+                buffer.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        if os.path.exists(target_path):
+            try:
+                os.remove(target_path)
+            except Exception:
+                pass
+        logger.error("Lỗi khi lưu file upload %s: %s", clean_name, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Không thể lưu file trên máy chủ: {str(e)}"
+        )
+
+    # Đồng thời sao chép vào thư mục tools/ để tương thích ngược nếu cần
+    tools_path = os.path.join(project_root, "tools", clean_name)
+    try:
+        if os.path.abspath(target_path) != os.path.abspath(tools_path):
+            shutil.copyfile(target_path, tools_path)
+    except Exception as e_cp:
+        logger.debug("Sao chép file sang tools/ thất bại: %s", e_cp)
+
+    file_size_mb = round(total_bytes / (1024 * 1024), 2)
+    logger.info("Người dùng %s đã tải lên thành công file gói '%s' (%s MB)", current_user.username, clean_name, file_size_mb)
+
+    return {
+        "success": True,
+        "file_name": clean_name,
+        "file_size": total_bytes,
+        "file_size_mb": file_size_mb,
+        "message": f"Tải lên thành công file '{clean_name}' ({file_size_mb} MB) sẵn sàng triển khai!"
+    }
+
+
 @router.get("/download-package-file/{package_name}")
 def download_package_file(package_name: str):
     """
-    Tải gói cài đặt (.ZIP) trực tiếp cho Client Agent máy trạm thực thi lệnh deploy_package.
+    Tải gói cài đặt (.ZIP, .RAR, .7Z...) trực tiếp cho Client Agent máy trạm thực thi lệnh deploy_package.
     Không yêu cầu Bearer token của người dùng web.
     """
     clean_name = os.path.basename(package_name).strip()
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
     agent_dir = os.path.join(project_root, "tools", "restaurant_support_agent")
-    zip_path = os.path.join(project_root, "tools", clean_name)
+    
+    # 1. Kiểm tra trong tools/packages/ trước
+    packages_dir = os.path.join(project_root, "tools", "packages")
+    zip_path = os.path.join(packages_dir, clean_name)
 
+    # 2. Nếu không thấy trong tools/packages/, kiểm tra trong tools/
+    if not os.path.exists(zip_path):
+        zip_path = os.path.join(project_root, "tools", clean_name)
+
+    # 3. Nếu là Restaurant_Support_Agent_Full.zip và chưa có hoặc cần đồng bộ
     if clean_name.lower() == "restaurant_support_agent_full.zip" and os.path.exists(agent_dir):
         # Tự động đồng bộ zip nếu cần
         try:
@@ -467,4 +546,5 @@ def download_package_file(package_name: str):
         media_type="application/octet-stream",
         headers={"Content-Disposition": f"attachment; filename={clean_name}"}
     )
+
 

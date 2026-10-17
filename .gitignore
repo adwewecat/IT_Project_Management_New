@@ -34,3 +34,10 @@ Thumbs.db
 *_old.exe
 build/
 *.spec
+
+# Gói triển khai upload lớn
+tools/packages/
+tools/*.rar
+tools/*.7z
+tools/*.iso
+tools/*.cab

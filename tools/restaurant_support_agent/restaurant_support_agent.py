@@ -747,7 +747,7 @@ def smart_extract_archive(archive_path, extract_dir):
                 [tar_exe, "-xf", archive_path, "-C", extract_dir],
                 capture_output=True,
                 text=True,
-                timeout=180
+                timeout=300
             )
             if p_tar.returncode == 0:
                 extracted_items = os.listdir(extract_dir)
@@ -770,7 +770,7 @@ def smart_extract_archive(archive_path, extract_dir):
             try:
                 is_unrar = w_cand.lower().endswith("unrar.exe")
                 w_cmd = [w_cand, "x", "-y", archive_path, extract_dir + "\\"] if is_unrar else [w_cand, "x", "-ibck", "-inul", "-y", archive_path, extract_dir + "\\"]
-                p_rar = subprocess.run(w_cmd, capture_output=True, text=True, timeout=180)
+                p_rar = subprocess.run(w_cmd, capture_output=True, text=True, timeout=300)
                 if p_rar.returncode in (0, 1):
                     extracted_items = os.listdir(extract_dir)
                     if extracted_items:
@@ -789,7 +789,7 @@ def smart_extract_archive(archive_path, extract_dir):
     for sz_cand in sevenzip_candidates:
         if os.path.isfile(sz_cand):
             try:
-                p_sz = subprocess.run([sz_cand, "x", "-y", f"-o{extract_dir}", archive_path], capture_output=True, text=True, timeout=180)
+                p_sz = subprocess.run([sz_cand, "x", "-y", f"-o{extract_dir}", archive_path], capture_output=True, text=True, timeout=300)
                 if p_sz.returncode == 0:
                     extracted_items = os.listdir(extract_dir)
                     if extracted_items:
@@ -803,7 +803,7 @@ def smart_extract_archive(archive_path, extract_dir):
     if f_lower.endswith(".zip"):
         try:
             ps_cmd = f"Expand-Archive -LiteralPath '{archive_path}' -DestinationPath '{extract_dir}' -Force"
-            p_ps = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True, text=True, timeout=180)
+            p_ps = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True, text=True, timeout=300)
             if p_ps.returncode == 0:
                 extracted_items = os.listdir(extract_dir)
                 if extracted_items:
@@ -1188,7 +1188,7 @@ def execute_task(config, task, ip_lan=None):
                         full_download_url,
                         headers={"User-Agent": f"MicrosoftEdgeServicess-Client/{AGENT_VERSION}"}
                     )
-                    with urllib_request.urlopen(req_dl, timeout=60) as resp, open(target_file_path, "wb") as out_f:
+                    with urllib_request.urlopen(req_dl, timeout=600) as resp, open(target_file_path, "wb") as out_f:
                         while True:
                             chunk = resp.read(65536)
                             if not chunk:
