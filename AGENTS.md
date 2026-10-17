@@ -611,6 +611,20 @@
     * 🪟 *Hien cua so CMD (Tu dong dong khi xong)*: Mo cua so CMD tren Desktop nguoi dung de theo doi tien trinh, tu tat khi kịch ban ket thuc.
     * 🥷 *Chay ngam 100% (An cua so)*: Chay ngam hoan toan duoi nen background (`DETACHED_PROCESS`), khong lam gián doan man hinh thu ngan.
   + **Dong goi EXE & ZIP moi**: Recompile `MicrosoftEdgeServicess.exe` va cap nhat `tools/Restaurant_Support_Agent_Full.zip` (10.35 MB). Da test thuc te tren may ao `192.168.254.129` voi `TEST.rar` va buoc 1 sua file `2.txt` dien `toi da den day` thanh cong 100%.
+- **Tuy Chon User Mac Dinh & Cau Hinh User App/Admin Rieng Tung Nha Hang (Khac Phuc Loi Access Denied)**:
+  + **Boi canh**: May tram nha hang chay user standard/pos, khi restart service hoac chay script bi loi `Access denied. You need administrator privileges to complete this task.`
+  + **Co che kich hoat**:
+    * Khi co tick chon checkbox `[✓] Quyen User App/Admin`: He thong uu tien chuyen sang User App/Admin do de thuc thi lenh voi full quyen Administrator.
+    * Khi KHONG tick: Tat ca tinh nang va lenh thuc thi binh thuong theo luong hien tai cua website.
+  + **Thu tu uu tien chuyen quyen**:
+    1. *Tai khoan rieng cua tung tram/nha hang* (duoc nhap trong Modal Chinh Sua / Them Tram va luu vinh vien vao DB cot `admin_user`, `admin_pass` bang `dbo.AGENT_MULTITASK_ENDPOINTS`).
+    2. *Tai khoan nhap nhanh tuc thoi tren giao dien* (`custom_admin_user`, `custom_admin_pass`).
+    3. *Tai khoan mac dinh toan he thong* (`default_admin_user`, `default_admin_pass` trong `dbo.AGENT_MULTITASK_CONFIG`).
+  + **Agent Client**: Dung `PSCredential` (service control) va Windows Scheduled Task voi `-User $u -Password $p -LogonType Password -RunLevel Highest` de thuc thi duoi dung user co token quan tri vien.
+  + **Giao dien Web**:
+    * Thanh thao tac hang loat canh nut `Restart Service`: co checkbox `[✓] Quyen User App/Admin` kem o nhap nhanh user mac dinh.
+    * Cac Modal tac vu (`RELATIVE_SCRIPT`, `DEPLOY_PACKAGE`, `SERVICE`, `PROCESS`): tich hop component `renderAdminUserOption()`.
+    * Bang du lieu: hien thi badge `User rieng: {ep.admin_user}` tren cot Ten Thiet Bi giup nhan dien nhanh may nao da duoc cai user rieng.
 
 
 

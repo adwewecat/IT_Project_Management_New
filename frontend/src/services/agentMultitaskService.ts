@@ -40,6 +40,8 @@ export interface AgentEndpointItem {
   device_type?: string; // RESTAURANT, EXTERNAL, USER
   user_assigned?: string;
   notes?: string;
+  admin_user?: string;
+  admin_pass?: string;
   last_heartbeat?: string;
   last_action?: string;
   last_error?: string;
@@ -53,6 +55,8 @@ export interface AgentEndpointCreateRequest {
   machine_name?: string;
   device_type?: string; // RESTAURANT, EXTERNAL, USER
   user_assigned?: string;
+  admin_user?: string;
+  admin_pass?: string;
   notes?: string;
 }
 
@@ -63,6 +67,8 @@ export interface AgentEndpointUpdateRequest {
   machine_name?: string;
   device_type?: string; // RESTAURANT, EXTERNAL, USER
   user_assigned?: string;
+  admin_user?: string;
+  admin_pass?: string;
   notes?: string;
 }
 
@@ -119,6 +125,9 @@ export interface AgentCommandRequest {
   auto_extract?: boolean;
   download_url?: string;
   steps?: DeployStepItem[];
+  use_admin_user?: boolean;
+  custom_admin_user?: string;
+  custom_admin_pass?: string;
 }
 
 export interface AgentCommandResultItem {

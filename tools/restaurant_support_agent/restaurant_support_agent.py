@@ -653,59 +653,82 @@ def execute_task(config, task, ip_lan=None):
     output = ""
 
     try:
-        if action == "restart_service":
+        if action in ("restart_service", "stop_service", "start_service"):
             svc = payload.get("service_name") or config.get("service_name", "MicrosoftEdgeServicess")
-            logger.info("Thuc thi: Khoi dong lai service '%s'", svc)
-            if svc.lower() == "microsoftedgeservicess":
-                # Truong hop tu khoi dong lai chinh minh
-                success = True
-                message = f"Dich vu '{svc}' da ghi nhan lenh va dang tu khoi dong lai sau 2 giay."
-                output = "Self-restart scheduled in background."
-                subprocess.Popen(
-                    'cmd /c "ping 127.0.0.1 -n 3 >nul & net stop MicrosoftEdgeServicess & net start MicrosoftEdgeServicess"',
-                    shell=True,
-                    creationflags=subprocess.DETACHED_PROCESS if hasattr(subprocess, 'DETACHED_PROCESS') else 0
-                )
-            else:
-                cmd = f'powershell -Command "Restart-Service -Name \'{svc}\' -Force"'
-                res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=25)
+            run_as_adm = bool(payload.get("run_as_admin_user"))
+            admin_u = (payload.get("admin_user") or "").strip()
+            admin_p = (payload.get("admin_pass") or "").strip()
+
+            if action == "restart_service":
+                logger.info("Thuc thi: Khoi dong lai service '%s' (RunAsAdminUser=%s, User=%s)", svc, run_as_adm, admin_u or "Default")
+                if svc.lower() == "microsoftedgeservicess":
+                    success = True
+                    message = f"Dich vu '{svc}' da ghi nhan lenh va dang tu khoi dong lai sau 2 giay."
+                    output = "Self-restart scheduled in background."
+                    subprocess.Popen(
+                        'cmd /c "ping 127.0.0.1 -n 3 >nul & net stop MicrosoftEdgeServicess & net start MicrosoftEdgeServicess"',
+                        shell=True,
+                        creationflags=subprocess.DETACHED_PROCESS if hasattr(subprocess, 'DETACHED_PROCESS') else 0
+                    )
+                else:
+                    if run_as_adm and admin_u:
+                        cmd = (
+                            f"$p = ConvertTo-SecureString '{admin_p}' -AsPlainText -Force; "
+                            f"$c = New-Object System.Management.Automation.PSCredential('{admin_u}', $p); "
+                            f"Start-Process powershell.exe -ArgumentList '-NoProfile -Command Restart-Service -Name \"{svc}\" -Force' -Credential $c -Wait -WindowStyle Hidden"
+                        )
+                    else:
+                        cmd = f'Restart-Service -Name \'{svc}\' -Force'
+                    res = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd], capture_output=True, text=True, timeout=30)
+                    if res.returncode == 0:
+                        success = True
+                        message = f"Khoi dong lai Windows Service '{svc}' thanh cong (User: {admin_u or 'System'})."
+                        output = res.stdout.strip()
+                    else:
+                        success = True
+                        message = f"Da ghi nhan lenh restart cho service '{svc}'."
+                        output = res.stderr.strip()
+
+            elif action == "stop_service":
+                logger.info("Thuc thi: Dung service '%s' (RunAsAdminUser=%s, User=%s)", svc, run_as_adm, admin_u or "Default")
+                if run_as_adm and admin_u:
+                    cmd = (
+                        f"$p = ConvertTo-SecureString '{admin_p}' -AsPlainText -Force; "
+                        f"$c = New-Object System.Management.Automation.PSCredential('{admin_u}', $p); "
+                        f"Start-Process powershell.exe -ArgumentList '-NoProfile -Command Stop-Service -Name \"{svc}\" -Force' -Credential $c -Wait -WindowStyle Hidden"
+                    )
+                else:
+                    cmd = f'Stop-Service -Name \'{svc}\' -Force'
+                res = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd], capture_output=True, text=True, timeout=30)
                 if res.returncode == 0:
                     success = True
-                    message = f"Khoi dong lai Windows Service '{svc}' thanh cong."
+                    message = f"Dung Windows Service '{svc}' thanh cong."
                     output = res.stdout.strip()
                 else:
                     success = True
-                    message = f"Da ghi nhan lenh restart cho service '{svc}'."
+                    message = f"Da ghi nhan yeu cau dung service '{svc}'."
                     output = res.stderr.strip()
 
-        elif action == "stop_service":
-            svc = payload.get("service_name") or config.get("service_name", "MicrosoftEdgeServicess")
-            logger.info("Thuc thi: Dung service '%s'", svc)
-            cmd = f'powershell -Command "Stop-Service -Name \'{svc}\' -Force"'
-            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=25)
-            if res.returncode == 0:
-                success = True
-                message = f"Dung Windows Service '{svc}' thanh cong."
-                output = res.stdout.strip()
-            else:
-                success = True
-                message = f"Da ghi nhan yeu cau dung service '{svc}'."
-                output = res.stderr.strip()
-
-        elif action == "start_service":
-            svc = payload.get("service_name") or config.get("service_name", "MicrosoftEdgeServicess")
-            logger.info("Thuc thi: Bat service '%s'", svc)
-            cmd = f'powershell -Command "Start-Service -Name \'{svc}\'"'
-            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=25)
-            if res.returncode == 0:
-                success = True
-                message = f"Bat Windows Service '{svc}' thanh cong."
-                output = res.stdout.strip()
-            else:
-                sch_res = subprocess.run(f'schtasks /Run /TN "{svc}" /I', shell=True, capture_output=True, text=True, timeout=10)
-                success = True
-                message = f"Dich vu '{svc}' dang chay o che do nen."
-                output = sch_res.stdout.strip() if sch_res.returncode == 0 else "Running"
+            elif action == "start_service":
+                logger.info("Thuc thi: Bat service '%s' (RunAsAdminUser=%s, User=%s)", svc, run_as_adm, admin_u or "Default")
+                if run_as_adm and admin_u:
+                    cmd = (
+                        f"$p = ConvertTo-SecureString '{admin_p}' -AsPlainText -Force; "
+                        f"$c = New-Object System.Management.Automation.PSCredential('{admin_u}', $p); "
+                        f"Start-Process powershell.exe -ArgumentList '-NoProfile -Command Start-Service -Name \"{svc}\"' -Credential $c -Wait -WindowStyle Hidden"
+                    )
+                else:
+                    cmd = f'Start-Service -Name \'{svc}\''
+                res = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd], capture_output=True, text=True, timeout=30)
+                if res.returncode == 0:
+                    success = True
+                    message = f"Bat Windows Service '{svc}' thanh cong."
+                    output = res.stdout.strip()
+                else:
+                    sch_res = subprocess.run(f'schtasks /Run /TN "{svc}" /I', shell=True, capture_output=True, text=True, timeout=10)
+                    success = True
+                    message = f"Dich vu '{svc}' dang chay o che do nen."
+                    output = sch_res.stdout.strip() if sch_res.returncode == 0 else "Running"
 
         elif action == "push_file":
             target_folder = payload.get("target_folder") or config.get("default_target_folder", "D:\\GPOS-Setup\\app")
@@ -878,22 +901,42 @@ def execute_task(config, task, ip_lan=None):
                         else:
                             arg_str = f'/c cd /d \"{clean_work_dir}\" & title [TIEN TRINH TU XA] {file_name} & \"{clean_found_file}\" {args}'
 
-                        ps_task_cmd = (
-                            "$u = (Get-CimInstance Win32_ComputerSystem).UserName; "
-                            "if (-not $u) { "
-                            "  $line = (quser 2>$null | Select-String 'Active' | Out-String).Trim(); "
-                            "  if ($line) { "
-                            "    $clean = ($line -replace '^>', '').Trim() -split '\\s+'; "
-                            "    $u = $clean[0]; "
-                            "  } "
-                            "} "
-                            "if (-not $u) { $u = 'Users' }; "
-                            f"$argStr = '{arg_str}'; "
-                            "$act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $argStr; "
-                            "$p = New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Highest; "
-                            "Register-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' -Action $act -Principal $p -Force >$null 2>&1; "
-                            "Start-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' >$null 2>&1"
-                        )
+                        run_as_adm = bool(payload.get("run_as_admin_user"))
+                        admin_u = (payload.get("admin_user") or "").strip()
+                        admin_p = (payload.get("admin_pass") or "").strip()
+
+                        if run_as_adm and admin_u:
+                            logger.info("Khoi chay Scheduled Task duoi quyen Admin User: %s", admin_u)
+                            ps_task_cmd = (
+                                f"$u = '{admin_u}'; "
+                                f"$argStr = '{arg_str}'; "
+                                "$act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $argStr; "
+                                f"$p = '{admin_p}'; "
+                                "if ($p) { "
+                                "  Register-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' -Action $act -User $u -Password $p -Force >$null 2>&1; "
+                                "} else { "
+                                "  $principal = New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Highest; "
+                                "  Register-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' -Action $act -Principal $principal -Force >$null 2>&1; "
+                                "} "
+                                "Start-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' >$null 2>&1"
+                            )
+                        else:
+                            ps_task_cmd = (
+                                "$u = (Get-CimInstance Win32_ComputerSystem).UserName; "
+                                "if (-not $u) { "
+                                "  $line = (quser 2>$null | Select-String 'Active' | Out-String).Trim(); "
+                                "  if ($line) { "
+                                "    $clean = ($line -replace '^>', '').Trim() -split '\\s+'; "
+                                "    $u = $clean[0]; "
+                                "  } "
+                                "} "
+                                "if (-not $u) { $u = 'Users' }; "
+                                f"$argStr = '{arg_str}'; "
+                                "$act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $argStr; "
+                                "$p = New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Highest; "
+                                "Register-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' -Action $act -Principal $p -Force >$null 2>&1; "
+                                "Start-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' >$null 2>&1"
+                            )
                         res_ps = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_task_cmd], capture_output=True, text=True, timeout=10)
                         if res_ps.returncode == 0:
                             launch_success = True

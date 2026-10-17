@@ -48,6 +48,8 @@ class AgentMultitaskEndpoint(Base):
     device_type: Mapped[Optional[str]] = mapped_column(Unicode(50), default="RESTAURANT", nullable=True)
     user_assigned: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Unicode(250), nullable=True)
+    admin_user: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
+    admin_pass: Mapped[Optional[str]] = mapped_column(Unicode(255), nullable=True)
     last_heartbeat: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_action: Mapped[Optional[str]] = mapped_column(Unicode(200), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(UnicodeText, nullable=True)

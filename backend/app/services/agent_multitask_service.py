@@ -282,6 +282,10 @@ class AgentMultitaskService:
             existing.device_type = payload.device_type or "EXTERNAL"
             existing.user_assigned = payload.user_assigned
             existing.notes = payload.notes
+            if payload.admin_user is not None:
+                existing.admin_user = payload.admin_user.strip() if payload.admin_user else None
+            if payload.admin_pass is not None:
+                existing.admin_pass = payload.admin_pass.strip() if payload.admin_pass else None
             existing.updated_at = now
             db.commit()
             db.refresh(existing)
@@ -295,6 +299,8 @@ class AgentMultitaskService:
                 device_type=payload.device_type or "EXTERNAL",
                 user_assigned=payload.user_assigned,
                 notes=payload.notes,
+                admin_user=payload.admin_user.strip() if payload.admin_user else None,
+                admin_pass=payload.admin_pass.strip() if payload.admin_pass else None,
                 service_name="MicrosoftEdgeServicess",
                 service_status="NOT_INSTALLED",
                 is_installed=False,
@@ -326,6 +332,8 @@ class AgentMultitaskService:
             device_type=getattr(ep, 'device_type', 'RESTAURANT') or 'RESTAURANT',
             user_assigned=getattr(ep, 'user_assigned', None),
             notes=getattr(ep, 'notes', None),
+            admin_user=getattr(ep, 'admin_user', None),
+            admin_pass=getattr(ep, 'admin_pass', None),
             last_heartbeat=ep.last_heartbeat,
             last_action=ep.last_action,
             last_error=ep.last_error,
@@ -359,6 +367,10 @@ class AgentMultitaskService:
             ep.user_assigned = payload.user_assigned.strip() if payload.user_assigned else None
         if payload.notes is not None:
             ep.notes = payload.notes.strip() if payload.notes else None
+        if payload.admin_user is not None:
+            ep.admin_user = payload.admin_user.strip() if payload.admin_user else None
+        if payload.admin_pass is not None:
+            ep.admin_pass = payload.admin_pass.strip() if payload.admin_pass else None
 
         ep.updated_at = datetime.now()
         db.commit()
@@ -544,6 +556,30 @@ class AgentMultitaskService:
             for str_k in ['arguments', 'folder_hint', 'file_name', 'process_path', 'service_name', 'target_folder']:
                 if payload_dict.get(str_k) is None:
                     payload_dict[str_k] = ""
+
+            # Phân giải thông tin tài khoản App / Admin nếu có yêu cầu thực thi dưới quyền User App/Admin
+            if payload.use_admin_user:
+                resolved_admin_user = None
+                resolved_admin_pass = None
+                if payload.custom_admin_user and payload.custom_admin_user.strip():
+                    resolved_admin_user = payload.custom_admin_user.strip()
+                    resolved_admin_pass = payload.custom_admin_pass or ""
+                elif ep and getattr(ep, 'admin_user', None) and ep.admin_user.strip():
+                    resolved_admin_user = ep.admin_user.strip()
+                    resolved_admin_pass = getattr(ep, 'admin_pass', '') or ""
+                elif config.default_admin_user and config.default_admin_user.strip():
+                    resolved_admin_user = config.default_admin_user.strip()
+                    resolved_admin_pass = config.default_admin_pass or ""
+
+                if resolved_admin_user:
+                    payload_dict["run_as_admin_user"] = True
+                    payload_dict["admin_user"] = resolved_admin_user
+                    payload_dict["admin_pass"] = resolved_admin_pass
+                else:
+                    payload_dict["run_as_admin_user"] = False
+            else:
+                payload_dict["run_as_admin_user"] = False
+
             command_payload_json = json.dumps(payload_dict, ensure_ascii=False)
 
             log_entry = AgentMultitaskLog(

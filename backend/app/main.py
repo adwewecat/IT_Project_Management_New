@@ -134,6 +134,10 @@ async def lifespan(app: FastAPI):
                             ALTER TABLE dbo.AGENT_MULTITASK_ENDPOINTS ADD user_assigned NVARCHAR(100) NULL;
                         IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='AGENT_MULTITASK_ENDPOINTS' AND COLUMN_NAME='notes')
                             ALTER TABLE dbo.AGENT_MULTITASK_ENDPOINTS ADD notes NVARCHAR(250) NULL;
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='AGENT_MULTITASK_ENDPOINTS' AND COLUMN_NAME='admin_user')
+                            ALTER TABLE dbo.AGENT_MULTITASK_ENDPOINTS ADD admin_user NVARCHAR(100) NULL;
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='AGENT_MULTITASK_ENDPOINTS' AND COLUMN_NAME='admin_pass')
+                            ALTER TABLE dbo.AGENT_MULTITASK_ENDPOINTS ADD admin_pass NVARCHAR(255) NULL;
                     END
                 """))
                 _c.commit()

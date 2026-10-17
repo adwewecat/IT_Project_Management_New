@@ -144,6 +144,8 @@ export const AgentMultitaskPage: React.FC = () => {
   const [addDeviceType, setAddDeviceType] = useState<string>('EXTERNAL'); // RESTAURANT, EXTERNAL, USER
   const [addUserAssigned, setAddUserAssigned] = useState<string>('');
   const [addNotes, setAddNotes] = useState<string>('');
+  const [addAdminUser, setAddAdminUser] = useState<string>('');
+  const [addAdminPass, setAddAdminPass] = useState<string>('');
   const [isAddingDevice, setIsAddingDevice] = useState<boolean>(false);
 
   // Modal Chỉnh Sửa Thiết Bị / Tên Máy Trạm
@@ -155,8 +157,15 @@ export const AgentMultitaskPage: React.FC = () => {
   const [editDeviceType, setEditDeviceType] = useState<string>('EXTERNAL'); // RESTAURANT, EXTERNAL, USER
   const [editUserAssigned, setEditUserAssigned] = useState<string>('');
   const [editNotes, setEditNotes] = useState<string>('');
+  const [editAdminUser, setEditAdminUser] = useState<string>('');
+  const [editAdminPass, setEditAdminPass] = useState<string>('');
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
+  // Lựa Chọn Thực Thi Dưới Quyền User App / Admin Mặc Định (Giải Quyết Access Denied)
+  const [useAdminUser, setUseAdminUser] = useState<boolean>(false);
+  const [customAdminUser, setCustomAdminUser] = useState<string>('Administrator');
+  const [customAdminPass, setCustomAdminPass] = useState<string>('');
 
   // Modal Tải Gói Cài Đặt (.ZIP) Kèm Cấu Hình IP & Mã Trạm Trực Tiếp
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState<boolean>(false);
@@ -257,6 +266,8 @@ export const AgentMultitaskPage: React.FC = () => {
         setConfig(cfgRes);
         setDefaultAdminUser(cfgRes.default_admin_user || 'Administrator');
         setDefaultAdminPass(cfgRes.default_admin_pass || '');
+        setCustomAdminUser(cfgRes.default_admin_user || 'Administrator');
+        setCustomAdminPass(cfgRes.default_admin_pass || '');
         setAllowedUsers(cfgRes.allowed_users || 'dung.nguyenanh,admin');
         setAutoRestartOnFailure(cfgRes.auto_restart_on_failure);
         // Tải mẫu kịch bản
@@ -585,7 +596,10 @@ export const AgentMultitaskPage: React.FC = () => {
         run_mode: action === 'run_relative_script' ? scriptRunMode : 'interactive',
         run_hidden: action === 'run_relative_script' ? scriptRunMode === 'hidden' : false,
         auto_extract: action === 'deploy_package' ? deployAutoExtract : undefined,
-        steps: action === 'deploy_package' ? deploySteps : undefined
+        steps: action === 'deploy_package' ? deploySteps : undefined,
+        use_admin_user: useAdminUser,
+        custom_admin_user: customAdminUser.trim() || undefined,
+        custom_admin_pass: customAdminPass.trim() || undefined
       });
 
       setCommandResult(res);
@@ -619,7 +633,9 @@ export const AgentMultitaskPage: React.FC = () => {
         machine_name: addMachineName.trim() || undefined,
         device_type: addDeviceType,
         user_assigned: addUserAssigned.trim() || undefined,
-        notes: addNotes.trim() || undefined
+        notes: addNotes.trim() || undefined,
+        admin_user: addAdminUser.trim() || undefined,
+        admin_pass: addAdminPass.trim() || undefined
       });
 
       showToast(`Đã thêm thiết bị '${addName}' thành công!`, 'success');
@@ -631,6 +647,8 @@ export const AgentMultitaskPage: React.FC = () => {
       setAddMachineName('');
       setAddUserAssigned('');
       setAddNotes('');
+      setAddAdminUser('');
+      setAddAdminPass('');
       // Nạp lại danh sách
       await loadAllData();
     } catch (err: any) {
@@ -650,6 +668,8 @@ export const AgentMultitaskPage: React.FC = () => {
     setEditDeviceType(ep.device_type || 'EXTERNAL');
     setEditUserAssigned(ep.user_assigned || '');
     setEditNotes(ep.notes || '');
+    setEditAdminUser(ep.admin_user || '');
+    setEditAdminPass(ep.admin_pass || '');
   };
 
   // Lưu chỉnh sửa thông tin thiết bị / máy trạm
@@ -678,7 +698,9 @@ export const AgentMultitaskPage: React.FC = () => {
         machine_name: editMachineName.trim() || undefined,
         device_type: editDeviceType as any,
         user_assigned: editUserAssigned.trim() || undefined,
-        notes: editNotes.trim() || undefined
+        notes: editNotes.trim() || undefined,
+        admin_user: editAdminUser.trim() || undefined,
+        admin_pass: editAdminPass.trim() || undefined
       });
 
       showToast(`Đã cập nhật thông tin thiết bị "${editName.trim()}" thành công!`, 'success');
@@ -1034,6 +1056,158 @@ export const AgentMultitaskPage: React.FC = () => {
   );
 
   // ══════════════════════════════════════════════════════════════════════════
+  // HELPER: TÙY CHỌN THỰC THI DƯỚI QUYỀN USER APP / ADMIN MẶC ĐỊNH
+  // (Ưu tiên User riêng của trạm nếu có, ngược lại dùng User mặc định hệ thống)
+  // ══════════════════════════════════════════════════════════════════════════
+  const renderAdminUserOption = (compact = false) => {
+    if (compact) {
+      return (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '4px 10px',
+            borderRadius: '6px',
+            border: `1.5px solid ${useAdminUser ? '#2563EB' : 'var(--border-color)'}`,
+            backgroundColor: useAdminUser ? 'rgba(37, 99, 235, 0.08)' : 'var(--bg-secondary)',
+            transition: 'all 0.2s'
+          }}
+        >
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              color: useAdminUser ? '#1D4ED8' : 'var(--text-primary)',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={useAdminUser}
+              onChange={(e) => setUseAdminUser(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            <span>🔑 Quyền User App/Admin</span>
+          </label>
+          {useAdminUser && (
+            <input
+              type="text"
+              value={customAdminUser}
+              onChange={(e) => setCustomAdminUser(e.target.value)}
+              title="Tài khoản App / Admin ưu tiên (Tự động nhận diện tài khoản riêng của từng trạm nếu đã lưu)"
+              placeholder="User App/Admin"
+              style={{
+                width: '125px',
+                padding: '3px 8px',
+                fontSize: '11.5px',
+                borderRadius: '4px',
+                border: '1px solid #93C5FD',
+                backgroundColor: '#FFFFFF',
+                color: '#1E40AF',
+                fontWeight: 700
+              }}
+            />
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div
+        style={{
+          padding: '10px 14px',
+          borderRadius: '8px',
+          border: `1.5px solid ${useAdminUser ? '#2563EB' : 'var(--border-color)'}`,
+          backgroundColor: useAdminUser ? 'rgba(37, 99, 235, 0.06)' : 'var(--bg-secondary)',
+          transition: 'all 0.2s',
+          marginTop: '6px'
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              color: useAdminUser ? '#1E40AF' : 'var(--text-primary)'
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={useAdminUser}
+              onChange={(e) => setUseAdminUser(e.target.checked)}
+              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+            />
+            <span>🔑 Ưu tiên thực thi dưới quyền User App / Quản trị (Khắc phục Access Denied)</span>
+          </label>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+            (Không tích = Thực thi tài khoản mặc định hiện tại của máy)
+          </span>
+        </div>
+
+        {useAdminUser && (
+          <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #BFDBFE', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ fontSize: '12px', color: '#1E40AF', lineHeight: 1.4 }}>
+              💡 <strong>Cơ chế tự động chuyển quyền:</strong> Nếu máy trạm đích đã được lưu <strong>User App riêng</strong> (trong nút Chỉnh Sửa ✏️), hệ thống sẽ ưu tiên dùng user riêng đó. Nếu chưa lưu riêng, hệ thống tự động đăng nhập tài khoản mặc định bên dưới:
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '3px', color: 'var(--text-primary)' }}>
+                  User App / Admin Mặc Định:
+                </label>
+                <input
+                  type="text"
+                  value={customAdminUser}
+                  onChange={(e) => setCustomAdminUser(e.target.value)}
+                  placeholder="VD: Administrator hoặc app_admin"
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '12px',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    fontWeight: 600
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '3px', color: 'var(--text-primary)' }}>
+                  Mật Khẩu App / Admin (Nếu có):
+                </label>
+                <input
+                  type="password"
+                  value={customAdminPass}
+                  onChange={(e) => setCustomAdminPass(e.target.value)}
+                  placeholder="Mật khẩu tài khoản..."
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '12px',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
   // GIAO DIỆN CHÍNH (SINGLE-SCREEN VIEWPORT, TOP TOOLBAR & SCROLL TABLE)
   // ══════════════════════════════════════════════════════════════════════════
   return (
@@ -1313,6 +1487,9 @@ export const AgentMultitaskPage: React.FC = () => {
             Đã chọn: <strong style={{ color: 'var(--color-primary)' }}>{selectedEndpointIds.length}</strong> / {filteredEndpoints.length} máy
           </span>
 
+          {/* Ô checkbox & User mặc định ưu tiên */}
+          {renderAdminUserOption(true)}
+
           <Button
             variant="primary"
             size="sm"
@@ -1438,6 +1615,12 @@ export const AgentMultitaskPage: React.FC = () => {
                           <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
                             <Monitor size={11} />
                             <span>Hostname: <code>{ep.machine_name}</code></span>
+                          </div>
+                        )}
+                        {ep.admin_user && (
+                          <div style={{ fontSize: '11px', color: '#1D4ED8', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', fontWeight: 600 }}>
+                            <ShieldAlert size={11} style={{ color: '#2563EB' }} />
+                            <span>User riêng: <code>{ep.admin_user}</code></span>
                           </div>
                         )}
                         {ep.notes && (
@@ -2100,6 +2283,59 @@ export const AgentMultitaskPage: React.FC = () => {
                 />
               </div>
             </div>
+
+            {/* Cấu Hình Tài Khoản User App / Admin Riêng Cho Máy Này (Tùy Chọn) */}
+            <div style={{ padding: '10px 12px', borderRadius: '8px', border: '1px dashed #BFDBFE', backgroundColor: '#EFF6FF', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#1E40AF', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <ShieldAlert size={14} style={{ color: '#2563EB' }} />
+                <span>Cấu Hình Tài Khoản App / Admin Riêng (Khắc Phục Access Denied - Tùy Chọn):</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '3px', color: 'var(--text-primary)' }}>
+                    User App / Admin Riêng:
+                  </label>
+                  <input
+                    type="text"
+                    value={addAdminUser}
+                    onChange={(e) => setAddAdminUser(e.target.value)}
+                    placeholder="VD: app_admin hoặc Administrator"
+                    style={{
+                      width: '100%',
+                      padding: '6px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '12px',
+                      backgroundColor: 'var(--bg-primary)',
+                      color: 'var(--text-primary)'
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '3px', color: 'var(--text-primary)' }}>
+                    Mật Khẩu App / Admin:
+                  </label>
+                  <input
+                    type="password"
+                    value={addAdminPass}
+                    onChange={(e) => setAddAdminPass(e.target.value)}
+                    placeholder="Nhập mật khẩu..."
+                    style={{
+                      width: '100%',
+                      padding: '6px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '12px',
+                      backgroundColor: 'var(--bg-primary)',
+                      color: 'var(--text-primary)'
+                    }}
+                  />
+                </div>
+              </div>
+              <span style={{ fontSize: '11px', color: '#1E40AF' }}>
+                💡 Nếu máy trạm này có user đặc thù để khởi chạy service/script, bạn nhập ở đây để hệ thống tự động ưu tiên.
+              </span>
+            </div>
           </form>
         </Modal>
       )}
@@ -2308,6 +2544,59 @@ export const AgentMultitaskPage: React.FC = () => {
                 />
               </div>
             </div>
+
+            {/* Cấu Hình Tài Khoản User App / Admin Riêng Cho Máy Này (Lưu Lại Cho Các Lần Sau Chạy) */}
+            <div style={{ padding: '10px 12px', borderRadius: '8px', border: '1px dashed #BFDBFE', backgroundColor: '#EFF6FF', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#1E40AF', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <ShieldAlert size={14} style={{ color: '#2563EB' }} />
+                <span>Cấu Hình Tài Khoản App / Admin Riêng (Lưu cố định cho máy này - Khắc phục Access Denied):</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '3px', color: 'var(--text-primary)' }}>
+                    User App / Admin Riêng:
+                  </label>
+                  <input
+                    type="text"
+                    value={editAdminUser}
+                    onChange={(e) => setEditAdminUser(e.target.value)}
+                    placeholder="VD: app_admin hoặc Administrator"
+                    style={{
+                      width: '100%',
+                      padding: '6px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '12px',
+                      backgroundColor: 'var(--bg-primary)',
+                      color: 'var(--text-primary)'
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '3px', color: 'var(--text-primary)' }}>
+                    Mật Khẩu App / Admin:
+                  </label>
+                  <input
+                    type="password"
+                    value={editAdminPass}
+                    onChange={(e) => setEditAdminPass(e.target.value)}
+                    placeholder="Nhập mật khẩu riêng..."
+                    style={{
+                      width: '100%',
+                      padding: '6px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '12px',
+                      backgroundColor: 'var(--bg-primary)',
+                      color: 'var(--text-primary)'
+                    }}
+                  />
+                </div>
+              </div>
+              <span style={{ fontSize: '11px', color: '#1E40AF' }}>
+                💡 Khi thực thi có bật tùy chọn quyền App/Admin, hệ thống sẽ ưu tiên login tài khoản riêng này của máy thay vì tài khoản mặc định chung.
+              </span>
+            </div>
           </form>
         </Modal>
       )}
@@ -2362,6 +2651,7 @@ export const AgentMultitaskPage: React.FC = () => {
             {/* Bộ chọn máy đích */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {renderTargetDevicePicker()}
+              {renderAdminUserOption()}
             </div>
 
             {/* ── THƯ VIỆN MẪU KỊCH BẢN ĐÃ LƯU (SCRIPT TEMPLATES LIBRARY) ── */}
@@ -2841,6 +3131,7 @@ export const AgentMultitaskPage: React.FC = () => {
             {/* Bộ chọn máy đích */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {renderTargetDevicePicker()}
+              {renderAdminUserOption()}
             </div>
 
             {/* Khối 1: Cấu hình Gói Cài & Thư Mục Đích */}
@@ -3548,8 +3839,9 @@ export const AgentMultitaskPage: React.FC = () => {
             </Button>
           }
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {renderTargetDevicePicker()}
+            {renderAdminUserOption()}
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
               <Button
@@ -3724,6 +4016,7 @@ export const AgentMultitaskPage: React.FC = () => {
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {renderTargetDevicePicker()}
+            {renderAdminUserOption()}
 
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
               <div>

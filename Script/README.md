@@ -193,6 +193,42 @@ npm run dev
 
 ---
 
+### [2026-10-17] - Bổ Sung Tùy Chọn User Mặc Định & Cấu Hình User App/Admin Riêng Từng Nhà Hàng (Khắc Phục Lỗi Access Denied Khi Thực Thi Từ Xa)
+- **Bối cảnh & Yêu cầu người dùng**:
+  1. Một số nhà hàng máy trạm chạy tài khoản người dùng hạn chế quyền (Standard User, Cashier/POS). Khi thực thi khởi động lại Windows Service (`MicrosoftEdgeServicess`) hoặc chạy file kịch bản bảo trì, Windows chặn lại với thông báo lỗi: `Unable to stop service. Access denied. You need administrator privileges to complete this task. Close Task Manager, then run it as an administrator and try again.`
+  2. Người dùng yêu cầu thêm ô nhập User mặc định cấu hình hệ thống (ưu tiên quyền App để chạy các tác vụ nâng cao).
+  3. Cơ chế kích hoạt:
+     - Khi có tích chọn checkbox "🔑 Quyền User App/Admin": Hệ thống ưu tiên login/chuyển sang tài khoản App/Admin đó để thực thi lệnh.
+     - Khi KHÔNG tích chọn: Các tính năng và tác vụ thực thi bình thường theo luồng hiện tại của website.
+  4. Cơ chế cấu hình linh hoạt (Hàng loạt & Cụ thể từng trạm):
+     - **Cấu hình hàng loạt**: Có User mặc định chung toàn hệ thống (`default_admin_user`, `default_admin_pass`).
+     - **Cấu hình cụ thể từng nhà hàng/thiết bị**: Cho phép nhập `admin_user` và `admin_pass` trực tiếp trong Modal Chỉnh Sửa / Thêm Thiết Bị và lưu vĩnh viễn vào Database để lần sau chạy thì hệ thống tự động nhớ và ưu tiên dùng user đó.
+- **Chi tiết kỹ thuật & Triển khai**:
+  1. **Database & Backend**:
+     - `dbo.AGENT_MULTITASK_ENDPOINTS`: Thêm 2 cột `admin_user NVARCHAR(100) NULL` và `admin_pass NVARCHAR(255) NULL`.
+     - Tự động kiểm tra và thêm cột trong hàm `lifespan` (`backend/app/main.py`) khi khởi động: `IF NOT EXISTS ... ALTER TABLE dbo.AGENT_MULTITASK_ENDPOINTS ADD admin_user ... admin_pass ...`.
+     - Cập nhật DDL vào `Script/Full_SCRIPT_SQL_TABLE.sql`.
+     - Cập nhật Schemas (`agent_multitask.py`): Bổ sung `admin_user`, `admin_pass` vào `AgentEndpointItem`, `AgentEndpointCreateRequest`, `AgentEndpointUpdateRequest`; bổ sung `use_admin_user: bool = False`, `custom_admin_user`, `custom_admin_pass` vào `AgentCommandRequest`.
+     - Cập nhật Services (`agent_multitask_service.py`):
+       - Phân giải quyền linh hoạt theo thứ tự ưu tiên: `Tài khoản riêng cấu hình tại trạm` $\rightarrow$ `Tài khoản gửi kèm custom` $\rightarrow$ `Tài khoản mặc định config hệ thống`.
+       - Gói payload sang Agent Client trạm với cờ `run_as_admin_user: True/False`.
+  2. **Agent Service (`tools/restaurant_support_agent/restaurant_support_agent.py`)**:
+     - Khối Service Control (`restart_service`, `stop_service`, `start_service`): Bổ sung logic kiểm tra `run_as_admin_user` và `admin_user`. Khi kích hoạt, tạo `PSCredential` và thực thi lệnh Service dưới đúng quyền User Administrator để vượt qua lỗi `Access Denied`.
+     - Khối Script Execution: Hỗ trợ tạo Windows Scheduled Task với `-User $u -Password $p -LogonType Password -RunLevel Highest` để chuyển đổi sang đúng User App/Admin có full token quyền Administrator.
+  3. **Frontend (`agentMultitaskService.ts` & `AgentMultitaskPage.tsx`)**:
+     - Bổ sung trường dữ liệu `admin_user`, `admin_pass`, `use_admin_user` vào frontend service.
+     - Xây dựng component helper `renderAdminUserOption(compact)`:
+       - Trên Toolbar hàng loạt cạnh nút `Restart Service`: hiển thị checkbox nhỏ gọn `[✓] Quyền User App/Admin` kèm ô nhập/điều chỉnh User nhanh.
+       - Trong các Modal tác vụ (`RELATIVE_SCRIPT`, `DEPLOY_PACKAGE`, `SERVICE`, `PROCESS`): hiển thị khung cấu hình chuyển quyền chi tiết kèm giải thích rõ ràng và ô nhập User / Password mặc định.
+     - Bổ sung 2 trường nhập "User App / Admin Riêng" và "Mật Khẩu App / Admin" vào Modal Thêm Thiết Bị Mới và Modal Chỉnh Sửa Thông Tin Thiết Bị (lưu vĩnh viễn vào DB).
+     - Bổ sung nhãn badge `👤 User riêng: {ep.admin_user}` trực tiếp trên cột Tên Thiết Bị trong bảng danh sách giúp dễ dàng nhận biết máy nào đã có user riêng.
+  4. **Kiểm thử & Đóng gói**:
+     - Frontend: `cmd /c "npm run build"` thành công 100% exit code 0 (`✓ built in 4.20s`), cập nhật sẵn sàng vào `frontend/dist/`.
+     - Backend: `python -m compileall app` sạch lỗi; Smoke Test `>>> PASSED 100%`.
+     - Khởi động lại backend daemon trên port 8000 sạch sẽ, API phản hồi HTTP 200.
+
+---
+
 ### [2026-10-17] - Tối Ưu Bảng Thiết Bị Trang Agent Multitask: Bỏ 2 Cột "Tình Trạng Cài" và "Khởi Động Win"
 - **Yêu cầu người dùng**: Bỏ cột "Tình Trạng Cài" và "Khởi Động Win" khỏi bảng danh sách thiết bị/nhà hàng tại trang Agent Multitask.
 - **Chi tiết kỹ thuật & Khắc phục**:

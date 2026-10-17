@@ -44,6 +44,8 @@ class AgentEndpointItem(BaseModel):
     device_type: Optional[str] = "RESTAURANT"  # RESTAURANT, EXTERNAL, USER
     user_assigned: Optional[str] = None
     notes: Optional[str] = None
+    admin_user: Optional[str] = None
+    admin_pass: Optional[str] = None
     last_heartbeat: Optional[datetime] = None
     last_action: Optional[str] = None
     last_error: Optional[str] = None
@@ -58,6 +60,8 @@ class AgentEndpointCreateRequest(BaseModel):
     device_type: Optional[str] = "EXTERNAL"  # RESTAURANT, EXTERNAL, USER
     user_assigned: Optional[str] = None
     notes: Optional[str] = None
+    admin_user: Optional[str] = None
+    admin_pass: Optional[str] = None
 
 
 class AgentEndpointUpdateRequest(BaseModel):
@@ -68,6 +72,8 @@ class AgentEndpointUpdateRequest(BaseModel):
     device_type: Optional[str] = None  # RESTAURANT, EXTERNAL, USER
     user_assigned: Optional[str] = None
     notes: Optional[str] = None
+    admin_user: Optional[str] = None
+    admin_pass: Optional[str] = None
 
 
 
@@ -98,6 +104,10 @@ class AgentCommandRequest(BaseModel):
     process_path: Optional[str] = None
     arguments: Optional[str] = None
     run_as_admin: Optional[bool] = True
+    # Dành cho Thực thi dưới quyền User App / Quản trị mặc định
+    use_admin_user: Optional[bool] = False
+    custom_admin_user: Optional[str] = None
+    custom_admin_pass: Optional[str] = None
     # Dành cho Khởi Chạy Script Tương Đối (Tự Tìm Folder / File)
     folder_hint: Optional[str] = None
     working_directory: Optional[str] = None
