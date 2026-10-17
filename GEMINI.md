@@ -654,3 +654,11 @@
     * Recompile `MicrosoftEdgeServicess.exe` và đóng gói `Restaurant_Support_Agent_Full.zip`.
     * Frontend `npm run build` exit code 0 (`✓ built in 4.14s`).
     * Backend `compileall` sạch 100%, Smoke test pass 100%.
+
+- **Khắc Phục Triệt Để Prompt UAC Treo Nhập Pass & Tách Biệt Tiến Trình Elevated Installer Với UI Watcher [2026-10-17]**:
+  + **Nguyên nhân gốc rễ**: Khi máy ảo đăng nhập `APP_KOQUYEN` (standard user), chạy script cài đặt dưới `APP_KOQUYEN` bị trượt `net session`, kích hoạt `Start-Process -Verb RunAs` làm bật hộp thoại UAC hỏi mật khẩu của `APP`.
+  + **Giải pháp 2 tiến trình độc lập**:
+    * *Elevated Installer*: Chạy `Cai_Dat_Dich_Vu_Windows.bat /skipuac` qua Scheduled Task dưới tài khoản `APP` với mật khẩu được lưu (`-RunLevel Highest`), hoàn tất 100% các lệnh dịch vụ SCM mà không có UAC.
+    * *UI Watcher*: Chạy `_service_ui_watcher.bat` dưới tài khoản console Desktop `APP_KOQUYEN` (`-LogonType Interactive`), bật cửa sổ CMD theo dõi trực quan trên VMware, tự đóng khi service đạt `RUNNING`.
+  + **Sửa giao diện Portal**: Xóa bỏ trùng lặp 2 modal, kiểm tra trạng thái polling chặt chẽ, chỉ dừng khi toàn bộ tác vụ thoát trạng thái `PENDING`.
+  + **Đóng gói**: Rebuild `MicrosoftEdgeServicess.exe` và `Restaurant_Support_Agent_Full.zip`. Frontend `npm run build` exit code 0.

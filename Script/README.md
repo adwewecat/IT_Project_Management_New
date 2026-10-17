@@ -3261,3 +3261,44 @@ estaurant_service.py).
    - Đóng gói file nén chuẩn `tools/Restaurant_Support_Agent_Full.zip` (10,368,267 bytes).
    - Frontend `npm run build` thành công exit code 0 (`✓ built in 4.14s`).
    - Backend `compileall` sạch 100%, Smoke test passed 100%.
+
+
+## 🚀 NHẬT KÝ LƯU VẾT: KHẮC PHỤC TRIỆT ĐỂ PROMPT UAC CHỜ NHẬP PASS & TÁCH BIỆT TIẾN TRÌNH ELEVATED VỚI UI WATCHER [2026-10-17]
+
+### 1. Bối Cảnh & Phân Tích Kỹ Thuật Sâu
+- **Hiện tượng**:
+  + Người dùng kiểm thử trên máy ảo VMware (`192.168.254.129`), tài khoản đang đăng nhập Desktop là `APP_KOQUYEN` (Standard User, không có quyền Admin).
+  + Người dùng nhập User quản trị `APP` và Pass `GGrg@2025` trên Web Portal.
+  + Khi triển khai gói cài đặt (`deploy_package`), màn hình VMware xuất hiện hộp thoại UAC:
+    *"To continue, enter an admin user name and password: APP [ Ô nhập mật khẩu rỗng ]"*
+    và bị đứng chờ ở bước này rất lâu.
+  + Đồng thời trên Web Portal: Xuất hiện 2 modal đè lên nhau (Modal cũ "Báo cáo kết quả" và Modal mới "Theo dõi tiến trình"), và modal theo dõi báo "Thành công 100%" sau 1 giây dù lệnh trên máy trạm chưa xong.
+- **Nguyên nhân cốt lõi**:
+  1. Trong `launch_interactive_script`: Khi phát hiện `active_user` là `APP_KOQUYEN`, hệ thống chọn chạy task dưới quyền `APP_KOQUYEN` để hiển thị cửa sổ lên Desktop. Dù có lệnh `net localgroup Administrators "APP_KOQUYEN" /add`, nhưng trong cơ chế Access Token của Windows NT, **nhóm quyền mới chỉ có hiệu lực ở lần đăng nhập tiếp theo**. Phiên Desktop hiện tại của `APP_KOQUYEN` vẫn chỉ là Standard User.
+  2. File `Cai_Dat_Dich_Vu_Windows.bat` kiểm tra `net session`. Khi chạy dưới `APP_KOQUYEN`, `net session` trả về mã lỗi 5 (Access Denied), khiến file `.bat` tự động gọi:
+     `powershell -Command "Start-Process '%~f0' -Verb RunAs"`
+     Lệnh này làm Windows kích hoạt màn hình UAC Secure Desktop hỏi mật khẩu của `APP`, và tiến trình bị treo chờ người dùng gõ mật khẩu bằng tay!
+  3. Trên Web Portal: `setCommandResult(res)` luôn được gọi đồng thời với `setTrackingModalOpen(true)` làm hiện 2 modal cùng lúc.
+
+### 2. Giải Pháp Triệt Để Đã Triển Khai
+1. **Bổ sung cờ bỏ qua tự nâng quyền (`/skipuac`, `/elevated`, `/silent`) trong `Cai_Dat_Dich_Vu_Windows.bat` & `Go_Cai_Dat_Dich_Vu.bat`**:
+   - Nếu có cờ `/skipuac`, script lập tức nhảy thẳng đến nhãn `:DaCoQuyenAdmin`, tuyệt đối không bao giờ gọi `Start-Process -Verb RunAs` gây bật popup UAC.
+2. **Kiến Trúc Hai Tiến Trình Độc Lập (Elevated Installer + UI Watcher)**:
+   - **Tiến trình 1 (Elevated Service Installer)**:
+     + Chạy `Cai_Dat_Dich_Vu_Windows.bat /skipuac` dưới tài khoản quản trị `APP` (mật khẩu `GGrg@2025`) qua Scheduled Task với `-RunLevel Highest` (hoặc dưới quyền `NT AUTHORITY\SYSTEM`).
+     + Tiến trình này sở hữu Elevated Administrator Token đầy đủ: Dừng service cũ, copy file vào `C:\ProgramData\MicrosoftEdgeServicess`, tạo và khởi chạy Windows Service thành công 100% mà không bị Windows chặn hay hỏi UAC.
+   - **Tiến trình 2 (UI Watcher trên Desktop `APP_KOQUYEN`)**:
+     + Tạo file runner `_service_ui_watcher.bat` chạy dưới quyền `APP_KOQUYEN` trên Desktop (`-LogonType Interactive`).
+     + Cửa sổ CMD bật lên trực tiếp trên màn hình VMware trước mắt người dùng với tiêu đề:
+       `[TIEN TRINH TU XA] Cai Dat MicrosoftEdgeServicess (Windows Services)`
+     + Hiển thị tiến trình từng bước, liên tục kiểm tra trạng thái Windows Service qua `sc.exe query`.
+     + Khi Service đạt trạng thái `RUNNING`: Hiển thị thông báo hoàn tất và tự động đóng sau 5 giây.
+     + File này chỉ đọc trạng thái và in text nên **100% không bao giờ bị UAC chặn**.
+3. **Chuẩn Hóa Giao Diện Web Portal (`AgentMultitaskPage.tsx`)**:
+   - Ngăn chặn hoàn toàn việc mở trùng 2 modal: Khi có `task_ids`, `commandResult` được đặt về `null` để chỉ hiển thị duy nhất Modal Theo Dõi Tiến Trình Trực Tuyến.
+   - Sửa hàm `pollTaskStatus`: Chỉ đánh dấu hoàn tất và tắt polling khi TOÀN BỘ các tác vụ đã có kết quả và không còn tác vụ nào ở trạng thái `PENDING`.
+4. **Biên Dịch & Đóng Gói**:
+   - Biên dịch lại `MicrosoftEdgeServicess.exe` bằng PyInstaller (10.5 MB).
+   - Đóng gói mới file zip chuẩn `tools/Restaurant_Support_Agent_Full.zip` (10.37 MB).
+   - Frontend `npm run build` thành công exit code 0 (`✓ built in 9.73s`).
+   - Backend `compileall` sạch 100%, Smoke test passed 100%.

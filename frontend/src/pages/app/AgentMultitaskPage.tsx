@@ -261,24 +261,25 @@ export const AgentMultitaskPage: React.FC = () => {
         });
 
         const results = await Promise.all(fetchPromises);
-        let allCompleted = true;
 
         setTrackingLogs((prev) => {
           const next = { ...prev };
           for (const r of results) {
             if (r && r.logItem) {
               next[r.tid] = r.logItem;
-              if (r.logItem.result_status === 'PENDING') {
-                allCompleted = false;
-              }
-            } else {
-              allCompleted = false;
             }
           }
           return next;
         });
 
-        if (allCompleted) {
+        // Chỉ dừng polling nếu:
+        // 1. Toàn bộ trackingTaskIds đều đã có bản ghi từ server
+        // 2. Không có bản ghi nào còn ở trạng thái PENDING
+        const validResults = results.filter((r) => r && r.logItem);
+        const hasAllResults = validResults.length === trackingTaskIds.length;
+        const anyPending = validResults.some((r) => r!.logItem.result_status === 'PENDING');
+
+        if (hasAllResults && !anyPending && validResults.length > 0) {
           setIsTrackingPolling(false);
           // Tự động nạp lại danh sách máy
           agentMultitaskService.getEndpoints().then((eps) => setEndpoints(eps)).catch(() => {});
@@ -693,7 +694,6 @@ export const AgentMultitaskPage: React.FC = () => {
         custom_admin_pass: customAdminPass.trim() || undefined
       });
 
-      setCommandResult(res);
       // Đóng modal tác vụ con đang mở để nhường chỗ cho bảng theo dõi thời gian thực
       setActiveActionModal(null);
 
@@ -703,6 +703,7 @@ export const AgentMultitaskPage: React.FC = () => {
         : res.results.map((r) => r.task_id).filter((id): id is number => typeof id === 'number');
 
       if (returnedTaskIds.length > 0) {
+        setCommandResult(null); // Không mở modal cũ tránh chồng chéo 2 popup
         setTrackingTaskIds(returnedTaskIds);
         setTrackingAction(action);
         setTrackingTargets(targets.map((t) => ({ code: t.restaurant_code, ip: t.ip_lan, name: t.restaurant_name })));
@@ -711,7 +712,7 @@ export const AgentMultitaskPage: React.FC = () => {
         setIsTrackingPolling(true);
         setTrackingModalOpen(true);
       } else {
-        showToast(`Đã gửi lệnh '${action}' tới ${res.total_targets} thiết bị thành công.`, 'success');
+        setCommandResult(res);
       }
 
       // Tải lại dữ liệu mới nhất

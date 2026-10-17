@@ -36,6 +36,11 @@ exit /b 1
 :DaCoFileExe
 
 :: 2. Kiem tra quyen Administrator (Tu dong xin quyen UAC de cai dat 1-click)
+if "%~1"=="/skipuac" goto :DaCoQuyenAdmin
+if "%~1"=="/elevated" goto :DaCoQuyenAdmin
+if "%~1"=="/silent" goto :DaCoQuyenAdmin
+if "%~1"=="/unattended" goto :DaCoQuyenAdmin
+
 net session >nul 2>&1
 if %errorlevel% equ 0 goto :DaCoQuyenAdmin
 
