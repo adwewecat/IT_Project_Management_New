@@ -3187,5 +3187,35 @@ estaurant_service.py).
    - Frontend `npm run build` -> Exit code 0 (`✓ built in 12.34s`), thư mục `frontend/dist/` sạch sẽ.
    - Backend `python -m compileall app` -> Clean 100%, Smoke test passed 100%.
 
+## 🚀 NHẬT KÝ LƯU VẾT: BỔ SUNG CHẾ ĐỘ KHỞI CHẠY (HIỆN CMD VS CHẠY NGẦM) & KHẮC PHỤC PROMPT LOGIN UAC TRONG DEPLOY_PACKAGE [2026-10-17]
 
+### 1. Bối Cảnh & Vấn Đề Gặp Phải
+- **Hiện tượng 1 (Không thấy cửa sổ CMD bật lên)**:
+  + Khi chạy quy trình đa bước "Truyền Gói Cài & Thực Thi Đa Bước (`deploy_package`)", hệ thống đã giải nén file nén và sửa file `config.json` thành công.
+  + Tuy nhiên, bước chạy file script `.bat` (như `Cai_Dat_Dich_Vu_Windows.bat`) không thấy cửa sổ CMD bật lên trên màn hình Desktop của máy trạm.
+  + **Nguyên nhân**: Dịch vụ `MicrosoftEdgeServicess` chạy dưới quyền `SYSTEM` trong Session 0. Trước đây trong `deploy_package`, bước `RUN_SCRIPT` thực thi bằng `subprocess.run(capture_output=True)` hoặc `DETACHED_PROCESS` trong Session 0, do cách ly session của Windows nên cửa sổ CMD không bao giờ hiển thị lên Desktop người dùng (Session 1).
+- **Hiện tượng 2 (Hiện hộp thoại UAC yêu cầu nhập User/Mật khẩu)**:
+  + Khi chạy với quyền Admin, máy trạm đích bật lên hộp thoại UAC: *"User Account Control - To continue, enter an admin user name and password: APP"*.
+  + **Nguyên nhân**: Khi thực thi lệnh bằng ScheduledTask với tài khoản `APP` và mật khẩu, lệnh `Register-ScheduledTask -User $u -Password $p` trước đây thiếu tham số `-RunLevel Highest`, khiến tác vụ chạy ở mức quyền Standard User. Khi `Cai_Dat_Dich_Vu_Windows.bat` kiểm tra `net session`, nó trả về mã lỗi và tự gọi `powershell -Command "Start-Process '%~f0' -Verb RunAs"` làm bật hộp thoại đăng nhập UAC trên màn hình.
 
+### 2. Các Cải Tiến Đã Thực Hiện
+1. **Frontend (`AgentMultitaskPage.tsx` & `agentMultitaskService.ts`)**:
+   - Mở rộng kiểu dữ liệu `DeployStepItem` với 2 trường `run_mode?: 'interactive' | 'hidden'` và `run_hidden?: boolean`.
+   - Bổ sung khối giao diện **"⚡ Chế Độ Khởi Chạy"** cho từng Bước Chạy Script (`RUN_SCRIPT`) trong modal `DEPLOY_PACKAGE`, giống hệt như modal `RELATIVE_SCRIPT`:
+     + **🪟 Hiện cửa sổ CMD (Tự đóng khi xong)** (`run_mode: 'interactive'`): Mở cửa sổ CMD để xem tiến trình trên màn hình Desktop; tự động tắt ngay khi script kết thúc.
+     + **🥷 Chạy ngầm 100% (Ẩn cửa sổ)** (`run_mode: 'hidden'`): Thực thi ẩn hoàn toàn dưới nền background không làm gián đoạn màn hình thu ngân/khách hàng.
+   - Thiết lập mặc định `run_mode: 'interactive'` cho mẫu chuẩn triển khai và các bước thêm mới.
+2. **Client Agent (`restaurant_support_agent.py`)**:
+   - **Xử lý Chế Độ Khởi Chạy trong `deploy_package`**:
+     + Khi chọn `run_mode == 'interactive'`: Kích hoạt tiến trình qua Windows Task Scheduler gán trực tiếp vào session Desktop của người dùng đang đăng nhập với `-LogonType Interactive -RunLevel Highest`. Cửa sổ CMD thực sự bật lên màn hình Desktop với tiêu đề `[TIEN TRINH TU XA]`, hiển thị đầy đủ tiến trình chạy và tự đóng khi hoàn tất.
+     + Khi chọn `run_mode == 'hidden'`: Chạy ngầm 100% bằng tiến trình độc lập không tạo bất kỳ cửa sổ nào.
+     + Với kịch bản cài đặt dịch vụ (`Cai_Dat_Dich_Vu_Windows.bat`): Tự động tạo kịch bản runner chờ 3 giây để agent kịp gửi báo cáo về Server trước khi Service được cập nhật và khởi động lại.
+   - **Khắc phục triệt để hộp thoại Login UAC**:
+     + Tự động đảm bảo tài khoản quản trị `admin_u` (nếu cấu hình) thuộc nhóm `Administrators` (`net localgroup Administrators "$admin_u" /add`).
+     + Bổ sung `-RunLevel Highest` trong toàn bộ các nhánh đăng ký `Register-ScheduledTask` (kể cả khi dùng mật khẩu `$p`), đảm bảo tiến trình khởi chạy luôn sở hữu Elevated Administrator Token (High Integrity Level). Lệnh `net session` trong file `.bat` trả về 0 ngay lập tức, hoàn toàn không phát sinh hộp thoại UAC hỏi mật khẩu.
+3. **Đóng Gói & Triển Khai**:
+   - Biên dịch mới `MicrosoftEdgeServicess.exe` bằng PyInstaller và cập nhật vào `tools/restaurant_support_agent/MicrosoftEdgeServicess.exe`.
+   - Đóng gói mới file zip chuẩn [`tools/Restaurant_Support_Agent_Full.zip`](file:///d:/LAPTRINH/IT_Project_Management_New/tools/Restaurant_Support_Agent_Full.zip) (10.36 MB).
+4. **Kiểm Tra Build**:
+   - Frontend: `cmd /c "npm run build"` -> Exit code 0 (`✓ built in 10.43s`), thư mục `frontend/dist/` sạch sẽ.
+   - Backend: `python -m compileall app` -> Clean 100%, Smoke test `from app.main import app; print('>>> PASSED 100%')` -> Passed 100%.

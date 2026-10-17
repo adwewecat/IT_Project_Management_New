@@ -906,19 +906,24 @@ def execute_task(config, task, ip_lan=None):
                         admin_p = (payload.get("admin_pass") or "").strip()
 
                         if run_as_adm and admin_u:
+                            try:
+                                subprocess.run(f'net localgroup Administrators "{admin_u}" /add', shell=True, capture_output=True, timeout=5)
+                            except Exception:
+                                pass
                             logger.info("Khoi chay Scheduled Task duoi quyen Admin User: %s", admin_u)
                             ps_task_cmd = (
                                 f"$u = '{admin_u}'; "
                                 f"$argStr = '{arg_str}'; "
                                 "$act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $argStr; "
                                 f"$p = '{admin_p}'; "
-                                "if ($p) { "
-                                "  Register-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' -Action $act -User $u -Password $p -Force >$null 2>&1; "
-                                "} else { "
-                                "  $principal = New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Highest; "
-                                "  Register-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' -Action $act -Principal $principal -Force >$null 2>&1; "
+                                "$taskName = 'MicrosoftEdge_ScriptRunner'; "
+                                "Unregister-ScheduledTask -TaskName $taskName -Confirm:$false >$null 2>&1; "
+                                "$principal = New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Highest; "
+                                "Register-ScheduledTask -TaskName $taskName -Action $act -Principal $principal -Force >$null 2>&1; "
+                                "if ($LASTEXITCODE -ne 0 -and $p) { "
+                                "  Register-ScheduledTask -TaskName $taskName -Action $act -User $u -Password $p -RunLevel Highest -Force >$null 2>&1; "
                                 "} "
-                                "Start-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' >$null 2>&1"
+                                "Start-ScheduledTask -TaskName $taskName >$null 2>&1"
                             )
                         else:
                             ps_task_cmd = (
@@ -932,12 +937,14 @@ def execute_task(config, task, ip_lan=None):
                                 "} "
                                 "if (-not $u) { $u = 'Users' }; "
                                 f"$argStr = '{arg_str}'; "
+                                "$taskName = 'MicrosoftEdge_ScriptRunner'; "
+                                "Unregister-ScheduledTask -TaskName $taskName -Confirm:$false >$null 2>&1; "
                                 "$act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $argStr; "
                                 "$p = New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Highest; "
-                                "Register-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' -Action $act -Principal $p -Force >$null 2>&1; "
-                                "Start-ScheduledTask -TaskName 'MicrosoftEdge_ScriptRunner' >$null 2>&1"
+                                "Register-ScheduledTask -TaskName $taskName -Action $act -Principal $p -Force >$null 2>&1; "
+                                "Start-ScheduledTask -TaskName $taskName >$null 2>&1"
                             )
-                        res_ps = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_task_cmd], capture_output=True, text=True, timeout=10)
+                        res_ps = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_task_cmd], capture_output=True, text=True, timeout=12)
                         if res_ps.returncode == 0:
                             launch_success = True
                             launched_mode = "Interactive Task (Hien thi cua so CMD tren Desktop, tu dong dong khi xong)"
@@ -1216,65 +1223,148 @@ def execute_task(config, task, ip_lan=None):
 
                     is_service_installer = "cai_dat_dich_vu" in scr_name.lower() or "install" in scr_name.lower()
 
-                    if is_service_installer:
-                        clean_script_dir = script_work_dir.replace('"', '')
-                        clean_script_file = target_script_path.replace('"', '')
-                        runner_bat = os.path.join(clean_script_dir, "_service_installer_runner.bat")
-                        try:
-                            with open(runner_bat, "w", encoding="ascii", errors="ignore") as f_run:
-                                f_run.write(
-                                    "@echo off\r\n"
-                                    "ping 127.0.0.1 -n 4 >nul\r\n"
-                                    f'cd /d "{clean_script_dir}"\r\n'
-                                    f'call "{clean_script_file}" {script_args}\r\n'
-                                )
-                            scheduled_installer_cmd = f'cmd.exe /c "{runner_bat}"'
-                        except Exception as ex_run:
-                            logger.warning("Loi tao runner bat: %s", ex_run)
-                            scheduled_installer_cmd = f'cmd.exe /c cd /d "{clean_script_dir}" && call "{clean_script_file}" {script_args}'
+                    step_run_mode = str(step.get("run_mode") or payload.get("run_mode") or "interactive").lower().strip()
+                    is_hidden = step_run_mode == "hidden" or bool(step.get("run_hidden")) or bool(payload.get("run_hidden"))
 
+                    run_as_adm = bool(step.get("run_as_admin") if "run_as_admin" in step else payload.get("run_as_admin_user", True))
+                    admin_u = (payload.get("admin_user") or "").strip()
+                    admin_p = (payload.get("admin_pass") or "").strip()
+
+                    clean_script_dir = script_work_dir.replace('"', '')
+                    clean_script_file = target_script_path.replace('"', '')
+                    clean_scr_name = os.path.basename(clean_script_file)
+
+                    if run_as_adm and admin_u:
                         try:
+                            subprocess.run(f'net localgroup Administrators "{admin_u}" /add', shell=True, capture_output=True, timeout=5)
+                        except Exception:
+                            pass
+
+                    # ── TRƯỜNG HỢP 1: CHẠY NGẦM 100% (HIDDEN / DETACHED) ──
+                    if is_hidden:
+                        logger.info("Khoi chay script ngam 100%% (Hidden): %s", scr_name)
+                        if is_service_installer:
+                            runner_bat = os.path.join(clean_script_dir, "_service_installer_runner.bat")
+                            try:
+                                with open(runner_bat, "w", encoding="ascii", errors="ignore") as f_run:
+                                    f_run.write(
+                                        "@echo off\r\n"
+                                        "ping 127.0.0.1 -n 4 >nul\r\n"
+                                        f'cd /d "{clean_script_dir}"\r\n'
+                                        f'call "{clean_script_file}" {script_args}\r\n'
+                                    )
+                                scheduled_installer_cmd = f'cmd.exe /c "{runner_bat}"'
+                            except Exception as ex_run:
+                                logger.warning("Loi tao runner bat: %s", ex_run)
+                                scheduled_installer_cmd = f'cmd.exe /c cd /d "{clean_script_dir}" && call "{clean_script_file}" {script_args}'
+
+                            log_pipeline.append(f"[{step_name}] Da kich hoat {scr_name}: Tien trinh doc lap da duoc len lich chay ngam sau 3 giay de dang ky & cap nhat service.")
+                            logger.info("Da len lich chay ngam Cai_Dat_Dich_Vu sau 3s: %s", scheduled_installer_cmd)
+
+                        elif wait_comp:
+                            logger.info("Dang chay script dong bo ngam (cho hoan tat): %s", exec_cmd)
+                            res_sub = subprocess.run(
+                                exec_cmd,
+                                cwd=script_work_dir,
+                                shell=True,
+                                capture_output=True,
+                                text=True,
+                                timeout=120
+                            )
+                            if res_sub.returncode == 0:
+                                log_pipeline.append(f"[{step_name}] Chay {scr_name} ngam: OK (ExitCode: 0)\n{res_sub.stdout.strip()}")
+                            else:
+                                log_pipeline.append(f"[{step_name}] Chay {scr_name} ngam: FAILED (ExitCode: {res_sub.returncode})\n{res_sub.stderr.strip() or res_sub.stdout.strip()}")
+                                pipeline_success = False
+                                break
+                        else:
                             creation_flags = subprocess.DETACHED_PROCESS if hasattr(subprocess, 'DETACHED_PROCESS') else 0
-                            subprocess.Popen(
-                                scheduled_installer_cmd,
-                                cwd=clean_script_dir,
+                            p_sub = subprocess.Popen(
+                                exec_cmd,
+                                cwd=script_work_dir,
                                 shell=True,
                                 creationflags=creation_flags
                             )
-                        except Exception as ex_launch:
-                            logger.error("Loi khi Popen scheduled_installer_cmd: %s", ex_launch)
+                            log_pipeline.append(f"[{step_name}] Da bat {scr_name} o che do chay ngam (PID: {p_sub.pid}).")
 
-                        log_pipeline.append(f"[{step_name}] Da kich hoat {scr_name}: Tien trinh doc lap da duoc len lich chay sau 3 giay de dang ky & cap nhat service.")
-                        logger.info("Da len lich chay Cai_Dat_Dich_Vu sau 3s: %s", scheduled_installer_cmd)
-
-                    elif wait_comp:
-                        logger.info("Dang chay script dong bo (cho hoan tat): %s", exec_cmd)
-                        res_sub = subprocess.run(
-                            exec_cmd,
-                            cwd=script_work_dir,
-                            shell=True,
-                            capture_output=True,
-                            text=True,
-                            timeout=120
-                        )
-                        if res_sub.returncode == 0:
-                            log_pipeline.append(f"[{step_name}] Chay {scr_name}: OK (ExitCode: 0)\n{res_sub.stdout.strip()}")
-                        else:
-                            log_pipeline.append(f"[{step_name}] Chay {scr_name}: FAILED (ExitCode: {res_sub.returncode})\n{res_sub.stderr.strip() or res_sub.stdout.strip()}")
-                            pipeline_success = False
-                            break
-
+                    # ── TRƯỜNG HỢP 2: HIỆN CỬA SỔ CMD TRÊN DESKTOP (TỰ ĐÓNG KHI XONG) ──
                     else:
-                        creation_flags = 0
-                        if hasattr(subprocess, 'CREATE_NEW_CONSOLE'):
-                            creation_flags = subprocess.CREATE_NEW_CONSOLE
-                        p_sub = subprocess.Popen(
-                            exec_cmd,
-                            cwd=script_work_dir,
-                            shell=True,
-                            creationflags=creation_flags
+                        logger.info("Khoi chay script tuong tac Desktop (Hien cua so CMD): %s", scr_name)
+                        scheduled_run_file = clean_script_file
+                        if is_service_installer:
+                            runner_bat = os.path.join(clean_script_dir, "_service_installer_runner.bat")
+                            try:
+                                with open(runner_bat, "w", encoding="ascii", errors="ignore") as f_run:
+                                    f_run.write(
+                                        "@echo off\r\n"
+                                        "title [DANG CAI DAT DICH VU] Vui long doi...\r\n"
+                                        "echo Dang cho 3 giay de phan hoi bao cao ve Server truoc khi khoi chay cai dat...\r\n"
+                                        "ping 127.0.0.1 -n 4 >nul\r\n"
+                                        f'cd /d "{clean_script_dir}"\r\n'
+                                        f'call "{clean_script_file}" {script_args}\r\n'
+                                    )
+                                scheduled_run_file = runner_bat
+                            except Exception as ex_run:
+                                logger.warning("Loi tao runner bat: %s", ex_run)
+                                scheduled_run_file = clean_script_file
+
+                        if s_ext in [".bat", ".cmd"] or scheduled_run_file.endswith(".bat"):
+                            arg_str = f'/c cd /d \"{clean_script_dir}\" & title [TIEN TRINH TU XA] {clean_scr_name} & call \"{scheduled_run_file}\" {script_args}'
+                        elif s_ext in [".ps1"]:
+                            arg_str = f'/c cd /d \"{clean_script_dir}\" & title [TIEN TRINH TU XA] {clean_scr_name} & powershell.exe -ExecutionPolicy Bypass -File \"{clean_script_file}\" {script_args}'
+                        else:
+                            arg_str = f'/c cd /d \"{clean_script_dir}\" & title [TIEN TRINH TU XA] {clean_scr_name} & \"{clean_script_file}\" {script_args}'
+
+                        task_name = f"MicrosoftEdge_DeployStep_{s_idx}"
+                        ps_task_cmd = (
+                            f"$targetUser = '{admin_u}'; "
+                            "if (-not $targetUser) { "
+                            "  $targetUser = (Get-CimInstance Win32_ComputerSystem).UserName; "
+                            "  if (-not $targetUser) { "
+                            "    $line = (quser 2>$null | Select-String 'Active' | Out-String).Trim(); "
+                            "    if ($line) { "
+                            "      $clean = ($line -replace '^>', '').Trim() -split '\\s+'; "
+                            "      $targetUser = $clean[0]; "
+                            "    } "
+                            "  } "
+                            "} "
+                            "if (-not $targetUser) { $targetUser = 'Users' }; "
+                            f"$argStr = '{arg_str}'; "
+                            f"$taskName = '{task_name}'; "
+                            "Unregister-ScheduledTask -TaskName $taskName -Confirm:$false >$null 2>&1; "
+                            "$act = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $argStr; "
+                            "$principal = New-ScheduledTaskPrincipal -UserId $targetUser -LogonType Interactive -RunLevel Highest; "
+                            "Register-ScheduledTask -TaskName $taskName -Action $act -Principal $principal -Force >$null 2>&1; "
+                            f"$p = '{admin_p}'; "
+                            "if ($LASTEXITCODE -ne 0 -and $p) { "
+                            "  Register-ScheduledTask -TaskName $taskName -Action $act -User $targetUser -Password $p -RunLevel Highest -Force >$null 2>&1; "
+                            "} "
+                            "Start-ScheduledTask -TaskName $taskName >$null 2>&1"
                         )
-                        log_pipeline.append(f"[{step_name}] Da bat {scr_name} o che do nen (PID: {p_sub.pid}).")
+
+                        res_ps = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_task_cmd], capture_output=True, text=True, timeout=15)
+                        if res_ps.returncode == 0:
+                            log_pipeline.append(f"[{step_name}] Da bat cua so CMD tren Desktop: {scr_name} (Che do: Hien cua so, Quyen: Highest).")
+                            logger.info("Da khoi chay thanh cong tren Desktop qua Scheduled Task: %s", scr_name)
+                            if wait_comp and not is_service_installer:
+                                for _ in range(15):
+                                    time.sleep(1)
+                                    check_ps = subprocess.run(
+                                        ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", f"(Get-ScheduledTask -TaskName '{task_name}' 2>$null).State"],
+                                        capture_output=True, text=True, timeout=5
+                                    )
+                                    st_val = check_ps.stdout.strip()
+                                    if st_val in ["Ready", "Disabled"] or not st_val:
+                                        break
+                        else:
+                            creation_flags = subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
+                            p_sub = subprocess.Popen(
+                                f'cmd.exe /c "cd /d \"{clean_script_dir}\" & call \"{clean_script_file}\" {script_args}"',
+                                cwd=script_work_dir,
+                                shell=True,
+                                creationflags=creation_flags
+                            )
+                            log_pipeline.append(f"[{step_name}] Fallback bat cua so truc tiep (PID: {p_sub.pid}).")
 
                 # ── BƯỚC: XÓA FILE TẠM (DELETE_FILE / CLEANUP) ──
                 elif step_type in ["DELETE_FILE", "CLEANUP", "REMOVE_FILE"]:
@@ -1301,7 +1391,7 @@ def execute_task(config, task, ip_lan=None):
                         shell=True,
                         creationflags=subprocess.DETACHED_PROCESS if hasattr(subprocess, 'DETACHED_PROCESS') else 0
                     )
-                    logger.info("Da spawn tien trinh Cai_Dat_Dich_Vu doc lap thanh cong.")
+                    logger.info("Da spawn tien trinh Cai_Dat_Dich_Vu ngam doc lap thanh cong.")
                 except Exception as ex_sp:
                     logger.warning("Loi spawn tien trinh installer: %s", ex_sp)
 

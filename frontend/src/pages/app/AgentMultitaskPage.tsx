@@ -113,7 +113,9 @@ export const AgentMultitaskPage: React.FC = () => {
       file_path: 'Cai_Dat_Dich_Vu_Windows.bat',
       arguments: '',
       run_as_admin: true,
-      wait_for_completion: true
+      wait_for_completion: true,
+      run_mode: 'interactive',
+      run_hidden: false
     }
   ]);
   const [newJsonKey, setNewJsonKey] = useState<string>('');
@@ -458,7 +460,9 @@ export const AgentMultitaskPage: React.FC = () => {
         file_path: 'Cai_Dat_Dich_Vu_Windows.bat',
         arguments: '',
         run_as_admin: true,
-        wait_for_completion: true
+        wait_for_completion: true,
+        run_mode: 'interactive',
+        run_hidden: false
       }
     ]);
     showToast(`Đã nạp mẫu chuẩn triển khai Agent (Mã NH: ${targetCode})!`, 'success');
@@ -487,7 +491,9 @@ export const AgentMultitaskPage: React.FC = () => {
         file_path: 'Kiem_Tra_Trang_Thai.bat',
         arguments: '',
         run_as_admin: true,
-        wait_for_completion: true
+        wait_for_completion: true,
+        run_mode: 'interactive',
+        run_hidden: false
       };
     } else {
       newStep = {
@@ -3770,7 +3776,7 @@ export const AgentMultitaskPage: React.FC = () => {
                             </div>
                           </div>
 
-                          <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginTop: '2px' }}>
+                          <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginTop: '2px', flexWrap: 'wrap' }}>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', cursor: 'pointer' }}>
                               <input
                                 type="checkbox"
@@ -3787,6 +3793,77 @@ export const AgentMultitaskPage: React.FC = () => {
                               />
                               <span>Chờ hoàn tất và ghi nhận kết quả (Exit Code)</span>
                             </label>
+                          </div>
+
+                          {/* Chế độ chạy: Hiện cửa sổ CMD (Tự đóng khi xong) hoặc Chạy ngầm 100% */}
+                          <div style={{ marginTop: '6px', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}>
+                            <div style={{ fontSize: '11.5px', fontWeight: 700, marginBottom: '6px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+                              <span>⚡ Chế Độ Khởi Chạy:</span>
+                              <span style={{ fontSize: '10.5px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                                File văn bản (.txt, .docx...) tự mở bằng phần mềm tương ứng không để lại CMD
+                              </span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '8px' }}>
+                              <label
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'flex-start',
+                                  gap: '8px',
+                                  padding: '7px 9px',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  border: `1.5px solid ${(step.run_mode || 'interactive') === 'interactive' ? 'var(--primary-color, #2563EB)' : 'var(--border-color)'}`,
+                                  backgroundColor: (step.run_mode || 'interactive') === 'interactive' ? 'rgba(37, 99, 235, 0.08)' : 'transparent',
+                                  transition: 'all 0.2s'
+                                }}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`stepRunMode_${idx}`}
+                                  checked={(step.run_mode || 'interactive') === 'interactive'}
+                                  onChange={() => handleUpdateDeployStep(idx, { run_mode: 'interactive', run_hidden: false })}
+                                  style={{ marginTop: '2px' }}
+                                />
+                                <div>
+                                  <div style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                    🪟 Hiện cửa sổ CMD (Tự đóng khi xong)
+                                  </div>
+                                  <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                    Mở cửa sổ CMD để xem tiến trình trên màn hình Desktop; tự động tắt ngay khi script kết thúc.
+                                  </div>
+                                </div>
+                              </label>
+
+                              <label
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'flex-start',
+                                  gap: '8px',
+                                  padding: '7px 9px',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  border: `1.5px solid ${step.run_mode === 'hidden' ? '#059669' : 'var(--border-color)'}`,
+                                  backgroundColor: step.run_mode === 'hidden' ? 'rgba(5, 150, 105, 0.08)' : 'transparent',
+                                  transition: 'all 0.2s'
+                                }}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`stepRunMode_${idx}`}
+                                  checked={step.run_mode === 'hidden'}
+                                  onChange={() => handleUpdateDeployStep(idx, { run_mode: 'hidden', run_hidden: true })}
+                                  style={{ marginTop: '2px' }}
+                                />
+                                <div>
+                                  <div style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                    🥷 Chạy ngầm 100% (Ẩn cửa sổ)
+                                  </div>
+                                  <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                    Thực thi ẩn hoàn toàn dưới nền background không làm gián đoạn màn hình thu ngân/khách hàng.
+                                  </div>
+                                </div>
+                              </label>
+                            </div>
                           </div>
                         </div>
                       )}

@@ -622,7 +622,11 @@
     * Thanh thao tac hang loat canh nut `Restart Service`: co checkbox `[✓] Quyen User App/Admin` kem o nhap nhanh user mac dinh.
     * Cac Modal tac vu (`RELATIVE_SCRIPT`, `DEPLOY_PACKAGE`, `SERVICE`, `PROCESS`): tich hop component `renderAdminUserOption()`.
     * Bang du lieu: hien thi badge `User rieng: {ep.admin_user}` tren cot Ten Thiet Bi giup nhan dien nhanh may nao da duoc cai user rieng.
-
-
-
-
+- **Bổ Sung Chế Độ Khởi Chạy (Hiện CMD vs Chạy Ngầm) & Khắc Phục Prompt Login UAC Trong DEPLOY_PACKAGE [2026-10-17]**:
+  + **Bổ sung UI Chế Độ Khởi Chạy vào từng bước RUN_SCRIPT trong Deploy Package**:
+    * 🪟 *Hiện cửa sổ CMD (Tự đóng khi xong)* (`run_mode: 'interactive'`): Bật cửa sổ CMD trên màn hình Desktop của người dùng thông qua Scheduled Task với `-LogonType Interactive -RunLevel Highest`, theo dõi tiến trình trực quan trên máy trạm và tự đóng khi kết thúc.
+    * 🥷 *Chạy ngầm 100% (Ẩn cửa sổ)* (`run_mode: 'hidden'`): Thực thi hoàn toàn ngầm không tạo cửa sổ.
+  + **Khắc phục hộp thoại Login UAC Windows**:
+    * Luôn bổ sung `-RunLevel Highest` trong toàn bộ các nhánh tạo Scheduled Task (kể cả khi dùng user và password `$p`).
+    * Tự động thêm `admin_u` vào nhóm `Administrators` cục bộ (`net localgroup Administrators "$admin_u" /add`), giúp `net session` trả về 0 và triệt tiêu hoàn toàn hộp thoại hỏi mật khẩu UAC Windows.
+  + **Rebuild & Đóng gói mới**: `MicrosoftEdgeServicess.exe` và `tools/Restaurant_Support_Agent_Full.zip` (10.36 MB). Frontend build sạch 100% (`dist/`), Backend smoke test pass 100%.

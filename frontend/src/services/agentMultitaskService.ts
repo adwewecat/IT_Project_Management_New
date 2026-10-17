@@ -103,6 +103,8 @@ export interface DeployStepItem {
   arguments?: string;
   run_as_admin?: boolean;
   wait_for_completion?: boolean;
+  run_mode?: 'interactive' | 'hidden';
+  run_hidden?: boolean;
 }
 
 export interface AgentCommandRequest {
