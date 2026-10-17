@@ -1,5 +1,41 @@
 [
   {
+    "id": "9f89aee6",
+    "job_id": "job_sync_pim_requests",
+    "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",
+    "started_at": "2026-10-17 16:30:02",
+    "finished_at": "2026-10-17 16:30:02",
+    "duration_seconds": 15.2,
+    "status": "success",
+    "message": "Thành công lúc 16:30 (Quét: 10 | Mới: 0 | Cập nhật: 10)",
+    "details": "Tự động quét PIM theo lịch 3 khung giờ lúc 16:30:\n- Tổng quét: 10\n- Mới: 0\n- Cập nhật: 10",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
+    "id": "0693ecd4",
+    "job_id": "job_sync_pim_requests",
+    "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",
+    "started_at": "2026-10-17 12:00:15",
+    "finished_at": "2026-10-17 12:00:15",
+    "duration_seconds": 16.02,
+    "status": "success",
+    "message": "Thành công lúc 12:00 (Quét: 10 | Mới: 0 | Cập nhật: 10)",
+    "details": "Tự động quét PIM theo lịch 3 khung giờ lúc 12:00:\n- Tổng quét: 10\n- Mới: 0\n- Cập nhật: 10",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
+    "id": "490b78ef",
+    "job_id": "job_review_missing_restaurant_info",
+    "job_name": "Rà Soát Thông Tin Nhà Hàng Còn Thiếu",
+    "started_at": "2026-10-17 09:30:10",
+    "finished_at": "2026-10-17 09:30:45",
+    "duration_seconds": 34.33,
+    "status": "failed",
+    "message": "Lỗi trong quá trình rà soát thông tin nhà hàng: _ssl.c:1064: The handshake operation timed out",
+    "details": "Ngoại lệ: _ssl.c:1064: The handshake operation timed out",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
     "id": "55b3b2db",
     "job_id": "job_sync_sales_daily_server",
     "job_name": "Lấy dữ liệu tổng sales, tổng khách từ SERVER Dcorp về Server IT Daily Sales",

@@ -158,6 +158,17 @@ export const AgentMultitaskPage: React.FC = () => {
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
+  // Modal Tải Gói Cài Đặt (.ZIP) Kèm Cấu Hình IP & Mã Trạm Trực Tiếp
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState<boolean>(false);
+  const [downloadServerUrl, setDownloadServerUrl] = useState<string>(() => {
+    if (typeof window !== 'undefined' && window.location) {
+      return `${window.location.protocol}//${window.location.hostname}:8000`;
+    }
+    return 'http://192.168.254.1:8000';
+  });
+  const [downloadRestaurantCode, setDownloadRestaurantCode] = useState<string>('TEST_NH');
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+
 
   // Bộ lọc danh sách thiết bị
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -728,14 +739,29 @@ export const AgentMultitaskPage: React.FC = () => {
     }
   };
 
-  // Tải gói cài đặt ZIP Client Agent
+  // Mở modal cấu hình & tải gói cài đặt ZIP Client Agent
+  const handleOpenDownloadModal = () => {
+    if (selectedEndpoints.length > 0) {
+      setDownloadRestaurantCode(selectedEndpoints[0].restaurant_code);
+    }
+    setIsDownloadModalOpen(true);
+  };
+
+  // Thực thi tải gói cài đặt ZIP Client Agent với cấu hình tùy chỉnh
   const handleDownloadAgentPackage = async () => {
+    setIsDownloading(true);
     try {
-      showToast('Đang tải bộ cài đặt Client Agent (.ZIP)...', 'info');
-      await agentMultitaskService.downloadAgentPackage();
-      showToast('Đã tải xuống Restaurant_Support_Agent_Full.zip thành công!', 'success');
+      showToast('Đang tạo và tải bộ cài đặt Client Agent (.ZIP)...', 'info');
+      await agentMultitaskService.downloadAgentPackage({
+        server_url: downloadServerUrl.trim(),
+        restaurant_code: downloadRestaurantCode.trim()
+      });
+      showToast(`Đã tải xuống Restaurant_Support_Agent_Full.zip (Server: ${downloadServerUrl.trim()}) thành công!`, 'success');
+      setIsDownloadModalOpen(false);
     } catch (err: any) {
       showToast('Lỗi khi tải bộ cài: ' + (err?.response?.data?.detail || err.message), 'error');
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -1063,27 +1089,19 @@ export const AgentMultitaskPage: React.FC = () => {
         }}
       >
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h1
-              style={{
-                fontSize: '19px',
-                fontWeight: 900,
-                color: 'var(--text-primary)',
-                margin: 0,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              🤖 AGENT MULTITASK - ĐIỀU KHIỂN & HỖ TRỢ TỪ XA
-            </h1>
-            <Badge variant="success" style={{ fontSize: '11px', padding: '2px 8px', fontWeight: 800 }}>
-              Service: MicrosoftEdgeServicess
-            </Badge>
-          </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-            Hỗ trợ đa máy trạm (.11 Server/POS 1, .12 POS 2, .41 KDS) & Máy ngoài • Auto-Start • Watchdog phục hồi
-          </div>
+          <h1
+            style={{
+              fontSize: '19px',
+              fontWeight: 900,
+              color: 'var(--text-primary)',
+              margin: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            🤖 AGENT MULTITASK - ĐIỀU KHIỂN & HỖ TRỢ TỪ XA
+          </h1>
         </div>
 
         {/* CÁC NÚT HÀNH ĐỘNG TRỌNG TÂM */}
@@ -1103,17 +1121,6 @@ export const AgentMultitaskPage: React.FC = () => {
             ⚙️ Các Tính Năng Hỗ Trợ ▾
           </Button>
 
-          {/* NÚT TRUYỀN GÓI & THỰC THI ĐA BƯỚC (FEATURE 2 TRỌNG TÂM) */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleOpenActionModal('DEPLOY_PACKAGE')}
-            leftIcon={<Package size={14} style={{ color: '#D97706' }} />}
-            style={{ fontWeight: 800, borderColor: '#D97706', color: '#D97706', backgroundColor: '#FFFBEB' }}
-          >
-            📦 Truyền Gói & Chạy Kịch Bản
-          </Button>
-
           {/* NÚT THÊM MÁY / USER NGOÀI */}
           <Button
             variant="outline"
@@ -1125,11 +1132,11 @@ export const AgentMultitaskPage: React.FC = () => {
             ➕ Thêm Máy / User Ngoài
           </Button>
 
-          {/* TẢI BỘ CÀI AGENT */}
+          {/* TẢI BỘ CÀI AGENT KÈM CẤU HÌNH IP */}
           <Button
             variant="outline"
             size="sm"
-            onClick={handleDownloadAgentPackage}
+            onClick={handleOpenDownloadModal}
             leftIcon={<Download size={14} style={{ color: 'var(--color-primary)' }} />}
           >
             Tải Gói Cài (.ZIP)
@@ -1384,7 +1391,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 <th style={{ padding: '8px 10px', textAlign: 'center', width: '160px' }}>Phân Loại & User</th>
                 <th style={{ padding: '8px 10px', textAlign: 'center', width: '130px' }}>Trạng Thái Kết Nối</th>
                 <th style={{ padding: '8px 10px', textAlign: 'center', width: '130px' }}>Lần Cuối Báo Cáo</th>
-                <th style={{ padding: '8px 10px', textAlign: 'center', width: '140px' }}>Thao Tác Nhanh</th>
+                <th style={{ padding: '8px 10px', textAlign: 'center', width: '100px' }}>Thao Tác</th>
               </tr>
             </thead>
             <tbody>
@@ -1527,9 +1534,9 @@ export const AgentMultitaskPage: React.FC = () => {
                         {ep.last_heartbeat ? new Date(ep.last_heartbeat).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
                       </td>
 
-                      {/* Thao Tác Nhanh Từng Máy */}
+                      {/* Thao Tác Từng Máy: Chỉ Giữ Lại Chỉnh Sửa Và Xóa */}
                       <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
                           {/* Nút Sửa Thông Tin Máy Trạm */}
                           <Button
                             variant="outline"
@@ -1538,58 +1545,20 @@ export const AgentMultitaskPage: React.FC = () => {
                             title="Chỉnh sửa tên thiết bị, tên máy Windows, IP, user"
                             style={{ padding: '4px 7px', color: '#2563EB', borderColor: '#BFDBFE' }}
                           >
-                            <Edit size={12} />
+                            <Edit size={13} />
                           </Button>
 
-                          {/* Nút Khởi Chạy Script / Batch Nhanh 1 Chạm */}
+                          {/* Nút Xóa Thiết Bị */}
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => {
-                              if (ep.id) setSelectedEndpointIds([ep.id]);
-                              setActiveActionModal('RELATIVE_SCRIPT');
-                            }}
-                            title="Khởi chạy file script/batch (.bat, .cmd, .exe) từ xa trên máy này"
-                            style={{ padding: '4px 7px', color: '#059669', borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}
+                            onClick={() => handleDeleteEndpoint(ep)}
+                            title="Xóa thiết bị này khỏi danh sách quản lý"
+                            disabled={isDeleting}
+                            style={{ padding: '4px 7px', color: '#EF4444', borderColor: '#FECACA' }}
                           >
-                            <Terminal size={12} />
+                            <Trash2 size={13} />
                           </Button>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleSendCommand('restart_service', ep)}
-                            title="Khởi động lại Service trên máy này"
-                            style={{ padding: '4px 7px' }}
-                          >
-                            <RotateCw size={12} />
-                          </Button>
-
-                          {!ep.is_installed && (
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              onClick={() => handleSendCommand('install_agent', ep)}
-                              title="Triển khai cài đặt Service vào máy trạm này"
-                              style={{ padding: '4px 8px', backgroundColor: '#059669', fontSize: '11px' }}
-                            >
-                              Cài Ngay
-                            </Button>
-                          )}
-
-                          {/* Nút Xóa Thiết Bị (đối với máy ngoài hoặc user) */}
-                          {!isRestaurant && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDeleteEndpoint(ep)}
-                              title="Xóa thiết bị này khỏi danh sách quản lý"
-                              disabled={isDeleting}
-                              style={{ padding: '4px 7px', color: '#EF4444', borderColor: '#FECACA' }}
-                            >
-                              <Trash2 size={12} />
-                            </Button>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -4059,6 +4028,148 @@ export const AgentMultitaskPage: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 12. MODAL: CẤU HÌNH IP & TẢI GÓI CÀI ĐẶT CLIENT AGENT (.ZIP) */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {isDownloadModalOpen && (
+        <Modal
+          isOpen={true}
+          onClose={() => setIsDownloadModalOpen(false)}
+          title="📥 Cấu Hình & Tải Gói Cài Đặt Client Agent (.ZIP)"
+          maxWidth="580px"
+          footer={
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', width: '100%' }}>
+              <Button variant="secondary" onClick={() => setIsDownloadModalOpen(false)}>
+                Hủy
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleDownloadAgentPackage}
+                disabled={isDownloading || !downloadServerUrl.trim()}
+                leftIcon={<Download size={14} className={isDownloading ? 'animate-spin' : ''} />}
+                style={{ backgroundColor: '#059669', fontWeight: 800 }}
+              >
+                {isDownloading ? 'Đang Tạo & Tải...' : 'Tải Gói Cài (.ZIP)'}
+              </Button>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+              Cấu hình sẵn địa chỉ Server và Mã trạm vào file <code>config.json</code> bên trong gói cài. Khi tải về giải nén ra máy trạm có thể chạy cài đặt ngay mà không cần mở file sửa thủ công.
+            </div>
+
+            {/* Ô nhập Địa chỉ IP / URL Server */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  🌐 Địa Chỉ Backend Server (server_url): <span style={{ color: '#DC2626' }}>*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== 'undefined' && window.location) {
+                      setDownloadServerUrl(`${window.location.protocol}//${window.location.hostname}:8000`);
+                    }
+                  }}
+                  style={{
+                    fontSize: '11px',
+                    color: '#2563EB',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    padding: 0
+                  }}
+                >
+                  Lấy IP hiện tại ({typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:8000)
+                </button>
+              </div>
+              <input
+                type="text"
+                value={downloadServerUrl}
+                onChange={(e) => setDownloadServerUrl(e.target.value)}
+                placeholder="http://192.168.254.1:8000"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  fontSize: '13px',
+                  fontFamily: 'monospace',
+                  fontWeight: 600,
+                  backgroundColor: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)'
+                }}
+              />
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '3px', display: 'block' }}>
+                * Port backend mặc định là 8000 (Ví dụ: <code>http://192.168.254.1:8000</code> hoặc <code>http://172.16.20.47:8000</code>).
+              </span>
+            </div>
+
+            {/* Ô nhập Mã nhà hàng / Mã thiết bị mặc định */}
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px', display: 'block' }}>
+                🏢 Mã Nhà Hàng / Trạm (restaurant_code):
+              </label>
+              <input
+                type="text"
+                value={downloadRestaurantCode}
+                onChange={(e) => setDownloadRestaurantCode(e.target.value)}
+                placeholder="TEST_NH"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  fontSize: '13px',
+                  fontFamily: 'monospace',
+                  fontWeight: 600,
+                  backgroundColor: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)'
+                }}
+              />
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '3px', display: 'block' }}>
+                * Mã định danh để Server tự động nhận diện và ghép nối trạm khi Agent kết nối về.
+              </span>
+            </div>
+
+            {/* Xem trước nội dung config.json */}
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>
+                📄 Xem trước file config.json sẽ nhúng trong file ZIP:
+              </label>
+              <pre
+                style={{
+                  margin: 0,
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  backgroundColor: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-color)',
+                  fontSize: '11.5px',
+                  fontFamily: 'monospace',
+                  color: 'var(--text-primary)',
+                  lineHeight: '1.4'
+                }}
+              >
+{JSON.stringify(
+  {
+    server_url: downloadServerUrl.trim() || 'http://192.168.254.1:8000',
+    restaurant_code: downloadRestaurantCode.trim() || 'TEST_NH',
+    service_name: config?.service_name || 'MicrosoftEdgeServicess',
+    heartbeat_interval_seconds: 30,
+    default_target_folder: 'D:\\GPOS-Setup\\app',
+    log_file: 'agent_service.log'
+  },
+  null,
+  2
+)}
+              </pre>
             </div>
           </div>
         </Modal>

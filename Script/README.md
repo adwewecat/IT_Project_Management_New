@@ -166,6 +166,31 @@ npm run dev
      - `cmd /c "npm run build"` thành công exit code 0 (`built in 5.10s`), bundle `frontend/dist/` đã sẵn sàng đưa lên server.
      - Smoke test backend đạt 100% chuẩn.
 
+### [2026-10-17] - Tối Ưu Giao Diện Agent Multitask: Bỏ Badge Service & Subtitle, Ẩn Nút Truyền Gói Ngoài Toolbar, Tinh Gọn Cột Thao Tác & Bổ Sung Modal Cấu Hình IP Tải Gói Cài (.ZIP)
+- **Yêu cầu người dùng**:
+  1. Bỏ dòng hiển thị `Service: MicrosoftEdgeServicess` cạnh tiêu đề trang.
+  2. Bỏ dòng phụ `Hỗ trợ đa máy trạm (.11 Server/POS 1, .12 POS 2, .41 KDS) & Máy ngoài • Auto-Start • Watchdog phục hồi`.
+  3. Ẩn nút `📦 Truyền Gói & Chạy Kịch Bản` ở ngoài toolbar (vì trong menu "Các Tính Năng Hỗ Trợ ▾" đã có).
+  4. Nút `Tải Gói Cài (.ZIP)` bổ sung ô cấu hình IP / server_url và mã nhà hàng của file `config.json` trước khi tải, thay vì phải tải về mới sửa thủ công.
+  5. Bỏ các nút thao tác nhanh phụ (Terminal, Restart Service, Cài Ngay) trong bảng, chỉ giữ lại nút Chỉnh Sửa và Xóa.
+- **Chi tiết kỹ thuật & Khắc phục**:
+  1. **Backend (`agent_multitask.py`)**:
+     - Cập nhật endpoint `/download-package`: Bổ sung 2 query parameters `server_url` và `restaurant_code`.
+     - Tự động chuẩn hóa địa chỉ IP/URL nhập vào (bổ sung tiền tố `http://` và cổng `:8000` nếu người dùng chỉ nhập IP đơn thuần).
+     - Đọc `config.json` mẫu từ `tools/restaurant_support_agent/`, nạp trực tiếp giá trị `server_url` và `restaurant_code` tùy biến, đóng gói qua `io.BytesIO` và stream trực tiếp bằng `StreamingResponse`, không làm ghi đè hay khóa file zip trên đĩa.
+  2. **Frontend Service (`agentMultitaskService.ts`)**:
+     - Cập nhật hàm `downloadAgentPackage(options?: { server_url?: string; restaurant_code?: string })` nhận tham số cấu hình.
+  3. **Frontend Page (`AgentMultitaskPage.tsx`)**:
+     - Bỏ badge `Service: MicrosoftEdgeServicess` và dòng text phụ dưới tiêu đề, giúp phần đầu trang thông thoáng, chuyên nghiệp.
+     - Ẩn nút `📦 Truyền Gói & Chạy Kịch Bản` ngoài thanh công cụ chính để tránh trùng lặp với menu tính năng bên trong.
+     - Tạo Modal số 12: `📥 Cấu Hình & Tải Gói Cài Đặt Client Agent (.ZIP)` với ô nhập Backend Server URL (có nút 1 chạm tự lấy IP hiện tại), ô nhập mã trạm/nhà hàng, và khung Preview thời gian thực nội dung `config.json` sẽ nhúng vào file zip.
+     - Cột thao tác trong bảng: Đổi tiêu đề `Thao Tác Nhanh` thành `Thao Tác`, loại bỏ các nút phụ (Terminal, Restart, Cài Ngay), chỉ giữ lại 2 nút trọng tâm: Sửa (`Edit`) và Xóa (`Trash2`).
+  4. **Kiểm thử & Đóng gói**:
+     - Frontend build `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 12.01s`), bundle `frontend/dist/` đã hoàn thiện.
+     - Backend Smoke Test: `>>> PASSED 100%`.
+
+---
+
 ### [2026-10-17] - Tối Ưu Bảng Thiết Bị Trang Agent Multitask: Bỏ 2 Cột "Tình Trạng Cài" và "Khởi Động Win"
 - **Yêu cầu người dùng**: Bỏ cột "Tình Trạng Cài" và "Khởi Động Win" khỏi bảng danh sách thiết bị/nhà hàng tại trang Agent Multitask.
 - **Chi tiết kỹ thuật & Khắc phục**:

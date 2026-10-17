@@ -204,8 +204,9 @@ export const agentMultitaskService = {
     return res.data;
   },
 
-  downloadAgentPackage: async (): Promise<void> => {
+  downloadAgentPackage: async (options?: { server_url?: string; restaurant_code?: string }): Promise<void> => {
     const res = await api.get('/agent-multitask/download-package', {
+      params: options,
       responseType: 'blob'
     });
     const url = window.URL.createObjectURL(new Blob([res.data]));

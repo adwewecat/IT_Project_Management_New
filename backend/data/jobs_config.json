@@ -60,11 +60,11 @@
       "time_3": "16:30"
     },
     "status": "idle",
-    "last_run_at": "2026-10-17 03:00:00",
-    "last_duration": 17.05,
+    "last_run_at": "2026-10-17 16:30:02",
+    "last_duration": 15.2,
     "last_status": "success",
-    "total_runs": 31,
-    "success_runs": 31,
+    "total_runs": 33,
+    "success_runs": 33,
     "failed_runs": 0,
     "is_hidden": false,
     "restricted_to_dung": false
@@ -516,12 +516,12 @@
       "human_readable": "Hàng ngày lúc 09:30"
     },
     "status": "idle",
-    "last_run_at": "2026-10-09 09:30:51",
-    "last_duration": 35.11,
+    "last_run_at": "2026-10-17 09:30:45",
+    "last_duration": 34.33,
     "last_status": "failed",
-    "total_runs": 3,
+    "total_runs": 4,
     "success_runs": 1,
-    "failed_runs": 2,
+    "failed_runs": 3,
     "is_hidden": false,
     "restricted_to_dung": false
   }

@@ -1,10 +1,12 @@
 from __future__ import annotations
 import os
 import zipfile
+import io
+import json
 import logging
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -348,37 +350,68 @@ def delete_script_template(
 
 @router.get("/download-package")
 def download_package(
+    server_url: Optional[str] = Query(None, description="URL hoặc IP Server ghi vào config.json"),
+    restaurant_code: Optional[str] = Query(None, description="Mã nhà hàng ghi vào config.json"),
     current_user: UserInfo = Depends(get_current_user)
 ):
     """
     Tải gói cài đặt toàn diện Client Agent (.ZIP) cho máy trạm nhà hàng.
+    Hỗ trợ cấu hình trước server_url và restaurant_code vào config.json trong file ZIP.
     """
-    # Đường dẫn thư mục tools/restaurant_support_agent
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
     agent_dir = os.path.join(project_root, "tools", "restaurant_support_agent")
-    zip_path = os.path.join(project_root, "tools", "Restaurant_Support_Agent_Full.zip")
 
-    # Tu dong nen lai neu zip chua co hoac co file moi (bo qua file log, file cu/bak)
-    if os.path.exists(agent_dir):
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
-            for f in sorted(os.listdir(agent_dir)):
-                if f.endswith('.log') or f.endswith('.tmp') or '_old' in f or f.endswith('.bak'):
-                    continue
-                fp = os.path.join(agent_dir, f)
-                if os.path.isfile(fp):
-                    z.write(fp, arcname=f)
-
-    if not os.path.exists(zip_path) or os.path.getsize(zip_path) < 100:
+    if not os.path.exists(agent_dir):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Chưa tìm thấy gói cài đặt Restaurant_Support_Agent_Full.zip."
+            detail="Chưa tìm thấy thư mục công cụ tools/restaurant_support_agent."
         )
 
-    return FileResponse(
-        path=zip_path,
-        filename="Restaurant_Support_Agent_Full.zip",
+    # Đọc config.json mẫu
+    config_data = {}
+    config_file_path = os.path.join(agent_dir, "config.json")
+    if os.path.exists(config_file_path):
+        try:
+            with open(config_file_path, "r", encoding="utf-8") as cf:
+                config_data = json.load(cf)
+        except Exception as e_cfg:
+            logger.warning("Không thể đọc config.json mẫu: %s", e_cfg)
+            config_data = {}
+
+    # Ghi đè thông tin nếu có cấu hình truyền vào từ giao diện
+    if server_url and server_url.strip():
+        clean_url = server_url.strip()
+        if not clean_url.startswith("http://") and not clean_url.startswith("https://"):
+            if ":" not in clean_url:
+                clean_url = f"http://{clean_url}:8000"
+            else:
+                clean_url = f"http://{clean_url}"
+        config_data["server_url"] = clean_url
+
+    if restaurant_code and restaurant_code.strip():
+        config_data["restaurant_code"] = restaurant_code.strip()
+
+    # Nén file trực tiếp vào bộ nhớ StreamingResponse
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in sorted(os.listdir(agent_dir)):
+            if f.endswith('.log') or f.endswith('.tmp') or '_old' in f or f.endswith('.bak'):
+                continue
+            fp = os.path.join(agent_dir, f)
+            if os.path.isfile(fp):
+                if f.lower() == "config.json" and config_data:
+                    # Ghi đè file config.json tùy biến
+                    custom_config_str = json.dumps(config_data, indent=2, ensure_ascii=False)
+                    z.writestr("config.json", custom_config_str.encode("utf-8"))
+                else:
+                    z.write(fp, arcname=f)
+
+    zip_buffer.seek(0)
+    filename = "Restaurant_Support_Agent_Full.zip"
+    return StreamingResponse(
+        zip_buffer,
         media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=Restaurant_Support_Agent_Full.zip"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
 
