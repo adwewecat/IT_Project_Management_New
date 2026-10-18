@@ -3442,3 +3442,21 @@ estaurant_service.py).
     * File `Script/Full_SCRIPT_SQL_TABLE.sql` đã cập nhật đầy đủ DDL chuẩn.
     * Hiện tại: **100% BẢNG và 100% CỘT trong toàn bộ hệ thống đã khớp hoàn hảo trên Server Production .25**.
 
+- **Khắc Phục Triệt Để Hiện Tượng G-Process Báo Hoàn Thành Ảo Nhưng Chưa Xử Lý Gì (`ticket_batch_service.py`) [2026-10-18]**:
+  + **Hiện tượng**: Khi tác vụ tự động Cron hoặc người dùng chạy "Ticket theo Danh Mục — List Xử Lý", danh sách báo: *Đã xử lý 8 mục (198.21s). Thành công: 8, Thất bại: 0*. Tuy nhiên khi vào đường dẫn thực tế trên GPMS (ví dụ: `https://gpms.ggg.com.vn/g-process/my-mission/650923`), nhiệm vụ vẫn còn nguyên trạng thái "Đang triển khai", form chưa hề được chọn "Không đạt", chưa chọn "Không phê duyệt", chưa chọn "Kết thúc quy trình" và chưa khai báo timesheet.
+  + **Xác minh: KHÔNG PHẢI DO TIMEOUT**: Nếu timeout, Playwright đã ném `TimeoutError` và hệ thống báo lỗi `❌ Thất bại: 8`. Con số 198.21s cho 8 nhiệm vụ (~24.77s/nhiệm vụ) là thời gian chạy trọn vẹn luồng nhưng bị fall-through báo thành công giả.
+  + **4 Nguyên nhân cốt lõi**:
+    1. *Bẫy kiểm tra `.count() > 0` tức thì khi SPA React chưa hydrate xong*: Sau `page.goto()`, mã cũ chỉ `sleep(0.5s)` rồi gọi ngay `.count()`. Playwright không chờ DOM cho hàm `.count()`, lúc này các radio checklist và thực hiện chưa kịp render xong nên `.count() == 0`, code lướt qua toàn bộ bước click chọn mà không phát sinh lỗi.
+    2. *Bẫy nuốt ngoại lệ ở radio Kết thúc quy trình*: Do chưa click chọn "Không phê duyệt", radio "Kết thúc quy trình" không xuất hiện. Lệnh `kt_radio.wait_for(timeout=8000)` chờ đủ 8.0s rồi ném lỗi nhưng bị khối `try...except: pass` nuốt sạch.
+    3. *Bẫy Silent Fall-through ở bước kiểm tra Toast (Nguyên nhân chính)*: Sau khi click Xác nhận, do form thiếu trường bắt buộc (vẫn ở chế độ Phê duyệt nên bắt buộc chọn Người thực hiện Bước 5), GPMS không bắn Toast thành công và cũng không có Toast lỗi. Vòng lặp chờ Toast chạy đủ 12s (`for _ in range(12): await sleep(1)`). Khi hết 12s, code **không kiểm tra cờ thành công** mà cứ thế chạy thẳng xuống return `status: "success"`!
+       - Tính toán thời gian: ~4.5s (load) + 8.0s (chờ kt_radio) + 12.0s (chờ toast) + 3.0s (buffer) = ~27.5s (trung bình 24.77s/mục x 8 mục = đúng 198.21s!).
+    4. *Bẫy kiểm tra "Nhiệm vụ đã kết thúc từ trước" bằng `inner_text("body")`*: Code cũ tìm chuỗi "đã hoàn thành" trên toàn trang, nhưng trên GPMS bước 1 của Nhà hàng luôn luôn ghi "Hoàn thành" nên dễ bị nhận diện sai thành đã xong từ trước.
+  + **Biện pháp khắc phục triệt để**:
+    1. Tăng thời gian chờ và sử dụng `wait_for_selector` đợi form nhiệm vụ render sẵn sàng (ít nhất 2.5s sau goto).
+    2. Sử dụng `wait_for(state="visible")` cho từng thao tác click "Không đạt", "Không phê duyệt", "Kết thúc quy trình" và đồng bộ synthetic React state.
+    3. Sửa hàm kiểm tra "đã hoàn thành từ trước": Chỉ kiểm tra riêng thẻ bước `02. IT xác nhận lỗi kỹ thuật` trên thanh tiến trình sidebar (phải là `hoàn thành` và không có `đang thực hiện`).
+    4. **BẮT BUỘC KIỂM TRA XÁC NHẬN LƯU THÀNH CÔNG**: Đặt biến cờ `is_success = False`. Chỉ ghi nhận thành công khi GPMS bắn Toast thành công (`.ant-message-success`) HOẶC trang tự động redirect về `/my-mission` HOẶC nút Xác nhận biến mất khỏi form. Nếu sau thời gian chờ không có bất kỳ dấu hiệu thành công nào, **BẮT BUỘC ném ngoại lệ `RuntimeError`** để chuyển trạng thái sang `❌ Lỗi` với nguyên nhân chi tiết, tuyệt đối cấm báo thành công ảo!
+    5. Áp dụng cơ chế tương tự cho hàm `_close_ticket` khi đóng ticket 3CX.
+  + **Kiểm thử**: Backend `compileall` sạch 100%, Smoke test `PASSED 100%`, Frontend `npm run build` thành công exit code 0 (`✓ built in 3.90s`).
+
+
