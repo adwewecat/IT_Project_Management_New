@@ -130,6 +130,33 @@ npm run dev
 
 ---
 
+### [2026-10-18] - Khắc Phục Lỗi Hover Dropdown Nhà Hàng Ở Dark Mode & Bổ Sung Tính Năng Phân Tích Món Vào Bếp KDS (Theo Món & Theo Lượt)
+- **Yêu cầu người dùng**:
+  1. Fix bug dropdown chọn nhà hàng tại trang *Phân Tích MongoDB Nhà Hàng* (`RestaurantMongoAnalysisPage.tsx`): Ở Dark Mode khi hover vào item nhà hàng bị trắng xóa nền và chữ không thấy gì.
+  2. Tại tác vụ KDS (Task 4): Gom nút `Logs KDS (Order & Ra Món)` thành một menu nhóm mang tên **"Phân Tích Logs KDS"**.
+  3. Menu nhóm này gồm 2 mục:
+     - Mục 1: `Logs KDS (Order & Ra Món)` (modal log cũ).
+     - Mục 2: `Phân Tích Món Vào Bếp` (mới): Thống kê trong ngày hoặc khoảng thời gian chọn (tối đa 5 ngày) tổng số món order vào bếp là bao nhiêu lượt.
+     - Hỗ trợ 2 chế độ thống kê song song: **Theo Món** (tổng số lượng món ăn) và **Theo Lượt** (tổng số đợt gửi vào bếp, 1 lượt gửi 10 món tính là 1 lượt). Chỉ cần số tổng không cần chi tiết.
+- **Chi tiết kỹ thuật & Khắc phục**:
+  1. **Khắc phục triệt để lỗi Dark Mode Dropdown Nhà Hàng & Tác Vụ**:
+     - Thay thế toàn bộ mã màu cứng (`#fff`, `#F9FAFB`, `#111827`, `#6B7280`) bằng CSS variables chuẩn (`var(--bg-card)`, `var(--bg-secondary)`, `var(--bg-hover)`, `var(--text-primary)`, `var(--border-color)`).
+     - Khi hover ở Dark Mode, nền hiển thị `var(--bg-hover)` (màu xám slate mềm mại), chữ hiển thị màu trắng/xanh rõ nét 100%.
+  2. **Backend API Phân Tích Món Vào Bếp KDS (`backend/app/services/mongodb_service.py` & `backend/app/api/v1/mongodb.py`)**:
+     - Schemas: `KdsKitchenIntakeAnalysisRequest`, `KdsKitchenIntakeAnalysisResponse`, `KdsKitchenIntakePlaceStat`, `KdsKitchenIntakeDateStat`, `KdsKitchenIntakeHourStat`.
+     - Endpoint: `POST /api/v1/mongodb/kds-analyze-intake`.
+     - Logic: Quét đồng thời `LOG_DISH_FINISH_ITEM` và `DISH_KDS` trong `G_KITCHEN` (kèm fallback `ORDER_DELIVERY_LOG` trong `G_ORDER`).
+     - Thuật toán tính Theo Lượt: Nhận diện batch dựa trên `(order_id_or_table, time_window_3s)`. Các món được gửi trong cùng một lượt (cùng đợt bấm gửi bếp) được gom thành 1 lượt chính xác.
+     - Phân rã dữ liệu đa chiều: Bóc tách theo Quầy Bếp (Places), theo Ngày (Dates), theo Khung Giờ (24h) và tính tỷ lệ trung bình món/lượt. Chặn kiểm tra tối đa 5 ngày.
+  3. **Frontend UI Component & Toolbar KDS**:
+     - Tạo component modal mới `frontend/src/pages/app/KdsKitchenIntakeModal.tsx`: Đầy đủ thẻ tóm tắt (Tổng Món, Tổng Lượt, Trung bình món/lượt), các phím chọn nhanh ngày (Hôm nay, Hôm qua, 2 ngày, 3 ngày, 5 ngày), toggle 3 chế độ (Theo Món / Theo Lượt / Cả Hai), 3 tabs phân rã dữ liệu, và nút sao chép báo cáo tổng hợp nhanh.
+     - Gom nút đơn lẻ cũ thành menu dropdown `📋 Phân Tích Logs KDS ▾` chứa 2 mục chuyên sâu.
+  4. **Kiểm thử & Đóng gói Server**:
+     - Frontend build `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 6.73s`), bundle sạch sẽ trong `frontend/dist/`.
+     - Backend: `python -m compileall app` sạch lỗi, Smoke Test `>>> PASSED 100%`.
+
+---
+
 ### [2026-10-12] - Ban Hành Quy Tắc Bất Biến: Mọi Tính Năng Mới Đều Phải Thêm Giao Diện Phù Hợp Với Mobile (Mobile-Ready 100%)
 - **Yêu cầu người dùng**: Thêm quy tắc bất biến: Khi làm thêm bất kỳ tính năng mới nào đều phải thêm giao diện phù hợp với điện thoại di động (mobile responsive).
 - **Chi tiết thực hiện**:

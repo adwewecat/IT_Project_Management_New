@@ -64,6 +64,8 @@ from app.schemas.mongodb import (
     KdsDeleteCookingConfigResponse,
     KdsLogQueryRequest,
     KdsLogQueryResponse,
+    KdsKitchenIntakeAnalysisRequest,
+    KdsKitchenIntakeAnalysisResponse,
     KdsDishHistoryRequest,
     KdsDishHistoryResponse,
     KdsUpdatePlacePrinterRequest,
@@ -1246,6 +1248,29 @@ def get_kds_logs(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Lỗi khi tra cứu nhật ký KDS ({payload.host}): {str(e)}"
+        )
+
+
+@router.post("/kds-analyze-intake", response_model=KdsKitchenIntakeAnalysisResponse)
+def analyze_kds_kitchen_intake(
+    payload: KdsKitchenIntakeAnalysisRequest,
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Phân tích tổng số món và số lượt gửi vào bếp (Kitchen Intake Analysis):
+    - Thống kê song song: Theo Món (Dishes) và Theo Lượt (Batches).
+    - Phân tích theo khoảng thời gian (tối đa 5 ngày).
+    - Phân rã theo từng Quầy Bếp (Places), theo Ngày (Dates) và theo Khung Giờ (Hours).
+    """
+    try:
+        return MongoDBService.analyze_kds_kitchen_intake(
+            payload=payload,
+            current_user=current_user
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Lỗi khi phân tích món vào bếp KDS ({payload.host}): {str(e)}"
         )
 
 

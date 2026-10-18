@@ -997,6 +997,13 @@ export const mongoService = {
     return res.data;
   },
 
+  analyzeKdsKitchenIntake: async (
+    payload: KdsKitchenIntakeAnalysisRequest
+  ): Promise<KdsKitchenIntakeAnalysisResponse> => {
+    const res = await api.post<KdsKitchenIntakeAnalysisResponse>('/mongodb/kds-analyze-intake', payload);
+    return res.data;
+  },
+
   getKdsDishHistory: async (
     payload: KdsDishHistoryRequest
   ): Promise<KdsDishHistoryResponse> => {
@@ -1600,6 +1607,52 @@ export interface KdsLogItem {
   printer_name?: string | null;
   print_status?: string | null;
   print_message?: string | null;
+}
+
+export interface KdsKitchenIntakeAnalysisRequest {
+  host: string;
+  port?: number;
+  start_date: string; // YYYY-MM-DD
+  end_date: string;   // YYYY-MM-DD
+  place_id?: number | null;
+}
+
+export interface KdsKitchenIntakePlaceStat {
+  place_id?: number | null;
+  place_name: string;
+  total_dishes: number;
+  total_batches: number;
+  avg_dishes_per_batch: number;
+  percentage: number;
+}
+
+export interface KdsKitchenIntakeDateStat {
+  date: string;
+  total_dishes: number;
+  total_batches: number;
+  avg_dishes_per_batch: number;
+}
+
+export interface KdsKitchenIntakeHourStat {
+  hour: number;
+  hour_label: string;
+  total_dishes: number;
+  total_batches: number;
+}
+
+export interface KdsKitchenIntakeAnalysisResponse {
+  success: boolean;
+  message: string;
+  start_date: string;
+  end_date: string;
+  total_days: number;
+  total_dishes: number;
+  total_batches: number;
+  avg_dishes_per_batch: number;
+  by_places: KdsKitchenIntakePlaceStat[];
+  by_dates: KdsKitchenIntakeDateStat[];
+  by_hours: KdsKitchenIntakeHourStat[];
+  source_collection: string;
 }
 
 export interface KdsDishHistoryRequest {

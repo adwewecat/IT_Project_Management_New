@@ -523,6 +523,57 @@ class KdsLogQueryResponse(BaseModel):
     message: str = ""
 
 
+# ══════════════════════════════════════════════════════════════
+# SCHEMAS: PHÂN TÍCH MÓN VÀO BẾP KDS (THEO MÓN & THEO LƯỢT)
+# ══════════════════════════════════════════════════════════════
+class KdsKitchenIntakeAnalysisRequest(BaseModel):
+    host: str
+    port: int = 27017
+    start_date: str  # YYYY-MM-DD
+    end_date: str    # YYYY-MM-DD
+    place_id: Optional[int] = None  # None = Tất cả các quầy
+
+
+class KdsKitchenIntakePlaceStat(BaseModel):
+    place_id: Optional[int] = None
+    place_name: str
+    total_dishes: int = 0          # Tổng số món (theo món)
+    total_batches: int = 0         # Tổng số lượt gửi vào bếp (theo lượt)
+    avg_dishes_per_batch: float = 0.0
+    percentage: float = 0.0        # Tỷ lệ % số món so với toàn nhà hàng
+
+
+class KdsKitchenIntakeDateStat(BaseModel):
+    date: str                      # YYYY-MM-DD
+    total_dishes: int = 0          # Tổng số món trong ngày
+    total_batches: int = 0         # Tổng số lượt trong ngày
+    avg_dishes_per_batch: float = 0.0
+
+
+class KdsKitchenIntakeHourStat(BaseModel):
+    hour: int                      # 0..23
+    hour_label: str                # Ví dụ "11:00 - 12:00"
+    total_dishes: int = 0
+    total_batches: int = 0
+
+
+class KdsKitchenIntakeAnalysisResponse(BaseModel):
+    success: bool
+    message: str = ""
+    start_date: str
+    end_date: str
+    total_days: int = 1
+    total_dishes: int = 0          # Thống kê chế độ "Theo Món"
+    total_batches: int = 0         # Thống kê chế độ "Theo Lượt"
+    avg_dishes_per_batch: float = 0.0
+    by_places: List[KdsKitchenIntakePlaceStat] = []
+    by_dates: List[KdsKitchenIntakeDateStat] = []
+    by_hours: List[KdsKitchenIntakeHourStat] = []
+    source_collection: str = "G_KITCHEN.LOG_DISH_FINISH_ITEM & DISH_KDS"
+
+
+
+
 class KdsDishHistoryRequest(BaseModel):
     host: str
     port: int = 27017

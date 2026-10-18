@@ -182,6 +182,11 @@ from app.schemas.mongodb import (
     KdsLogQueryRequest,
     KdsLogItem,
     KdsLogQueryResponse,
+    KdsKitchenIntakeAnalysisRequest,
+    KdsKitchenIntakePlaceStat,
+    KdsKitchenIntakeDateStat,
+    KdsKitchenIntakeHourStat,
+    KdsKitchenIntakeAnalysisResponse,
     KdsDishHistoryRequest,
     KdsDishHistoryTimelineItem,
     KdsDishHistoryResponse,
@@ -3224,6 +3229,328 @@ class MongoDBService:
                 query_filter=payload.query,
                 logs=logs,
                 message=f"Đã tìm thấy {len(logs)} bản ghi nhật ký KDS trong ngày {date_str}."
+            )
+        finally:
+            client.close()
+
+    @staticmethod
+    def analyze_kds_kitchen_intake(
+        payload: KdsKitchenIntakeAnalysisRequest,
+        current_user: UserInfo
+    ) -> KdsKitchenIntakeAnalysisResponse:
+        """
+        Phân tích tổng số lượng món ăn và lượt gửi order vào bếp (KDS/Kitchen Intake Analysis).
+        - Thời gian: start_date đến end_date (chặn tối đa 5 ngày).
+        - Thống kê song song:
+          + Theo món: Tổng số món được gọi vào bếp (sum quantity)
+          + Theo lượt: Tổng số đợt bấm gửi bếp (batch theo order/table + submit_time)
+        - Phân rã theo từng Quầy Bếp (Places), theo Ngày (Dates) và theo Giờ trong ngày (Hours).
+        """
+        client = MongoClient(payload.host, payload.port, serverSelectionTimeoutMS=4000)
+        try:
+            # 1. Chuẩn hóa ngày và kiểm tra giới hạn tối đa 5 ngày
+            def _parse_date_str(d_str: str) -> datetime.date:
+                clean = d_str.strip()
+                if "/" in clean:
+                    parts = clean.split("/")
+                    if len(parts) == 3:
+                        if len(parts[2]) == 4:
+                            clean = f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
+                        elif len(parts[0]) == 4:
+                            clean = f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
+                for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"]:
+                    try:
+                        return datetime.datetime.strptime(clean, fmt).date()
+                    except Exception:
+                        pass
+                raise ValueError(f"Định dạng ngày không hợp lệ: {d_str}")
+
+            s_date = _parse_date_str(payload.start_date)
+            e_date = _parse_date_str(payload.end_date)
+            if s_date > e_date:
+                s_date, e_date = e_date, s_date
+
+            day_span = (e_date - s_date).days + 1
+            if day_span > 5:
+                # Giới hạn tối đa 5 ngày theo quy định
+                e_date = s_date + datetime.timedelta(days=4)
+                day_span = 5
+
+            start_dt = datetime.datetime.combine(s_date, datetime.time.min)
+            end_dt = datetime.datetime.combine(e_date, datetime.time.max)
+            start_ms = int(start_dt.timestamp() * 1000)
+            end_ms = int(end_dt.timestamp() * 1000)
+
+            all_dbs = client.list_database_names()
+            db_kitchen = client["G_KITCHEN"] if "G_KITCHEN" in all_dbs else None
+            db_order = client["G_ORDER"] if "G_ORDER" in all_dbs else None
+
+            # 2. Xây dựng bản đồ Quầy Bếp (Place Map)
+            place_map: Dict[int, str] = {}
+            if db_kitchen is not None:
+                cfg = db_kitchen["CONFIG_KDS"].find_one() or {}
+                for p in (cfg.get("places") or []):
+                    if isinstance(p, dict) and p.get("id") is not None:
+                        try:
+                            pid_int = int(p["id"])
+                            place_map[pid_int] = str(p.get("name") or f"Quầy #{p['id']}").strip()
+                        except Exception:
+                            pass
+                if "ACCOUNT" in db_kitchen.list_collection_names():
+                    for acc in db_kitchen["ACCOUNT"].find():
+                        for lp in (acc.get("listPlace") or []):
+                            if isinstance(lp, dict) and lp.get("id") is not None:
+                                try:
+                                    lp_pid = int(lp["id"])
+                                    if lp_pid not in place_map:
+                                        place_map[lp_pid] = str(lp.get("name") or f"Quầy #{lp_pid}").strip()
+                                except Exception:
+                                    pass
+
+            def parse_time_val(val: Any) -> Optional[datetime.datetime]:
+                if not val:
+                    return None
+                if isinstance(val, datetime.datetime):
+                    return val
+                if isinstance(val, (int, float)):
+                    if val > 1000000000000:
+                        return datetime.datetime.fromtimestamp(val / 1000.0)
+                    elif val > 1000000000:
+                        return datetime.datetime.fromtimestamp(val)
+                if isinstance(val, str):
+                    val_str = val.strip()
+                    for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%d/%m/%Y %H:%M:%S"]:
+                        try:
+                            return datetime.datetime.strptime(val_str.split(".")[0], fmt.split(".")[0])
+                        except Exception:
+                            pass
+                return None
+
+            # 3. Thu thập và tổng hợp dữ liệu
+            total_dishes = 0
+            overall_batches: set = set()
+            place_stats: Dict[int, Dict[str, Any]] = {}
+            for pid, pname in place_map.items():
+                place_stats[pid] = {"name": pname, "dishes": 0, "batches": set()}
+            place_unassigned: Dict[str, Any] = {"name": "⚠️ Chưa gán quầy / Khác", "dishes": 0, "batches": set()}
+
+            date_stats: Dict[str, Dict[str, Any]] = {}
+            curr = s_date
+            while curr <= e_date:
+                d_key = curr.strftime("%Y-%m-%d")
+                date_stats[d_key] = {"dishes": 0, "batches": set()}
+                curr += datetime.timedelta(days=1)
+
+            hour_stats: Dict[int, Dict[str, Any]] = {
+                h: {"dishes": 0, "batches": set()} for h in range(24)
+            }
+
+            processed_ids: set = set()
+
+            def process_dish_record(doc: Dict[str, Any]):
+                nonlocal total_dishes
+                doc_id = str(doc.get("_id"))
+                if doc_id in processed_ids:
+                    return
+                processed_ids.add(doc_id)
+
+                sub_val = doc.get("submitTime") or doc.get("orderTime") or doc.get("time") or doc.get("createDate")
+                sub_dt = parse_time_val(sub_val)
+                if not sub_dt:
+                    return
+                if sub_dt < start_dt or sub_dt > end_dt:
+                    return
+
+                q_val = doc.get("quantity") or doc.get("qty") or doc.get("count") or 1
+                try:
+                    qty = int(float(q_val))
+                    if qty <= 0:
+                        qty = 1
+                except Exception:
+                    qty = 1
+
+                # Nhận diện Lượt gửi (Batch) gom món cùng bàn/order trong cửa sổ 3 giây (3000ms)
+                raw_tbl = doc.get("tableName") or doc.get("table") or doc.get("tableCode") or "TBL"
+                if isinstance(raw_tbl, dict):
+                    tbl_str = str(raw_tbl.get("name") or raw_tbl.get("code") or "TBL").strip()
+                else:
+                    tbl_str = str(raw_tbl).strip()
+
+                order_ref = str(doc.get("orderId") or doc.get("orderGuid") or doc.get("batchId") or tbl_str).strip()
+                ts_ms = int(sub_dt.timestamp() * 1000)
+                time_window = ts_ms // 3000
+                batch_key = f"{sub_dt.strftime('%Y%m%d')}_{order_ref}_{time_window}"
+
+                total_dishes += qty
+                overall_batches.add(batch_key)
+
+                # Cập nhật theo ngày
+                d_str = sub_dt.strftime("%Y-%m-%d")
+                if d_str in date_stats:
+                    date_stats[d_str]["dishes"] += qty
+                    date_stats[d_str]["batches"].add(batch_key)
+
+                # Cập nhật theo giờ
+                h = sub_dt.hour
+                if h in hour_stats:
+                    hour_stats[h]["dishes"] += qty
+                    hour_stats[h]["batches"].add(batch_key)
+
+                # Cập nhật theo quầy bếp
+                c = doc.get("configCooking") or {}
+                raw_pids = c.get("placeIds") if isinstance(c.get("placeIds"), list) else ([doc.get("placeId")] if doc.get("placeId") is not None else [])
+                clean_pids = []
+                for p in raw_pids:
+                    try:
+                        clean_pids.append(int(p))
+                    except (ValueError, TypeError):
+                        pass
+
+                if clean_pids:
+                    for pid in clean_pids:
+                        if pid not in place_stats:
+                            place_stats[pid] = {
+                                "name": place_map.get(pid, f"Quầy #{pid}"),
+                                "dishes": 0,
+                                "batches": set()
+                            }
+                        place_stats[pid]["dishes"] += qty
+                        place_stats[pid]["batches"].add(batch_key)
+                else:
+                    place_unassigned["dishes"] += qty
+                    place_unassigned["batches"].add(batch_key)
+
+            time_filter = {
+                "$or": [
+                    {"submitTime": {"$gte": start_ms, "$lte": end_ms}},
+                    {"submitTime": {"$gte": start_dt, "$lte": end_dt}},
+                ]
+            }
+            proj = {
+                "_id": 1,
+                "submitTime": 1,
+                "orderTime": 1,
+                "quantity": 1,
+                "qty": 1,
+                "orderId": 1,
+                "orderGuid": 1,
+                "batchId": 1,
+                "tableName": 1,
+                "table": 1,
+                "tableCode": 1,
+                "placeId": 1,
+                "placeName": 1,
+                "configCooking.placeIds": 1
+            }
+
+            source_colls = []
+            if db_kitchen is not None:
+                if "LOG_DISH_FINISH_ITEM" in db_kitchen.list_collection_names():
+                    source_colls.append("LOG_DISH_FINISH_ITEM")
+                    for d in db_kitchen["LOG_DISH_FINISH_ITEM"].find(time_filter, proj):
+                        process_dish_record(d)
+
+                if "DISH_KDS" in db_kitchen.list_collection_names():
+                    source_colls.append("DISH_KDS")
+                    for d in db_kitchen["DISH_KDS"].find(time_filter, proj):
+                        process_dish_record(d)
+
+            # Fallback nếu G_KITCHEN không có dữ liệu
+            if total_dishes == 0 and db_order is not None and "ORDER_DELIVERY_LOG" in db_order.list_collection_names():
+                source_colls.append("ORDER_DELIVERY_LOG")
+                q_deliv = {
+                    "$or": [
+                        {"time": {"$gte": start_ms, "$lte": end_ms}},
+                        {"orderTime": {"$gte": start_ms, "$lte": end_ms}},
+                        {"time": {"$gte": start_dt, "$lte": end_dt}},
+                    ]
+                }
+                for d in db_order["ORDER_DELIVERY_LOG"].find(q_deliv):
+                    process_dish_record(d)
+
+            total_batches_count = len(overall_batches)
+            avg_all = round(total_dishes / total_batches_count, 1) if total_batches_count > 0 else 0.0
+
+            # Xây dựng danh sách thống kê theo Quầy Bếp (by_places)
+            by_places_list: List[KdsKitchenIntakePlaceStat] = []
+            for pid, pdata in place_stats.items():
+                p_dishes = pdata["dishes"]
+                p_batches = len(pdata["batches"])
+                p_avg = round(p_dishes / p_batches, 1) if p_batches > 0 else 0.0
+                pct = round((p_dishes / total_dishes) * 100, 1) if total_dishes > 0 else 0.0
+                if p_dishes > 0 or p_batches > 0:
+                    by_places_list.append(KdsKitchenIntakePlaceStat(
+                        place_id=pid,
+                        place_name=pdata["name"],
+                        total_dishes=p_dishes,
+                        total_batches=p_batches,
+                        avg_dishes_per_batch=p_avg,
+                        percentage=pct
+                    ))
+
+            if place_unassigned["dishes"] > 0:
+                u_dishes = place_unassigned["dishes"]
+                u_batches = len(place_unassigned["batches"])
+                u_avg = round(u_dishes / u_batches, 1) if u_batches > 0 else 0.0
+                pct = round((u_dishes / total_dishes) * 100, 1) if total_dishes > 0 else 0.0
+                by_places_list.append(KdsKitchenIntakePlaceStat(
+                    place_id=None,
+                    place_name=place_unassigned["name"],
+                    total_dishes=u_dishes,
+                    total_batches=u_batches,
+                    avg_dishes_per_batch=u_avg,
+                    percentage=pct
+                ))
+
+            by_places_list.sort(key=lambda x: x.total_dishes, reverse=True)
+
+            # Xây dựng danh sách thống kê theo Ngày (by_dates)
+            by_dates_list: List[KdsKitchenIntakeDateStat] = []
+            for d_str in sorted(date_stats.keys()):
+                d_info = date_stats[d_str]
+                d_dishes = d_info["dishes"]
+                d_batches = len(d_info["batches"])
+                d_avg = round(d_dishes / d_batches, 1) if d_batches > 0 else 0.0
+                by_dates_list.append(KdsKitchenIntakeDateStat(
+                    date=d_str,
+                    total_dishes=d_dishes,
+                    total_batches=d_batches,
+                    avg_dishes_per_batch=d_avg
+                ))
+
+            # Xây dựng danh sách thống kê theo Khung Giờ (by_hours)
+            by_hours_list: List[KdsKitchenIntakeHourStat] = []
+            for h in range(24):
+                h_info = hour_stats[h]
+                by_hours_list.append(KdsKitchenIntakeHourStat(
+                    hour=h,
+                    hour_label=f"{h:02d}:00 - {(h+1)%24:02d}:00",
+                    total_dishes=h_info["dishes"],
+                    total_batches=len(h_info["batches"])
+                ))
+
+            if payload.place_id is not None:
+                by_places_list = [p for p in by_places_list if p.place_id == payload.place_id]
+
+            date_range_label = f"{s_date.strftime('%d/%m/%Y')} -> {e_date.strftime('%d/%m/%Y')}" if s_date != e_date else s_date.strftime('%d/%m/%Y')
+            msg = (
+                f"Đã phân tích xong món vào bếp ({date_range_label}, {day_span} ngày): "
+                f"Tổng {total_dishes:,} món ăn / {total_batches_count:,} lượt gửi bếp."
+            )
+
+            return KdsKitchenIntakeAnalysisResponse(
+                success=True,
+                message=msg,
+                start_date=s_date.strftime("%Y-%m-%d"),
+                end_date=e_date.strftime("%Y-%m-%d"),
+                total_days=day_span,
+                total_dishes=total_dishes,
+                total_batches=total_batches_count,
+                avg_dishes_per_batch=avg_all,
+                by_places=by_places_list,
+                by_dates=by_dates_list,
+                by_hours=by_hours_list,
+                source_collection=" + ".join(source_colls) if source_colls else "G_KITCHEN"
             )
         finally:
             client.close()

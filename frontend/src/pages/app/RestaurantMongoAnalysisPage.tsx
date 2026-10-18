@@ -53,7 +53,8 @@ import {
   Settings,
   LayoutGrid,
   Trash2,
-  Tag
+  Tag,
+  BarChart3
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -75,6 +76,7 @@ import {
   KdsEditDishGroupModal,
   KdsDeleteCookingConfigModal
 } from './KdsQuayModals';
+import { KdsKitchenIntakeModal } from './KdsKitchenIntakeModal';
 import { BatchRoleUserModal } from './BatchRoleUserModal';
 import { AndroidEmulatorTab } from './AndroidEmulatorTab';
 
@@ -1432,6 +1434,25 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
   // Modal: Tra cứu Logs KDS (Order từ CO/SO & Bấm Done Món)
   const [showKdsLogsModal, setShowKdsLogsModal] = useState<boolean>(false);
+  // Modal: Phân Tích Món & Lượt Vào Bếp KDS (theo món & theo lượt, tối đa 5 ngày)
+  const [showKdsIntakeModal, setShowKdsIntakeModal] = useState<boolean>(false);
+  // Dropdown gom nhóm Phân Tích Logs KDS
+  const [showKdsLogsDropdown, setShowKdsLogsDropdown] = useState<boolean>(false);
+  const kdsLogsDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutsideKdsLogs = (event: MouseEvent) => {
+      if (kdsLogsDropdownRef.current && !kdsLogsDropdownRef.current.contains(event.target as Node)) {
+        setShowKdsLogsDropdown(false);
+      }
+    };
+    if (showKdsLogsDropdown) {
+      document.addEventListener('mousedown', handleClickOutsideKdsLogs);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutsideKdsLogs);
+    };
+  }, [showKdsLogsDropdown]);
 
   // Modal: Popup tổng hợp Các Tính Năng KDS
   const [showKdsFeaturesModal, setShowKdsFeaturesModal] = useState<boolean>(false);
@@ -2465,18 +2486,18 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                     left: 0,
                     right: 0,
                     marginTop: '6px',
-                    backgroundColor: '#fff',
+                    backgroundColor: 'var(--bg-card, #fff)',
                     borderRadius: '8px',
                     border: '1px solid var(--border-color)',
-                    boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.25)',
                     zIndex: 1000,
                     overflow: 'hidden'
                   }}
                 >
                   {/* Search inside dropdown */}
-                  <div style={{ padding: '8px', borderBottom: '1px solid var(--border-color)', backgroundColor: '#F9FAFB' }}>
+                  <div style={{ padding: '8px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary, #F9FAFB)' }}>
                     <div style={{ position: 'relative' }}>
-                      <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} />
+                      <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted, #9CA3AF)' }} />
                       <input
                         type="text"
                         autoFocus
@@ -2490,7 +2511,8 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                           borderRadius: '6px',
                           border: '1px solid var(--border-color)',
                           outline: 'none',
-                          backgroundColor: '#fff'
+                          backgroundColor: 'var(--bg-primary, #fff)',
+                          color: 'var(--text-primary)'
                         }}
                       />
                     </div>
@@ -2505,21 +2527,28 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                         padding: '9px 12px',
                         fontSize: '13px',
                         fontWeight: !selectedRestaurant ? 700 : 500,
-                        backgroundColor: !selectedRestaurant ? '#ECFDF5' : 'transparent',
-                        color: !selectedRestaurant ? '#065F46' : 'var(--text-primary)',
+                        backgroundColor: !selectedRestaurant ? 'rgba(5, 150, 105, 0.15)' : 'transparent',
+                        color: !selectedRestaurant ? '#10B981' : 'var(--text-primary)',
                         cursor: 'pointer',
-                        borderBottom: '1px solid #F3F4F6',
+                        borderBottom: '1px solid var(--border-color)',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between'
+                        justifyContent: 'space-between',
+                        transition: 'background-color 0.15s'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (selectedRestaurant) e.currentTarget.style.backgroundColor = 'var(--bg-hover, rgba(255,255,255,0.06))';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (selectedRestaurant) e.currentTarget.style.backgroundColor = 'transparent';
                       }}
                     >
                       <span>🌐 -- Tất Cả Nhà Hàng (Dùng Cho Xuất All) --</span>
-                      {!selectedRestaurant && <Check size={14} color="#059669" />}
+                      {!selectedRestaurant && <Check size={14} color="#10B981" />}
                     </div>
 
                     {filteredRestaurants.length === 0 ? (
-                      <div style={{ padding: '16px', textAlign: 'center', fontSize: '12px', color: '#9CA3AF' }}>
+                      <div style={{ padding: '16px', textAlign: 'center', fontSize: '12px', color: 'var(--text-muted, #9CA3AF)' }}>
                         Không tìm thấy nhà hàng phù hợp
                       </div>
                     ) : (
@@ -2533,8 +2562,8 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                               padding: '8px 12px',
                               fontSize: '12px',
                               fontWeight: isSelected ? 700 : 400,
-                              backgroundColor: isSelected ? '#EFF6FF' : 'transparent',
-                              color: isSelected ? '#1E40AF' : 'var(--text-primary)',
+                              backgroundColor: isSelected ? 'rgba(37, 99, 235, 0.15)' : 'transparent',
+                              color: isSelected ? '#3B82F6' : 'var(--text-primary)',
                               cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
@@ -2542,20 +2571,20 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                               transition: 'background-color 0.15s'
                             }}
                             onMouseEnter={(e) => {
-                              if (!isSelected) e.currentTarget.style.backgroundColor = '#F9FAFB';
+                              if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-hover, rgba(255, 255, 255, 0.08))';
                             }}
                             onMouseLeave={(e) => {
                               if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
                             }}
                           >
                             <div>
-                              <span style={{ fontWeight: 700, color: '#111827', marginRight: '6px' }}>
+                              <span style={{ fontWeight: 700, color: isSelected ? '#3B82F6' : 'var(--text-primary)', marginRight: '6px' }}>
                                 {r.sap ? `[${r.sap}]` : ''}
                               </span>
-                              <span>{r.res}</span>
-                              {r.ip && <span style={{ color: '#6B7280', marginLeft: '6px' }}>({r.ip})</span>}
+                              <span style={{ color: 'var(--text-primary)' }}>{r.res}</span>
+                              {r.ip && <span style={{ color: 'var(--text-muted, #9CA3AF)', marginLeft: '6px' }}>({r.ip})</span>}
                             </div>
-                            {isSelected && <Check size={14} color="#2563EB" />}
+                            {isSelected && <Check size={14} color="#3B82F6" />}
                           </div>
                         );
                       })
@@ -3183,7 +3212,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           padding: '8px 12px',
-                          backgroundColor: '#fff',
+                          backgroundColor: 'var(--bg-card, #fff)',
                           border: isTaskDropdownOpen ? '1.5px solid #D97706' : '1px solid var(--border-color)',
                           borderRadius: '8px',
                           cursor: 'pointer',
@@ -3194,13 +3223,13 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden', minWidth: 0, flex: 1 }}>
                           {renderTaskIcon(selectedTask.id, false)}
-                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'block', minWidth: 0 }}>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'block', minWidth: 0 }}>
                             {renderHighlightedTitle(selectedTask, false)}
                           </span>
                         </div>
                         <ChevronDown
                           size={16}
-                          color="#6B7280"
+                          color="var(--text-muted, #6B7280)"
                           style={{
                             transform: isTaskDropdownOpen ? 'rotate(180deg)' : 'none',
                             transition: 'transform 0.15s',
@@ -3219,17 +3248,17 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                             left: 0,
                             right: 0,
                             zIndex: 100,
-                            backgroundColor: '#fff',
+                            backgroundColor: 'var(--bg-card, #fff)',
                             borderRadius: '8px',
                             border: '1px solid var(--border-color)',
-                            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15)',
+                            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.25)',
                             overflow: 'hidden'
                           }}
                         >
                           {/* Input search trong dropdown để nhập tìm kiếm tác vụ */}
-                          <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border-color)', backgroundColor: '#F9FAFB' }}>
+                          <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary, #F9FAFB)' }}>
                             <div style={{ position: 'relative' }}>
-                              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} />
+                              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted, #9CA3AF)' }} />
                               <input
                                 type="text"
                                 value={taskSearchQuery}
@@ -3242,7 +3271,9 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                                   fontSize: '12px',
                                   border: '1px solid var(--border-color)',
                                   borderRadius: '6px',
-                                  outline: 'none'
+                                  outline: 'none',
+                                  backgroundColor: 'var(--bg-primary, #fff)',
+                                  color: 'var(--text-primary)'
                                 }}
                                 onClick={(e) => e.stopPropagation()}
                               />
@@ -3252,7 +3283,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                           {/* Danh sách từng dòng tác vụ */}
                           <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
                             {filteredTasks.length === 0 ? (
-                              <div style={{ padding: '16px', textAlign: 'center', color: '#9CA3AF', fontSize: '12px' }}>
+                              <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted, #9CA3AF)', fontSize: '12px' }}>
                                 Không tìm thấy tác vụ nào khớp với từ khóa "{taskSearchQuery}".
                               </div>
                             ) : (
@@ -3273,12 +3304,12 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                                       justifyContent: 'space-between',
                                       gap: '12px',
                                       cursor: 'pointer',
-                                      backgroundColor: isSelected ? '#FEF3C7' : 'transparent',
-                                      borderBottom: '1px solid #F3F4F6',
+                                      backgroundColor: isSelected ? 'rgba(217, 119, 6, 0.15)' : 'transparent',
+                                      borderBottom: '1px solid var(--border-color)',
                                       transition: 'background-color 0.15s'
                                     }}
                                     onMouseEnter={(e) => {
-                                      if (!isSelected) e.currentTarget.style.backgroundColor = '#F9FAFB';
+                                      if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-hover, rgba(255, 255, 255, 0.08))';
                                     }}
                                     onMouseLeave={(e) => {
                                       if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
@@ -4924,22 +4955,113 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                     ⚙️ Các Tính Năng KDS ▾
                   </Button>
 
-                  {/* Nút Chức năng Logs KDS (Order từ CO/SO & Bấm Done) */}
-                  <Button
-                    size="sm"
-                    style={{
-                      backgroundColor: '#4338CA',
-                      color: '#fff',
-                      borderColor: '#3730A3',
-                      fontWeight: 700,
-                      boxShadow: '0 1px 2px rgba(67, 56, 202, 0.2)'
-                    }}
-                    onClick={() => setShowKdsLogsModal(true)}
-                    leftIcon={<Clock size={14} />}
-                    title="Tra cứu lịch sử Order từ CO/SO vào KDS, thời gian bấm Done món và máy in KDS"
-                  >
-                    📋 Logs KDS (Order &amp; Ra Món)
-                  </Button>
+                  {/* Nút Nhóm: Phân Tích Logs KDS ▾ (Gồm Logs Order & Ra Món + Phân Tích Món Vào Bếp) */}
+                  <div style={{ position: 'relative' }} ref={kdsLogsDropdownRef}>
+                    <Button
+                      size="sm"
+                      style={{
+                        backgroundColor: '#4338CA',
+                        color: '#fff',
+                        borderColor: '#3730A3',
+                        fontWeight: 700,
+                        boxShadow: '0 1px 2px rgba(67, 56, 202, 0.2)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                      onClick={() => setShowKdsLogsDropdown(!showKdsLogsDropdown)}
+                      leftIcon={<Clock size={14} />}
+                      title="Phân tích và tra cứu nhật ký KDS: Logs Order & Ra món và Thống kê món vào bếp"
+                    >
+                      <span>📋 Phân Tích Logs KDS</span>
+                      <ChevronDown
+                        size={14}
+                        style={{
+                          transform: showKdsLogsDropdown ? 'rotate(180deg)' : 'none',
+                          transition: 'transform 0.15s'
+                        }}
+                      />
+                    </Button>
+
+                    {showKdsLogsDropdown && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: 'calc(100% + 6px)',
+                          right: 0,
+                          width: '330px',
+                          backgroundColor: 'var(--bg-card, #fff)',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-color)',
+                          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.25)',
+                          zIndex: 100,
+                          overflow: 'hidden',
+                          padding: '6px'
+                        }}
+                      >
+                        {/* Mục 1: Logs KDS (Order & Ra Món) */}
+                        <div
+                          onClick={() => {
+                            setShowKdsLogsDropdown(false);
+                            setShowKdsLogsModal(true);
+                          }}
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '10px',
+                            transition: 'background-color 0.15s'
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, rgba(255,255,255,0.08))')}
+                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                        >
+                          <Clock size={18} color="#4338CA" style={{ marginTop: '2px', flexShrink: 0 }} />
+                          <div>
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                              1. Logs KDS (Order &amp; Ra Món)
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', lineHeight: 1.35 }}>
+                              Tra cứu chi tiết từng món: giờ order, giờ done, thời gian chế biến và phát lệnh in
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 6px' }} />
+
+                        {/* Mục 2: Phân Tích Món Vào Bếp (Mới) */}
+                        <div
+                          onClick={() => {
+                            setShowKdsLogsDropdown(false);
+                            setShowKdsIntakeModal(true);
+                          }}
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '10px',
+                            transition: 'background-color 0.15s'
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, rgba(255,255,255,0.08))')}
+                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                        >
+                          <BarChart3 size={18} color="#D97706" style={{ marginTop: '2px', flexShrink: 0 }} />
+                          <div>
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span>2. Phân Tích Món Vào Bếp</span>
+                              <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#FEF3C7', color: '#92400E', fontWeight: 800 }}>MỚI</span>
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', lineHeight: 1.35 }}>
+                              Thống kê tổng số món và số lượt gửi vào bếp (1 ngày / 2-5 ngày) theo món &amp; theo lượt
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -7704,6 +7826,18 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
       <KdsLogsModal
         isOpen={showKdsLogsModal}
         onClose={() => setShowKdsLogsModal(false)}
+        host={connectedHost || ''}
+        port={27017}
+        restaurantName={restaurantGposInfo?.restaurant_name || selectedRestaurant?.res || undefined}
+        showToast={showToast}
+      />
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* MODAL: PHÂN TÍCH TỔNG SỐ MÓN & LƯỢT ORDER VÀO BẾP (THEO MÓN & THEO LƯỢT) */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <KdsKitchenIntakeModal
+        isOpen={showKdsIntakeModal}
+        onClose={() => setShowKdsIntakeModal(false)}
         host={connectedHost || ''}
         port={27017}
         restaurantName={restaurantGposInfo?.restaurant_name || selectedRestaurant?.res || undefined}
