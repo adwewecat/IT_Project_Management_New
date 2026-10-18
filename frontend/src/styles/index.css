@@ -264,6 +264,22 @@ button, input, select, textarea {
   color: inherit !important;
 }
 
+/* Sidebar Dark Theme Text & Icon Optimization */
+[data-theme="dark"] .app-sidebar {
+  background-color: var(--bg-primary);
+  border-right-color: var(--border-color);
+}
+
+[data-theme="dark"] .sidebar-interactive-item,
+[data-theme="dark"] .sidebar-sub-item {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .sidebar-interactive-item:not(:hover) span,
+[data-theme="dark"] .sidebar-sub-item:not(:hover) span {
+  color: var(--text-primary);
+}
+
 /* 2. Table Rows Hover Pop-out Effect */
 .interactive-table-row {
   position: relative;
