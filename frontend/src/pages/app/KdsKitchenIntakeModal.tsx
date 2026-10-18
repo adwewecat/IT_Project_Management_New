@@ -3,8 +3,6 @@ import {
   Calendar,
   RefreshCw,
   ChefHat,
-  BellRing,
-  BarChart3,
   Copy,
   Check,
   Info,
@@ -377,137 +375,6 @@ export const KdsKitchenIntakeModal: React.FC<KdsKitchenIntakeModalProps> = ({
           </div>
         </div>
 
-        {/* Thống kê Tổng Hợp (Metric Summary Cards) */}
-        {analysisData && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-            {/* Card 1: Tổng số món (Theo Món) */}
-            <div
-              style={{
-                padding: '12px 16px',
-                borderRadius: '10px',
-                backgroundColor: 'var(--bg-card, #fff)',
-                border: '1.5px solid #F59E0B',
-                boxShadow: '0 2px 6px rgba(245, 158, 11, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '14px'
-              }}
-            >
-              <div
-                style={{
-                  width: '44px',
-                  height: '44px',
-                  borderRadius: '10px',
-                  backgroundColor: '#FEF3C7',
-                  color: '#D97706',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}
-              >
-                <ChefHat size={24} />
-              </div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#92400E', textTransform: 'uppercase' }}>
-                  Tổng Món Order Vào Bếp
-                </div>
-                <div style={{ fontSize: '24px', fontWeight: 900, color: '#D97706', lineHeight: 1.2 }}>
-                  {analysisData.total_dishes.toLocaleString()}{' '}
-                  <span style={{ fontSize: '13px', fontWeight: 600 }}>món</span>
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  (Chế độ: <strong>Theo Món</strong>)
-                </div>
-              </div>
-            </div>
-
-            {/* Card 2: Tổng số lượt (Theo Lượt) */}
-            <div
-              style={{
-                padding: '12px 16px',
-                borderRadius: '10px',
-                backgroundColor: 'var(--bg-card, #fff)',
-                border: '1.5px solid #3B82F6',
-                boxShadow: '0 2px 6px rgba(59, 130, 246, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '14px'
-              }}
-            >
-              <div
-                style={{
-                  width: '44px',
-                  height: '44px',
-                  borderRadius: '10px',
-                  backgroundColor: '#EFF6FF',
-                  color: '#2563EB',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}
-              >
-                <BellRing size={24} />
-              </div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#1E40AF', textTransform: 'uppercase' }}>
-                  Tổng Số Lượt Bấm Gửi Bếp
-                </div>
-                <div style={{ fontSize: '24px', fontWeight: 900, color: '#2563EB', lineHeight: 1.2 }}>
-                  {analysisData.total_batches.toLocaleString()}{' '}
-                  <span style={{ fontSize: '13px', fontWeight: 600 }}>lượt</span>
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  (Chế độ: <strong>Theo Lượt</strong> - 1 đợt gửi = 1 lượt)
-                </div>
-              </div>
-            </div>
-
-            {/* Card 3: Trung bình món / lượt */}
-            <div
-              style={{
-                padding: '12px 16px',
-                borderRadius: '10px',
-                backgroundColor: 'var(--bg-card, #fff)',
-                border: '1.5px solid #10B981',
-                boxShadow: '0 2px 6px rgba(16, 185, 129, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '14px'
-              }}
-            >
-              <div
-                style={{
-                  width: '44px',
-                  height: '44px',
-                  borderRadius: '10px',
-                  backgroundColor: '#ECFDF5',
-                  color: '#059669',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}
-              >
-                <BarChart3 size={24} />
-              </div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#065F46', textTransform: 'uppercase' }}>
-                  Trung Bình Món / Lượt Gửi
-                </div>
-                <div style={{ fontSize: '24px', fontWeight: 900, color: '#059669', lineHeight: 1.2 }}>
-                  {analysisData.avg_dishes_per_batch}{' '}
-                  <span style={{ fontSize: '13px', fontWeight: 600 }}>món/lượt</span>
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  (Tỷ suất tải món mỗi đợt)
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Thanh Điều Hướng: Chế Độ Hiển Thị & Sub Tabs */}
         {analysisData && (
           <div
@@ -666,7 +533,7 @@ export const KdsKitchenIntakeModal: React.FC<KdsKitchenIntakeModalProps> = ({
             </div>
           </div>
         ) : (
-          <div style={{ maxHeight: '380px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+          <div style={{ maxHeight: 'calc(80vh - 180px)', minHeight: '380px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
             {/* SUB TAB 1: BẢNG PHÂN BỔ THEO QUẦY BẾP (PLACES) */}
             {activeSubTab === 'places' && (
               <TopScrollTable>
