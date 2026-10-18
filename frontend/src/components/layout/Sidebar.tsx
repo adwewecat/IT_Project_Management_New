@@ -111,8 +111,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     top: '64px',
     height: 'calc(100vh - 64px)',
     zIndex: 50,
-    scrollbarWidth: 'none',
-    msOverflowStyle: 'none',
   };
 
   const navListStyle: React.CSSProperties = {
@@ -230,7 +228,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }
         }}
       >
-        <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div className="sidebar-scroll-container" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
           <ul style={navListStyle}>
         {/* ================= PHẦN 1: MÀN HÌNH TẤT CẢ CÁC QUYỀN DÙNG CHUNG ================= */}
         <li style={sectionTitleStyle}>Chức Năng Dùng Chung</li>
