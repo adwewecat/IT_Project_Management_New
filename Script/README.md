@@ -130,6 +130,29 @@ npm run dev
 
 ---
 
+### [2026-10-18] - Cải Tiến Modal Truyền Gói Cài & File Nén (Agent Multitask): Hỗ Trợ Truyền File Thuần Túy Không Cần Bước Thực Thi & Tinh Gọn Giao Diện
+- **Yêu cầu người dùng**:
+  1. Hỗ trợ truyền file thuần túy vào thư mục yêu cầu mà không bắt buộc phải có bước thực thi script hay sửa file. Trước đây nếu không có bước thực thi nào (`steps.length === 0`) thì nút submit bị vô hiệu hóa không tiến hành được.
+  2. Sửa nhãn chọn file: Đổi `Chọn file nén hoặc file gói từ máy tính (hỗ trợ .zip, .rar, .7z, .tar, dung lượng lên tới 500MB) *:` thành `Chọn file nén Giới hạn: tối đa 500MB`.
+  3. Bỏ chữ `Giới hạn: tối đa 500MB` thừa ở góc phải.
+  4. Bỏ lựa chọn `Gói Chuẩn Server` và bỏ nút `⚡ Nạp Mẫu Chuẩn (Test VMware)`.
+- **Chi tiết kỹ thuật & Khắc phục**:
+  1. **Frontend (`frontend/src/pages/app/AgentMultitaskPage.tsx`)**:
+     - State `deploySteps` khởi tạo mặc định là mảng rỗng `[]`, `deployPackageSource` mặc định là `'UPLOAD'`.
+     - Loại bỏ điều kiện chặn `deploySteps.length === 0` trong `disabled` của nút submit footer. Cho phép gửi lệnh khi `deploySteps.length === 0`.
+     - Footer động: Khi 0 bước thực thi, hiển thị nhãn `Đã cấu hình: Chỉ truyền file (0 bước thực thi)` và nút bấm `🚀 Bắt Đầu Truyền File Vào Máy`. Khi có bước thực thi, hiển thị `🚀 Bắt Đầu Triển Khai & Thực Thi`.
+     - Tiêu đề Khối 2: `2. Kịch Bản Thực Thi Tuần Tự (0 bước - Tùy chọn)`. Khi chưa có bước nào, hiển thị banner hướng dẫn thân thiện: Chế độ truyền file thuần túy (file được đẩy vào thư mục đích và tự động giải nén nếu bật), có thể bấm các nút "+ Bước" nếu cần.
+     - Tinh gọn nguồn gói: Loại bỏ hoàn toàn khối `Gói Chuẩn Server` và nút `⚡ Nạp Mẫu Chuẩn (Test VMware)`, dọn sạch hàm `handleApplyStandardDeployPreset`. Lưới chọn nguồn chuyển thành 2 cột: `📁 Tải File Lên (Upload)` và `🖥️ Đã Có Trên Máy Trạm`.
+     - Chuẩn hóa nhãn upload: Đúng chuẩn chữ `Chọn file nén Giới hạn: tối đa 500MB`, xóa dòng text góc phải.
+  2. **Backend & Client Agent tương thích 100%**:
+     - Backend `agent_multitask_service.py` đã hỗ trợ sẵn `step_list = payload.steps or []`.
+     - Client Agent `restaurant_support_agent.py` khi nhận lệnh `deploy_package` với `steps: []` sẽ tải/ghi file vào thư mục đích, tự động giải nén (nếu bật) và kết thúc thành công 100%.
+  3. **Kiểm thử & Đóng gói Server**:
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.05s`), tạo mới bản build trong `frontend/dist/`.
+     - Backend: `python -m compileall app` exit code 0, Smoke Test `from app.main import app; print('>>> PASSED 100%')`.
+
+---
+
 ### [2026-10-18] - Khắc Phục Lỗi Hover Dropdown Nhà Hàng Ở Dark Mode & Bổ Sung Tính Năng Phân Tích Món Vào Bếp KDS (Theo Món & Theo Lượt)
 - **Yêu cầu người dùng**:
   1. Fix bug dropdown chọn nhà hàng tại trang *Phân Tích MongoDB Nhà Hàng* (`RestaurantMongoAnalysisPage.tsx`): Ở Dark Mode khi hover vào item nhà hàng bị trắng xóa nền và chữ không thấy gì.

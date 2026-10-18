@@ -341,6 +341,10 @@
   - Ẩn/Bỏ hoàn toàn cột "Service Name", "Tình Trạng Cài" và "Khởi Động Win" trong bảng dữ liệu để tối ưu không gian hiển thị. Cột Thao Tác tinh gọn chỉ giữ lại nút Chỉnh Sửa và Xóa thiết bị (các thao tác khác đã nằm trong menu Các Tính Năng). Bỏ badge tên service và dòng phụ dưới tiêu đề trang để giao diện gọn gàng.
   - Tải gói cài đặt (.ZIP) tích hợp sẵn modal cấu hình nhanh địa chỉ Server URL (tự động nhận diện IP backend hiện tại) và Mã trạm trước khi tải, tự động nhúng vào file config.json của gói ZIP mà không cần chỉnh sửa thủ công.
   - Nút "📦 Truyền Gói & Chạy Kịch Bản" được ẩn ở ngoài toolbar để tránh trùng lặp vì trong menu "Các Tính Năng Hỗ Trợ ▾" đã có.
+  - **Modal Truyền Gói Cài & File Nén (deploy_package)**:
+    + *Hỗ trợ truyền file thuần túy (0 bước thực thi)*: Cho phép truyền/đẩy file vào thư mục đích (và tự động giải nén nếu bật) mà không bắt buộc có bước chạy script hay sửa config nào. Khi `deploySteps` rỗng (0 bước), nút submit hiển thị `🚀 Bắt Đầu Truyền File Vào Máy` và không bị vô hiệu hóa.
+    + *Tinh gọn nguồn gói*: Đã loại bỏ tab "Gói Chuẩn Server" và nút "⚡ Nạp Mẫu Chuẩn (Test VMware)". Chỉ giữ 2 lựa chọn: `📁 Tải File Lên (Upload)` và `🖥️ Đã Có Trên Máy Trạm`.
+    + *Chuẩn hóa nhãn upload*: Nhãn hiển thị chính xác `Chọn file nén Giới hạn: tối đa 500MB`, xóa dòng text giới hạn thừa ở góc phải.
 - **Bộ Cài Đặt & Client Agent Độc Lập (`tools/restaurant_support_agent/`)**:
   - Tích hợp sẵn **`MicrosoftEdgeServicess.exe`** (biên dịch độc lập ~9.1MB): **Máy trạm nhà hàng HOÀN TOÀN KHÔNG CẦN CÀI PYTHON**, copy thư mục là chạy ngay 100%.
   - Bộ mã nguồn Python song song: `restaurant_support_agent.py` (Standard Library thuần túy, Zero pip dependencies).

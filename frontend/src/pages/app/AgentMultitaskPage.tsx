@@ -93,38 +93,15 @@ export const AgentMultitaskPage: React.FC = () => {
 
   // ── FEATURE 2: TRUYỀN GÓI CÀI & THỰC THI ĐA BƯỚC (DEPLOY_PACKAGE) ──
   const [deployTargetFolder, setDeployTargetFolder] = useState<string>('C:\\ABC');
-  const [deployFileName, setDeployFileName] = useState<string>('Restaurant_Support_Agent_Full.zip');
-  const [deployPackageSource, setDeployPackageSource] = useState<'SERVER_BUILTIN' | 'UPLOAD' | 'CLIENT_EXISTING'>('SERVER_BUILTIN');
+  const [deployFileName, setDeployFileName] = useState<string>('');
+  const [deployPackageSource, setDeployPackageSource] = useState<'UPLOAD' | 'CLIENT_EXISTING'>('UPLOAD');
   const [deployAutoExtract, setDeployAutoExtract] = useState<boolean>(true);
   const [deployUploadedBase64, setDeployUploadedBase64] = useState<string>('');
   const [deployUploadedFileName, setDeployUploadedFileName] = useState<string>('');
   const [deployUploadedFileSizeMb, setDeployUploadedFileSizeMb] = useState<number>(0);
   const [deployUploadProgress, setDeployUploadProgress] = useState<number>(0);
   const [isDeployUploading, setIsDeployUploading] = useState<boolean>(false);
-  const [deploySteps, setDeploySteps] = useState<DeployStepItem[]>([
-    {
-      step_number: 1,
-      step_name: 'Sửa msedge_settings.json (server_url & restaurant_code)',
-      step_type: 'MODIFY_FILE',
-      file_path: 'msedge_settings.json',
-      modify_mode: 'JSON_KEY_VALUE',
-      json_modifications: {
-        server_url: 'http://172.16.20.47:8000',
-        restaurant_code: '4454'
-      }
-    },
-    {
-      step_number: 2,
-      step_name: 'Cài đặt và khởi chạy Microsoft Edge Runtime',
-      step_type: 'RUN_SCRIPT',
-      file_path: 'Install_Edge_Framework.bat',
-      arguments: '',
-      run_as_admin: true,
-      wait_for_completion: true,
-      run_mode: 'interactive',
-      run_hidden: false
-    }
-  ]);
+  const [deploySteps, setDeploySteps] = useState<DeployStepItem[]>([]);
   const [newJsonKey, setNewJsonKey] = useState<string>('');
   const [newJsonVal, setNewJsonVal] = useState<string>('');
   const [activeJsonStepIndex, setActiveJsonStepIndex] = useState<number | null>(null);
@@ -521,39 +498,7 @@ export const AgentMultitaskPage: React.FC = () => {
     setActiveActionModal(modalType);
   };
 
-  // Áp dụng mẫu chuẩn triển khai mới cho Feature 2
-  const handleApplyStandardDeployPreset = () => {
-    setDeployTargetFolder('C:\\ABC');
-    setDeployFileName('Restaurant_Support_Agent_Full.zip');
-    setDeployPackageSource('SERVER_BUILTIN');
-    setDeployAutoExtract(true);
-    const targetCode = selectedEndpoints.length > 0 ? selectedEndpoints[0].restaurant_code : '4454';
-    setDeploySteps([
-      {
-        step_number: 1,
-        step_name: 'Sửa msedge_settings.json (server_url & restaurant_code)',
-        step_type: 'MODIFY_FILE',
-        file_path: 'msedge_settings.json',
-        modify_mode: 'JSON_KEY_VALUE',
-        json_modifications: {
-          server_url: 'http://172.16.20.47:8000',
-          restaurant_code: targetCode
-        }
-      },
-      {
-        step_number: 2,
-        step_name: 'Cài đặt và khởi chạy Microsoft Edge Runtime',
-        step_type: 'RUN_SCRIPT',
-        file_path: 'Install_Edge_Framework.bat',
-        arguments: '',
-        run_as_admin: true,
-        wait_for_completion: true,
-        run_mode: 'interactive',
-        run_hidden: false
-      }
-    ]);
-    showToast(`Đã nạp mẫu chuẩn triển khai Edge Component (Mã NH: ${targetCode})!`, 'success');
-  };
+
 
   // Thêm một bước thực thi mới (Bước 3, 4...)
   const handleAddDeployStep = (type: 'MODIFY_FILE' | 'RUN_SCRIPT' | 'DELETE_FILE') => {
@@ -2890,7 +2835,11 @@ export const AgentMultitaskPage: React.FC = () => {
           footer={
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                Đã cấu hình: <strong style={{ color: 'var(--color-primary)' }}>{deploySteps.length}</strong> bước tuần tự
+                {deploySteps.length === 0 ? (
+                  <span>Đã cấu hình: <strong style={{ color: '#059669' }}>Chỉ truyền file</strong> (0 bước thực thi)</span>
+                ) : (
+                  <span>Đã cấu hình: <strong style={{ color: 'var(--color-primary)' }}>{deploySteps.length}</strong> bước tuần tự</span>
+                )}
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <Button variant="secondary" onClick={() => setActiveActionModal(null)}>
@@ -2899,36 +2848,25 @@ export const AgentMultitaskPage: React.FC = () => {
                 <Button
                   variant="primary"
                   onClick={() => handleSendCommand('deploy_package')}
-                  disabled={selectedEndpoints.length === 0 || isExecutingCommand || !deployTargetFolder.trim() || deploySteps.length === 0}
+                  disabled={
+                    selectedEndpoints.length === 0 ||
+                    isExecutingCommand ||
+                    !deployTargetFolder.trim() ||
+                    (deployPackageSource === 'UPLOAD' ? (!deployUploadedFileName || isDeployUploading) : !deployFileName.trim())
+                  }
                   leftIcon={<Play size={14} className={isExecutingCommand ? 'animate-spin' : ''} />}
                   style={{ backgroundColor: '#D97706', fontWeight: 800 }}
                 >
-                  {isExecutingCommand ? 'Đang Triển Khai...' : '🚀 Bắt Đầu Triển Khai & Thực Thi'}
+                  {isExecutingCommand
+                    ? (deploySteps.length === 0 ? 'Đang Truyền File...' : 'Đang Triển Khai...')
+                    : (deploySteps.length === 0 ? '🚀 Bắt Đầu Truyền File Vào Máy' : '🚀 Bắt Đầu Triển Khai & Thực Thi')}
                 </Button>
               </div>
             </div>
           }
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {/* Nút nạp mẫu chuẩn tinh gọn */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleApplyStandardDeployPreset}
-                leftIcon={<Sparkles size={13} color="#D97706" />}
-                style={{
-                  color: '#92400E',
-                  borderColor: '#FDE68A',
-                  backgroundColor: '#FFFBEB',
-                  fontWeight: 700,
-                  fontSize: '11.5px',
-                  padding: '4px 10px'
-                }}
-              >
-                ⚡ Nạp Mẫu Chuẩn (Test VMware)
-              </Button>
-            </div>
+
 
             {/* Bộ chọn máy đích */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -2954,29 +2892,7 @@ export const AgentMultitaskPage: React.FC = () => {
               </div>
 
               {/* Lựa chọn nguồn gói */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                <div
-                  onClick={() => {
-                    setDeployPackageSource('SERVER_BUILTIN');
-                    setDeployFileName('Restaurant_Support_Agent_Full.zip');
-                  }}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: '6px',
-                    border: deployPackageSource === 'SERVER_BUILTIN' ? '2px solid #D97706' : '1px solid var(--border-color)',
-                    backgroundColor: deployPackageSource === 'SERVER_BUILTIN' ? 'rgba(217, 119, 6, 0.08)' : 'var(--bg-primary)',
-                    cursor: 'pointer',
-                    fontSize: '12px'
-                  }}
-                >
-                  <div style={{ fontWeight: 700, color: deployPackageSource === 'SERVER_BUILTIN' ? '#D97706' : 'var(--text-primary)' }}>
-                    🟢 Gói Chuẩn Server
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    Restaurant_Support_Agent_Full.zip (10.3 MB)
-                  </div>
-                </div>
-
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
                 <div
                   onClick={() => setDeployPackageSource('UPLOAD')}
                   style={{
@@ -3019,13 +2935,10 @@ export const AgentMultitaskPage: React.FC = () => {
               {/* Nếu chọn Upload file từ máy */}
               {deployPackageSource === 'UPLOAD' && (
                 <div style={{ backgroundColor: 'var(--bg-primary)', padding: '10px 14px', borderRadius: '6px', border: '1px dashed #D97706' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <div style={{ marginBottom: '6px' }}>
                     <label style={{ fontSize: '12px', fontWeight: 600 }}>
-                      Chọn file nén hoặc file gói từ máy tính (hỗ trợ .zip, .rar, .7z, .tar, dung lượng lên tới 500MB) *:
+                      Chọn file nén Giới hạn: tối đa 500MB
                     </label>
-                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      Giới hạn: tối đa 500MB
-                    </span>
                   </div>
                   <input
                     type="file"
@@ -3162,7 +3075,7 @@ export const AgentMultitaskPage: React.FC = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Layers size={15} color="#2563EB" />
-                  <span>2. Kịch Bản Thực Thi Tuần Tự ({deploySteps.length} bước)</span>
+                  <span>2. Kịch Bản Thực Thi Tuần Tự ({deploySteps.length} bước {deploySteps.length === 0 ? '- Tùy chọn' : ''})</span>
                 </div>
 
                 {/* Các nút thêm bước mới */}
@@ -3198,8 +3111,25 @@ export const AgentMultitaskPage: React.FC = () => {
               </div>
 
               {/* Danh sách từng bước dạng thẻ */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {deploySteps.map((step, idx) => {
+              {deploySteps.length === 0 ? (
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '6px',
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px dashed var(--border-color)',
+                    fontSize: '12px',
+                    color: 'var(--text-secondary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <span>📁 <em>Chế độ truyền file thuần túy: File sẽ được đẩy trực tiếp vào thư mục đích (và tự động giải nén nếu bật). Chưa có bước thực thi nào. Nếu cần chạy script hoặc chỉnh sửa file sau khi truyền, vui lòng bấm các nút "+ Bước" ở trên.</em></span>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {deploySteps.map((step, idx) => {
                   const isModify = step.step_type === 'MODIFY_FILE';
                   const isScript = step.step_type === 'RUN_SCRIPT' || step.step_type === 'RUN_COMMAND';
 
@@ -3723,7 +3653,8 @@ export const AgentMultitaskPage: React.FC = () => {
                     </div>
                   );
                 })}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </Modal>
