@@ -3406,3 +3406,30 @@ estaurant_service.py).
   + **Giải pháp khắc phục**:
     * Trong `frontend/src/components/layout/Sidebar.tsx`: Chuyển toàn bộ màu chữ cứng sang các biến CSS chuẩn hệ thống: `var(--text-primary)` (sẽ tự động thành `#F8FAFC` trắng sáng ở Dark Mode và `#111827` đen ở Light Mode) và `var(--text-secondary)` (thành `#CBD5E1` xám sáng ở Dark Mode).
     * Trong `frontend/src/styles/index.css`: Bổ sung rule CSS cho `[data-theme="dark"] .app-sidebar` đảm bảo toàn bộ menu text & span luôn hiển thị trắng sáng sắc nét, tương phản hoàn hảo trên nền tối.
+
+- **Tinh Gọn Tính Năng Truyền Gói Cài & Hỗ Trợ Chỉ Truyền File Vào Thư Mục [2026-10-18]**:
+  + Người dùng có nhu cầu chỉ truyền file nén/file cấu hình vào thư mục đích trên máy trạm mà không bắt buộc phải có bước thực thi.
+  + Đã bỏ các bước kiểm tra bắt buộc phải có lệnh thực thi trong `DeployPackageModal.tsx` và `agentMultitaskService.ts`.
+  + Tinh gọn nhãn mô tả: Đổi `"Chọn file nén hoặc file gói từ máy tính (hỗ trợ .zip, .rar, .7z, .tar, dung lượng lên tới 500MB) *"` thành `"Chọn file nén Giới hạn: tối đa 500MB"`, xóa nhãn trùng lặp ở góc phải, xóa các nút "Gói Chuẩn Server" và "⚡ Nạp Mẫu Chuẩn (Test VMware)".
+
+- **Nâng Cấp Kết Nối KDS Hỗ Trợ Windows Server 2012 / 2016 / 2019 / 2022 & Remote Desktop (RDP) [2026-10-18]**:
+  + **Hiện tượng & Nguyên nhân**: Khi mở kết nối KDS từ Windows Server 2012 hoặc phiên RDP, click vào không thấy có phản ứng gì (trong khi máy trạm VMware Win 10/11 chạy bình thường). Nguyên nhân do:
+    1. Windows Server và Remote Desktop không có card màn hình vật lý (GPU) và Windows Audio service bị tắt mặc định $\rightarrow$ Scrcpy tiêu chuẩn gọi Direct3D 11 / WASAPI bị crash ngầm.
+    2. File registry cũ gọi qua PowerShell với Base64 command, khi có lỗi CMD tắt ngay trong 1ms khiến người dùng thấy như không có phản ứng.
+  + **Giải pháp Nâng Cấp Toàn Diện (Giữ Nguyên Bản Cũ Cho Máy Trạm)**:
+    1. **Tab Phân Định Giao Diện Trong `VncSetupModal.tsx`**:
+       * *Bản Chuẩn (Win 10 / 11 / Máy Trạm)*: Giữ nguyên 100% logic, bộ cài `scrcpy.rar` và registry `vnc_scrcpy_protocol.reg` cũ.
+       * *Bản Chuyên Dụng Windows Server / RDP (Hỗ trợ Win Server 2012+)*: Tùy chọn chuyên biệt cho máy chủ với notice giải thích nguyên nhân và hướng dẫn cụ thể.
+    2. **Bộ Cài Đặt Scrcpy WinServer (`scrcpy_winserver.zip` 7.48 MB & `scrcpy_winserver.rar` 6.15 MB)**:
+       * Tích hợp script điều hướng `kds_connect_server.bat` thiết lập `SDL_RENDER_DRIVER=software`, chạy `scrcpy.exe` với `--render-driver=software --no-audio --video-codec=h264` (render thuần CPU, không phụ thuộc GPU và Windows Audio).
+       * Tích hợp script kiểm tra trực tiếp `test_kds_server.bat` trên màn hình Server.
+       * 100% tiếng Việt không dấu, không chớp tắt, dừng màn hình báo lỗi rõ ràng nếu có sự cố mạng.
+    3. **File Registry Tối Ưu Cho Windows Server (`vnc_scrcpy_protocol_winserver.reg`)**:
+       * Gọi trực tiếp `cmd /c "if exist C:\scrcpy\kds_connect_server.bat (call C:\scrcpy\kds_connect_server.bat %1) else (...)"` không phụ thuộc PowerShell execution policy, kiểm tra file tồn tại và dừng báo lỗi nếu chưa giải nén.
+    4. **Backend API Endpoints**:
+       * `GET /api/v1/restaurants/download/scrcpy-winserver` (tải file zip/rar bộ cài WinServer)
+       * `GET /api/v1/restaurants/download/reg-winserver` (tải file reg cấu hình WinServer)
+    5. **Kiểm Thử & Đóng Gói Triển Khai**:
+       * Frontend `npm run build` thành công exit code 0 (`✓ built in 3.91s`), tự động đóng gói sẵn trong `frontend/dist/`.
+       * Backend `compileall` sạch 100%, Smoke test `PASSED 100%`.
+

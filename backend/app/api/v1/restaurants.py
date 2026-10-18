@@ -334,6 +334,90 @@ def download_vnc_scrcpy_reg(request: Request, password: Optional[str] = Query(No
     )
 
 
+@router.get("/download/scrcpy-winserver")
+def download_scrcpy_winserver_package():
+    """Tải bộ cài đặt scrcpy_winserver.zip chuyên dụng cho Windows Server / RDP (hỗ trợ Win Server 2012+)"""
+    base_dir = Path(__file__).resolve().parent.parent.parent.parent / "static" / "downloads"
+    zip_path = base_dir / "scrcpy_winserver.zip"
+    rar_path = base_dir / "scrcpy_winserver.rar"
+    if zip_path.exists():
+        return FileResponse(
+            path=str(zip_path),
+            filename="scrcpy_winserver.zip",
+            media_type="application/zip"
+        )
+    elif rar_path.exists():
+        return FileResponse(
+            path=str(rar_path),
+            filename="scrcpy_winserver.rar",
+            media_type="application/x-rar-compressed"
+        )
+    raise HTTPException(status_code=404, detail="File scrcpy_winserver không tồn tại trên máy chủ")
+
+
+@router.get("/download/reg-winserver")
+def download_vnc_scrcpy_reg_winserver(request: Request, password: Optional[str] = Query(None)):
+    """Tải file vnc_scrcpy_protocol_winserver.reg tối ưu riêng cho Windows Server & Remote Desktop"""
+    origin = f"{request.url.scheme}://{request.url.netloc}"
+    req_origin = request.headers.get("origin") or request.headers.get("referer")
+    if req_origin:
+        parsed = urllib.parse.urlparse(req_origin)
+        if parsed.scheme and parsed.netloc:
+            origin = f"{parsed.scheme}://{parsed.netloc}"
+
+    if password and password.strip():
+        vnc_pwd = password.strip()
+    else:
+        vnc_pwd = get_saved_vnc_password()
+
+    reg_template = r"""Windows Registry Editor Version 5.00
+
+[HKEY_CLASSES_ROOT\vnc]
+@="URL:VNC Connection"
+"URL Protocol"=""
+
+[HKEY_CLASSES_ROOT\vnc\shell]
+
+[HKEY_CLASSES_ROOT\vnc\shell\open]
+
+[HKEY_CLASSES_ROOT\vnc\shell\open\command]
+@="cmd /V:ON /c \"set url=%1&&set url=!url:vnc://=!&&set url=!url:/=!&&start \"\" \"C:\\Program Files\\TightVNC\\tvnviewer.exe\" !url! -password=1234a@\""
+
+[HKEY_CLASSES_ROOT\scrcpy]
+@="URL:scrcpy Connection"
+"URL Protocol"=""
+
+[HKEY_CLASSES_ROOT\scrcpy\shell]
+
+[HKEY_CLASSES_ROOT\scrcpy\shell\open]
+
+[HKEY_CLASSES_ROOT\scrcpy\shell\open\command]
+@="cmd /c \"if exist C:\\\\scrcpy\\\\kds_connect_server.bat (call C:\\\\scrcpy\\\\kds_connect_server.bat %1) else (echo Khong tim thay C:\\\\scrcpy\\\\kds_connect_server.bat && echo Vui long tai va giai nen bo cai scrcpy_winserver vao C:\\\\scrcpy && echo. && pause)\""
+
+[HKEY_CURRENT_USER\Software\Policies\Google\Chrome]
+"AutoLaunchProtocolsFromOrigins"="[{\"allowed_origins\":[\"{origin}\"],\"protocol\":\"vnc\"},{\"allowed_origins\":[\"{origin}\"],\"protocol\":\"scrcpy\"}]"
+
+[HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge]
+"AutoLaunchProtocolsFromOrigins"="[{\"allowed_origins\":[\"{origin}\"],\"protocol\":\"vnc\"},{\"allowed_origins\":[\"{origin}\"],\"protocol\":\"scrcpy\"}]"
+
+[HKEY_LOCAL_MACHINE\Software\Policies\Google\Chrome]
+"AutoLaunchProtocolsFromOrigins"="[{\"allowed_origins\":[\"{origin}\"],\"protocol\":\"vnc\"},{\"allowed_origins\":[\"{origin}\"],\"protocol\":\"scrcpy\"}]"
+
+[HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Edge]
+"AutoLaunchProtocolsFromOrigins"="[{\"allowed_origins\":[\"{origin}\"],\"protocol\":\"vnc\"},{\"allowed_origins\":[\"{origin}\"],\"protocol\":\"scrcpy\"}]"
+"""
+    formatted_content = reg_template.replace('{origin}', origin).replace('-password=1234a@', f'-password={vnc_pwd}').strip().replace('\n', '\r\n')
+    return Response(
+        content=formatted_content.encode('utf-8-sig'),
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Content-Disposition": "attachment; filename=vnc_scrcpy_protocol_winserver.reg",
+            "Cache-Control": "no-cache, no-store, must-revalidate"
+        }
+    )
+
+
+
 def _check_single_vnc(ip: str) -> bool:
     import socket
     import subprocess

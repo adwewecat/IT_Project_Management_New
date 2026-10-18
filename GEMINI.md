@@ -273,6 +273,19 @@
   - **Nhật Ký**: Người tạo, Ngày tạo, Người sửa cuối, Ngày sửa cuối.
 - Áp dụng triệt để quy tắc **Permission Masking**: nếu tài khoản không có quyền xem trường nào, hiển thị nhãn `🔒 Bị ẩn theo phân quyền`.
 
+### 6.2.1. Cài Đặt & Cấu Hình Kết Nối Từ Xa VNC / KDS (Hỗ Trợ Windows Server 2012+ & Máy Trạm)
+- **Modal Cấu Hình (`VncSetupModal.tsx`)**: Hỗ trợ chuyển đổi linh hoạt qua 2 Tab:
+  1. **Bản Chuẩn (Win 10 / 11 / Máy Trạm Thông Thường)**:
+     - Giữ nguyên 100% logic cũ: Nút tải file `vnc_scrcpy_protocol.reg` và bộ cài `scrcpy.rar` giải nén vào `C:\scrcpy`.
+  2. **Bản Chuyên Dụng Windows Server / RDP (Hỗ trợ Win Server 2012 / 2016 / 2019 / 2022)**:
+     - **Nguyên nhân Win Server bấm không phản ứng**: Môi trường Server / RDP không có card màn hình vật lý (GPU) và Windows Audio service mặc định bị tắt $\rightarrow$ Scrcpy tiêu chuẩn gọi DirectX 11 / WASAPI bị dừng ngầm; lệnh gọi PowerShell qua cmd cũ chớp tắt trong 1ms.
+     - **Giải pháp**:
+       * Script điều hướng `kds_connect_server.bat` ép `set SDL_RENDER_DRIVER=software`, chạy `scrcpy.exe` với `--render-driver=software --no-audio --video-codec=h264` (render thuần CPU, không phụ thuộc GPU và Windows Audio), bắt lỗi rõ ràng không chớp tắt.
+       * File kiểm tra nhanh trực tiếp trên màn hình Server `test_kds_server.bat`.
+       * Bộ cài đặt `scrcpy_winserver.zip` (7.48 MB) giải nén được ngay trên mọi Windows Server không cần WinRAR, và file `scrcpy_winserver.rar` (6.15 MB).
+       * File Registry `vnc_scrcpy_protocol_winserver.reg` gọi thẳng `kds_connect_server.bat` ổn định 100%.
+       * Backend API: `/api/v1/restaurants/download/scrcpy-winserver` và `/api/v1/restaurants/download/reg-winserver`.
+
 ### 6.3. Báo Cáo Logs Tập Trung (`CentralizedLogsPage.tsx`)
 - Giới hạn tải tối đa **2000 dòng log gần nhất** (`MAX_LOAD_LIMIT = 2000` trong `log_service.py`).
 - Đã xóa bỏ các stat cards nhóm log và các khẩu hiệu giới thiệu thừa.

@@ -141,6 +141,54 @@ export const downloadVncScrcpyReg = (vncPassword: string = '1234a@') => {
   URL.revokeObjectURL(link.href);
 };
 
+export const downloadScrcpyWinServerPackage = (fileType: 'zip' | 'rar' = 'zip') => {
+  const downloadUrl = '/api/v1/restaurants/download/scrcpy-winserver';
+  const link = document.createElement('a');
+  link.href = downloadUrl;
+  link.setAttribute('download', fileType === 'zip' ? 'scrcpy_winserver.zip' : 'scrcpy_winserver.rar');
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+};
+
+export const downloadVncScrcpyRegWinServer = (vncPassword: string = '1234a@') => {
+  const origin = window.location.origin;
+  const pwd = vncPassword.trim() || '1234a@';
+  const regContent =
+    `Windows Registry Editor Version 5.00\r\n\r\n` +
+    `[HKEY_CLASSES_ROOT\\vnc]\r\n` +
+    `@="URL:VNC Connection"\r\n` +
+    `"URL Protocol"=""\r\n\r\n` +
+    `[HKEY_CLASSES_ROOT\\vnc\\shell]\r\n\r\n` +
+    `[HKEY_CLASSES_ROOT\\vnc\\shell\\open]\r\n\r\n` +
+    `[HKEY_CLASSES_ROOT\\vnc\\shell\\open\\command]\r\n` +
+    `@="cmd /V:ON /c \\"set url=%1&&set url=!url:vnc://=!&&set url=!url:/=!&&start \\"\\" \\"C:\\\\Program Files\\\\TightVNC\\\\tvnviewer.exe\\" !url! -password=${pwd}\\""\r\n\r\n` +
+    `[HKEY_CLASSES_ROOT\\scrcpy]\r\n` +
+    `@="URL:scrcpy Connection"\r\n` +
+    `"URL Protocol"=""\r\n\r\n` +
+    `[HKEY_CLASSES_ROOT\\scrcpy\\shell]\r\n\r\n` +
+    `[HKEY_CLASSES_ROOT\\scrcpy\\shell\\open]\r\n\r\n` +
+    `[HKEY_CLASSES_ROOT\\scrcpy\\shell\\open\\command]\r\n` +
+    `@="cmd /c \\"if exist C:\\\\scrcpy\\\\kds_connect_server.bat (call C:\\\\scrcpy\\\\kds_connect_server.bat %1) else (echo Khong tim thay C:\\\\scrcpy\\\\kds_connect_server.bat && echo Vui long tai va giai nen bo cai scrcpy_winserver vao C:\\\\scrcpy && echo. && pause)\\""\r\n\r\n` +
+    `[HKEY_CURRENT_USER\\Software\\Policies\\Google\\Chrome]\r\n` +
+    `"AutoLaunchProtocolsFromOrigins"="[{\\"allowed_origins\\":[\\"${origin}\\"],\\"protocol\\":\\"vnc\\"},{\\"allowed_origins\\":[\\"${origin}\\"],\\"protocol\\":\\"scrcpy\\"}]"\r\n\r\n` +
+    `[HKEY_CURRENT_USER\\Software\\Policies\\Microsoft\\Edge]\r\n` +
+    `"AutoLaunchProtocolsFromOrigins"="[{\\"allowed_origins\\":[\\"${origin}\\"],\\"protocol\\":\\"vnc\\"},{\\"allowed_origins\\":[\\"${origin}\\"],\\"protocol\\":\\"scrcpy\\"}]"\r\n\r\n` +
+    `[HKEY_LOCAL_MACHINE\\Software\\Policies\\Google\\Chrome]\r\n` +
+    `"AutoLaunchProtocolsFromOrigins"="[{\\"allowed_origins\\":[\\"${origin}\\"],\\"protocol\\":\\"vnc\\"},{\\"allowed_origins\\":[\\"${origin}\\"],\\"protocol\\":\\"scrcpy\\"}]"\r\n\r\n` +
+    `[HKEY_LOCAL_MACHINE\\Software\\Policies\\Microsoft\\Edge]\r\n` +
+    `"AutoLaunchProtocolsFromOrigins"="[{\\"allowed_origins\\":[\\"${origin}\\"],\\"protocol\\":\\"vnc\\"},{\\"allowed_origins\\":[\\"${origin}\\"],\\"protocol\\":\\"scrcpy\\"}]"\r\n`;
+
+  const blob = new Blob([regContent], { type: 'text/plain;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'vnc_scrcpy_protocol_winserver.reg';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+};
+
 export const getVncConfig = async (): Promise<{ default_password: string }> => {
   const response = await apiClient.get<{ default_password: string }>('/restaurants/vnc-config');
   return response.data;

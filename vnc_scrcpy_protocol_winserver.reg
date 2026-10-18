@@ -1,0 +1,35 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CLASSES_ROOT\vnc]
+@="URL:VNC Connection"
+"URL Protocol"=""
+
+[HKEY_CLASSES_ROOT\vnc\shell]
+
+[HKEY_CLASSES_ROOT\vnc\shell\open]
+
+[HKEY_CLASSES_ROOT\vnc\shell\open\command]
+@="cmd /V:ON /c \"set url=%1&&set url=!url:vnc://=!&&set url=!url:/=!&&start \"\" \"C:\\Program Files\\TightVNC\\tvnviewer.exe\" !url! -password=1234a@\""
+
+[HKEY_CLASSES_ROOT\scrcpy]
+@="URL:scrcpy Connection"
+"URL Protocol"=""
+
+[HKEY_CLASSES_ROOT\scrcpy\shell]
+
+[HKEY_CLASSES_ROOT\scrcpy\shell\open]
+
+[HKEY_CLASSES_ROOT\scrcpy\shell\open\command]
+@="cmd /c \"if exist C:\\scrcpy\\kds_connect_server.bat (call C:\\scrcpy\\kds_connect_server.bat %1) else (echo Khong tim thay C:\\scrcpy\\kds_connect_server.bat && echo Vui long tai va giai nen bo cai scrcpy_winserver vao C:\\scrcpy && echo. && pause)\""
+
+[HKEY_CURRENT_USER\Software\Policies\Google\Chrome]
+"AutoLaunchProtocolsFromOrigins"="[{\"allowed_origins\":[\"http://172.16.8.25:5001\",\"http://172.16.8.25:5002\"],\"protocol\":\"vnc\"},{\"allowed_origins\":[\"http://172.16.8.25:5001\",\"http://172.16.8.25:5002\"],\"protocol\":\"scrcpy\"}]"
+
+[HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge]
+"AutoLaunchProtocolsFromOrigins"="[{\"allowed_origins\":[\"http://172.16.8.25:5001\",\"http://172.16.8.25:5002\"],\"protocol\":\"vnc\"},{\"allowed_origins\":[\"http://172.16.8.25:5001\",\"http://172.16.8.25:5002\"],\"protocol\":\"scrcpy\"}]"
+
+[HKEY_LOCAL_MACHINE\Software\Policies\Google\Chrome]
+"AutoLaunchProtocolsFromOrigins"="[{\"allowed_origins\":[\"http://172.16.8.25:5001\",\"http://172.16.8.25:5002\"],\"protocol\":\"vnc\"},{\"allowed_origins\":[\"http://172.16.8.25:5001\",\"http://172.16.8.25:5002\"],\"protocol\":\"scrcpy\"}]"
+
+[HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Edge]
+"AutoLaunchProtocolsFromOrigins"="[{\"allowed_origins\":[\"http://172.16.8.25:5001\",\"http://172.16.8.25:5002\"],\"protocol\":\"vnc\"},{\"allowed_origins\":[\"http://172.16.8.25:5001\",\"http://172.16.8.25:5002\"],\"protocol\":\"scrcpy\"}]"
