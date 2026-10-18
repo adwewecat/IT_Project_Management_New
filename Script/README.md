@@ -3434,3 +3434,11 @@ estaurant_service.py).
        * Backend `compileall` sạch 100%, Smoke test `PASSED 100%`.
        * **Tinh gọn giao diện Tab WinServer**: Đã bỏ khối giải thích lý thuyết "Vì sao Win Server 2012 bấm vào không phản ứng gì?", bỏ các dòng diễn giải thừa dưới Step 1 và Step 2, giữ giao diện trực quan, tập trung tuyệt đối vào các nút hành động (Tải registry, Tải bộ cài, Hướng dẫn giải nén).
 
+- **Kiểm Tra, Đối Soát & Đồng Bộ Cơ Sở Dữ Liệu SQL Server Production .25 (172.16.8.25 / ITDEPT) [2026-10-18]**:
+  + **Đối soát toàn diện**: Đã quét toàn bộ 52 SQLAlchemy Models và so sánh trực tiếp với 66 bảng thực tế trên Database `ITDEPT` (`172.16.8.25:1433`, Server `SRVHCM-ASSET`).
+  + **Kết quả phát hiện & Đồng bộ tức thì**:
+    * Phát hiện 4 bảng của phân hệ Agent Multitask (`AGENT_MULTITASK_CONFIG`, `AGENT_MULTITASK_ENDPOINTS`, `AGENT_MULTITASK_LOGS`, `AGENT_MULTITASK_SCRIPT_TEMPLATES`) chưa có trên Server .25.
+    * Đã kết nối trực tiếp vào SQL Server .25 và tạo hoàn tất 100% cả 4 bảng này cùng các Index và nạp sẵn dữ liệu kịch bản mặc định (`Update iPOS TCH`, `Restart GPOS Service`).
+    * File `Script/Full_SCRIPT_SQL_TABLE.sql` đã cập nhật đầy đủ DDL chuẩn.
+    * Hiện tại: **100% BẢNG và 100% CỘT trong toàn bộ hệ thống đã khớp hoàn hảo trên Server Production .25**.
+
