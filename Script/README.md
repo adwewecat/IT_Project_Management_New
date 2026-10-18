@@ -3432,4 +3432,5 @@ estaurant_service.py).
     5. **Kiểm Thử & Đóng Gói Triển Khai**:
        * Frontend `npm run build` thành công exit code 0 (`✓ built in 3.91s`), tự động đóng gói sẵn trong `frontend/dist/`.
        * Backend `compileall` sạch 100%, Smoke test `PASSED 100%`.
+       * **Tinh gọn giao diện Tab WinServer**: Đã bỏ khối giải thích lý thuyết "Vì sao Win Server 2012 bấm vào không phản ứng gì?", bỏ các dòng diễn giải thừa dưới Step 1 và Step 2, giữ giao diện trực quan, tập trung tuyệt đối vào các nút hành động (Tải registry, Tải bộ cài, Hướng dẫn giải nén).
 

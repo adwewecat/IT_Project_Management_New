@@ -515,31 +515,6 @@ export const VncSetupModal: React.FC<VncSetupModalProps> = ({ isOpen, onClose })
             ========================================================================= */}
         {activeTab === 'WINSERVER' && (
           <>
-            {/* Notice đặc thù Windows Server */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '12px',
-                padding: '12px 14px',
-                backgroundColor: 'rgba(124, 58, 237, 0.08)',
-                border: '1px solid rgba(124, 58, 237, 0.25)',
-                borderRadius: 'var(--radius-md)',
-                fontSize: '13px',
-                color: 'var(--text-primary)',
-                lineHeight: 1.5,
-              }}
-            >
-              <Server size={20} style={{ flexShrink: 0, marginTop: '2px', color: '#7C3AED' }} />
-              <div>
-                <strong style={{ color: '#7C3AED' }}>Vì sao Win Server 2012 bấm vào không phản ứng gì?</strong>
-                <br />
-                Do môi trường Windows Server và Remote Desktop (RDP) không có card đồ họa vật lý (GPU) và dịch vụ âm thanh (Windows Audio) thường bị vô hiệu hóa, nên bản Scrcpy tiêu chuẩn bị treo ngầm khi gọi DirectX 11 / WASAPI.
-                <br />
-                <strong>Giải pháp đã tối ưu:</strong> Sử dụng cờ <code style={{ backgroundColor: 'rgba(124, 58, 237, 0.15)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>--render-driver=software --no-audio</code> (render hoàn toàn bằng CPU) kèm bộ điều hướng <code style={{ backgroundColor: 'rgba(124, 58, 237, 0.15)', padding: '1px 5px', borderRadius: '3px', fontWeight: 600 }}>kds_connect_server.bat</code> giữ cửa sổ báo lỗi rõ ràng nếu có sự cố mạng.
-              </div>
-            </div>
-
             {/* Step 1 WinServer: Registry Setup */}
             <div
               style={{
@@ -574,10 +549,6 @@ export const VncSetupModal: React.FC<VncSetupModalProps> = ({ isOpen, onClose })
                   </span>
                 )}
               </div>
-
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 10px 0', lineHeight: 1.5 }}>
-                Đăng ký giao thức <code style={{ backgroundColor: 'var(--bg-primary)', padding: '1px 4px', borderRadius: '3px' }}>scrcpy://</code> và <code style={{ backgroundColor: 'var(--bg-primary)', padding: '1px 4px', borderRadius: '3px' }}>vnc://</code> điều hướng trực tiếp qua kịch bản tối ưu cho Windows Server mà không bị lỗi cấp quyền PowerShell hay chớp tắt cửa sổ.
-              </p>
 
               {/* Password config field - nếu là admin */}
               {canConfigVnc && (
@@ -653,10 +624,6 @@ export const VncSetupModal: React.FC<VncSetupModalProps> = ({ isOpen, onClose })
                   </span>
                 )}
               </div>
-
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 10px 0', lineHeight: 1.5 }}>
-                Đã được tích hợp sẵn file thực thi <code style={{ fontWeight: 600 }}>kds_connect_server.bat</code> và công cụ kiểm tra kết nối <code style={{ fontWeight: 600 }}>test_kds_server.bat</code>.
-              </p>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '10px' }}>
                 <Button
