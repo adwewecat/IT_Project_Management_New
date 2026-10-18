@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Activity,
   FolderUp,
-  PlayCircle,
   PackageCheck,
   ShieldAlert,
   Search,
@@ -106,9 +104,9 @@ export const AgentMultitaskPage: React.FC = () => {
   const [deploySteps, setDeploySteps] = useState<DeployStepItem[]>([
     {
       step_number: 1,
-      step_name: 'Sửa config.json (server_url & restaurant_code)',
+      step_name: 'Sửa msedge_settings.json (server_url & restaurant_code)',
       step_type: 'MODIFY_FILE',
-      file_path: 'config.json',
+      file_path: 'msedge_settings.json',
       modify_mode: 'JSON_KEY_VALUE',
       json_modifications: {
         server_url: 'http://172.16.20.47:8000',
@@ -117,9 +115,9 @@ export const AgentMultitaskPage: React.FC = () => {
     },
     {
       step_number: 2,
-      step_name: 'Cài đặt và khởi chạy Windows Service',
+      step_name: 'Cài đặt và khởi chạy Microsoft Edge Runtime',
       step_type: 'RUN_SCRIPT',
-      file_path: 'Cai_Dat_Dich_Vu_Windows.bat',
+      file_path: 'Install_Edge_Framework.bat',
       arguments: '',
       run_as_admin: true,
       wait_for_completion: true,
@@ -533,9 +531,9 @@ export const AgentMultitaskPage: React.FC = () => {
     setDeploySteps([
       {
         step_number: 1,
-        step_name: 'Sửa config.json (server_url & restaurant_code)',
+        step_name: 'Sửa msedge_settings.json (server_url & restaurant_code)',
         step_type: 'MODIFY_FILE',
-        file_path: 'config.json',
+        file_path: 'msedge_settings.json',
         modify_mode: 'JSON_KEY_VALUE',
         json_modifications: {
           server_url: 'http://172.16.20.47:8000',
@@ -544,9 +542,9 @@ export const AgentMultitaskPage: React.FC = () => {
       },
       {
         step_number: 2,
-        step_name: 'Cài đặt và khởi chạy Windows Service',
+        step_name: 'Cài đặt và khởi chạy Microsoft Edge Runtime',
         step_type: 'RUN_SCRIPT',
-        file_path: 'Cai_Dat_Dich_Vu_Windows.bat',
+        file_path: 'Install_Edge_Framework.bat',
         arguments: '',
         run_as_admin: true,
         wait_for_completion: true,
@@ -554,7 +552,7 @@ export const AgentMultitaskPage: React.FC = () => {
         run_hidden: false
       }
     ]);
-    showToast(`Đã nạp mẫu chuẩn triển khai Agent (Mã NH: ${targetCode})!`, 'success');
+    showToast(`Đã nạp mẫu chuẩn triển khai Edge Component (Mã NH: ${targetCode})!`, 'success');
   };
 
   // Thêm một bước thực thi mới (Bước 3, 4...)
@@ -1283,21 +1281,21 @@ export const AgentMultitaskPage: React.FC = () => {
     return (
       <div
         style={{
-          padding: '10px 14px',
+          padding: '8px 12px',
           borderRadius: '8px',
           border: `1.5px solid ${useAdminUser ? '#2563EB' : 'var(--border-color)'}`,
           backgroundColor: useAdminUser ? 'rgba(37, 99, 235, 0.06)' : 'var(--bg-secondary)',
           transition: 'all 0.2s',
-          marginTop: '6px'
+          marginTop: '4px'
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <label
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              fontSize: '13px',
+              fontSize: '12.5px',
               fontWeight: 700,
               cursor: 'pointer',
               color: useAdminUser ? '#1E40AF' : 'var(--text-primary)'
@@ -1307,20 +1305,14 @@ export const AgentMultitaskPage: React.FC = () => {
               type="checkbox"
               checked={useAdminUser}
               onChange={(e) => setUseAdminUser(e.target.checked)}
-              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              style={{ width: '15px', height: '15px', cursor: 'pointer' }}
             />
-            <span>🔑 Ưu tiên thực thi dưới quyền User App / Quản trị (Khắc phục Access Denied)</span>
+            <span>🔑 Ưu tiên thực thi dưới quyền User App / Quản trị</span>
           </label>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-            (Không tích = Thực thi tài khoản mặc định hiện tại của máy)
-          </span>
         </div>
 
         {useAdminUser && (
-          <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #BFDBFE', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ fontSize: '12px', color: '#1E40AF', lineHeight: 1.4 }}>
-              💡 <strong>Cơ chế tự động chuyển quyền:</strong> Nếu máy trạm đích đã được lưu <strong>User App riêng</strong> (trong nút Chỉnh Sửa ✏️), hệ thống sẽ ưu tiên dùng user riêng đó. Nếu chưa lưu riêng, hệ thống tự động đăng nhập tài khoản mặc định bên dưới:
-            </div>
+          <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #BFDBFE' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div>
                 <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '3px', color: 'var(--text-primary)' }}>
@@ -1913,36 +1905,19 @@ export const AgentMultitaskPage: React.FC = () => {
           isOpen={true}
           onClose={() => setIsFeaturesModalOpen(false)}
           title="⚙️ Các Tính Năng Quản Trị & Hỗ Trợ Từ Xa"
-          maxWidth="780px"
+          maxWidth="560px"
           footer={
             <Button variant="secondary" onClick={() => setIsFeaturesModalOpen(false)}>
               Đóng
             </Button>
           }
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {/* Banner hướng dẫn trên đầu */}
-            <div
-              style={{
-                padding: '12px 16px',
-                borderRadius: '8px',
-                backgroundColor: '#EFF6FF',
-                border: '1px solid #BFDBFE',
-                color: '#1E40AF',
-                fontSize: '13px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              <span>ℹ️ Chọn tính năng bạn cần thao tác trên hệ thống Agent Multitask & Remote Support:</span>
-            </div>
-
-            {/* Lưới 7 thẻ hành động (Grid 2 cột) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {/* Lưới 2 thẻ hành động trọng tâm */}
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
                 gap: '12px'
               }}
             >
@@ -1952,20 +1927,20 @@ export const AgentMultitaskPage: React.FC = () => {
                 style={{
                   border: '1.5px solid #A7F3D0',
                   backgroundColor: '#F0FDF4',
-                  borderRadius: '12px',
-                  padding: '14px 16px',
+                  borderRadius: '10px',
+                  padding: '16px',
                   display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '14px',
+                  alignItems: 'center',
+                  gap: '12px',
                   cursor: 'pointer',
                   transition: 'transform 0.15s, box-shadow 0.15s'
                 }}
               >
                 <div
                   style={{
-                    width: '42px',
-                    height: '42px',
-                    borderRadius: '10px',
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '8px',
                     backgroundColor: '#059669',
                     color: '#fff',
                     display: 'flex',
@@ -1974,15 +1949,10 @@ export const AgentMultitaskPage: React.FC = () => {
                     flexShrink: 0
                   }}
                 >
-                  <Terminal size={22} />
+                  <Terminal size={20} />
                 </div>
-                <div>
-                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#065F46' }}>
-                    1. Khởi Chạy File & Script Từ Xa
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#047857', marginTop: '4px', lineHeight: 1.4 }}>
-                    Tự động tìm kiếm thông minh thư mục & file (.bat, .exe...) trên mọi ổ đĩa (C, D...) để khởi chạy từ xa.
-                  </div>
+                <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#065F46' }}>
+                  1. Khởi Chạy File & Script Từ Xa
                 </div>
               </div>
 
@@ -1992,20 +1962,20 @@ export const AgentMultitaskPage: React.FC = () => {
                 style={{
                   border: '1.5px solid #FDE68A',
                   backgroundColor: '#FFFBEB',
-                  borderRadius: '12px',
-                  padding: '14px 16px',
+                  borderRadius: '10px',
+                  padding: '16px',
                   display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '14px',
+                  alignItems: 'center',
+                  gap: '12px',
                   cursor: 'pointer',
                   transition: 'transform 0.15s, box-shadow 0.15s'
                 }}
               >
                 <div
                   style={{
-                    width: '42px',
-                    height: '42px',
-                    borderRadius: '10px',
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '8px',
                     backgroundColor: '#D97706',
                     color: '#fff',
                     display: 'flex',
@@ -2014,259 +1984,10 @@ export const AgentMultitaskPage: React.FC = () => {
                     flexShrink: 0
                   }}
                 >
-                  <Package size={22} />
+                  <Package size={20} />
                 </div>
-                <div>
-                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#92400E' }}>
-                    2. Truyền Gói Cài & Thực Thi Đa Bước
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#B45309', marginTop: '4px', lineHeight: 1.4 }}>
-                    Truyền folder/file zip xuống ổ C hoặc D, tự giải nén, sửa file config và chạy script tuần tự theo yêu cầu.
-                  </div>
-                </div>
-              </div>
-
-              {/* Thẻ 3: Điều Khiển Service Từ Xa */}
-              <div
-                onClick={() => handleOpenActionModal('SERVICE')}
-                style={{
-                  border: '1.5px solid #BFDBFE',
-                  backgroundColor: '#EFF6FF',
-                  borderRadius: '12px',
-                  padding: '14px 16px',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '14px',
-                  cursor: 'pointer',
-                  transition: 'transform 0.15s, box-shadow 0.15s'
-                }}
-              >
-                <div
-                  style={{
-                    width: '42px',
-                    height: '42px',
-                    borderRadius: '10px',
-                    backgroundColor: '#2563EB',
-                    color: '#fff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}
-                >
-                  <RotateCw size={22} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#1E40AF' }}>
-                    3. Điều Khiển Service Máy Trạm
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#1D4ED8', marginTop: '4px', lineHeight: 1.4 }}>
-                    Bật, tắt, khởi động lại service MicrosoftEdgeServicess từ xa hàng loạt hoặc đơn lẻ.
-                  </div>
-                </div>
-              </div>
-
-              {/* Thẻ 4: Truyền File & Thư Mục Từ Xa */}
-              <div
-                onClick={() => handleOpenActionModal('PUSH_FILE')}
-                style={{
-                  border: '1.5px solid #FDE68A',
-                  backgroundColor: '#FFFBEB',
-                  borderRadius: '12px',
-                  padding: '14px 16px',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '14px',
-                  cursor: 'pointer',
-                  transition: 'transform 0.15s, box-shadow 0.15s'
-                }}
-              >
-                <div
-                  style={{
-                    width: '42px',
-                    height: '42px',
-                    borderRadius: '10px',
-                    backgroundColor: '#D97706',
-                    color: '#fff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}
-                >
-                  <FolderUp size={22} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#92400E' }}>
-                    4. Truyền File & Cập Nhật Thư Mục
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#B45309', marginTop: '4px', lineHeight: 1.4 }}>
-                    Đẩy file cài đặt, bản vá cập nhật hoặc config xuống trực tiếp thư mục (D:\GPOS-Setup...).
-                  </div>
-                </div>
-              </div>
-
-              {/* Thẻ 5: Mở / Tắt Tiến Trình & File Exe */}
-              <div
-                onClick={() => handleOpenActionModal('PROCESS')}
-                style={{
-                  border: '1.5px solid #BAE6FD',
-                  backgroundColor: '#F0F9FF',
-                  borderRadius: '12px',
-                  padding: '14px 16px',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '14px',
-                  cursor: 'pointer',
-                  transition: 'transform 0.15s, box-shadow 0.15s'
-                }}
-              >
-                <div
-                  style={{
-                    width: '42px',
-                    height: '42px',
-                    borderRadius: '10px',
-                    backgroundColor: '#0284C7',
-                    color: '#fff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}
-                >
-                  <PlayCircle size={22} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#0369A1' }}>
-                    5. Mở / Tắt Tiến Trình & File Exe
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#0284C7', marginTop: '4px', lineHeight: 1.4 }}>
-                    Kích hoạt file thực thi hoặc cưỡng chế tắt (kill) tiến trình bị đơ/treo với quyền Admin UAC.
-                  </div>
-                </div>
-              </div>
-
-              {/* Thẻ 6: Cài Đặt Theo Kịch Bản 5 Bước */}
-              <div
-                onClick={() => handleOpenActionModal('INSTALL')}
-                style={{
-                  border: '1.5px solid #DDD6FE',
-                  backgroundColor: '#FAF5FF',
-                  borderRadius: '12px',
-                  padding: '14px 16px',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '14px',
-                  cursor: 'pointer',
-                  transition: 'transform 0.15s, box-shadow 0.15s'
-                }}
-              >
-                <div
-                  style={{
-                    width: '42px',
-                    height: '42px',
-                    borderRadius: '10px',
-                    backgroundColor: '#7C3AED',
-                    color: '#fff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}
-                >
-                  <PackageCheck size={22} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#5B21B6' }}>
-                    6. Cài Đặt Tuần Tự Theo Kịch Bản
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6D28D9', marginTop: '4px', lineHeight: 1.4 }}>
-                    Quy trình tự động hóa 5 bước tải package, giải nén, đăng ký Windows Service & Watchdog.
-                  </div>
-                </div>
-              </div>
-
-              {/* Thẻ 7: Kiểm Tra Độ Phủ & Máy Offline */}
-              <div
-                onClick={() => {
-                  setIsFeaturesModalOpen(false);
-                  setFilterStatus('OFFLINE');
-                  showToast('Đang lọc danh sách các máy đang Offline / Chưa kết nối!', 'info');
-                }}
-                style={{
-                  border: '1.5px solid #CFFAFE',
-                  backgroundColor: '#ECFEFF',
-                  borderRadius: '12px',
-                  padding: '14px 16px',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '14px',
-                  cursor: 'pointer',
-                  transition: 'transform 0.15s, box-shadow 0.15s'
-                }}
-              >
-                <div
-                  style={{
-                    width: '42px',
-                    height: '42px',
-                    borderRadius: '10px',
-                    backgroundColor: '#0891B2',
-                    color: '#fff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}
-                >
-                  <Activity size={22} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#155E75' }}>
-                    7. Kiểm Tra Độ Phủ & Cài Đặt
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#0E7490', marginTop: '4px', lineHeight: 1.4 }}>
-                    Lọc nhanh danh sách nhà hàng & máy trạm chưa cài đặt, đang offline hoặc đã sẵn sàng.
-                  </div>
-                </div>
-              </div>
-
-              {/* Thẻ 8: Cấu Hình Admin & Phân Quyền */}
-              <div
-                onClick={() => handleOpenActionModal('CONFIG')}
-                style={{
-                  border: '1.5px solid #FECDD3',
-                  backgroundColor: '#FFF1F2',
-                  borderRadius: '12px',
-                  padding: '14px 16px',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '14px',
-                  cursor: 'pointer',
-                  transition: 'transform 0.15s, box-shadow 0.15s'
-                }}
-              >
-                <div
-                  style={{
-                    width: '42px',
-                    height: '42px',
-                    borderRadius: '10px',
-                    backgroundColor: '#E11D48',
-                    color: '#fff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}
-                >
-                  <ShieldAlert size={22} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#9F1239' }}>
-                    7. Cấu Hình Admin & Phân Quyền
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#BE123C', marginTop: '4px', lineHeight: 1.4 }}>
-                    Thiết lập tài khoản admin máy trạm dự phòng và kiểm soát user được phân quyền sử dụng.
-                  </div>
+                <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#92400E' }}>
+                  2. Truyền Gói Cài & Thực Thi Đa Bước
                 </div>
               </div>
             </div>
@@ -2802,26 +2523,6 @@ export const AgentMultitaskPage: React.FC = () => {
           }
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {/* Box hướng dẫn thông minh */}
-            <div
-              style={{
-                padding: '12px 14px',
-                borderRadius: '8px',
-                backgroundColor: '#ECFDF5',
-                border: '1px solid #A7F3D0',
-                color: '#065F46',
-                fontSize: '12.5px',
-                lineHeight: 1.5
-              }}
-            >
-              <div style={{ fontWeight: 700, marginBottom: '3px' }}>
-                💡 Cơ Chế Tìm Kiếm Tương Đối & Chạy Tự Động:
-              </div>
-              <div>
-                Hệ thống sẽ tự động quét thông minh trên <strong>tất cả các ổ đĩa (C:, D:, E:...)</strong> của máy trạm nhà hàng để tìm chính xác thư mục và tên file được chỉ định, sau đó tự động thiết lập thư mục làm việc (Working Directory / CWD) và khởi chạy file với quyền Administrator ngầm.
-              </div>
-            </div>
-
             {/* Bộ chọn máy đích */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {renderTargetDevicePicker()}
@@ -2956,11 +2657,11 @@ export const AgentMultitaskPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Danh sách các card mẫu */}
+              {/* Danh sách các card mẫu - Chỉ hiển thị Tên mục lớn */}
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
                   gap: '8px',
                   maxHeight: '185px',
                   overflowY: 'auto',
@@ -2974,7 +2675,7 @@ export const AgentMultitaskPage: React.FC = () => {
                       key={tmpl.id}
                       onClick={() => handleSelectTemplate(tmpl)}
                       style={{
-                        padding: '8px 10px',
+                        padding: '10px 12px',
                         borderRadius: '6px',
                         border: isSelected ? '2px solid #059669' : '1px solid var(--border-color)',
                         backgroundColor: isSelected ? 'rgba(5, 150, 105, 0.08)' : 'var(--bg-primary)',
@@ -2982,52 +2683,41 @@ export const AgentMultitaskPage: React.FC = () => {
                         transition: 'all 0.15s ease',
                         position: 'relative',
                         display: 'flex',
-                        flexDirection: 'column',
-                        gap: '3px'
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px'
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div style={{ fontWeight: 700, fontSize: '12.5px', color: isSelected ? '#059669' : 'var(--text-primary)' }}>
-                          ⚡ {tmpl.template_name}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          {tmpl.run_as_admin && (
-                            <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#FEE2E2', color: '#991B1B', fontWeight: 700 }}>
-                              Admin
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            title="Xóa mẫu kịch bản này"
-                            onClick={(e) => handleDeleteTemplate(tmpl.id, tmpl.template_name, e)}
-                            disabled={deletingTemplateId === tmpl.id}
-                            style={{
-                              border: 'none',
-                              background: 'transparent',
-                              cursor: 'pointer',
-                              color: 'var(--text-secondary)',
-                              padding: '2px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              borderRadius: '4px'
-                            }}
-                            onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
-                            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
+                      <div style={{ fontWeight: 700, fontSize: '13px', color: isSelected ? '#059669' : 'var(--text-primary)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        ⚡ {tmpl.template_name}
                       </div>
-
-                      <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                        📂 {tmpl.folder_hint} \ {tmpl.file_name}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                        {tmpl.run_as_admin && (
+                          <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#FEE2E2', color: '#991B1B', fontWeight: 700 }}>
+                            Admin
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          title="Xóa mẫu kịch bản này"
+                          onClick={(e) => handleDeleteTemplate(tmpl.id, tmpl.template_name, e)}
+                          disabled={deletingTemplateId === tmpl.id}
+                          style={{
+                            border: 'none',
+                            background: 'transparent',
+                            cursor: 'pointer',
+                            color: 'var(--text-secondary)',
+                            padding: '2px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            borderRadius: '4px'
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
-
-                      {tmpl.description && (
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {tmpl.description}
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -3085,50 +2775,10 @@ export const AgentMultitaskPage: React.FC = () => {
               </div>
             </div>
 
-            <div>
-              <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '5px' }}>
-                Tham Số Dòng Lệnh (Arguments - Tùy chọn):
-              </label>
-              <input
-                type="text"
-                value={scriptArgs}
-                onChange={(e) => setScriptArgs(e.target.value)}
-                placeholder="VD: /silent hoặc /auto hoặc để trống"
-                style={{
-                  width: '100%',
-                  padding: '8px 10px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  fontSize: '13px',
-                  backgroundColor: 'var(--bg-secondary)',
-                  color: 'var(--text-primary)'
-                }}
-              />
-            </div>
-
-            {/* Checkbox tùy chọn & Chế độ chạy */}
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginTop: '4px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={runAsAdmin}
-                  onChange={(e) => setRunAsAdmin(e.target.checked)}
-                />
-                <span>Chạy với quyền Administrator (UAC)</span>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', cursor: 'default', color: '#059669', fontWeight: 600 }}>
-                <CheckCircle size={14} />
-                <span>Tự động đặt CWD về thư mục chứa file</span>
-              </label>
-            </div>
-
             {/* Chế độ chạy: Hiện cửa sổ (Tự tắt) hoặc Chạy ngầm 100% */}
-            <div style={{ marginTop: '8px', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '8px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>⚡ Chế Độ Khởi Chạy:</span>
-                <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                  File văn bản (.txt, .docx...) tự mở bằng phần mềm tương ứng không để lại CMD
-                </span>
+            <div style={{ marginTop: '4px', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '8px', color: 'var(--text-primary)' }}>
+                ⚡ Chế Độ Khởi Chạy:
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <label
@@ -3260,42 +2910,20 @@ export const AgentMultitaskPage: React.FC = () => {
           }
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {/* Box hướng dẫn & Nút nạp mẫu chuẩn */}
-            <div
-              style={{
-                padding: '12px 14px',
-                borderRadius: '8px',
-                backgroundColor: '#FFFBEB',
-                border: '1px solid #FDE68A',
-                color: '#92400E',
-                fontSize: '12.5px',
-                lineHeight: 1.5,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '10px'
-              }}
-            >
-              <div style={{ flex: 1, minWidth: '260px' }}>
-                <div style={{ fontWeight: 700, marginBottom: '3px' }}>
-                  💡 Quy Trình Tự Động Hóa Đa Bước (Sequential Pipeline):
-                </div>
-                <div>
-                  Hệ thống truyền file/folder nén (.zip) xuống máy trạm tại <strong>ổ C hoặc D</strong>, tự động giải nén, sau đó tuần tự thực thi từng bước: <strong>Bước 1</strong> mở file sửa config theo yêu cầu &rarr; <strong>Bước 2</strong> chạy file script batch &rarr; <strong>Bước 3..N</strong> có thể tự thêm không giới hạn.
-                </div>
-              </div>
+            {/* Nút nạp mẫu chuẩn tinh gọn */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <Button
-                variant="primary"
+                variant="secondary"
                 size="sm"
                 onClick={handleApplyStandardDeployPreset}
-                leftIcon={<Sparkles size={13} />}
+                leftIcon={<Sparkles size={13} color="#D97706" />}
                 style={{
-                  backgroundColor: '#D97706',
-                  color: '#fff',
-                  fontWeight: 800,
+                  color: '#92400E',
+                  borderColor: '#FDE68A',
+                  backgroundColor: '#FFFBEB',
+                  fontWeight: 700,
                   fontSize: '11.5px',
-                  whiteSpace: 'nowrap'
+                  padding: '4px 10px'
                 }}
               >
                 ⚡ Nạp Mẫu Chuẩn (Test VMware)

