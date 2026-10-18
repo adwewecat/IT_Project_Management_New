@@ -41,3 +41,4 @@ tools/*.rar
 tools/*.7z
 tools/*.iso
 tools/*.cab
+backend/static/downloads/vc_redist*.exe

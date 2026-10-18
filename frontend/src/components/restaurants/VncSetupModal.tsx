@@ -688,12 +688,50 @@ export const VncSetupModal: React.FC<VncSetupModalProps> = ({ isOpen, onClose })
               }}
             >
               <HelpCircle size={20} style={{ color: '#D97706', flexShrink: 0, marginTop: '2px' }} />
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                <strong style={{ color: 'var(--text-primary)' }}>Lưu ý kỹ thuật cho Windows Server 2012 / 2012 R2:</strong>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5, flex: 1 }}>
+                <strong style={{ color: 'var(--text-primary)' }}>Khắc phục lỗi thiếu DLL (api-ms-win-crt-*.dll / MSVCP140.dll):</strong>
                 <br />
-                - <strong>Gói Visual C++:</strong> Nếu Scrcpy báo lỗi thiếu file <code>MSVCP140.dll</code> hoặc <code>VCRUNTIME140.dll</code>, hãy cài đặt gói miễn phí <em>Visual C++ Redistributable (x64)</em> của Microsoft trên server.
-                <br />
-                - <strong>TightVNC:</strong> Vẫn cài đặt vào thư mục mặc định <code style={{ fontFamily: 'monospace' }}>C:\Program Files\TightVNC\tvnviewer.exe</code> để xem màn hình POS và PC Quản Lý.
+                Nếu Server 2012 báo lỗi thiếu DLL của <code>adb.exe</code>, cài đặt gói bổ trợ chính thức của Microsoft (chạy cài 10 giây):
+                <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                  <a
+                    href="https://aka.ms/vs/17/release/vc_redist.x86.exe"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '5px 12px',
+                      borderRadius: '4px',
+                      backgroundColor: '#2563EB',
+                      color: '#fff',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <Download size={13} /> Tải Visual C++ x86 (Sửa lỗi adb.exe thiếu api-ms-win-crt)
+                  </a>
+                  <a
+                    href="https://aka.ms/vs/17/release/vc_redist.x64.exe"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '5px 12px',
+                      borderRadius: '4px',
+                      backgroundColor: '#4B5563',
+                      color: '#fff',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <Download size={13} /> Tải Visual C++ x64
+                  </a>
+                </div>
               </div>
             </div>
           </>
