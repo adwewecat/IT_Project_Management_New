@@ -747,3 +747,22 @@
     4. **BẮT BUỘC KIỂM TRA XÁC NHẬN LƯU THÀNH CÔNG**: Đặt biến cờ `is_success = False`. Chỉ ghi nhận thành công khi GPMS bắn Toast thành công (`.ant-message-success`) HOẶC trang tự động redirect về `/my-mission` HOẶC nút Xác nhận biến mất khỏi form. Nếu không thấy dấu hiệu thành công nào, **BẮT BUỘC ném ngoại lệ `RuntimeError`** để chuyển trạng thái sang `❌ Lỗi` với nguyên nhân chi tiết, tuyệt đối cấm báo thành công ảo!
     5. Áp dụng cơ chế tương tự cho hàm `_close_ticket` khi đóng ticket 3CX.
 
+- **Khởi Tạo Màn Hình Độc Lập 'Tích Hợp Thay Thế Remote' (Remote Desktop Lab - Hướng 1) [2026-10-19]**:
+  + **Mục đích & Kiến trúc Độc Lập**:
+    * Thử nghiệm giải pháp Web-based Remote Desktop qua WebSocket & HTML5 Canvas để thay thế triệt để TightVNC (cho Windows POS/PC) và Scrcpy (cho Android KDS Bếp).
+    * Thiết kế tách biệt thành 1 màn hình Lab riêng biệt (`/app/remote-desktop-lab`) với router, service, worker hoàn toàn độc lập, không làm ảnh hưởng đến các phân hệ đã ổn định (`RestaurantListPage`, `VncSetupModal`, `VncKdsModal`...).
+    * Dễ dàng cách ly, gỡ bỏ hoặc hòa vào màn hình chính khi kiểm thử thành công và đáp ứng mọi nhu cầu thực tế.
+  + **Các thành phần đã triển khai**:
+    1. *Backend Relay Service (`backend/app/services/remote_lab_service.py`)*: Quản lý active sessions trong RAM, cầu nối WebSocket relay cực nhanh (chuyển tiếp Binary ArrayBuffer JPEG từ Agent sang Viewer, chuyển tiếp JSON sự kiện chuột/phím/config từ Viewer sang Agent).
+    2. *Backend API Router (`backend/app/api/v1/remote_lab.py`)*: Cung cấp endpoint REST (`/sessions/create`, `/sessions`, `/endpoints`, `/terminate`) và 2 endpoint WebSocket (`/ws/viewer/{session_id}`, `/ws/agent/{session_id}`).
+    3. *Client Agent Remote Worker (`tools/restaurant_support_agent/remote_worker.py`)*:
+       - Chụp màn hình Windows bằng Win32 GDI+ / PIL, mô phỏng chuột & bàn phím Win32 (`mouse_event`, `keybd_event`, Unicode text, các tổ hợp phím `Ctrl+Shift+Esc`, `Win`, `Alt+Tab`, `Alt+F4`).
+       - Chế độ KDS: Tiếp sóng Android qua ADB LAN (`adb connect <ip>:5555`, `adb exec-out screencap -p`, `input tap`, `input swipe`, `input keyevent`).
+    4. *File Batch Test Trực Tiếp (`tools/restaurant_support_agent/Chay_Thu_Nghiem_Remote_Lab.bat`)*: 100% tiếng Việt không dấu, không dùng khối `(...)`, dừng tối thiểu 10s trước khi đóng để IT test ngay tại chỗ.
+    5. *Frontend Service (`frontend/src/services/remoteLabService.ts`)*: Kết nối API và dựng URL WebSocket chuẩn xác.
+    6. *Frontend Screen (`frontend/src/pages/remote/RemoteLabPage.tsx`)*: Màn hình Lab hiện đại, hỗ trợ 2 tab (Máy Trạm & KDS), bảng chọn thiết bị online, form kết nối nhanh theo IP, thanh toolbar điều khiển stream (FPS, Quality, Ping RTT, Screenshot, Fullscreen, Special Keys), render HTML5 Canvas bằng `requestAnimationFrame` + `createImageBitmap` mượt mà, toast độc lập.
+    7. *Điều hướng & Menu*: Route `/app/remote-desktop-lab`, menu `Thay Thế Remote` (badge `Lab`) trong Sidebar nhóm Quyền App.
+  + **Kiểm thử & Đóng gói**:
+    * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`dist/` cập nhật sẵn).
+    * Backend: `compileall` sạch 100%, Smoke test `PASSED 100%`.
+

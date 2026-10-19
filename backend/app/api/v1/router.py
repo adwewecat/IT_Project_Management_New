@@ -32,6 +32,7 @@ from app.api.v1.sso_management import router as sso_management_router
 from app.api.v1.logs import router as logs_router
 from app.api.v1.hotline import router as hotline_3cx_router
 from app.api.v1.agent_multitask import router as agent_multitask_router
+from app.api.v1.remote_lab import router as remote_lab_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(auth_router)
@@ -67,6 +68,7 @@ api_v1_router.include_router(mongo_mosquitto_router)
 api_v1_router.include_router(sso_management_router)
 api_v1_router.include_router(logs_router)
 api_v1_router.include_router(agent_multitask_router)
+api_v1_router.include_router(remote_lab_router)
 
 
 

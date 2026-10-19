@@ -28,6 +28,7 @@ import {
   KeyRound,
   ScrollText,
   Cpu,
+  Monitor,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { dashboardService, PendingSummaryResponse } from '../../services/dashboardService';
@@ -497,6 +498,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <Cpu size={15} style={{ color: 'var(--color-primary)' }} />
                       <span>Agent Multitask</span>
                     </div>
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to="/app/remote-desktop-lab"
+                    className="sidebar-sub-item"
+                    style={({ isActive }) => getSubLinkStyle(isActive)}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Monitor size={15} style={{ color: '#10B981' }} />
+                      <span>Thay Thế Remote</span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: '9.5px',
+                        fontWeight: 700,
+                        padding: '1px 6px',
+                        borderRadius: '8px',
+                        backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                        color: '#059669',
+                        textTransform: 'uppercase'
+                      }}
+                    >
+                      Lab
+                    </span>
                   </NavLink>
                 </li>
               </ul>

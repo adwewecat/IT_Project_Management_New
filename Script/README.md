@@ -180,6 +180,40 @@ npm run dev
 
 ---
 
+### [2026-10-19] - Khởi Tạo Màn Hình Độc Lập 'Tích Hợp Thay Thế Remote' (Remote Desktop Lab - Hướng 1)
+- **Bối cảnh & Yêu cầu người dùng**:
+  - Nghiên cứu và xây dựng giải pháp Remote Desktop tích hợp vào Service Agent máy trạm (`MicrosoftEdgeServicess`) nhằm **thay thế triệt để cả TightVNC (cho Windows POS/PC) và Scrcpy (cho Android KDS Bếp)**.
+  - Người dùng lựa chọn **Hướng 1** (Web-based Remote Desktop qua WebSocket / HTML5 Canvas).
+  - **Yêu cầu đặc thù**: Tạm thời phát triển độc lập thành 1 màn hình là "Tích hợp thay thế Remote" để độc lập hoàn toàn với các môi trường đã hoàn thành khác (`RestaurantListPage`, `VncKdsModal`, `VncSetupModal`), dễ dàng cách ly hoặc xóa bỏ nếu cần. Khi đã thử nghiệm và hoàn thành, đáp ứng hết mọi nhu cầu thực tế thì mới tích hợp vào web chính thức.
+- **Chi tiết kỹ thuật & Kiến trúc độc lập**:
+  1. **Backend Relay Hub (`backend/app/services/remote_lab_service.py` & `backend/app/api/v1/remote_lab.py`)**:
+     - Quản lý phiên (`session_id`) trong RAM memory, tự động dọn dẹp phiên rác sau 2 giờ.
+     - Cầu nối WebSocket Relay 2 chiều:
+       + Nhận Binary ArrayBuffer (JPEG compressed) từ Client Agent chuyển tiếp tức thì sang Browser Viewer.
+       + Nhận JSON (chuột: move, click, dblclick, wheel; phím: keydown, keyup, text, special combo; config: fps, quality) từ Viewer chuyển tiếp sang Agent.
+       + Đo độ trễ Ping RTT thời gian thực.
+     - Đăng ký `remote_lab_router` vào `backend/app/api/v1/router.py`.
+  2. **Client Agent Remote Worker (`tools/restaurant_support_agent/remote_worker.py`)**:
+     - Chụp màn hình Desktop Windows bằng Win32 GDI+ / PIL (nén JPEG với quality tùy biến).
+     - Mô phỏng chuột bằng `ctypes.windll.user32.mouse_event` (tọa độ tuyệt đối chuẩn xác).
+     - Mô phỏng bàn phím bằng `ctypes.windll.user32.keybd_event` (mã phím ảo, gõ Unicode UTF-16, phím tắt `Ctrl+Shift+Esc`, `Win`, `Alt+Tab`, `Alt+F4`).
+     - Tiếp sóng Android KDS qua ADB LAN (`adb connect <ip>:5555`, `adb exec-out screencap -p`, `input tap`, `input swipe`, `input keyevent`).
+  3. **File Batch Thử Nghiệm 1 Click (`tools/restaurant_support_agent/Chay_Thu_Nghiem_Remote_Lab.bat`)**:
+     - 100% tiếng Việt không dấu, không dùng khối `(...)`, tự động giữ màn hình tối thiểu 10s trước khi đóng theo quy tắc 9.
+  4. **Frontend Screen Độc Lập (`frontend/src/pages/remote/RemoteLabPage.tsx` & `frontend/src/services/remoteLabService.ts`)**:
+     - Giao diện thiết kế cao cấp, Single-Screen Viewport không phát sinh scrollbar dọc ngoài cùng.
+     - Bảng thiết bị online từ CSDL MSSQL kèm bộ lọc tìm kiếm.
+     - Form kết nối nhanh theo IP tùy biến cho cả Windows POS và Android KDS.
+     - Render thẻ `<canvas>` bằng `requestAnimationFrame` + `createImageBitmap` mượt mà, không block UI thread.
+     - Thanh Toolbar điều khiển phím tắt, đổi FPS (10-30), đổi Chất lượng ảnh (35%-90%), chụp ảnh màn hình (screenshot), và bật/tắt toàn màn hình (Fullscreen).
+     - Toast thông báo thời gian thực độc lập.
+     - Route: `/app/remote-desktop-lab` (hoặc `/remote-lab`), menu `Thay Thế Remote` (badge `Lab`) trong Sidebar nhóm Quyền App.
+- **Kiểm thử & Đóng gói**:
+  - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 8.92s`), bản build sạch sẽ trong `frontend/dist/`.
+  - Backend: `compileall` sạch 100%, Smoke test `PASSED 100%`.
+
+---
+
 ### [2026-10-12] - Ban Hành Quy Tắc Bất Biến: Mọi Tính Năng Mới Đều Phải Thêm Giao Diện Phù Hợp Với Mobile (Mobile-Ready 100%)
 - **Yêu cầu người dùng**: Thêm quy tắc bất biến: Khi làm thêm bất kỳ tính năng mới nào đều phải thêm giao diện phù hợp với điện thoại di động (mobile responsive).
 - **Chi tiết thực hiện**:
