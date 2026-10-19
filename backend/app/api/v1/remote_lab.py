@@ -5,9 +5,10 @@ Cung cấp WebSocket Endpoint và REST API quản lý phiên Remote độc lập
 
 from __future__ import annotations
 import logging
+import socket
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, status, Query
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -20,6 +21,44 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/remote-lab", tags=["Remote Lab"])
 
 
+def resolve_server_url(request: Request, client_server_url: Optional[str] = None, target_ip: Optional[str] = None) -> str:
+    """Xác định URL Server chính xác nhất để Agent máy trạm kết nối WebSocket."""
+    if client_server_url and client_server_url.strip():
+        url = client_server_url.strip().rstrip('/')
+        clean_target = (target_ip or '').strip().lower()
+        if clean_target not in ('127.0.0.1', 'localhost', ''):
+            if '127.0.0.1' in url or 'localhost' in url:
+                try:
+                    lan_ip = socket.gethostbyname(socket.gethostname())
+                    if lan_ip and lan_ip != '127.0.0.1':
+                        url = url.replace('127.0.0.1', lan_ip).replace('localhost', lan_ip)
+                except Exception:
+                    pass
+        return url
+
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    scheme = "https" if request.url.scheme == "https" else "http"
+    if host:
+        url = f"{scheme}://{host}"
+        clean_target = (target_ip or '').strip().lower()
+        if clean_target not in ('127.0.0.1', 'localhost', ''):
+            if '127.0.0.1' in host or 'localhost' in host:
+                try:
+                    lan_ip = socket.gethostbyname(socket.gethostname())
+                    if lan_ip and lan_ip != '127.0.0.1':
+                        port_part = f":{host.split(':')[1]}" if ":" in host else ":8000"
+                        url = f"{scheme}://{lan_ip}{port_part}"
+                except Exception:
+                    pass
+        return url
+
+    try:
+        lan_ip = socket.gethostbyname(socket.gethostname())
+        return f"http://{lan_ip}:8000"
+    except Exception:
+        return "http://127.0.0.1:8000"
+
+
 class CreateRemoteSessionRequest(BaseModel):
     """Payload yêu cầu khởi tạo phiên Remote."""
     target_type: str = Field("workstation", description="'workstation' hoặc 'kds'")
@@ -28,6 +67,7 @@ class CreateRemoteSessionRequest(BaseModel):
     device_name: Optional[str] = Field("", description="Tên gợi nhớ thiết bị")
     fps_limit: int = Field(15, ge=5, le=30, description="Giới hạn FPS (5-30)")
     quality: int = Field(65, ge=20, le=95, description="Chất lượng nén ảnh JPEG (20-95)")
+    server_url: Optional[str] = Field(None, description="URL Backend mà máy trạm sẽ kết nối")
 
 
 @router.get("/endpoints")
@@ -42,6 +82,7 @@ def get_endpoints(
 @router.post("/sessions/create")
 def create_session(
     payload: CreateRemoteSessionRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(get_current_user)
 ) -> Dict[str, Any]:
@@ -62,10 +103,11 @@ def create_session(
         quality=payload.quality
     )
 
-    # Tự động gửi task PENDING tới Windows Service máy trạm nếu có endpoint tương ứng
+    # Tự động gửi task PENDING tới Windows Service máy trạm với server_url chính xác
+    eff_server_url = resolve_server_url(request, payload.server_url, target_ip)
     RemoteLabService.dispatch_agent_task(
         session=session,
-        server_url="http://127.0.0.1:8000",
+        server_url=eff_server_url,
         db=db,
         action="start_remote_worker"
     )
@@ -73,7 +115,34 @@ def create_session(
     return {
         "status": "SUCCESS",
         "message": f"Đã tạo phiên Remote cho {dev_name}",
-        "session": session.to_dict()
+        "session": session.to_dict(),
+        "server_url": eff_server_url
+    }
+
+
+@router.post("/sessions/{session_id}/retry-agent")
+def retry_agent_task(
+    session_id: str,
+    request: Request,
+    server_url: Optional[str] = Query(None, description="URL Backend"),
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Phát lại lệnh kích hoạt Remote Worker tới Agent máy trạm."""
+    session = RemoteLabService.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Phiên không tồn tại hoặc đã đóng.")
+    eff_server_url = resolve_server_url(request, server_url, session.target_ip)
+    RemoteLabService.dispatch_agent_task(
+        session=session,
+        server_url=eff_server_url,
+        db=db,
+        action="start_remote_worker"
+    )
+    return {
+        "status": "SUCCESS",
+        "message": f"Đã gửi lại tín hiệu kích hoạt Web Worker tới {session.target_ip}",
+        "server_url": eff_server_url
     }
 
 

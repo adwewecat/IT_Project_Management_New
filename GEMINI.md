@@ -836,6 +836,14 @@
       - Hiển thị bảng thông báo lỗi to rõ, hướng dẫn người dùng sửa lại dòng 13 hoặc chạy bằng Run as administrator.
       - Giảm toàn bộ thời gian chờ tự động đóng từ 10s xuống **5s** theo yêu cầu người dùng.
       - Đồng bộ sang `tools/`, `d:\1.Download\` và `tools/Restaurant_Support_Agent_Full.zip`.
+  + **Chuyển Đổi Triệt Để Cơ Chế Kết Nối Sang Web Remote Desktop Canvas Làm Luồng Mặc Định (Thay Thế Hoàn Toàn TightVNC & Scrcpy) [2026-10-19]**:
+    * *Đúng mục tiêu dự án*: Khắc phục triệt để việc bấm kết nối lại bật TightVNC. Đưa Web Remote Desktop (HTML5 Canvas + WebSocket Streaming) trở thành phương thức kết nối mặc định khi click.
+    * *Click Card Thiết Bị $\rightarrow$ Vào Thẳng Web Canvas*: Nhấp vào bất kỳ ô thiết bị ONLINE nào (.41, .11, .12, .31 - .38) là hệ thống tự động khởi tạo phiên Web Remote và chuyển sang màn hình Canvas tương tác chuột/phím trực tiếp trên Web. Bổ sung nút icon nhỏ `ExternalLink` ở góc card nếu cần mở app cũ ngoài Desktop.
+    * *Cột Thao Tác Trong Bảng*: Nút chính to nhất là **`⚡ KẾT NỐI WEB`** (màu xanh thương hiệu). Nút phụ nhỏ `App VNC` / `App KDS` chỉ là tùy chọn phụ dự phòng.
+    * *Màn Hình Chờ Agent (`WAITING_AGENT`)*: Xóa bỏ hoàn toàn nút to đùng mở TightVNC. Thay bằng khối trạng thái Web Stream chuyên nghiệp và nút **`⚡ GỬI LẠI LỆNH KÍCH HOẠT WEB AGENT`** (kèm hiệu ứng loading `isRetryingAgent`).
+    * *Backend Sửa Lỗi `server_url` Động*: Viết hàm `resolve_server_url` tự động phát hiện IP LAN của server (`socket.gethostbyname`) thay vì hardcode `127.0.0.1:8000`, giúp máy trạm ở xa (`10.8.222.12`...) kết nối WebSocket chuẩn xác về server trung tâm. Thêm endpoint `POST /sessions/{session_id}/retry-agent`.
+    * *Kiểm thử & Đóng gói*: Frontend `npm run build` exit code 0 (`✓ built in 5.61s`), Backend `compileall` sạch 100%, Smoke test `PASSED 100%`.
+
 
 
 

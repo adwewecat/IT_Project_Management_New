@@ -3732,6 +3732,38 @@ estaurant_service.py).
     + *Giảm timeout*: Đổi toàn bộ thời gian chờ tự động đóng cửa sổ từ 10s xuống **5s**.
     + *Đóng gói & Phục vụ*: Cập nhật đồng bộ `tools/restaurant_support_agent/`, `d:\1.Download\` và `tools/Restaurant_Support_Agent_Full.zip`.
 
+---
+
+### [2026-10-19] - Chuyển Đổi Triệt Để Cơ Chế Kết Nối Sang Web Remote Desktop Canvas Làm Luồng Mặc Định (Thay Thế Hoàn Toàn TightVNC & Scrcpy)
+- **Bối cảnh & Thắc mắc từ người dùng**:
+  + *"quay lại phần phát triển Tích Hợp Thay Thế Remote (TightVNC & Scrcpy) , tôi thấy bấm kết nối vào bạn lại đnag dùng tightvnc là sao, chúng ta đang thay thế nó mà"*.
+  + Màn hình phân hệ có tên là *"Tích Hợp Thay Thế Remote (TightVNC & Scrcpy)"*, nhưng trước đây do thiết kế thử nghiệm, khi click vào card hoặc danh sách thiết bị thì hệ thống lại bật modal ưu tiên TightVNC Viewer và gọi protocol `vnc://` mở ứng dụng desktop ngoài. Điều này đi ngược lại mục tiêu cốt lõi của phân hệ là **thay thế phần mềm ngoài bằng công nghệ điều khiển trực tiếp trên Web Browser**.
+- **Nội dung cải tiến & Tối ưu hóa**:
+  1. **Click vào Card thiết bị (PC .41, POS .11, .12, KDS .31 - .38) $\rightarrow$ Mở ngay Web Remote Desktop Canvas**:
+     - Bỏ qua bước modal hỏi trung gian. Bấm vào bất kỳ ô thiết bị ONLINE nào là hệ thống lập tức khởi tạo phiên Web Remote và chuyển sang màn hình Canvas tương tác chuột/phím trực tiếp trên Web (công nghệ mới).
+     - Bổ sung nút icon nhỏ `ExternalLink` ở góc mỗi thẻ: Dành riêng cho trường hợp ngoại lệ muốn mở app ngoài Desktop.
+  2. **Tối ưu Cột "Thao Tác" trong Bảng Danh Sách Endpoint**:
+     - Nút to, nổi bật nhất (Primary Action): **`⚡ KẾT NỐI WEB`** (icon `Zap`, màu xanh thương hiệu). Bấm vào là vào ngay giao diện Web Canvas.
+     - Nút phụ nhỏ gọn: `App VNC` / `App KDS` (màu trung tính, icon nhỏ) với tooltip ghi rõ *"Dự phòng: Mở app ngoài nếu máy trạm chưa cài Web Agent"*.
+  3. **Màn hình Chờ Tín Hiệu Agent (`WAITING_AGENT`)**:
+     - **Xóa bỏ triệt để nút to đùng màu xanh dương `🚀 MỞ TIGHTVNC KẾT NỐI NGAY TỚI MÁY TRẠM`** vốn gây hiểu lầm cho người dùng.
+     - Thay thế bằng giao diện chuyên nghiệp:
+       + Khối trạng thái: Radar chờ tín hiệu Web Stream, thông báo đã điều phối lệnh tới Windows Service `MicrosoftEdgeServicess`.
+       + Nút hành động chính: **`⚡ GỬI LẠI LỆNH KÍCH HOẠT WEB AGENT`** (kèm hiệu ứng xoay loading `isRetryingAgent`).
+       + Dòng link nhỏ dự phòng mờ dưới đáy: *"Máy trạm quá cũ chưa cài Web Agent? [Tạm mở qua TightVNC cũ ngoài Desktop]"*.
+  4. **Modal Tùy Chọn Kết Nối (`isConnectModalOpen`)**:
+     - Đảo ngược vị trí ưu tiên: Lựa chọn 1 (to nhất, viền xanh rực rỡ, nhãn `KHUYÊN DÙNG`) là **`⚡ 1. Điều Khiển Trực Tiếp Trên Web (Web Canvas Remote)`**.
+     - Lựa chọn 2: `2. Mở Bằng Ứng Dụng Cũ (TightVNC / Scrcpy)` gắn nhãn `DỰ PHÒNG`.
+  5. **Backend Sửa Lỗi Phân Giải `server_url` Động & Thêm Endpoint Retry**:
+     - *Phát hiện lỗi nghiêm trọng*: Backend trước đây hardcode `server_url="http://127.0.0.1:8000"`. Khi máy trạm nhà hàng ở xa (ví dụ `10.8.222.12`) nhận task, nó sẽ kết nối WebSocket tới `127.0.0.1` của chính nó và thất bại hoàn toàn.
+     - *Khắc phục*: Viết hàm `resolve_server_url` trong `backend/app/api/v1/remote_lab.py`: Tự động trích xuất IP LAN của server (`socket.gethostbyname`) hoặc Host header / `payload.server_url` từ request, đảm bảo máy trạm ở xa nhận đúng IP Server trung tâm (như `172.16.20.47:8000` hoặc `172.16.8.25:8000`).
+     - Thêm endpoint `POST /api/v1/remote-lab/sessions/{session_id}/retry-agent` để phát lại lệnh kích hoạt khi người dùng bấm nút trên giao diện Web.
+- **Kiểm thử & Đóng gói**:
+  - Frontend: `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 5.61s`), thư mục `frontend/dist/` sạch sẽ.
+  - Backend: `python -m compileall app` sạch 100%, Smoke test `PASSED 100%`.
+  - Khởi động lại Backend daemon nạp code mới trên port 8000.
+
+
 
 
 

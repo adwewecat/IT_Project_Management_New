@@ -118,6 +118,7 @@ export const RemoteLabPage: React.FC = () => {
   // Phiên remote đang chạy
   const [currentSession, setCurrentSession] = useState<RemoteSessionInfo | null>(null);
   const [isAgentConnected, setIsAgentConnected] = useState<boolean>(false);
+  const [isRetryingAgent, setIsRetryingAgent] = useState<boolean>(false);
   const [pingMs, setPingMs] = useState<number>(0);
   const [streamFps, setStreamFps] = useState<number>(0);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -272,7 +273,7 @@ export const RemoteLabPage: React.FC = () => {
     );
   }, [endpoints]);
 
-  // Xử lý khi click vào ô thiết bị
+  // Xử lý khi click vào ô thiết bị -> KẾT NỐI NGAY WEB REMOTE CANVAS (Thay thế TightVNC / Scrcpy)
   const handleCardClick = (item: { suffix: string; label: string; protocol: 'vnc' | 'scrcpy' }) => {
     const isOnline = item.protocol === 'vnc' ? vncResults[item.suffix] === true : kdsResults[item.suffix] === true;
     const ip = ipPrefix + item.suffix;
@@ -280,6 +281,22 @@ export const RemoteLabPage: React.FC = () => {
       showToast(`Thiết bị ${item.label} (${ip}) đang OFFLINE, chưa phản hồi tín hiệu!`, 'warning');
       return;
     }
+    const mode = item.protocol === 'scrcpy' ? 'kds' : 'workstation';
+    const resCode = selectedRestaurant?.sap || selectedRestaurant?.res || 'NH';
+    showToast(`⚡ Đang kết nối Web Remote tới ${item.label} (${ip})...`, 'info');
+    handleStartRemote(
+      mode,
+      resCode,
+      ip,
+      `${resCode} - ${item.label} (${ip})`
+    );
+  };
+
+  // Mở modal tùy chọn kết nối (dự phòng ứng dụng cũ ngoài Desktop)
+  const handleOpenConnectOptions = (e: React.MouseEvent, item: { suffix: string; label: string; protocol: 'vnc' | 'scrcpy' }) => {
+    e.stopPropagation();
+    const isOnline = item.protocol === 'vnc' ? vncResults[item.suffix] === true : kdsResults[item.suffix] === true;
+    const ip = ipPrefix + item.suffix;
     const hasAgent = checkHasAgent(ip);
     setConnectTarget({
       suffix: item.suffix,
@@ -292,7 +309,23 @@ export const RemoteLabPage: React.FC = () => {
     setIsConnectModalOpen(true);
   };
 
-  // Mở ứng dụng truyền thống (vnc:// hoặc scrcpy://)
+  // Phát lại lệnh kích hoạt Web Remote Worker tới máy trạm
+  const handleRetryAgent = async () => {
+    if (!currentSession) return;
+    try {
+      setIsRetryingAgent(true);
+      showToast('Đang gửi lại lệnh kích hoạt Web Worker tới máy trạm...', 'info');
+      const res = await remoteLabService.retryAgent(currentSession.session_id);
+      showToast(res.message || 'Đã gửi lại tín hiệu thành công!', 'success');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Lỗi khi gửi lại tín hiệu';
+      showToast(msg, 'error');
+    } finally {
+      setIsRetryingAgent(false);
+    }
+  };
+
+  // Mở ứng dụng truyền thống ngoài desktop (vnc:// hoặc scrcpy:// - Dự phòng)
   const handleConnectLegacy = () => {
     if (!connectTarget) return;
     const url = `${connectTarget.protocol}://${connectTarget.ip}`;
@@ -1113,7 +1146,7 @@ export const RemoteLabPage: React.FC = () => {
               <div style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
                 IP Prefix: <strong style={{ fontFamily: 'monospace', color: VNC_COLOR }}>{ipPrefix}</strong>
                 <span style={{ color: 'var(--text-muted)', marginLeft: '8px', fontSize: '11.5px' }}>
-                  👉 Click vào ô <b>ONLINE</b> để kết nối (Hỗ trợ cả Web Canvas siêu tốc và TightVNC / Scrcpy)
+                  👉 Click vào ô <b>ONLINE</b> để mở ngay Điều Khiển Web Canvas (Thay thế hoàn toàn TightVNC & Scrcpy)
                 </span>
               </div>
             </div>
@@ -1220,18 +1253,39 @@ export const RemoteLabPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div
-                        style={{
-                          fontSize: '9px',
-                          fontWeight: 800,
-                          padding: '1.5px 6px',
-                          borderRadius: '6px',
-                          backgroundColor: isPending ? 'var(--bg-primary)' : isOnline ? '#DEF7EC' : '#F3F4F6',
-                          color: isPending ? 'var(--text-muted)' : isOnline ? '#059669' : '#9CA3AF',
-                          flexShrink: 0
-                        }}
-                      >
-                        {isPending ? '...' : isOnline ? 'ONLINE' : 'OFFLINE'}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <div
+                          style={{
+                            fontSize: '9px',
+                            fontWeight: 800,
+                            padding: '1.5px 6px',
+                            borderRadius: '6px',
+                            backgroundColor: isPending ? 'var(--bg-primary)' : isOnline ? '#DEF7EC' : '#F3F4F6',
+                            color: isPending ? 'var(--text-muted)' : isOnline ? '#059669' : '#9CA3AF',
+                            flexShrink: 0
+                          }}
+                        >
+                          {isPending ? '...' : isOnline ? 'ONLINE' : 'OFFLINE'}
+                        </div>
+                        {isOnline && (
+                          <span
+                            onClick={(e) => handleOpenConnectOptions(e, item)}
+                            title="Tùy chọn kết nối khác (mở app cũ)"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '18px',
+                              height: '18px',
+                              borderRadius: '4px',
+                              backgroundColor: 'rgba(0,0,0,0.06)',
+                              color: 'var(--text-secondary)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <ExternalLink size={10} />
+                          </span>
+                        )}
                       </div>
                     </button>
                   );
@@ -1318,18 +1372,39 @@ export const RemoteLabPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div
-                        style={{
-                          fontSize: '8.5px',
-                          fontWeight: 800,
-                          padding: '1px 4px',
-                          borderRadius: '4px',
-                          backgroundColor: isPending ? 'var(--bg-primary)' : isOnline ? '#DEF7EC' : '#F3F4F6',
-                          color: isPending ? 'var(--text-muted)' : isOnline ? '#059669' : '#9CA3AF',
-                          flexShrink: 0
-                        }}
-                      >
-                        {isPending ? '...' : isOnline ? 'ONLINE' : 'OFFLINE'}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <div
+                          style={{
+                            fontSize: '8.5px',
+                            fontWeight: 800,
+                            padding: '1px 4px',
+                            borderRadius: '4px',
+                            backgroundColor: isPending ? 'var(--bg-primary)' : isOnline ? '#DEF7EC' : '#F3F4F6',
+                            color: isPending ? 'var(--text-muted)' : isOnline ? '#059669' : '#9CA3AF',
+                            flexShrink: 0
+                          }}
+                        >
+                          {isPending ? '...' : isOnline ? 'ONLINE' : 'OFFLINE'}
+                        </div>
+                        {isOnline && (
+                          <span
+                            onClick={(e) => handleOpenConnectOptions(e, item)}
+                            title="Tùy chọn kết nối khác (mở app cũ)"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '16px',
+                              height: '16px',
+                              borderRadius: '4px',
+                              backgroundColor: 'rgba(0,0,0,0.06)',
+                              color: 'var(--text-secondary)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <ExternalLink size={9} />
+                          </span>
+                        )}
                       </div>
                     </button>
                   );
@@ -1486,60 +1561,8 @@ export const RemoteLabPage: React.FC = () => {
                             style={{ padding: '8px 12px', textAlign: 'center' }}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <div style={{ display: 'flex', justifyContent: 'center', gap: '6px' }}>
-                              {/* Nút TightVNC mở trực tiếp máy trạm */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  window.location.href = `vnc://${ep.ip_lan}`;
-                                  showToast(`Đang mở TightVNC tới ${ep.ip_lan}...`, 'info');
-                                }}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '4px 8px',
-                                  borderRadius: 'var(--radius-md)',
-                                  backgroundColor: VNC_COLOR,
-                                  color: '#fff',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  fontWeight: 700,
-                                  fontSize: '11.5px'
-                                }}
-                                title={`Mở TightVNC kết nối tới ${ep.ip_lan}`}
-                              >
-                                <Monitor size={12} />
-                                <span>VNC POS</span>
-                              </button>
-
-                              {/* Nút Scrcpy KDS Bếp */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  window.location.href = `scrcpy://${kdsIp}`;
-                                  showToast(`Đang mở Scrcpy tới KDS ${kdsIp}...`, 'info');
-                                }}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '4px 8px',
-                                  borderRadius: 'var(--radius-md)',
-                                  backgroundColor: KDS_COLOR,
-                                  color: '#fff',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  fontWeight: 700,
-                                  fontSize: '11.5px'
-                                }}
-                                title={`Mở Scrcpy kết nối KDS Bếp ${kdsIp}`}
-                              >
-                                <Tv size={12} />
-                                <span>KDS .31</span>
-                              </button>
-
-                              {/* Nút Web Canvas */}
+                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}>
+                              {/* NÚT CHÍNH (PRIMARY): Mở ngay Điều Khiển Web Canvas */}
                               <button
                                 type="button"
                                 onClick={() =>
@@ -1553,20 +1576,74 @@ export const RemoteLabPage: React.FC = () => {
                                 style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '4px 8px',
+                                  gap: '5px',
+                                  padding: '5px 12px',
                                   borderRadius: 'var(--radius-md)',
-                                  backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                                  color: '#2563EB',
-                                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                                  backgroundColor: 'var(--color-primary)',
+                                  color: '#fff',
+                                  border: 'none',
                                   cursor: 'pointer',
-                                  fontWeight: 700,
-                                  fontSize: '11.5px'
+                                  fontWeight: 800,
+                                  fontSize: '12px',
+                                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
+                                  transition: 'all 0.15s ease'
                                 }}
-                                title="Thử nghiệm điều khiển qua Web Canvas"
+                                title={`Mở phiên Điều Khiển Web Canvas tới ${ep.ip_lan} (Không cần cài phần mềm ngoài)`}
                               >
-                                <Zap size={12} />
-                                <span>Web</span>
+                                <Zap size={13} />
+                                <span>KẾT NỐI WEB</span>
+                              </button>
+
+                              {/* Nút phụ dự phòng: Mở app TightVNC cũ */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  window.location.href = `vnc://${ep.ip_lan}`;
+                                  showToast(`Đang mở app TightVNC cũ tới ${ep.ip_lan}...`, 'info');
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '5px 8px',
+                                  borderRadius: 'var(--radius-md)',
+                                  backgroundColor: 'var(--bg-secondary)',
+                                  color: 'var(--text-secondary)',
+                                  border: '1px solid var(--border-color)',
+                                  cursor: 'pointer',
+                                  fontWeight: 600,
+                                  fontSize: '11px'
+                                }}
+                                title={`Dự phòng: Mở qua phần mềm TightVNC cũ tới ${ep.ip_lan}`}
+                              >
+                                <Monitor size={12} />
+                                <span>App VNC</span>
+                              </button>
+
+                              {/* Nút phụ dự phòng: Scrcpy KDS Bếp cũ */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  window.location.href = `scrcpy://${kdsIp}`;
+                                  showToast(`Đang mở app Scrcpy cũ tới KDS ${kdsIp}...`, 'info');
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '5px 8px',
+                                  borderRadius: 'var(--radius-md)',
+                                  backgroundColor: 'var(--bg-secondary)',
+                                  color: 'var(--text-secondary)',
+                                  border: '1px solid var(--border-color)',
+                                  cursor: 'pointer',
+                                  fontWeight: 600,
+                                  fontSize: '11px'
+                                }}
+                                title={`Dự phòng: Mở qua phần mềm Scrcpy cũ tới KDS Bếp ${kdsIp}`}
+                              >
+                                <Tv size={12} />
+                                <span>App KDS</span>
                               </button>
                             </div>
                           </td>
@@ -1820,28 +1897,34 @@ export const RemoteLabPage: React.FC = () => {
                   <div style={{ marginBottom: '16px' }}>
                     <div
                       style={{
-                        padding: '10px 14px',
+                        padding: '12px 16px',
                         borderRadius: '8px',
                         backgroundColor: 'rgba(59, 130, 246, 0.12)',
                         border: '1px solid rgba(59, 130, 246, 0.3)',
                         color: '#93C5FD',
                         fontSize: '12.5px',
                         marginBottom: '12px',
-                        lineHeight: 1.5,
+                        lineHeight: 1.6,
                         textAlign: 'left'
                       }}
                     >
-                      📡 Đang chờ máy trạm <b>{currentSession.target_ip}</b> ({currentSession.device_name}) gửi tín hiệu hình ảnh lên Server...
-                      <br />
-                      Nếu máy trạm này chưa cài Web Agent, bạn có thể kết nối ngay bằng TightVNC bên dưới:
+                      <div style={{ fontWeight: 700, color: '#BFDBFE', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                        <Zap size={14} style={{ color: '#38BDF8' }} />
+                        <span>Đang chờ máy trạm gửi tín hiệu Web Stream...</span>
+                      </div>
+                      <div>
+                        Thiết bị: <b>{currentSession.device_name}</b> (<b style={{ fontFamily: 'monospace' }}>{currentSession.target_ip}</b>)
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#94A3B8', marginTop: '4px' }}>
+                        Hệ thống đã tự động điều phối lệnh kích hoạt Web Worker tới Windows Service <code>MicrosoftEdgeServicess</code>.
+                      </div>
                     </div>
 
+                    {/* NÚT HÀNH ĐỘNG CHÍNH: Gửi lại lệnh kích hoạt Web Agent */}
                     <button
                       type="button"
-                      onClick={() => {
-                        window.location.href = `vnc://${currentSession.target_ip}`;
-                        showToast(`Đang mở TightVNC tới ${currentSession.target_ip}...`, 'info');
-                      }}
+                      onClick={handleRetryAgent}
+                      disabled={isRetryingAgent}
                       style={{
                         width: '100%',
                         padding: '12px 18px',
@@ -1849,7 +1932,7 @@ export const RemoteLabPage: React.FC = () => {
                         backgroundColor: '#2563EB',
                         color: '#fff',
                         border: 'none',
-                        cursor: 'pointer',
+                        cursor: isRetryingAgent ? 'not-allowed' : 'pointer',
                         fontWeight: 800,
                         fontSize: '13.5px',
                         display: 'flex',
@@ -1857,20 +1940,49 @@ export const RemoteLabPage: React.FC = () => {
                         justifyContent: 'center',
                         gap: '8px',
                         boxShadow: '0 4px 15px rgba(37, 99, 235, 0.4)',
-                        transition: 'all 0.2s ease'
+                        transition: 'all 0.2s ease',
+                        opacity: isRetryingAgent ? 0.7 : 1
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#1D4ED8';
-                        e.currentTarget.style.transform = 'translateY(-1px)';
+                        if (!isRetryingAgent) {
+                          e.currentTarget.style.backgroundColor = '#1D4ED8';
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                        }
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = '#2563EB';
-                        e.currentTarget.style.transform = 'translateY(0)';
+                        if (!isRetryingAgent) {
+                          e.currentTarget.style.backgroundColor = '#2563EB';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }
                       }}
                     >
-                      <ExternalLink size={18} />
-                      <span>🚀 MỞ TIGHTVNC KẾT NỐI NGAY TỚI MÁY TRẠM ({currentSession.target_ip})</span>
+                      <RefreshCw size={17} className={isRetryingAgent ? 'spin' : ''} />
+                      <span>{isRetryingAgent ? 'ĐANG GỬI LẠI TÍN HIỆU...' : '⚡ GỬI LẠI LỆNH KÍCH HOẠT WEB AGENT'}</span>
                     </button>
+
+                    {/* Dòng link nhỏ dự phòng trường hợp máy trạm quá cũ */}
+                    <div style={{ marginTop: '10px', fontSize: '11.5px', color: '#64748B', textAlign: 'center' }}>
+                      Máy trạm quá cũ chưa cài Web Agent?{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          window.location.href = `vnc://${currentSession.target_ip}`;
+                          showToast(`Đang mở tạm TightVNC tới ${currentSession.target_ip}...`, 'info');
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#60A5FA',
+                          textDecoration: 'underline',
+                          cursor: 'pointer',
+                          padding: 0,
+                          fontSize: '11.5px',
+                          fontWeight: 600
+                        }}
+                      >
+                        Tạm mở qua TightVNC cũ ngoài Desktop
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -2030,9 +2142,9 @@ export const RemoteLabPage: React.FC = () => {
               Chọn phương thức điều khiển:
             </div>
 
-            {/* Lựa chọn 1 (KHUYÊN DÙNG): Mở ứng dụng truyền thống (TightVNC hoặc Scrcpy) kết nối trực tiếp tới máy trạm */}
+            {/* Lựa chọn 1 (KHUYÊN DÙNG): ĐIỀU KHIỂN TRỰC TIẾP TRÊN WEB CANVAS */}
             <div
-              onClick={handleConnectLegacy}
+              onClick={handleConnectWebCanvas}
               style={{
                 padding: '14px 16px',
                 borderRadius: 'var(--radius-md)',
@@ -2064,24 +2176,22 @@ export const RemoteLabPage: React.FC = () => {
                   flexShrink: 0
                 }}
               >
-                <ExternalLink size={20} />
+                <Zap size={20} />
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>1. Mở {connectTarget.protocol === 'vnc' ? 'TightVNC Viewer' : 'Scrcpy'} Trực Tiếp Tới Máy Trạm</span>
+                  <span>1. Điều Khiển Trực Tiếp Trên Web (Web Canvas Remote)</span>
                   <span style={{ fontSize: '10px', backgroundColor: '#10B981', color: '#fff', padding: '1px 7px', borderRadius: '8px', fontWeight: 800 }}>KHUYÊN DÙNG</span>
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px' }}>
-                  {connectTarget.protocol === 'vnc'
-                    ? `Kích hoạt TightVNC Viewer (1 Chạm) kết nối thẳng tới IP máy trạm: vnc://${connectTarget.ip}`
-                    : `Kích hoạt Scrcpy KDS (1 Chạm) kết nối thẳng tới IP Android TV Box: scrcpy://${connectTarget.ip}`}
+                  Điều khiển trực tiếp trên trình duyệt Web (chuột & phím). Không cần cài đặt bất kỳ phần mềm ngoài nào!
                 </div>
               </div>
             </div>
 
-            {/* Lựa chọn 2: Điều Khiển Thử Nghiệm Trên Web (Web Canvas) */}
+            {/* Lựa chọn 2 (DỰ PHÒNG): Mở ứng dụng truyền thống cũ ngoài Desktop */}
             <div
-              onClick={handleConnectWebCanvas}
+              onClick={handleConnectLegacy}
               style={{
                 padding: '14px 16px',
                 borderRadius: 'var(--radius-md)',
@@ -2113,15 +2223,17 @@ export const RemoteLabPage: React.FC = () => {
                   flexShrink: 0
                 }}
               >
-                <Zap size={20} />
+                <ExternalLink size={20} />
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 800, fontSize: '13.5px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>2. Điều Khiển Thử Nghiệm Trên Web (Web Canvas)</span>
-                  <span style={{ fontSize: '10px', backgroundColor: '#3B82F6', color: '#fff', padding: '1px 6px', borderRadius: '8px' }}>LAB MỚI</span>
+                  <span>2. Mở Bằng Ứng Dụng Cũ ({connectTarget.protocol === 'vnc' ? 'TightVNC Viewer' : 'Scrcpy'})</span>
+                  <span style={{ fontSize: '10px', backgroundColor: '#64748B', color: '#fff', padding: '1px 6px', borderRadius: '8px' }}>DỰ PHÒNG</span>
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px' }}>
-                  Điều khiển trực tiếp trên tab trình duyệt. Yêu cầu máy trạm đích đã cài đặt Web Agent kết nối về Server.
+                  {connectTarget.protocol === 'vnc'
+                    ? `Kích hoạt TightVNC Viewer ngoài Desktop kết nối tới IP: vnc://${connectTarget.ip} (dành cho máy cũ chưa cài Agent)`
+                    : `Kích hoạt Scrcpy KDS ngoài Desktop kết nối tới IP Android TV Box: scrcpy://${connectTarget.ip}`}
                 </div>
               </div>
             </div>

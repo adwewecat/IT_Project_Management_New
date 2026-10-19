@@ -44,6 +44,7 @@ export interface CreateSessionPayload {
   device_name?: string;
   fps_limit?: number;
   quality?: number;
+  server_url?: string;
 }
 
 export const remoteLabService = {
@@ -54,8 +55,32 @@ export const remoteLabService = {
   },
 
   /** Tạo một phiên remote mới */
-  async createSession(payload: CreateSessionPayload): Promise<{ status: string; message: string; session: RemoteSessionInfo }> {
-    const res = await api.post('/remote-lab/sessions/create', payload);
+  async createSession(payload: CreateSessionPayload): Promise<{ status: string; message: string; session: RemoteSessionInfo; server_url?: string }> {
+    const loc = window.location;
+    let serverUrl = payload.server_url;
+    if (!serverUrl) {
+      if (loc.port && (loc.port === '5173' || loc.port === '3000')) {
+        serverUrl = `${loc.protocol}//${loc.hostname}:8000`;
+      } else {
+        serverUrl = `${loc.protocol}//${loc.host}`;
+      }
+    }
+    const res = await api.post('/remote-lab/sessions/create', { ...payload, server_url: serverUrl });
+    return res.data;
+  },
+
+  /** Phát lại lệnh kích hoạt Remote Worker tới máy trạm */
+  async retryAgent(sessionId: string): Promise<{ status: string; message: string; server_url?: string }> {
+    const loc = window.location;
+    let serverUrl = '';
+    if (loc.port && (loc.port === '5173' || loc.port === '3000')) {
+      serverUrl = `${loc.protocol}//${loc.hostname}:8000`;
+    } else {
+      serverUrl = `${loc.protocol}//${loc.host}`;
+    }
+    const res = await api.post(`/remote-lab/sessions/${sessionId}/retry-agent`, null, {
+      params: { server_url: serverUrl }
+    });
     return res.data;
   },
 
