@@ -3567,3 +3567,37 @@ estaurant_service.py).
 - **Kiểm thử & Đóng gói**:
   - Frontend `npm run build` thành công exit code 0 (`✓ built in 4.07s`), bản build sạch sẽ trong `frontend/dist/`.
   - Backend `python -m compileall app` sạch 100%, Smoke test `PASSED 100%`.
+
+---
+
+### [2026-10-19] - Thu Nhỏ Tối Đa Lưới Thẻ VNC / AGENT & Scrcpy / ADB Sang Mini Compact Cards (`RemoteLabPage.tsx`)
+- **Bối cảnh & Yêu cầu từ người dùng**:
+  - Người dùng gửi hình ảnh khoanh đỏ toàn bộ 2 khối Lưới Thẻ:
+    1. `VNC / AGENT — PC / POS` (3 thẻ: PC QL .41, POS 1.1 .11, POS 1.2 .12).
+    2. `Scrcpy / ADB — KDS (Màn Hình Bếp Android)` (8 thẻ: KDS 1 .31 đến KDS 8 .38).
+  - Yêu cầu: *"nhỏ lkhuc VNC / AGENT — PC / POS và Scrcpy / ADB — KDS (Màn Hình Bếp Android) lại"*.
+  - Lý do: Giao diện thẻ cũ to cồng kềnh (icon 36px, xếp 4 tầng dòng, padding lớn) chiếm tới gần ~280px chiều dọc, làm cho Bảng Danh Sách Máy Trạm ở dưới bị ép hẹp chỉ nhìn thấy được 2-3 dòng.
+- **Giải pháp & Triển khai chi tiết**:
+  1. **Thiết kế lại 2 nhóm Card thành dạng Mini Compact Horizontal Cards**:
+     - **Nhóm VNC / AGENT (PC / POS)**:
+       * Chiều cao mỗi thẻ rút gọn từ ~110px xuống còn **34px**.
+       * Icon máy tính tinh gọn 22px tròn (con 12px), xếp ngang cùng hàng với tên thiết bị (`item.label`), đuôi IP (`.{item.suffix}`) và huy hiệu `⚡ AGENT` nếu IP có service.
+       * Badge trạng thái `ONLINE` / `OFFLINE` bố trí tinh gọn ở phía bên phải thẻ.
+       * Dàn 3 cột đều nhau trên 1 hàng ngang.
+     - **Nhóm Scrcpy / ADB (KDS Màn Hình Bếp Android)**:
+       * Chiều cao mỗi thẻ rút gọn từ ~95px xuống còn **32px**.
+       * Icon TV bếp tinh gọn 18px tròn (con 10px), tên KDS (`item.label`), đuôi IP (`.{item.suffix}`).
+       * Badge trạng thái `ONLINE` / `OFFLINE` nhỏ xinh ở góc phải.
+       * 8 thẻ dàn đều thành đúng **1 hàng ngang duy nhất** trên màn hình máy tính thông thường (grid minmax 105px).
+  2. **Thu gọn lề & khoảng trống dư thừa**:
+     - Giảm padding của container chính từ `14px 18px` xuống `10px 14px`.
+     - Giảm khoảng cách giữa header khối, thanh tìm kiếm và thanh IP Prefix từ `14-16px` xuống `8px`.
+     - Tiết kiệm tổng cộng tới **~170px** chiều dọc màn hình.
+  3. **Hiệu quả đạt được**:
+     - Bảng Danh Sách Máy Trạm bên dưới được giải phóng không gian, hiển thị rõ ràng từ 10 đến 15 dòng dữ liệu cùng lúc.
+     - Giữ nguyên 100% tính năng tương tác (click mở modal kết nối, hover, badge online/offline, nhận diện agent).
+     - Tuân thủ tuyệt đối quy tắc **Single-Screen Viewport**: Toàn bộ trang nằm trọn vẹn trong 1 khung màn hình, không phát sinh thanh cuộn dọc ngoài cùng bên phải.
+- **Kiểm thử & Đóng gói**:
+  - Frontend: `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 4.02s`), bản build sạch sẽ được cập nhật trong `frontend/dist/`.
+  - Backend: `python -c "from app.main import app; print('>>> BACKEND SMOKE TEST PASSED 100%')"` đạt kết quả `PASSED 100%`.
+

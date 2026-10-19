@@ -797,3 +797,11 @@
     * *Kiểm thử & Đóng gói*:
       - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.07s`).
       - Backend: `compileall` sạch 100%, Smoke test `PASSED 100%`.
+  + **Thu Nhỏ Tối Đa Lưới Thẻ VNC / AGENT & Scrcpy / ADB Sang Mini Compact Cards [2026-10-19]**:
+    * Chuyển đổi 2 khối lưới thẻ (3 Card VNC PC/POS và 8 Card KDS Bếp) từ dạng Card to cồng kềnh (icon 36px, chiếm ~280px chiều dọc) sang dạng **Mini Compact Horizontal Cards**:
+      - Chiều cao mỗi thẻ chỉ còn 32-34px, icon tinh gọn 18-22px, bố cục ngang (Tên thiết bị + đuôi IP monospace + badge ONLINE/OFFLINE tinh gọn).
+      - Card VNC: Dàn đều 3 cột ngang, hiển thị huy hiệu `⚡ AGENT` nếu IP đã có Service.
+      - Card KDS: Dàn đều 8 cột trên 1 hàng ngang duy nhất (trên màn hình máy tính thông thường).
+    * Thu gọn padding và khoảng cách lề của toàn bộ Khối Kiểm Tra Tín Hiệu, thanh IP Prefix và thanh tìm kiếm từ 14-16px xuống 6-8px.
+    * Tiết kiệm tới ~170px chiều dọc màn hình, giúp Bảng Danh Sách Máy Trạm & Điểm Kết Nối bên dưới có không gian mở rộng tối đa, người dùng xem được 10-15 dòng máy trạm đồng thời trong Single-Screen Viewport.
+    * Đạt chuẩn build Frontend `npm run build` exit code 0 (`✓ built in 4.02s`), Backend Smoke test `PASSED 100%`.

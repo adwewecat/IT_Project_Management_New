@@ -770,7 +770,7 @@ export const RemoteLabPage: React.FC = () => {
           {/* KHỐI TRA CỨU TÍN HIỆU & ĐIỀU KHIỂN NHÀ HÀNG (GRID CARD CHUẨN POPUP VNC/KDS) */}
           <div
             style={{
-              padding: '14px 18px',
+              padding: '10px 14px',
               borderRadius: 'var(--radius-md)',
               backgroundColor: 'var(--bg-card)',
               border: '1px solid var(--border-color)',
@@ -779,13 +779,13 @@ export const RemoteLabPage: React.FC = () => {
             }}
           >
             {/* Header của Khối */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div
                   style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '8px',
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '6px',
                     backgroundColor: 'rgba(26, 115, 232, 0.12)',
                     display: 'flex',
                     alignItems: 'center',
@@ -793,25 +793,25 @@ export const RemoteLabPage: React.FC = () => {
                     color: VNC_COLOR
                   }}
                 >
-                  <Building2 size={18} />
+                  <Building2 size={16} />
                 </div>
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: '15px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span>Kiểm Tra Tín Hiệu & Kết Nối Thiết Bị Nhà Hàng</span>
                     <span
                       style={{
-                        fontSize: '11px',
+                        fontSize: '10.5px',
                         fontWeight: 700,
-                        padding: '2px 8px',
-                        borderRadius: '10px',
+                        padding: '1px 6px',
+                        borderRadius: '8px',
                         backgroundColor: '#DEF7EC',
                         color: '#059669'
                       }}
                     >
-                      Chuẩn Lưới Card Popup
+                      Mini Compact Card
                     </span>
                   </div>
-                  <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                  <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
                     {selectedRestaurant
                       ? `Nhà hàng: ${selectedRestaurant.sap || selectedRestaurant.res} — ${selectedRestaurant.address || selectedRestaurant.res}`
                       : 'Chọn nhà hàng từ danh mục hoặc nhập IP Prefix để kiểm tra trạng thái PC QL, POS 1.1, POS 1.2 & KDS Bếp'}
@@ -829,19 +829,19 @@ export const RemoteLabPage: React.FC = () => {
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    padding: '7px 12px',
+                    gap: '5px',
+                    padding: '5px 10px',
                     borderRadius: 'var(--radius-md)',
                     backgroundColor: 'rgba(16, 185, 129, 0.1)',
                     color: '#059669',
                     border: '1px solid rgba(16, 185, 129, 0.3)',
                     cursor: 'pointer',
                     fontWeight: 700,
-                    fontSize: '12px'
+                    fontSize: '11.5px'
                   }}
                   title="Tự động mở phiên và kích hoạt worker trên chính máy này"
                 >
-                  <Zap size={14} />
+                  <Zap size={13} />
                   <span>Kích Hoạt Máy Này (127.0.0.1)</span>
                 </button>
               </div>
@@ -851,14 +851,14 @@ export const RemoteLabPage: React.FC = () => {
             <div
               style={{
                 display: 'flex',
-                gap: '12px',
+                gap: '10px',
                 alignItems: 'flex-end',
                 flexWrap: 'wrap',
-                padding: '12px 14px',
+                padding: '8px 12px',
                 backgroundColor: 'var(--bg-secondary)',
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-color)',
-                marginBottom: '14px',
+                marginBottom: '8px',
                 position: 'relative'
               }}
             >
@@ -1101,41 +1101,41 @@ export const RemoteLabPage: React.FC = () => {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
-                padding: '8px 14px',
+                gap: '8px',
+                padding: '4px 10px',
                 backgroundColor: 'var(--bg-secondary)',
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-color)',
-                marginBottom: '16px'
+                marginBottom: '8px'
               }}
             >
-              <Monitor size={16} style={{ color: VNC_COLOR, flexShrink: 0 }} />
-              <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+              <Monitor size={14} style={{ color: VNC_COLOR, flexShrink: 0 }} />
+              <div style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
                 IP Prefix: <strong style={{ fontFamily: 'monospace', color: VNC_COLOR }}>{ipPrefix}</strong>
-                <span style={{ color: 'var(--text-muted)', marginLeft: '10px', fontSize: '12px' }}>
+                <span style={{ color: 'var(--text-muted)', marginLeft: '8px', fontSize: '11.5px' }}>
                   👉 Click vào ô <b>ONLINE</b> để kết nối (Hỗ trợ cả Web Canvas siêu tốc và TightVNC / Scrcpy)
                 </span>
               </div>
             </div>
 
-            {/* LƯỚI CARD 1: VNC / AGENT — PC / POS (.41, .11, .12) */}
-            <div style={{ marginBottom: '18px' }}>
+            {/* LƯỚI CARD 1: VNC / AGENT — PC / POS (.41, .11, .12) - MINI COMPACT */}
+            <div style={{ marginBottom: '8px' }}>
               <div
                 style={{
-                  fontSize: '12px',
+                  fontSize: '11px',
                   fontWeight: 800,
                   color: VNC_COLOR,
                   textTransform: 'uppercase',
                   letterSpacing: '0.04em',
-                  marginBottom: '10px',
+                  marginBottom: '4px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px'
+                  gap: '5px'
                 }}
               >
-                <Monitor size={15} /> VNC / AGENT — PC / POS
+                <Monitor size={13} /> VNC / AGENT — PC / POS
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '6px' }}>
                 {VNC_ITEMS.map((item) => {
                   const hasResult = vncResults[item.suffix] !== undefined;
                   const isOnline = vncResults[item.suffix] === true;
@@ -1150,18 +1150,19 @@ export const RemoteLabPage: React.FC = () => {
                       onClick={() => handleCardClick(item)}
                       style={{
                         display: 'flex',
-                        flexDirection: 'column',
                         alignItems: 'center',
+                        justifyContent: 'space-between',
                         gap: '6px',
-                        padding: '12px 8px',
-                        borderRadius: 'var(--radius-md)',
-                        border: `2px solid ${isOnline ? VNC_COLOR : 'var(--border-color)'}`,
+                        padding: '5px 8px',
+                        borderRadius: '6px',
+                        border: `1.5px solid ${isOnline ? VNC_COLOR : 'var(--border-color)'}`,
                         backgroundColor: isOnline ? `${VNC_COLOR}12` : 'var(--bg-secondary)',
                         cursor: isOnline ? 'pointer' : 'default',
-                        opacity: isPending ? 0.6 : isOnline ? 1 : 0.5,
+                        opacity: isPending ? 0.6 : isOnline ? 1 : 0.55,
                         transition: 'all 0.15s ease',
-                        position: 'relative',
-                        boxSizing: 'border-box'
+                        boxSizing: 'border-box',
+                        minHeight: '34px',
+                        textAlign: 'left'
                       }}
                       title={
                         isOnline
@@ -1171,58 +1172,63 @@ export const RemoteLabPage: React.FC = () => {
                           : `${ip} — Ngoại tuyến (OFFLINE)`
                       }
                     >
-                      {/* Huy hiệu Agent nếu IP đã có Service */}
-                      {hasAgent && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
                         <div
                           style={{
-                            position: 'absolute',
-                            top: '6px',
-                            right: '6px',
-                            backgroundColor: '#10B981',
-                            color: '#fff',
-                            fontSize: '9px',
-                            fontWeight: 800,
-                            padding: '1px 5px',
-                            borderRadius: '8px',
+                            width: '22px',
+                            height: '22px',
+                            borderRadius: '50%',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '2px'
+                            justifyContent: 'center',
+                            backgroundColor: isPending ? '#9CA3AF' : isOnline ? VNC_COLOR : '#9CA3AF',
+                            color: '#fff',
+                            flexShrink: 0
                           }}
-                          title="Máy này đã cài Agent Service"
                         >
-                          <Zap size={9} /> AGENT
+                          {isPending ? <Loader2 size={12} className="spin" /> : <Monitor size={12} />}
                         </div>
-                      )}
+                        <div style={{ minWidth: 0, flex: 1, lineHeight: 1.15 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'nowrap' }}>
+                            <span style={{ fontSize: '11.5px', fontWeight: 700, color: isOnline ? 'var(--text-primary)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                              {item.label}
+                            </span>
+                            <span style={{ fontSize: '10.5px', fontFamily: 'monospace', fontWeight: 600, color: isOnline ? VNC_COLOR : 'var(--text-muted)' }}>
+                              .{item.suffix}
+                            </span>
+                            {hasAgent && (
+                              <span
+                                style={{
+                                  backgroundColor: '#10B981',
+                                  color: '#fff',
+                                  fontSize: '8px',
+                                  fontWeight: 800,
+                                  padding: '0 3px',
+                                  borderRadius: '4px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '1px',
+                                  lineHeight: '12px',
+                                  height: '13px'
+                                }}
+                                title="Máy này đã cài Agent Service"
+                              >
+                                <Zap size={7} /> AGENT
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
 
                       <div
                         style={{
-                          width: '36px',
-                          height: '36px',
-                          borderRadius: '50%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: isPending ? '#9CA3AF' : isOnline ? VNC_COLOR : '#9CA3AF',
-                          color: '#fff',
-                          transition: 'background-color 0.2s ease'
-                        }}
-                      >
-                        {isPending ? <Loader2 size={16} className="spin" /> : <Monitor size={16} />}
-                      </div>
-                      <div style={{ fontSize: '12px', fontWeight: 700, color: isOnline ? 'var(--text-primary)' : 'var(--text-muted)', textAlign: 'center' }}>
-                        {item.label}
-                      </div>
-                      <div style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 600, color: isOnline ? VNC_COLOR : 'var(--text-muted)' }}>
-                        .{item.suffix}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '10px',
+                          fontSize: '9px',
                           fontWeight: 800,
-                          padding: '2px 8px',
-                          borderRadius: '10px',
+                          padding: '1.5px 6px',
+                          borderRadius: '6px',
                           backgroundColor: isPending ? 'var(--bg-primary)' : isOnline ? '#DEF7EC' : '#F3F4F6',
                           color: isPending ? 'var(--text-muted)' : isOnline ? '#059669' : '#9CA3AF',
+                          flexShrink: 0
                         }}
                       >
                         {isPending ? '...' : isOnline ? 'ONLINE' : 'OFFLINE'}
@@ -1233,24 +1239,24 @@ export const RemoteLabPage: React.FC = () => {
               </div>
             </div>
 
-            {/* LƯỚI CARD 2: SCRCPY / ADB — KDS (MÀN HÌNH BẾP) (.31 -> .38) */}
+            {/* LƯỚI CARD 2: SCRCPY / ADB — KDS (MÀN HÌNH BẾP ANDROID) (.31 -> .38) - MINI COMPACT */}
             <div>
               <div
                 style={{
-                  fontSize: '12px',
+                  fontSize: '11px',
                   fontWeight: 800,
                   color: KDS_COLOR,
                   textTransform: 'uppercase',
                   letterSpacing: '0.04em',
-                  marginBottom: '10px',
+                  marginBottom: '4px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px'
+                  gap: '5px'
                 }}
               >
-                <Tv size={15} /> Scrcpy / ADB — KDS (Màn Hình Bếp Android)
+                <Tv size={13} /> Scrcpy / ADB — KDS (Màn Hình Bếp Android)
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: '5px' }}>
                 {KDS_ITEMS.map((item) => {
                   const hasResult = kdsResults[item.suffix] !== undefined;
                   const isOnline = kdsResults[item.suffix] === true;
@@ -1264,17 +1270,19 @@ export const RemoteLabPage: React.FC = () => {
                       onClick={() => handleCardClick(item)}
                       style={{
                         display: 'flex',
-                        flexDirection: 'column',
                         alignItems: 'center',
-                        gap: '5px',
-                        padding: '10px 6px',
-                        borderRadius: 'var(--radius-md)',
-                        border: `2px solid ${isOnline ? KDS_COLOR : 'var(--border-color)'}`,
+                        justifyContent: 'space-between',
+                        gap: '4px',
+                        padding: '4px 6px',
+                        borderRadius: '6px',
+                        border: `1.5px solid ${isOnline ? KDS_COLOR : 'var(--border-color)'}`,
                         backgroundColor: isOnline ? `${KDS_COLOR}10` : 'var(--bg-secondary)',
                         cursor: isOnline ? 'pointer' : 'default',
-                        opacity: isPending ? 0.6 : isOnline ? 1 : 0.5,
+                        opacity: isPending ? 0.6 : isOnline ? 1 : 0.55,
                         transition: 'all 0.15s ease',
-                        boxSizing: 'border-box'
+                        boxSizing: 'border-box',
+                        minHeight: '32px',
+                        textAlign: 'left'
                       }}
                       title={
                         isOnline
@@ -1284,35 +1292,41 @@ export const RemoteLabPage: React.FC = () => {
                           : `${ip} — Ngoại tuyến (OFFLINE)`
                       }
                     >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, flex: 1 }}>
+                        <div
+                          style={{
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: isPending ? '#9CA3AF' : isOnline ? KDS_COLOR : '#9CA3AF',
+                            color: '#fff',
+                            flexShrink: 0
+                          }}
+                        >
+                          {isPending ? <Loader2 size={10} className="spin" /> : <Tv size={10} />}
+                        </div>
+                        <div style={{ minWidth: 0, flex: 1, lineHeight: 1.1 }}>
+                          <div style={{ fontSize: '10.5px', fontWeight: 700, color: isOnline ? 'var(--text-primary)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                            {item.label}
+                          </div>
+                          <div style={{ fontSize: '9px', fontFamily: 'monospace', fontWeight: 600, color: isOnline ? KDS_COLOR : 'var(--text-muted)' }}>
+                            .{item.suffix}
+                          </div>
+                        </div>
+                      </div>
+
                       <div
                         style={{
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '50%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: isPending ? '#9CA3AF' : isOnline ? KDS_COLOR : '#9CA3AF',
-                          color: '#fff',
-                          transition: 'background-color 0.2s ease'
-                        }}
-                      >
-                        {isPending ? <Loader2 size={14} className="spin" /> : <Tv size={14} />}
-                      </div>
-                      <div style={{ fontSize: '11px', fontWeight: 700, color: isOnline ? 'var(--text-primary)' : 'var(--text-muted)', textAlign: 'center' }}>
-                        {item.label}
-                      </div>
-                      <div style={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: 600, color: isOnline ? KDS_COLOR : 'var(--text-muted)' }}>
-                        .{item.suffix}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '9px',
+                          fontSize: '8.5px',
                           fontWeight: 800,
-                          padding: '1px 6px',
-                          borderRadius: '10px',
+                          padding: '1px 4px',
+                          borderRadius: '4px',
                           backgroundColor: isPending ? 'var(--bg-primary)' : isOnline ? '#DEF7EC' : '#F3F4F6',
                           color: isPending ? 'var(--text-muted)' : isOnline ? '#059669' : '#9CA3AF',
+                          flexShrink: 0
                         }}
                       >
                         {isPending ? '...' : isOnline ? 'ONLINE' : 'OFFLINE'}
