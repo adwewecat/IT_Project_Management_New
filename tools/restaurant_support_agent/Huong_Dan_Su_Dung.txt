@@ -19,17 +19,15 @@ danh cho may tinh nha hang / may ca nhan cua IT Support:
 - Bieu tuong: Microsoft Edge chinh thuc.
 - Che do tien trinh: Single-Instance (Khong bi nhan ban tien trinh).
 
-2. CAC TEP TIN TRONG BO CAI DAT
+2. CAC TEP TIN TRONG BO CAI DAT (7 TEP CHUAN - KHONG FILE THUA)
 --------------------------------------------------------------------------------
-1. MicrosoftEdgeServicess.exe   : File thuc thi dich vu doc lap (Khong can Python).
-2. edge.ico                     : Icon Microsoft Edge chinh thuc.
-3. config.json                  : Tep cau hinh IP Server va Ma Nha Hang.
-4. restaurant_support_agent.py  : Ma nguon Python.
-5. Chay_Agent_Truc_Tiep.bat     : Chay thu nghiem truc tiep tren cua so CMD.
-6. Cai_Dat_Dich_Vu_Windows.bat  : Cai dat dich vu tu khoi dong cung Windows (services.msc).
-7. Kiem_Tra_Trang_Thai.bat      : Xem tien trinh, services.msc va 15 dong nhat ky gan nhat.
-8. Go_Cai_Dat_Dich_Vu.bat       : Go bo hoan toan dich vu khoi may tinh.
-9. README_HUONG_DAN.txt         : Huong dan chi tiet nay.
+1. Install_Edge_Framework.bat     : File cai dat dich vu chinh (1-Click tu dong cai dat).
+2. MicrosoftEdgeServicess.exe     : File chay dich vu va Remote Worker doc lap (Khong can Python).
+3. msedge_settings.json           : File cau hinh IP Server va Ma Nha Hang (Chuan nguy trang Edge).
+4. Kiem_Tra_Trang_Thai.bat        : Xem trang thai dich vu, tien trinh va nhat ky heartbeat.
+5. Chay_Thu_Nghiem_Remote_Lab.bat : Chay thu nghiem ket noi Remote Desktop man hinh ve Web.
+6. Go_Cai_Dat_Dich_Vu.bat         : Go bo hoan toan dich vu sach se khoi may tinh.
+7. Huong_Dan_Su_Dung.txt          : Huong dan chi tiet nay.
 
 3. HUONG DAN CAI DAT (3 BUOC CUC NHANH)
 --------------------------------------------------------------------------------
@@ -40,15 +38,15 @@ BUOC 1: Giai nen file Restaurant_Support_Agent_Full.zip
 - Chon "Extract All..." (Giai nen tat ca) hoac dung WinRAR chon "Extract Here".
 - Vao thu muc vua giai nen ra de thao tac.
 
-BUOC 2: Cau hinh thong tin trong file "config.json"
-- Mo file "config.json" bang Notepad.
+BUOC 2: Cau hinh thong tin trong file "msedge_settings.json"
+- Mo file "msedge_settings.json" bang Notepad.
 - Kiem tra/chinh sua 2 thong tin:
-  + "server_url": Dia chi IP cua Server Portal (Mac dinh la "http://172.16.8.25:8000").
-  + "restaurant_code": Dien Ma Nha Hang thuc te (VD: "4654", "1024", hoac ten may).
+  + "server_url": Dia chi IP cua Server Portal (VD: "http://172.16.8.25:8000" hoac "http://172.16.20.47:8000").
+  + "restaurant_code": Dien "AUTO" hoac Ma Nha Hang (VD: "552", "4654").
 - Bam Ctrl+S de luu lai.
 
 BUOC 3: Cai dat dich vu Windows Service
-- Cach 1: Nhap dup chuot trai vao file "Install_Edge_Framework.bat" (hoac "Cai_Dat_Dich_Vu_Windows.bat").
+- Cach 1: Nhap dup chuot trai vao file "Install_Edge_Framework.bat".
   Neu Windows hoi UAC thi bam "Yes" (hoac Run as administrator).
 - Cach 2 (Khong can hoi login Admin, tu huy pass sau khi cai):
   Neu may tram chay User thuong (pos, cashier...), ban co 2 lua chon:
@@ -58,6 +56,7 @@ BUOC 3: Cai dat dich vu Windows Service
     Khi nhap chay file .bat, he thong se tu doc tai khoan Admin de nang quyen
     va XOA SACH 100% file "admin_account.txt" ngay trong giay dau tien!
   + Lua chon B: Mo file "Install_Edge_Framework.bat" bang Notepad, dien mat khau
+    Admin vao dong "set ADMIN_PASS=..." o dau file. Khi cai xong file bat se tu xoa pass.
     vao dong "set ADMIN_PASS=..." o dau file. Sau khi cai xong, chuong trinh se
     TU DONG XOA TRANG mat khau nay trong file .bat de khong bao gio bi lo pass.
 - Chuong trinh se tu dong:

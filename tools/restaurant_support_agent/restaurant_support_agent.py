@@ -274,43 +274,26 @@ def get_gateway_ip():
 
 def get_server_candidates(config):
     """
-    Tong hop danh sach tat ca cac server dich ung vien de auto-discover va failover:
-    1. Cau hinh server_url trong config.json
-    2. Server Host qua Default Gateway (Dac biet tren may ao VMware/VirtualBox: gateway thuong la Host PC chay port 8000)
-    3. Host dev 192.168.254.1:8000 va 172.16.20.47:8000
-    4. Server Production 172.16.8.25:8000
-    5. Localhost 127.0.0.1:8000
+    Lay danh sach server dich:
+    - Neu nguoi dung da cau hinh server_url cu the (khac AUTO va khong rong): Chi ket noi DUY NHAT server do!
+    - Neu de AUTO hoac rong: Quet cac ung vien Gateway, Host dev va Production.
     """
-    candidates = []
-    current_srv = config.get("server_url", "").strip().rstrip("/")
-    if current_srv:
-        candidates.append(current_srv)
+    configured_srv = config.get("server_url", "").strip().rstrip("/")
+    if configured_srv and configured_srv.upper() != "AUTO":
+        return [configured_srv]
 
-    # 1. Gateway IP (tren VMware NAT, gateway .1 hoac .2 la Host PC dang chay backend)
+    candidates = []
     gw = get_gateway_ip()
     if gw:
         gw_srv = f"http://{gw}:8000"
         if gw_srv not in candidates:
             candidates.append(gw_srv)
 
-    # 2. Host VMware pho bien (.1 va .2)
-    local_ip = get_local_ip()
-    if local_ip and "." in local_ip:
-        octets = local_ip.split(".")
-        if len(octets) == 4:
-            host_dot1 = f"http://{octets[0]}.{octets[1]}.{octets[2]}.1:8000"
-            host_dot2 = f"http://{octets[0]}.{octets[1]}.{octets[2]}.2:8000"
-            if host_dot1 not in candidates:
-                candidates.append(host_dot1)
-            if host_dot2 not in candidates:
-                candidates.append(host_dot2)
-
-    # 3. Server dev / may tram noi bo
     well_known = [
-        "http://192.168.254.1:8000",
         "http://172.16.20.47:8000",
-        "http://127.0.0.1:8000",
-        CENTRAL_PRODUCTION_SERVER.rstrip("/")
+        "http://192.168.254.1:8000",
+        CENTRAL_PRODUCTION_SERVER.rstrip("/"),
+        "http://127.0.0.1:8000"
     ]
     for wk in well_known:
         if wk not in candidates:
@@ -320,12 +303,8 @@ def get_server_candidates(config):
 
 
 def send_heartbeat(config, ip_lan, machine_name, os_info):
-    """
-    Gui tin hieu Heartbeat len Central Server.
-    Tu dong quet danh sach server ung vien (auto-discovery) va failover neu mot server loi 404/mat mang.
-    """
+    """Gui tin hieu Heartbeat len Central Server."""
     server_candidates = get_server_candidates(config)
-    current_srv = config.get("server_url", "").strip().rstrip("/")
 
     payload = {
         "restaurant_code": str(config.get("restaurant_code", "UNKNOWN")),
@@ -343,7 +322,7 @@ def send_heartbeat(config, ip_lan, machine_name, os_info):
         try:
             resp = send_http_post(endpoint, payload, timeout=6)
             logger.info("Heartbeat [OK] -> %s (IP: %s, Ma NH: %s)", endpoint, ip_lan, config.get("restaurant_code"))
-            
+
             # Tu dong nhan dien nha hang tu phan hoi cua Server theo dải IP LAN
             if isinstance(resp, dict):
                 resolved_code = resp.get("resolved_restaurant_code")
@@ -354,45 +333,29 @@ def send_heartbeat(config, ip_lan, machine_name, os_info):
                     save_config(config)
                     logger.info("Tu dong nhan dien nha hang tu Server thanh cong: %s (%s)", resolved_code, resolved_name or "")
 
-            if srv != current_srv:
-                config["server_url"] = srv
-                save_config(config)
-                logger.info("Tu dong cap nhat server_url ket noi thanh cong: %s", srv)
             return True
         except Exception as e:
             logger.warning("Khong the gui Heartbeat toi %s: %s", endpoint, e)
 
-    logger.error("That bai gui Heartbeat toi tat ca server ung vien.")
+    logger.error("That bai gui Heartbeat toi server.")
     return False
 
 
 def poll_pending_tasks(config, ip_lan=None):
     """Kiem tra va lay cac tac vu dieu khien tu xa dang cho thuc thi."""
-    server_url = config.get("server_url", CENTRAL_PRODUCTION_SERVER).rstrip("/")
+    server_candidates = get_server_candidates(config)
     r_code = config.get("restaurant_code", "")
     ip_param = f"&ip_lan={ip_lan}" if ip_lan else ""
-    endpoint = f"{server_url}/api/v1/agent-multitask/poll-tasks?restaurant_code={r_code}{ip_param}"
 
-    try:
-        tasks = send_http_get(endpoint, timeout=8)
-        if isinstance(tasks, list) and len(tasks) > 0:
-            return tasks
-        return []
-    except Exception:
-        # Neu server_url hien tai loi, thu nhanh cac ung vien khac
-        for srv in get_server_candidates(config):
-            if srv == server_url:
-                continue
-            alt_ep = f"{srv}/api/v1/agent-multitask/poll-tasks?restaurant_code={r_code}{ip_param}"
-            try:
-                tasks = send_http_get(alt_ep, timeout=5)
-                if isinstance(tasks, list):
-                    config["server_url"] = srv
-                    save_config(config)
-                    return tasks
-            except Exception:
-                continue
-        return []
+    for srv in server_candidates:
+        endpoint = f"{srv}/api/v1/agent-multitask/poll-tasks?restaurant_code={r_code}{ip_param}"
+        try:
+            tasks = send_http_get(endpoint, timeout=8)
+            if isinstance(tasks, list):
+                return tasks
+        except Exception:
+            continue
+    return []
 
 
 def report_task_result(config, task_id, success, message, output="", ip_lan=None):

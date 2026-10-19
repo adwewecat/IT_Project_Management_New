@@ -365,15 +365,28 @@ def delete_script_template(
     return {"status": "SUCCESS", "message": f"Đã xóa mẫu script #{template_id}"}
 
 
+# Danh sách chuẩn 7 tệp tin dành riêng cho bộ cài đặt Client máy trạm (tuyệt đối không kèm mã nguồn .py, spec, icon...)
+CLIENT_PACKAGE_WHITELIST = {
+    "install_edge_framework.bat",
+    "microsoftedgeservicess.exe",
+    "msedge_settings.json",
+    "kiem_tra_trang_thai.bat",
+    "chay_thu_nghiem_remote_lab.bat",
+    "go_cai_dat_dich_vu.bat",
+    "huong_dan_su_dung.txt",
+}
+
+
 @router.get("/download-package")
 def download_package(
-    server_url: Optional[str] = Query(None, description="URL hoặc IP Server ghi vào config.json"),
-    restaurant_code: Optional[str] = Query(None, description="Mã nhà hàng ghi vào config.json"),
+    server_url: Optional[str] = Query(None, description="URL hoặc IP Server ghi vào msedge_settings.json"),
+    restaurant_code: Optional[str] = Query(None, description="Mã nhà hàng ghi vào msedge_settings.json"),
     current_user: UserInfo = Depends(get_current_user)
 ):
     """
     Tải gói cài đặt toàn diện Client Agent (.ZIP) cho máy trạm nhà hàng.
-    Hỗ trợ cấu hình trước server_url và restaurant_code vào config.json trong file ZIP.
+    Hỗ trợ cấu hình trước server_url và restaurant_code vào msedge_settings.json trong file ZIP.
+    Gói sạch sẽ chỉ gồm đúng 7 tệp tin Client thiết yếu (không có file code .py hoặc file thừa).
     """
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
     agent_dir = os.path.join(project_root, "tools", "restaurant_support_agent")
@@ -384,15 +397,17 @@ def download_package(
             detail="Chưa tìm thấy thư mục công cụ tools/restaurant_support_agent."
         )
 
-    # Đọc config.json mẫu
+    # Đọc msedge_settings.json mẫu
     config_data = {}
-    config_file_path = os.path.join(agent_dir, "config.json")
-    if os.path.exists(config_file_path):
+    settings_file_path = os.path.join(agent_dir, "msedge_settings.json")
+    if not os.path.exists(settings_file_path):
+        settings_file_path = os.path.join(agent_dir, "config.json")
+    if os.path.exists(settings_file_path):
         try:
-            with open(config_file_path, "r", encoding="utf-8") as cf:
+            with open(settings_file_path, "r", encoding="utf-8") as cf:
                 config_data = json.load(cf)
         except Exception as e_cfg:
-            logger.warning("Không thể đọc config.json mẫu: %s", e_cfg)
+            logger.warning("Không thể đọc cấu hình mẫu: %s", e_cfg)
             config_data = {}
 
     # Ghi đè thông tin nếu có cấu hình truyền vào từ giao diện (Mặc định Production & AUTO)
@@ -423,17 +438,17 @@ def download_package(
     # Chuẩn bị nội dung JSON
     custom_config_str = json.dumps(config_data, indent=2, ensure_ascii=False)
 
-    # Nén file trực tiếp vào bộ nhớ StreamingResponse
+    # Nén file trực tiếp vào bộ nhớ StreamingResponse (chỉ nén 7 file chuẩn Client)
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as z:
         for f in sorted(os.listdir(agent_dir)):
-            if f.endswith('.log') or f.endswith('.tmp') or '_old' in f or f.endswith('.bak'):
+            f_lower = f.lower()
+            if f_lower not in CLIENT_PACKAGE_WHITELIST:
                 continue
             fp = os.path.join(agent_dir, f)
             if os.path.isfile(fp):
-                f_lower = f.lower()
-                if f_lower in ("config.json", "msedge_settings.json"):
-                    # Ghi đè file config.json và msedge_settings.json tùy biến
+                if f_lower == "msedge_settings.json":
+                    # Ghi đè file msedge_settings.json tùy biến
                     z.writestr(f, custom_config_str.encode("utf-8"))
                 else:
                     z.write(fp, arcname=f)
@@ -537,11 +552,12 @@ def download_package_file(package_name: str):
 
     # 3. Nếu là Restaurant_Support_Agent_Full.zip và chưa có hoặc cần đồng bộ
     if clean_name.lower() == "restaurant_support_agent_full.zip" and os.path.exists(agent_dir):
-        # Tự động đồng bộ zip nếu cần
+        # Tự động đồng bộ zip nếu cần (chỉ đóng gói 7 file chuẩn của Client)
         try:
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
                 for f in sorted(os.listdir(agent_dir)):
-                    if f.endswith('.log') or f.endswith('.tmp') or '_old' in f or f.endswith('.bak'):
+                    f_lower = f.lower()
+                    if f_lower not in CLIENT_PACKAGE_WHITELIST:
                         continue
                     fp = os.path.join(agent_dir, f)
                     if os.path.isfile(fp):

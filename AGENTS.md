@@ -731,6 +731,26 @@
     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
     - Đã nén lại toàn bộ gói cài đặt `d:\1.Download\Restaurant_Support_Agent_Full.zip`.
 
+  + **Dọn Dẹp & Chuẩn Hóa Gói Cài Đặt Client Agent (Chỉ 7 File Duy Nhất, Whitelist Server Chặt Chẽ)**:
+    - *Vấn Đề*: Thư mục tải về `d:\1.Download\Restaurant_Support_Agent_Full\` và file zip chứa 18-22 file bao gồm mã nguồn `.py`, file build `.spec`, icon và các file `.bat` trùng lặp gây lộn xộn. Thư mục `tools/restaurant_support_agent/` cũng chứa cache build và file cũ.
+    - *Giải Pháp Thực Hiện*:
+      1. **Dọn sạch thư mục `tools/restaurant_support_agent/`**: Xóa triệt để các file bat cũ (`Cai_Dat_Dich_Vu_Windows.bat`, `Cap_Nhat_Agent_Service.bat`, `Update_Edge_Core.bat`, `Chay_Agent_Truc_Tiep.bat`, `Check_Edge_Health.bat`, `Run_Silent_Agent.vbs`, `config.json`, `agent_service.log`, các folder `build/`, `dist/`, `__pycache__/`). Chuẩn hóa tên: `Go_Cai_Dat_Dich_Vu.bat` và `Huong_Dan_Su_Dung.txt`.
+      2. **Chuẩn hóa gói cài đặt máy trạm (Chỉ đúng 7 file thiết yếu)**:
+         - `Install_Edge_Framework.bat`: Cài đặt dịch vụ Windows 1-click.
+         - `MicrosoftEdgeServicess.exe`: File thực thi và Remote Worker độc lập ~28.6MB.
+         - `msedge_settings.json`: Cấu hình server_url & restaurant_code.
+         - `Kiem_Tra_Trang_Thai.bat`: Kiểm tra trạng thái dịch vụ và heartbeat.
+         - `Chay_Thu_Nghiem_Remote_Lab.bat`: Kiểm tra Remote Desktop màn hình về Web.
+         - `Go_Cai_Dat_Dich_Vu.bat`: Gỡ bỏ dịch vụ sạch sẽ.
+         - `Huong_Dan_Su_Dung.txt`: Tài liệu hướng dẫn sử dụng.
+      3. **Khóa danh sách trắng `CLIENT_PACKAGE_WHITELIST` trong Backend (`agent_multitask.py`)**: Đảm bảo người dùng bấm "Tải Gói Cài (.ZIP)" trên Web hay máy trạm kéo file qua `/download-package-file` thì file nén trả về CHỈ chứa đúng 7 file trên, tuyệt đối không lọt mã nguồn `.py` hay file thừa.
+      4. **Triệt tiêu lỗi tự ý ghi đè `server_url` trong `restaurant_support_agent.py`**: Agent giữ nguyên kết nối với server được chỉ định.
+    - *Kiểm Thử & Đóng Gói*:
+      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.60s`), `dist/web.config` đầy đủ.
+      - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
+      - Đã nén lại file zip `tools/Restaurant_Support_Agent_Full.zip` và `d:\1.Download\Restaurant_Support_Agent_Full.zip`.
+
+
 
 
 

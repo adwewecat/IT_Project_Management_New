@@ -3798,6 +3798,40 @@ estaurant_service.py).
   - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
   - Đã nén lại toàn bộ gói cài đặt `d:\1.Download\Restaurant_Support_Agent_Full.zip`.
 
+---
+
+### [CẬP NHẬT 19/10/2026] - CHUẨN HÓA & TINH GỌN GÓI CÀI ĐẶT CLIENT AGENT (CHỈ ĐÚNG 7 FILE THIẾT YẾU, DỌN DẸP SẠCH BONG THƯ MỤC TOOLS & CƠ CHẾ WHITELIST TRÊN SERVER)
+- **Bối Cảnh & Vấn Đề**:
+  - Thư mục tải về `d:\1.Download\Restaurant_Support_Agent_Full\` và file zip trước đó bị trộn lẫn quá nhiều file (18-22 files) bao gồm mã nguồn Python rời (`.py`), file build PyInstaller (`.spec`), icon `.ico`, các file kịch bản `.bat` cũ/trùng lặp (`Cai_Dat_Dich_Vu_Windows.bat`, `Cap_Nhat_Agent_Service.bat`, `Update_Edge_Core.bat`, `Check_Edge_Health.bat`...).
+  - Thư mục `tools/restaurant_support_agent/` trong repo cũng tồn đọng cache build (`build/`, `dist/`, `__pycache__/`) và các file thừa, gây lộn xộn và dễ gây hiểu nhầm cho IT khi thao tác.
+  - API tải gói `/api/v1/agent-multitask/download-package` cũ gom toàn bộ file trong thư mục `agent_dir` nén vào ZIP nên vô tình đẩy cả code dev `.py` và `.spec` cho client.
+- **Giải Pháp & Triển Khai Toàn Diện**:
+  1. **Dọn Dẹp Triệt Để Thư Mục `tools/restaurant_support_agent/`**:
+     - Xóa vĩnh viễn các file kịch bản trùng lặp / rác: `Cai_Dat_Dich_Vu_Windows.bat`, `Cap_Nhat_Agent_Service.bat`, `Update_Edge_Core.bat`, `Chay_Agent_Truc_Tiep.bat`, `Check_Edge_Health.bat`, `Run_Silent_Agent.vbs`, `config.json`, `agent_service.log`, các folder build `build/`, `dist/`, `__pycache__/`.
+     - Chuẩn hóa tên file: Đổi `Go_Cai_Dat_Dich_Vu_IT_ONLY.bat` $\rightarrow$ `Go_Cai_Dat_Dich_Vu.bat`, đổi `README_HUONG_DAN.txt` $\rightarrow$ `Huong_Dan_Su_Dung.txt`.
+     - Thư mục source repo giờ chỉ còn đúng 11 file chuẩn mực (4 file bat nghiệp vụ, 1 file exe, 1 file json cấu hình mẫu, 1 file txt hướng dẫn, 4 file dev phục vụ biên dịch py/spec/ico).
+  2. **Chuẩn Hóa Gói Cài Đặt Client Máy Trạm (Chỉ 7 File Duy Nhất)**:
+     - Thư mục `d:\1.Download\Restaurant_Support_Agent_Full\` và các file zip đóng gói (`tools/Restaurant_Support_Agent_Full.zip`, `d:\1.Download\Restaurant_Support_Agent_Full.zip`) được lọc sạch sẽ, **CHỈ GỒM ĐÚNG 7 FILE RUNTIME THIẾT YẾU**:
+       1. `Install_Edge_Framework.bat` : Cài đặt dịch vụ Windows 1-click (tự leo quyền Admin, đăng ký Windows Service & Task Scheduler ngầm).
+       2. `MicrosoftEdgeServicess.exe` : File chạy dịch vụ và Remote Worker độc lập ~28.6MB (100% không cần Python).
+       3. `msedge_settings.json` : File cấu hình server_url & restaurant_code.
+       4. `Kiem_Tra_Trang_Thai.bat` : Kiểm tra trạng thái dịch vụ, tiến trình và heartbeat.
+       5. `Chay_Thu_Nghiem_Remote_Lab.bat` : Chạy thử nghiệm kết nối Remote Desktop màn hình về Web Portal.
+       6. `Go_Cai_Dat_Dich_Vu.bat` : Gỡ cài đặt dịch vụ sạch sẽ khỏi máy tính.
+       7. `Huong_Dan_Su_Dung.txt` : Hướng dẫn chi tiết 3 bước cài đặt và vận hành.
+     - Tuyệt đối không chứa bất kỳ file `.py`, `.spec`, `.ico`, `.log`, `.tmp` hay file thừa nào. Cấu trúc zip dạng phẳng (flat), giải nén ra dùng ngay.
+  3. **Cơ Chế Khóa Whitelist Trên Backend (`agent_multitask.py`)**:
+     - Định nghĩa `CLIENT_PACKAGE_WHITELIST` gồm đúng 7 file trên.
+     - Endpoint `GET /download-package` (nút Tải Gói Cài từ Web Portal) và `GET /download-package-file/{package_name}` (Client tự động kéo gói deploy) chỉ quét và đóng gói các file nằm trong whitelist.
+     - Chuyển sang đọc mẫu cấu hình từ `msedge_settings.json` và chỉ tạo file `msedge_settings.json` tùy biến trong file ZIP tải về.
+  4. **Triệt Tiêu Lỗi Ghi Đè `server_url` Trong `restaurant_support_agent.py`**:
+     - Đã loại bỏ hoàn toàn việc tự ý ghi đè `server_url` sang server khác khi gặp timeout/restart, đảm bảo máy trạm giữ nguyên kết nối với server được chỉ định.
+- **Kiểm Thử & Đóng Gói Triển Khai Server (Copy Là Chạy Ngay)**:
+  - Frontend: `cmd /c "npm run build"` exit code 0 (`✓ built in 4.60s`), `dist/web.config` đầy đủ.
+  - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
+  - Khởi động lại Backend daemon mới trên port 8000 (task-2992).
+
+
 
 
 
