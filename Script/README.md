@@ -3523,5 +3523,21 @@ estaurant_service.py).
   - Frontend `npm run build` thành công exit code 0 (`✓ built in 3.99s`), bản build sạch sẽ trong `frontend/dist/`.
   - Backend `compileall` và Smoke test `PASSED 100%`.
 
+---
+
+### [2026-10-19] - Tinh Gọn Giao Diện Màn Hình Thay Thế Remote (`RemoteLabPage.tsx`) Theo Yêu Cầu Thực Tế
+- **Yêu cầu người dùng**:
+  1. Bỏ khối văn bản giải thích: *"Tại sao sử dụng giải pháp Web-based Remote thay thế TightVNC & Scrcpy? • Không cần cài VNC Viewer... • Vượt qua tường lửa... • Tiếp sóng KDS Bếp..."*.
+  2. Bỏ 2 nút *"Remote Máy Trạm Windows"*, *"Remote KDS Bếp (Android)"* vì không có ý nghĩa thực tế khi đã có Lưới Thẻ bên dưới.
+  3. Bỏ hộp thông tin màu xanh: *"💡 Kiến trúc linh hoạt: Bạn KHÔNG BẮT BUỘC phải cài Agent cho toàn bộ 3 máy trạm (.11, .12, .41)!..."* ở phía dưới.
+- **Chi tiết thực hiện & Tối ưu**:
+  - Xóa bỏ hoàn toàn Card Hướng Dẫn trên đỉnh trang và Hộp thông tin xanh dưới đáy lưới thẻ, giúp màn hình cực kỳ thông thoáng, tập trung 100% diện tích cho Khối Kiểm Tra Tín Hiệu & Lưới Thẻ Thiết Bị Nhà Hàng.
+  - Tích hợp ô `<select>` chọn Loại Thiết Bị (`🖥️ Máy Trạm` / `📺 KDS Bếp`) trực tiếp vào Form Nhập Nhanh Địa Chỉ IP Thủ Công để trường `remoteMode` được quản lý trực quan và có ý nghĩa thực tiễn.
+  - Dọn dẹp sạch sẽ các import thừa (`HelpCircle`), đảm bảo Zero TypeScript warnings TS6133.
+- **Kiểm thử & Đóng gói**:
+  - Frontend: `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 3.87s`), bundle `frontend/dist/` sạch sẽ.
+  - Backend: `compileall` sạch 100%, Smoke test `PASSED 100%`.
+
+
 
 

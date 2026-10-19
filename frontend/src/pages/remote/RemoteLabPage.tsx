@@ -23,7 +23,6 @@ import {
   Activity,
   ArrowLeft,
   Settings,
-  HelpCircle,
   Zap,
   Loader2,
   ExternalLink,
@@ -778,79 +777,7 @@ export const RemoteLabPage: React.FC = () => {
       {/* 2. NỘI DUNG CHÍNH (CHỌN THIẾT BỊ HOẶC MÀN HÌNH REMOTE) */}
       {!currentSession ? (
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '16px 20px', overflowY: 'auto' }}>
-          {/* Card Hướng Dẫn & Giới Thiệu Lab */}
-          <div
-            style={{
-              padding: '14px 18px',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--bg-secondary)',
-              border: '1px solid var(--border-color)',
-              marginBottom: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '16px'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-              <HelpCircle size={22} style={{ color: 'var(--color-primary)', flexShrink: 0, marginTop: '2px' }} />
-              <div>
-                <div style={{ fontWeight: 700, fontSize: '13.5px', marginBottom: '3px' }}>
-                  Tại sao sử dụng giải pháp Web-based Remote thay thế TightVNC & Scrcpy?
-                </div>
-                <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                  • <b>Không cần cài VNC Viewer hay Scrcpy trên máy IT</b>: Điều khiển trực tiếp 100% trên giao diện Web.<br />
-                  • <b>Vượt qua tường lửa / NAT</b>: Máy trạm kết nối Outbound lên Server qua WebSocket, IT ở bất kỳ đâu cũng điều khiển được.<br />
-                  • <b>Tiếp sóng KDS Bếp qua ADB LAN</b>: Không cần mở port mạng của Android TV Box.
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setRemoteMode('workstation')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '9px 16px',
-                  borderRadius: 'var(--radius-md)',
-                  backgroundColor: remoteMode === 'workstation' ? 'var(--color-primary)' : 'var(--bg-primary)',
-                  color: remoteMode === 'workstation' ? '#fff' : 'var(--text-primary)',
-                  border: '1px solid var(--border-color)',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                  fontSize: '13px'
-                }}
-              >
-                <Monitor size={16} />
-                <span>Remote Máy Trạm Windows</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setRemoteMode('kds')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '9px 16px',
-                  borderRadius: 'var(--radius-md)',
-                  backgroundColor: remoteMode === 'kds' ? 'var(--color-primary)' : 'var(--bg-primary)',
-                  color: remoteMode === 'kds' ? '#fff' : 'var(--text-primary)',
-                  border: '1px solid var(--border-color)',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                  fontSize: '13px'
-                }}
-              >
-                <Tv size={16} />
-                <span>Remote KDS Bếp (Android)</span>
-              </button>
-            </div>
-          </div>
-
-          {/* 3. KHỐI TRA CỨU TÍN HIỆU & ĐIỀU KHIỂN NHÀ HÀNG (GRID CARD CHUẨN POPUP VNC/KDS) */}
+          {/* KHỐI TRA CỨU TÍN HIỆU & ĐIỀU KHIỂN NHÀ HÀNG (GRID CARD CHUẨN POPUP VNC/KDS) */}
           <div
             style={{
               padding: '18px 22px',
@@ -1343,30 +1270,6 @@ export const RemoteLabPage: React.FC = () => {
                 })}
               </div>
             </div>
-
-            {/* Hộp kiến trúc: Giải đáp trực tiếp băn khoăn "Không cần cài Agent cho toàn bộ máy!" */}
-            <div
-              style={{
-                marginTop: '16px',
-                padding: '12px 16px',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'rgba(59, 130, 246, 0.08)',
-                border: '1px solid rgba(59, 130, 246, 0.25)',
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '12px'
-              }}
-            >
-              <HelpCircle size={20} style={{ color: '#2563EB', flexShrink: 0, marginTop: '2px' }} />
-              <div style={{ fontSize: '12.5px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                <b style={{ color: '#2563EB' }}>💡 Kiến trúc linh hoạt: Bạn KHÔNG BẮT BUỘC phải cài Agent cho toàn bộ 3 máy trạm (.11, .12, .41)!</b>
-                <div style={{ marginTop: '4px', color: 'var(--text-secondary)' }}>
-                  • <b>Máy chưa cài Agent</b>: Vẫn kết nối 100% bằng <b>TightVNC (`vnc://`)</b> hoặc <b>Scrcpy (`scrcpy://`)</b> 1 chạm như cũ, không làm gián đoạn công việc.<br />
-                  • <b>Máy đã cài Agent (VD: POS 1.1)</b>: Điều khiển trực tiếp siêu tốc trên Web Canvas mà không cần cài thêm VNC Viewer trên máy tính của bạn.<br />
-                  • <b>Mô hình Gateway LAN</b>: Chỉ cần 1 máy chính trong nhà hàng cài service, máy đó có thể làm cầu nối tiếp sóng điều khiển KDS Android (.31-.38) và các máy POS khác trong mạng LAN!
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Form Nhập Nhanh Địa Chỉ IP */}
@@ -1384,6 +1287,27 @@ export const RemoteLabPage: React.FC = () => {
               <span>Kết Nối Nhanh Theo Địa Chỉ IP (Lab Tùy Biến)</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
+              <div style={{ width: '160px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '5px' }}>Loại Thiết Bị</label>
+                <select
+                  value={remoteMode}
+                  onChange={(e) => setRemoteMode(e.target.value as 'workstation' | 'kds')}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    fontSize: '13px',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <option value="workstation">🖥️ Máy Trạm (POS/PC)</option>
+                  <option value="kds">📺 KDS Bếp (Android)</option>
+                </select>
+              </div>
+
               <div style={{ flex: '1 1 120px' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '5px' }}>Mã Nhà Hàng</label>
                 <input

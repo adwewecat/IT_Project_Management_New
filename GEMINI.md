@@ -777,5 +777,11 @@
   + **Kiểm thử & Đóng gói**:
     * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`dist/` cập nhật sẵn).
     * Backend: `compileall` sạch 100%, Smoke test `PASSED 100%`.
+  + **Tinh Gọn Giao Diện Màn Hình Thay Thế Remote [2026-10-19]**:
+    * Xóa bỏ hoàn toàn khối Card giải thích lý thuyết và 2 nút bấm thừa ở đỉnh trang theo đúng yêu cầu người dùng.
+    * Xóa bỏ khối hộp thông tin kiến trúc xanh dưới lưới thẻ, giúp không gian màn hình tối ưu 100% cho tra cứu và kết nối.
+    * Đưa ô chọn Loại Thiết Bị (`workstation`/`kds`) vào trong Form Nhập Nhanh Thủ Công.
+    * Dọn dẹp sạch `HelpCircle` import, Frontend build `npm run build` exit code 0 (`✓ built in 3.87s`), Backend test `PASSED 100%`.
+
 
 
