@@ -180,7 +180,14 @@ class RemoteLabService:
             if proc.poll() is None:
                 return {"success": True, "message": "Remote Worker đã đang chạy ngầm cho phiên này.", "pid": proc.pid}
 
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
+        # Xác định chính xác project_root
+        current_d = os.path.dirname(os.path.abspath(__file__))
+        project_root = current_d
+        while project_root and os.path.dirname(project_root) != project_root:
+            if os.path.exists(os.path.join(project_root, "tools", "restaurant_support_agent")):
+                break
+            project_root = os.path.dirname(project_root)
+
         worker_script = os.path.join(project_root, "tools", "restaurant_support_agent", "remote_worker.py")
 
         if not os.path.exists(worker_script):
