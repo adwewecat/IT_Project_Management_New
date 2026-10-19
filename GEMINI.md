@@ -825,4 +825,8 @@
       2. **Cách 2 (Khai báo trực tiếp trong file .bat)**: Điền `set "ADMIN_PASS=..."` ở đầu file `.bat`. Khi kết thúc cài đặt, script dùng PowerShell xóa pass và thay bằng khoảng trắng đúng bằng độ dài ký tự cũ (padding exact bytes) để kích thước file không bị lệch dù chỉ 1 byte, triệt tiêu 100% lỗi CMD Pointer Desync.
     * *Cơ chế nâng quyền*: Thử qua Scheduled Task (`schtasks /ru /rp /rl HIGHEST`), fallback qua PowerShell Credential `CreateProcessWithLogonW`, fallback qua UAC mặc định.
     * *Đóng gói & Kiểm thử*: Cập nhật đồng bộ `Install_Edge_Framework.bat`, `Cai_Dat_Dich_Vu_Windows.bat`, `README_HUONG_DAN.txt` và gói nén `tools/Restaurant_Support_Agent_Full.zip` (10.35 MB). Frontend build exit code 0 (`✓ built in 4.49s`), Backend smoke test `PASSED 100%`.
+  + **Sửa Lỗi Đồng Bộ Ghi Đè IP Gateway & Kiểm Thử Thành Công Thực Tế Máy Trạm Nhà Hàng 10.8.222.12 (Isushi Vivo City) [2026-10-19]**:
+    * *Phát hiện & Khắc phục*: Hàm `sync_restaurants_to_endpoints` trước đây tự động lấy `r.ip` (IP Router Gateway `.1`) đè lên `ep.ip_lan` của máy trạm thật (`.12`) mỗi khi tải danh sách. Đã cập nhật điều kiện bảo vệ: tuyệt đối không ghi đè nếu máy trạm đã cài đặt (`is_installed=True`) hoặc đã có `last_heartbeat`.
+    * *Kết quả kiểm thử thực tế trên máy nhà hàng*: Máy trạm `10.8.222.12` (Hostname `HCMISSVVCNVLP12`, vai trò `Isushi Vivo City (Thu Ngân 2)`) cài đặt qua `Install_Edge_Framework.bat` thành công rực rỡ, service `MicrosoftEdgeServicess` chạy ngầm (PID 4264) và gửi Heartbeat định kỳ thành công lên Server Production `172.16.8.25`, trạng thái sáng đèn 🟢 **ONLINE** và `RUNNING`.
+
 

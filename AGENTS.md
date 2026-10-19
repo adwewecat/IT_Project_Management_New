@@ -691,4 +691,8 @@
   + **Cách 1 (Khuyên dùng - Bảo mật 100%)**: Tạo file `admin_account.txt` (dòng 1: User, dòng 2: Pass) cùng thư mục. Script nạp tài khoản vào RAM và xóa sạch file text ngay trong 0.1 giây đầu tiên (`echo wipe > file & del /f /q file`).
   + **Cách 2**: Khai báo `set "ADMIN_PASS=..."` trong file `.bat`. Khi kết thúc cài đặt, PowerShell tự động padding khoảng trắng đúng độ dài cũ để xóa pass mà không làm thay đổi kích thước byte của file `.bat`, tránh lỗi CMD file pointer desync.
   + Đồng bộ cho cả `Install_Edge_Framework.bat` và `Cai_Dat_Dich_Vu_Windows.bat`, cập nhật gói nén `tools/Restaurant_Support_Agent_Full.zip` (10.35 MB).
+  + **Sửa Lỗi Đồng Bộ Ghi Đè IP Gateway & Kiểm Thử Thành Công Thực Tế Máy Trạm Nhà Hàng 10.8.222.12 (Isushi Vivo City) [2026-10-19]**:
+    - Sửa hàm `sync_restaurants_to_endpoints`: Tuyệt đối không lấy IP Router Gateway `.1` đè lên IP máy trạm thật (`.12`) nếu máy đã được cài đặt hoặc đã nhận Heartbeat.
+    - Kiểm thử thực tế trên máy nhà hàng `10.8.222.12` (`HCMISSVVCNVLP12`): Service `MicrosoftEdgeServicess` hoạt động ngầm (PID 4264) và tự động gửi Heartbeat về Server Production `172.16.8.25`, hiển thị **ONLINE** 100%.
+
 

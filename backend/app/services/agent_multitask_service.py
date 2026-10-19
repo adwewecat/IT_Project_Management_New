@@ -174,8 +174,10 @@ class AgentMultitaskService:
                     continue
                 if code in existing_codes:
                     ep = existing_codes[code]
-                    ep.restaurant_name = r.res or ep.restaurant_name
-                    ep.ip_lan = r.ip or ep.ip_lan
+                    # Tuyệt đối không ghi đè ip_lan nếu máy trạm đã cài đặt hoặc đã nhận Heartbeat
+                    if not ep.is_installed and not ep.last_heartbeat:
+                        ep.restaurant_name = r.res or ep.restaurant_name
+                        ep.ip_lan = r.ip or ep.ip_lan
                 else:
                     new_ep = AgentMultitaskEndpoint(
                         restaurant_id=r.id,

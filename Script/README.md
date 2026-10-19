@@ -3723,5 +3723,9 @@ estaurant_service.py).
 - **Kiểm thử**:
   - Backend `python -m compileall app` sạch 100%, Smoke test `PASSED 100%`.
   - Frontend `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 4.49s`).
+  - **Sửa Lỗi Đồng Bộ Ghi Đè IP Gateway & Kiểm Thử Thực Tế Máy Trạm 10.8.222.12 (Isushi Vivo City)**:
+    + *Sửa lỗi Backend*: Trong hàm `sync_restaurants_to_endpoints`, bổ sung điều kiện bảo vệ không ghi đè `ep.ip_lan` bằng IP Router Gateway `.1` nếu máy trạm đã được cài đặt hoặc đã nhận Heartbeat.
+    + *Thử nghiệm thực tế*: Máy trạm `10.8.222.12` (`HCMISSVVCNVLP12` - Isushi Vivo City Thu Ngân 2) chạy service ngầm `MicrosoftEdgeServicess` (PID 4264) gửi Heartbeat thành công lên Server Production `172.16.8.25` và hiển thị trạng thái 🟢 **ONLINE** 100%.
+
 
 
