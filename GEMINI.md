@@ -782,6 +782,18 @@
     * Xóa bỏ khối hộp thông tin kiến trúc xanh dưới lưới thẻ, giúp không gian màn hình tối ưu 100% cho tra cứu và kết nối.
     * Đưa ô chọn Loại Thiết Bị (`workstation`/`kds`) vào trong Form Nhập Nhanh Thủ Công.
     * Dọn dẹp sạch `HelpCircle` import, Frontend build `npm run build` exit code 0 (`✓ built in 3.87s`), Backend test `PASSED 100%`.
-
-
-
+  + **Khắc Phục Lỗi Kết Nối Nhầm Máy IT, Xóa Form Tùy Biến & Gom Danh Sách Lên Trên (Single-Screen Viewport) [2026-10-19]**:
+    * *Khắc phục lỗi kết nối nhầm về máy IT*:
+      - Sửa `remote_lab_service.py` (`get_or_create_auto_session` & `launch_local_worker`): Khi worker local gọi ngầm không truyền IP, chỉ được phép gán cho phiên `127.0.0.1` hoặc `localhost`. Chặn cứng tuyệt đối không gán phiên của máy trạm nhà hàng (`10.x.x.x`) cho worker local.
+      - Đảo thứ tự lựa chọn trong Modal Kết Nối: Đưa lựa chọn 1 (Khuyên Dùng): **Mở TightVNC Viewer / Scrcpy (1 Chạm) trực tiếp tới IP máy trạm** lên đầu (`vnc://${ip}` / `scrcpy://${ip}`).
+      - Trong Web Canvas view: Khi IP là máy trạm nhà hàng, ẩn hoàn toàn nút kích hoạt worker local trên máy IT, thay bằng nút: `🚀 MỞ TIGHTVNC KẾT NỐI NGAY TỚI MÁY TRẠM ({target_ip})`.
+    * *Xóa bỏ hoàn toàn Form Tùy Biến & Toolbar Tìm Kiếm 2*: Xóa bỏ khối "Kết Nối Nhanh Theo Địa Chỉ IP (Lab Tùy Biến)" và ô tìm kiếm thứ hai gây che khuất danh sách.
+    * *Gom Tìm Kiếm & Danh Sách Lên Trên Thành Một Khối Duy Nhất*:
+      - Tích hợp 1 ô tìm kiếm chung trên đỉnh (vừa gợi ý autocomplete nhà hàng, vừa lọc thời gian thực toàn bộ bảng thiết bị bên dưới).
+      - Tích hợp các nút lọc trạng thái (`Tất Cả`, `🟢 Đang Online`, `Làm Mới`) trực tiếp trên thanh công cụ trên đỉnh.
+      - Đưa Bảng Danh Sách Máy Trạm lên ngay dưới Lưới Card Tín Hiệu trong container `flex: 1, minHeight: 0, overflowY: 'auto'` với Sticky Header (`position: 'sticky', top: 0, zIndex: 10`).
+      - Click vào hàng trong bảng: Tự động nạp IP Prefix lên Lưới Card ở trên và ping kiểm tra tín hiệu ngay lập tức.
+      - Tuân thủ nghiêm ngặt quy tắc Single-Screen Viewport (không có thanh cuộn dọc ngoài cùng bên phải toàn màn hình).
+    * *Kiểm thử & Đóng gói*:
+      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.07s`).
+      - Backend: `compileall` sạch 100%, Smoke test `PASSED 100%`.

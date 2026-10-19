@@ -3538,6 +3538,32 @@ estaurant_service.py).
   - Frontend: `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 3.87s`), bundle `frontend/dist/` sạch sẽ.
   - Backend: `compileall` sạch 100%, Smoke test `PASSED 100%`.
 
+---
 
-
-
+### [2026-10-19] - Khắc Phục Lỗi Kết Nối Nhầm Về Máy IT, Xóa Form Tùy Biến & Gom Danh Sách Lên Trên Thành Một Khối Duy Nhất (`RemoteLabPage.tsx` & `remote_lab_service.py`)
+- **Bối cảnh & Phản hồi thực tế từ người dùng**:
+  1. *"Kết Nối Nhanh Theo Địa Chỉ IP (Lab Tùy Biến) ở dưới không thấy được danh sách"*: Form tùy biến và thanh toolbar 2 chiếm chỗ khiến bảng danh sách thiết bị bị đẩy xuống đáy và che khuất khỏi khung nhìn.
+  2. *"nó kết nối này toàn là kết nối tới máy tôi, chứ có kết nối tới máy trạm đâu"*: Khi người dùng click vào thẻ `.41` (`10.8.159.41`), màn hình Web Canvas lại hiển thị chính màn hình máy tính của người dùng (tạo hiệu ứng gương vô tận). Nguyên nhân: Hàm `get_or_create_auto_session` và `launch_local_worker` ở backend trước đó tự động gán session `10.8.159.41` cho worker local đang chạy trên máy IT, khiến worker máy IT chụp màn hình của chính nó rồi stream lên Web Canvas.
+  3. *"Gom phần danh sách này lên trên thành 1, chứ vừa search trên còn search dưới"*: Có 2 thanh tìm kiếm gây rối mắt và phân tán thao tác.
+- **Giải pháp & Triển khai chi tiết**:
+  1. **Khắc phục triệt để lỗi kết nối nhầm về máy IT (Chặn từ gốc cả Backend lẫn Frontend)**:
+     - **Backend (`remote_lab_service.py`)**:
+       * Sửa `get_or_create_auto_session`: Khi worker cục bộ gọi tự động không truyền IP, **CHỈ ĐƯỢC PHÉP gán cho phiên `127.0.0.1` hoặc `localhost`**. Tuyệt đối không gán phiên của máy trạm nhà hàng (`10.x.x.x`).
+       * Sửa `launch_local_worker`: Chặn cứng không cho phép spawn worker cục bộ nếu `session.target_ip` không phải `127.0.0.1` hoặc `localhost`.
+     - **Frontend (`RemoteLabPage.tsx`)**:
+       * Trong Modal Kết Nối: Đảo thứ tự lựa chọn, đưa **Lựa Chọn 1: Mở TightVNC Viewer / Scrcpy (1 Chạm) kết nối trực tiếp tới IP máy trạm** lên đầu với nhãn `KHUYÊN DÙNG`. Bấm vào là mở ngay `vnc://${ip}` (hoặc `scrcpy://${ip}` cho KDS) tới đúng máy trạm nhà hàng!
+       * Trong Màn hình Web Canvas khi chờ Agent: Nếu IP là IP nhà hàng (`10.x.x.x`), ẩn hoàn toàn nút kích hoạt worker local trên máy IT, thay bằng nút: `🚀 MỞ TIGHTVNC KẾT NỐI NGAY TỚI MÁY TRẠM ({target_ip})`.
+  2. **Xóa bỏ hoàn toàn Form Tùy Biến & Toolbar Tìm Kiếm 2**:
+     - Xóa bỏ khối `Kết Nối Nhanh Theo Địa Chỉ IP (Lab Tùy Biến)`.
+     - Xóa bỏ thanh Toolbar tìm kiếm thứ hai (`searchKeyword`).
+  3. **Gom Tìm Kiếm & Danh Sách Lên Trên Thành Một Khối Duy Nhất (Single-Screen Viewport)**:
+     - Tích hợp ô tìm kiếm duy nhất trên đỉnh: Vừa gợi ý autocomplete nhà hàng, vừa lọc thời gian thực toàn bộ bảng thiết bị bên dưới theo mã SAP, tên nhà hàng, IP LAN, hoặc tên máy.
+     - Tích hợp bộ lọc tab: `Tất Cả ({endpoints.length})` | `🟢 Đang Online ({onlineCount})` và nút `Làm Mới` ngay trên thanh công cụ trên đỉnh.
+     - Đưa Bảng Danh Sách Máy Trạm lên ngay bên dưới Lưới Card Tín Hiệu:
+       * Nằm trong container `flex: 1, minHeight: 0, overflowY: 'auto'` với Sticky Header (`position: 'sticky', top: 0, zIndex: 10`).
+       * Khi click vào 1 hàng trong bảng: Tự động nạp IP Prefix lên Lưới Card ở trên và ping kiểm tra tín hiệu ngay lập tức.
+       * Cung cấp các nút thao tác kết nối nhanh: 🚀 `VNC POS` (`vnc://${ep.ip_lan}`), 📺 `KDS .31` (`scrcpy://${kdsIp}`), 🌐 `Web`.
+     - Toàn bộ giao diện dàn vừa vặn trong 1 khung nhìn (Single-Screen Viewport), không có thanh cuộn dọc ngoài cùng bên phải của toàn màn hình.
+- **Kiểm thử & Đóng gói**:
+  - Frontend `npm run build` thành công exit code 0 (`✓ built in 4.07s`), bản build sạch sẽ trong `frontend/dist/`.
+  - Backend `python -m compileall app` sạch 100%, Smoke test `PASSED 100%`.

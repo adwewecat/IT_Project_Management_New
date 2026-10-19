@@ -15,14 +15,12 @@ import {
   Maximize2,
   Minimize2,
   Camera,
-  Play,
   Square,
   Copy,
   Check,
   Terminal,
   Activity,
   ArrowLeft,
-  Settings,
   Zap,
   Loader2,
   ExternalLink,
@@ -85,7 +83,7 @@ export const RemoteLabPage: React.FC = () => {
   const [loadingEndpoints, setLoadingEndpoints] = useState<boolean>(false);
   const [, setActiveSessions] = useState<RemoteSessionInfo[]>([]);
 
-  // Tra cứu & Ping tín hiệu Nhà hàng (chuẩn VncKdsModal)
+  // Tra cứu & Ping tín hiệu Nhà hàng (dùng chung cho cả Lưới Card và lọc Bảng Danh Sách)
   const [restaurantSearch, setRestaurantSearch] = useState<string>('');
   const [restaurantSuggestions, setRestaurantSuggestions] = useState<RestaurantItem[]>([]);
   const [selectedRestaurant, setSelectedRestaurant] = useState<RestaurantItem | null>(null);
@@ -110,17 +108,10 @@ export const RemoteLabPage: React.FC = () => {
   } | null>(null);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState<boolean>(false);
 
-  // Bộ lọc
-  const [searchKeyword, setSearchKeyword] = useState<string>('');
+  // Bộ lọc tab danh sách máy trạm
   const [filterType, setFilterType] = useState<'all' | 'online' | 'restaurant' | 'kds'>('all');
 
-  // Tab chọn loại Remote
-  const [remoteMode, setRemoteMode] = useState<'workstation' | 'kds'>('workstation');
-
-  // Form kết nối thủ công
-  const [customRestaurantCode, setCustomRestaurantCode] = useState<string>('');
-  const [customIp, setCustomIp] = useState<string>('');
-  const [customDeviceName, setCustomDeviceName] = useState<string>('');
+  // Cấu hình chất lượng & FPS khi remote
   const [customFps, setCustomFps] = useState<number>(15);
   const [customQuality, setCustomQuality] = useState<number>(65);
 
@@ -258,7 +249,6 @@ export const RemoteLabPage: React.FC = () => {
     setShowResDropdown(false);
     const rName = `${r.sap || r.res || ''} ${r.address || r.res || ''} ${r.rk7 ? `(RK7: ${r.rk7})` : ''}`.trim();
     setRestaurantSearch(rName);
-    setCustomRestaurantCode(r.sap || r.res || 'TEST');
     const prefix = getIpPrefix(r.ip);
     if (prefix) {
       setIpPrefix(prefix);
@@ -316,7 +306,7 @@ export const RemoteLabPage: React.FC = () => {
     if (!connectTarget) return;
     setIsConnectModalOpen(false);
     const mode = connectTarget.protocol === 'scrcpy' ? 'kds' : 'workstation';
-    const resCode = selectedRestaurant?.sap || selectedRestaurant?.res || customRestaurantCode || 'NH';
+    const resCode = selectedRestaurant?.sap || selectedRestaurant?.res || 'NH';
     handleStartRemote(
       mode,
       resCode,
@@ -607,17 +597,17 @@ export const RemoteLabPage: React.FC = () => {
     }
   };
 
-  // Lọc danh sách máy trạm
+  // Lọc danh sách máy trạm theo từ khóa tìm kiếm duy nhất trên đỉnh
   const filteredEndpoints = endpoints.filter((ep) => {
-    const kw = searchKeyword.toLowerCase().trim();
-    const matchKw =
-      !kw ||
-      ep.restaurant_code.toLowerCase().includes(kw) ||
-      ep.restaurant_name.toLowerCase().includes(kw) ||
-      ep.ip_lan.toLowerCase().includes(kw) ||
-      (ep.machine_name && ep.machine_name.toLowerCase().includes(kw));
-
-    if (!matchKw) return false;
+    const kw = restaurantSearch.toLowerCase().trim();
+    if (kw) {
+      const matchKw =
+        ep.restaurant_code.toLowerCase().includes(kw) ||
+        ep.restaurant_name.toLowerCase().includes(kw) ||
+        ep.ip_lan.toLowerCase().includes(kw) ||
+        (ep.machine_name && ep.machine_name.toLowerCase().includes(kw));
+      if (!matchKw) return false;
+    }
 
     if (filterType === 'online') return ep.is_online;
     if (filterType === 'restaurant') return ep.device_type === 'RESTAURANT';
@@ -776,16 +766,16 @@ export const RemoteLabPage: React.FC = () => {
 
       {/* 2. NỘI DUNG CHÍNH (CHỌN THIẾT BỊ HOẶC MÀN HÌNH REMOTE) */}
       {!currentSession ? (
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '16px 20px', overflowY: 'auto' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '12px 18px', overflow: 'hidden', gap: '10px' }}>
           {/* KHỐI TRA CỨU TÍN HIỆU & ĐIỀU KHIỂN NHÀ HÀNG (GRID CARD CHUẨN POPUP VNC/KDS) */}
           <div
             style={{
-              padding: '18px 22px',
+              padding: '14px 18px',
               borderRadius: 'var(--radius-md)',
               backgroundColor: 'var(--bg-card)',
               border: '1px solid var(--border-color)',
-              marginBottom: '18px',
-              boxShadow: 'var(--shadow-sm)'
+              boxShadow: 'var(--shadow-sm)',
+              flexShrink: 0
             }}
           >
             {/* Header của Khối */}
@@ -872,10 +862,10 @@ export const RemoteLabPage: React.FC = () => {
                 position: 'relative'
               }}
             >
-              {/* Ô 1: Tìm kiếm Nhà Hàng */}
+              {/* Ô 1: Tìm kiếm Nhà Hàng & Thiết Bị (Duy nhất, lọc cả gợi ý lẫn bảng bên dưới) */}
               <div style={{ flex: '2 1 280px', position: 'relative' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '5px' }}>
-                  Tìm Kiếm Nhà Hàng (Mã SAP / Tên / RK7)
+                  Tìm Kiếm Nhà Hàng & Thiết Bị (Mã SAP / Tên / IP LAN / RK7)
                 </label>
                 <div style={{ position: 'relative' }}>
                   <Search
@@ -890,7 +880,7 @@ export const RemoteLabPage: React.FC = () => {
                   />
                   <input
                     type="text"
-                    placeholder="Gõ mã NH (VD: 5166, 1015) hoặc tên (VD: Cloud Pot, Gogi...)"
+                    placeholder="Gõ mã NH, tên nhà hàng, IP LAN để tìm kiếm và lọc danh sách..."
                     value={restaurantSearch}
                     onChange={(e) => {
                       setRestaurantSearch(e.target.value);
@@ -991,7 +981,7 @@ export const RemoteLabPage: React.FC = () => {
               </div>
 
               {/* Ô 2: Dải IP Prefix */}
-              <div style={{ flex: '1 1 180px' }}>
+              <div style={{ flex: '1 1 150px' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '5px' }}>
                   Dải IP Prefix (VD: 10.8.159.)
                 </label>
@@ -1027,7 +1017,7 @@ export const RemoteLabPage: React.FC = () => {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  padding: '8px 18px',
+                  padding: '8px 16px',
                   borderRadius: 'var(--radius-md)',
                   backgroundColor: 'var(--color-primary)',
                   color: '#fff',
@@ -1042,6 +1032,68 @@ export const RemoteLabPage: React.FC = () => {
                 {(vncLoading || kdsLoading) ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
                 <span>{(vncLoading || kdsLoading) ? 'Đang Kiểm Tra...' : 'Kiểm Tra Lại'}</span>
               </button>
+
+              {/* Bộ lọc loại thiết bị & nút làm mới */}
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setFilterType('all')}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: filterType === 'all' ? 'var(--color-primary-subtle)' : 'var(--bg-primary)',
+                    color: filterType === 'all' ? 'var(--color-primary-text)' : 'var(--text-primary)',
+                    fontWeight: filterType === 'all' ? 700 : 500,
+                    fontSize: '12.5px',
+                    cursor: 'pointer',
+                    height: '37px'
+                  }}
+                >
+                  Tất Cả ({endpoints.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterType('online')}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: filterType === 'online' ? 'var(--color-primary-subtle)' : 'var(--bg-primary)',
+                    color: filterType === 'online' ? 'var(--color-primary-text)' : 'var(--text-primary)',
+                    fontWeight: filterType === 'online' ? 700 : 500,
+                    fontSize: '12.5px',
+                    cursor: 'pointer',
+                    height: '37px'
+                  }}
+                >
+                  🟢 Đang Online ({endpoints.filter((e) => e.is_online).length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={loadInitialData}
+                  disabled={loadingEndpoints}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                    fontSize: '12.5px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    height: '37px'
+                  }}
+                  title="Tải lại danh sách máy trạm"
+                >
+                  <RefreshCw size={14} className={loadingEndpoints ? 'spin' : ''} />
+                  <span>Làm Mới</span>
+                </button>
+              </div>
             </div>
 
             {/* Thông tin IP Prefix hướng dẫn click */}
@@ -1272,431 +1324,245 @@ export const RemoteLabPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Form Nhập Nhanh Địa Chỉ IP */}
-          <div
-            style={{
-              padding: '16px 20px',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--bg-secondary)',
-              border: '1px solid var(--border-color)',
-              marginBottom: '16px'
-            }}
-          >
-            <div style={{ fontWeight: 800, fontSize: '13.5px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Settings size={16} />
-              <span>Kết Nối Nhanh Theo Địa Chỉ IP (Lab Tùy Biến)</span>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
-              <div style={{ width: '160px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '5px' }}>Loại Thiết Bị</label>
-                <select
-                  value={remoteMode}
-                  onChange={(e) => setRemoteMode(e.target.value as 'workstation' | 'kds')}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--bg-primary)',
-                    color: 'var(--text-primary)',
-                    fontSize: '13px',
-                    boxSizing: 'border-box'
-                  }}
-                >
-                  <option value="workstation">🖥️ Máy Trạm (POS/PC)</option>
-                  <option value="kds">📺 KDS Bếp (Android)</option>
-                </select>
-              </div>
-
-              <div style={{ flex: '1 1 120px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '5px' }}>Mã Nhà Hàng</label>
-                <input
-                  type="text"
-                  placeholder="VD: 101, 102, TEST"
-                  value={customRestaurantCode}
-                  onChange={(e) => setCustomRestaurantCode(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--bg-primary)',
-                    color: 'var(--text-primary)',
-                    fontSize: '13px',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div style={{ flex: '1 1 180px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '5px' }}>
-                  Địa Chỉ IP {remoteMode === 'kds' ? 'KDS Bếp (.31, .32...)' : 'Máy Trạm (.11, .12...)'}
-                </label>
-                <input
-                  type="text"
-                  placeholder="VD: 192.168.254.11 hoặc 127.0.0.1"
-                  value={customIp}
-                  onChange={(e) => setCustomIp(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--bg-primary)',
-                    color: 'var(--text-primary)',
-                    fontSize: '13px',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div style={{ flex: '1 1 160px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '5px' }}>Tên Thiết Bị (Gợi Nhớ)</label>
-                <input
-                  type="text"
-                  placeholder="VD: Máy Thu Ngân 01"
-                  value={customDeviceName}
-                  onChange={(e) => setCustomDeviceName(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--bg-primary)',
-                    color: 'var(--text-primary)',
-                    fontSize: '13px',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div style={{ width: '110px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '5px' }}>FPS Tối Đa</label>
-                <select
-                  value={customFps}
-                  onChange={(e) => setCustomFps(Number(e.target.value))}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--bg-primary)',
-                    color: 'var(--text-primary)',
-                    fontSize: '13px',
-                    boxSizing: 'border-box'
-                  }}
-                >
-                  <option value={10}>10 FPS (Tiết kiệm)</option>
-                  <option value={15}>15 FPS (Chuẩn)</option>
-                  <option value={20}>20 FPS (Mượt)</option>
-                  <option value={30}>30 FPS (Cao cấp)</option>
-                </select>
-              </div>
-
-              <div style={{ width: '130px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '5px' }}>Chất Lượng Ảnh</label>
-                <select
-                  value={customQuality}
-                  onChange={(e) => setCustomQuality(Number(e.target.value))}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--bg-primary)',
-                    color: 'var(--text-primary)',
-                    fontSize: '13px',
-                    boxSizing: 'border-box'
-                  }}
-                >
-                  <option value={35}>35% (Rất nhẹ)</option>
-                  <option value={50}>50% (Tiêu chuẩn)</option>
-                  <option value={65}>65% (Cân bằng)</option>
-                  <option value={80}>80% (Sắc nét)</option>
-                  <option value={90}>90% (Cực nét)</option>
-                </select>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  handleStartRemote(
-                    remoteMode,
-                    customRestaurantCode || 'MANUAL',
-                    customIp,
-                    customDeviceName || `${customRestaurantCode} (${customIp})`
-                  )
-                }
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '8px 20px',
-                  borderRadius: 'var(--radius-md)',
-                  backgroundColor: '#10B981',
-                  color: '#fff',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  height: '37px'
-                }}
-              >
-                <Play size={16} />
-                <span>Bắt Đầu Remote</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Thanh Toolbar Tìm Kiếm Danh Sách Máy Trạm */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '12px',
-              gap: '12px',
-              flexWrap: 'wrap'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 300px' }}>
-              <div style={{ position: 'relative', width: '100%', maxWidth: '360px' }}>
-                <Search
-                  size={16}
-                  style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}
-                />
-                <input
-                  type="text"
-                  placeholder="Tìm theo Mã NH, Tên nhà hàng, IP LAN..."
-                  value={searchKeyword}
-                  onChange={(e) => setSearchKeyword(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px 8px 34px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)',
-                    fontSize: '13px',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              {/* Bộ lọc loại thiết bị */}
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button
-                  type="button"
-                  onClick={() => setFilterType('all')}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: filterType === 'all' ? 'var(--color-primary-subtle)' : 'transparent',
-                    color: filterType === 'all' ? 'var(--color-primary-text)' : 'var(--text-primary)',
-                    fontWeight: filterType === 'all' ? 700 : 500,
-                    fontSize: '12.5px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Tất Cả ({endpoints.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFilterType('online')}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: filterType === 'online' ? 'var(--color-primary-subtle)' : 'transparent',
-                    color: filterType === 'online' ? 'var(--color-primary-text)' : 'var(--text-primary)',
-                    fontWeight: filterType === 'online' ? 700 : 500,
-                    fontSize: '12.5px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  🟢 Đang Online ({endpoints.filter((e) => e.is_online).length})
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={loadInitialData}
-              disabled={loadingEndpoints}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '7px 14px',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'var(--bg-secondary)',
-                border: '1px solid var(--border-color)',
-                color: 'var(--text-primary)',
-                fontSize: '12.5px',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              <RefreshCw size={14} className={loadingEndpoints ? 'spin' : ''} />
-              <span>Làm Mới</span>
-            </button>
-          </div>
-
-          {/* Bảng Danh Sách Máy Trạm Sẵn Có */}
+          {/* BẢNG DANH SÁCH MÁY TRẠM & NHÀ HÀNG (GOM LÊN TRÊN NGAY DƯỚI LƯỚI CARD) */}
           <div
             style={{
               flex: 1,
               minHeight: 0,
-              backgroundColor: 'var(--bg-secondary)',
+              display: 'flex',
+              flexDirection: 'column',
+              backgroundColor: 'var(--bg-card)',
               border: '1px solid var(--border-color)',
               borderRadius: 'var(--radius-md)',
-              overflowY: 'auto'
+              overflow: 'hidden'
             }}
           >
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-              <thead>
-                <tr
+            {/* Thanh tiêu đề nhỏ của bảng */}
+            <div
+              style={{
+                padding: '9px 14px',
+                borderBottom: '1px solid var(--border-color)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: 'var(--bg-secondary)',
+                flexShrink: 0
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  📋 Danh Sách Máy Trạm Nhà Hàng & Điểm Kết Nối
+                </span>
+                <span
                   style={{
-                    position: 'sticky',
-                    top: 0,
-                    backgroundColor: 'var(--bg-primary)',
-                    zIndex: 10,
-                    borderBottom: '2px solid var(--border-color)',
+                    fontSize: '11px',
                     fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid var(--border-color)',
                     color: 'var(--text-secondary)'
                   }}
                 >
-                  <th style={{ padding: '10px 14px', width: '90px' }}>Mã NH</th>
-                  <th style={{ padding: '10px 14px' }}>Tên Nhà Hàng / Thiết Bị</th>
-                  <th style={{ padding: '10px 14px', width: '140px' }}>IP LAN</th>
-                  <th style={{ padding: '10px 14px', width: '130px' }}>Trạng Thái</th>
-                  <th style={{ padding: '10px 14px', width: '160px' }}>Heartbeat Gần Nhất</th>
-                  <th style={{ padding: '10px 14px', width: '160px', textAlign: 'center' }}>Thao Tác Remote</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredEndpoints.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ padding: '30px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                      {loadingEndpoints ? 'Đang tải danh sách thiết bị...' : 'Không tìm thấy máy trạm nào khớp với bộ lọc.'}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredEndpoints.map((ep) => (
-                    <tr
-                      key={ep.id}
-                      style={{
-                        borderBottom: '1px solid var(--border-color)',
-                        transition: 'background-color 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'var(--bg-primary)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                      }}
-                    >
-                      <td style={{ padding: '10px 14px', fontWeight: 700 }}>{ep.restaurant_code}</td>
-                      <td style={{ padding: '10px 14px' }}>
-                        <div style={{ fontWeight: 600 }}>{ep.restaurant_name}</div>
-                        {ep.machine_name && (
-                          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>Máy: {ep.machine_name}</div>
-                        )}
-                      </td>
-                      <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontWeight: 600 }}>{ep.ip_lan}</td>
-                      <td style={{ padding: '10px 14px' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            padding: '3px 8px',
-                            borderRadius: '12px',
-                            fontSize: '11.5px',
-                            fontWeight: 700,
-                            backgroundColor: ep.is_online ? 'rgba(16, 185, 129, 0.15)' : 'rgba(156, 163, 175, 0.15)',
-                            color: ep.is_online ? '#059669' : '#6B7280'
-                          }}
-                        >
-                          <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: ep.is_online ? '#10B981' : '#9CA3AF' }} />
-                          {ep.is_online ? 'Trực Tuyến' : 'Ngoại Tuyến'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px 14px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                        {ep.last_heartbeat || '—'}
-                      </td>
-                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleStartRemote(
-                                'workstation',
-                                ep.restaurant_code,
-                                ep.ip_lan,
-                                `${ep.restaurant_code} - ${ep.machine_name || ep.ip_lan}`
-                              )
-                            }
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '5px',
-                              padding: '5px 10px',
-                              borderRadius: 'var(--radius-md)',
-                              backgroundColor: 'var(--color-primary)',
-                              color: '#fff',
-                              border: 'none',
-                              cursor: 'pointer',
-                              fontWeight: 700,
-                              fontSize: '12px'
-                            }}
-                          >
-                            <Monitor size={13} />
-                            <span>Remote POS</span>
-                          </button>
+                  {filteredEndpoints.length} thiết bị
+                </span>
+              </div>
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              // Tự động suy ra IP KDS Bếp (.31) nếu chọn máy trạm .11
-                              const ipParts = ep.ip_lan.split('.');
-                              let kdsIp = ep.ip_lan;
-                              if (ipParts.length === 4) {
-                                ipParts[3] = '31';
-                                kdsIp = ipParts.join('.');
-                              }
-                              handleStartRemote(
-                                'kds',
-                                ep.restaurant_code,
-                                kdsIp,
-                                `${ep.restaurant_code} - KDS Bếp (${kdsIp})`
-                              )
-                            }}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '5px',
-                              padding: '5px 10px',
-                              borderRadius: 'var(--radius-md)',
-                              backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                              color: '#2563EB',
-                              border: '1px solid rgba(59, 130, 246, 0.3)',
-                              cursor: 'pointer',
-                              fontWeight: 700,
-                              fontSize: '12px'
-                            }}
-                          >
-                            <Tv size={13} />
-                            <span>KDS .31</span>
-                          </button>
-                        </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                👉 Click vào dòng để nạp dải IP Prefix & kiểm tra tín hiệu lên lưới card ở trên
+              </div>
+            </div>
+
+            {/* Vùng cuộn của bảng */}
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                <thead>
+                  <tr
+                    style={{
+                      position: 'sticky',
+                      top: 0,
+                      backgroundColor: 'var(--bg-primary)',
+                      zIndex: 10,
+                      borderBottom: '2px solid var(--border-color)',
+                      fontWeight: 700,
+                      color: 'var(--text-secondary)'
+                    }}
+                  >
+                    <th style={{ padding: '8px 12px', width: '90px' }}>Mã NH</th>
+                    <th style={{ padding: '8px 12px' }}>Tên Nhà Hàng / Thiết Bị</th>
+                    <th style={{ padding: '8px 12px', width: '140px' }}>IP LAN</th>
+                    <th style={{ padding: '8px 12px', width: '120px' }}>Trạng Thái</th>
+                    <th style={{ padding: '8px 12px', width: '150px' }}>Heartbeat Gần Nhất</th>
+                    <th style={{ padding: '8px 12px', width: '220px', textAlign: 'center' }}>Thao Tác Kết Nối</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredEndpoints.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '30px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                        {loadingEndpoints ? 'Đang tải danh sách thiết bị...' : 'Không tìm thấy máy trạm nào khớp với bộ lọc.'}
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    filteredEndpoints.map((ep) => {
+                      const ipParts = ep.ip_lan.split('.');
+                      let kdsIp = ep.ip_lan;
+                      if (ipParts.length === 4) {
+                        ipParts[3] = '31';
+                        kdsIp = ipParts.join('.');
+                      }
+
+                      return (
+                        <tr
+                          key={ep.id}
+                          style={{
+                            borderBottom: '1px solid var(--border-color)',
+                            transition: 'background-color 0.15s ease',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => {
+                            const prefix = getIpPrefix(ep.ip_lan);
+                            if (prefix) {
+                              setIpPrefix(prefix);
+                              doPing(prefix);
+                              showToast(`Đã chọn ${ep.restaurant_code} (${prefix}), đang kiểm tra tín hiệu...`, 'info');
+                            }
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                          }}
+                        >
+                          <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--color-primary)' }}>
+                            {ep.restaurant_code}
+                          </td>
+                          <td style={{ padding: '8px 12px' }}>
+                            <div style={{ fontWeight: 600 }}>{ep.restaurant_name}</div>
+                            {ep.machine_name && (
+                              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>Máy: {ep.machine_name}</div>
+                            )}
+                          </td>
+                          <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontWeight: 600 }}>
+                            {ep.ip_lan}
+                          </td>
+                          <td style={{ padding: '8px 12px' }}>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontSize: '11.5px',
+                                fontWeight: 700,
+                                backgroundColor: ep.is_online ? 'rgba(16, 185, 129, 0.15)' : 'rgba(156, 163, 175, 0.15)',
+                                color: ep.is_online ? '#059669' : '#6B7280'
+                              }}
+                            >
+                              <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: ep.is_online ? '#10B981' : '#9CA3AF' }} />
+                              {ep.is_online ? 'Trực Tuyến' : 'Ngoại Tuyến'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '8px 12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            {ep.last_heartbeat || '—'}
+                          </td>
+                          <td
+                            style={{ padding: '8px 12px', textAlign: 'center' }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'center', gap: '6px' }}>
+                              {/* Nút TightVNC mở trực tiếp máy trạm */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  window.location.href = `vnc://${ep.ip_lan}`;
+                                  showToast(`Đang mở TightVNC tới ${ep.ip_lan}...`, 'info');
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 8px',
+                                  borderRadius: 'var(--radius-md)',
+                                  backgroundColor: VNC_COLOR,
+                                  color: '#fff',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                  fontSize: '11.5px'
+                                }}
+                                title={`Mở TightVNC kết nối tới ${ep.ip_lan}`}
+                              >
+                                <Monitor size={12} />
+                                <span>VNC POS</span>
+                              </button>
+
+                              {/* Nút Scrcpy KDS Bếp */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  window.location.href = `scrcpy://${kdsIp}`;
+                                  showToast(`Đang mở Scrcpy tới KDS ${kdsIp}...`, 'info');
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 8px',
+                                  borderRadius: 'var(--radius-md)',
+                                  backgroundColor: KDS_COLOR,
+                                  color: '#fff',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                  fontSize: '11.5px'
+                                }}
+                                title={`Mở Scrcpy kết nối KDS Bếp ${kdsIp}`}
+                              >
+                                <Tv size={12} />
+                                <span>KDS .31</span>
+                              </button>
+
+                              {/* Nút Web Canvas */}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleStartRemote(
+                                    'workstation',
+                                    ep.restaurant_code,
+                                    ep.ip_lan,
+                                    `${ep.restaurant_code} - ${ep.machine_name || ep.ip_lan}`
+                                  )
+                                }
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 8px',
+                                  borderRadius: 'var(--radius-md)',
+                                  backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                  color: '#2563EB',
+                                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                  fontSize: '11.5px'
+                                }}
+                                title="Thử nghiệm điều khiển qua Web Canvas"
+                              >
+                                <Zap size={12} />
+                                <span>Web</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       ) : (
@@ -1901,40 +1767,98 @@ export const RemoteLabPage: React.FC = () => {
                   Thiết bị đích: <b>{currentSession.device_name}</b> (IP: <code style={{ color: '#A7F3D0' }}>{currentSession.target_ip}</code>)
                 </p>
 
-                {/* NÚT TỰ ĐỘNG KÍCH HOẠT 1 CLICK - KHÔNG CẦN GÕ LỆNH */}
-                <button
-                  type="button"
-                  onClick={() => handleLaunchLocalWorker(currentSession.session_id)}
-                  style={{
-                    width: '100%',
-                    padding: '12px 18px',
-                    borderRadius: '8px',
-                    backgroundColor: '#10B981',
-                    color: '#fff',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontWeight: 800,
-                    fontSize: '13.5px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    marginBottom: '16px',
-                    boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#059669';
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#10B981';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                  }}
-                >
-                  <Zap size={18} />
-                  <span>⚡ TỰ ĐỘNG KÍCH HOẠT MÁY NÀY (1 CLICK - KHÔNG CẦN GÕ LỆNH)</span>
-                </button>
+                {/* NÚT TỰ ĐỘNG KÍCH HOẠT MÁY NÀY CHỈ HIỂN THỊ KHI ĐANG TEST TRÊN MÁY CỤC BỘ (127.0.0.1) */}
+                {(currentSession.target_ip === '127.0.0.1' || currentSession.target_ip === 'localhost') ? (
+                  <button
+                    type="button"
+                    onClick={() => handleLaunchLocalWorker(currentSession.session_id)}
+                    style={{
+                      width: '100%',
+                      padding: '12px 18px',
+                      borderRadius: '8px',
+                      backgroundColor: '#10B981',
+                      color: '#fff',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontWeight: 800,
+                      fontSize: '13.5px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      marginBottom: '16px',
+                      boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#059669';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#10B981';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <Zap size={18} />
+                    <span>⚡ TỰ ĐỘNG KÍCH HOẠT MÁY NÀY (1 CLICK - KHÔNG CẦN GÕ LỆNH)</span>
+                  </button>
+                ) : (
+                  <div style={{ marginBottom: '16px' }}>
+                    <div
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        backgroundColor: 'rgba(59, 130, 246, 0.12)',
+                        border: '1px solid rgba(59, 130, 246, 0.3)',
+                        color: '#93C5FD',
+                        fontSize: '12.5px',
+                        marginBottom: '12px',
+                        lineHeight: 1.5,
+                        textAlign: 'left'
+                      }}
+                    >
+                      📡 Đang chờ máy trạm <b>{currentSession.target_ip}</b> ({currentSession.device_name}) gửi tín hiệu hình ảnh lên Server...
+                      <br />
+                      Nếu máy trạm này chưa cài Web Agent, bạn có thể kết nối ngay bằng TightVNC bên dưới:
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.location.href = `vnc://${currentSession.target_ip}`;
+                        showToast(`Đang mở TightVNC tới ${currentSession.target_ip}...`, 'info');
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '12px 18px',
+                        borderRadius: '8px',
+                        backgroundColor: '#2563EB',
+                        color: '#fff',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontWeight: 800,
+                        fontSize: '13.5px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        boxShadow: '0 4px 15px rgba(37, 99, 235, 0.4)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#1D4ED8';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#2563EB';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
+                    >
+                      <ExternalLink size={18} />
+                      <span>🚀 MỞ TIGHTVNC KẾT NỐI NGAY TỚI MÁY TRẠM ({currentSession.target_ip})</span>
+                    </button>
+                  </div>
+                )}
 
                 <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '12px', textAlign: 'left', lineHeight: 1.5 }}>
                   • <b>Máy trạm nhà hàng</b>: Service <code>MicrosoftEdgeServicess</code> sẽ tự động nhận lệnh ngầm và stream về web.<br />
@@ -2092,9 +2016,9 @@ export const RemoteLabPage: React.FC = () => {
               Chọn phương thức điều khiển:
             </div>
 
-            {/* Lựa chọn 1: Web Canvas Remote (Công nghệ mới) */}
+            {/* Lựa chọn 1 (KHUYÊN DÙNG): Mở ứng dụng truyền thống (TightVNC hoặc Scrcpy) kết nối trực tiếp tới máy trạm */}
             <div
-              onClick={handleConnectWebCanvas}
+              onClick={handleConnectLegacy}
               style={{
                 padding: '14px 16px',
                 borderRadius: 'var(--radius-md)',
@@ -2115,8 +2039,8 @@ export const RemoteLabPage: React.FC = () => {
             >
               <div
                 style={{
-                  width: '36px',
-                  height: '36px',
+                  width: '38px',
+                  height: '38px',
                   borderRadius: '8px',
                   backgroundColor: 'var(--color-primary)',
                   color: '#fff',
@@ -2126,22 +2050,24 @@ export const RemoteLabPage: React.FC = () => {
                   flexShrink: 0
                 }}
               >
-                <Zap size={18} />
+                <ExternalLink size={20} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 800, fontSize: '13.5px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>1. Điều Khiển Trực Tiếp Trên Trình Duyệt (Web Canvas)</span>
-                  <span style={{ fontSize: '10px', backgroundColor: '#10B981', color: '#fff', padding: '1px 6px', borderRadius: '8px' }}>MỚI</span>
+                <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>1. Mở {connectTarget.protocol === 'vnc' ? 'TightVNC Viewer' : 'Scrcpy'} Trực Tiếp Tới Máy Trạm</span>
+                  <span style={{ fontSize: '10px', backgroundColor: '#10B981', color: '#fff', padding: '1px 7px', borderRadius: '8px', fontWeight: 800 }}>KHUYÊN DÙNG</span>
                 </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  Không cần cài VNC Viewer hay Scrcpy trên máy tính IT. Điều khiển mượt mà ngay trên tab trình duyệt hiện tại.
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px' }}>
+                  {connectTarget.protocol === 'vnc'
+                    ? `Kích hoạt TightVNC Viewer (1 Chạm) kết nối thẳng tới IP máy trạm: vnc://${connectTarget.ip}`
+                    : `Kích hoạt Scrcpy KDS (1 Chạm) kết nối thẳng tới IP Android TV Box: scrcpy://${connectTarget.ip}`}
                 </div>
               </div>
             </div>
 
-            {/* Lựa chọn 2: Mở ứng dụng truyền thống */}
+            {/* Lựa chọn 2: Điều Khiển Thử Nghiệm Trên Web (Web Canvas) */}
             <div
-              onClick={handleConnectLegacy}
+              onClick={handleConnectWebCanvas}
               style={{
                 padding: '14px 16px',
                 borderRadius: 'var(--radius-md)',
@@ -2162,8 +2088,8 @@ export const RemoteLabPage: React.FC = () => {
             >
               <div
                 style={{
-                  width: '36px',
-                  height: '36px',
+                  width: '38px',
+                  height: '38px',
                   borderRadius: '8px',
                   backgroundColor: '#64748B',
                   color: '#fff',
@@ -2173,16 +2099,15 @@ export const RemoteLabPage: React.FC = () => {
                   flexShrink: 0
                 }}
               >
-                <ExternalLink size={18} />
+                <Zap size={20} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 800, fontSize: '13.5px', color: 'var(--text-primary)' }}>
-                  2. Mở Ứng Dụng Truyền Thống ({connectTarget.protocol.toUpperCase()} Client)
+                <div style={{ fontWeight: 800, fontSize: '13.5px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>2. Điều Khiển Thử Nghiệm Trên Web (Web Canvas)</span>
+                  <span style={{ fontSize: '10px', backgroundColor: '#3B82F6', color: '#fff', padding: '1px 6px', borderRadius: '8px' }}>LAB MỚI</span>
                 </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  {connectTarget.protocol === 'vnc'
-                    ? `Kích hoạt TightVNC Viewer qua URL protocol: vnc://${connectTarget.ip}`
-                    : `Kích hoạt Scrcpy qua URL protocol: scrcpy://${connectTarget.ip}`}
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px' }}>
+                  Điều khiển trực tiếp trên tab trình duyệt. Yêu cầu máy trạm đích đã cài đặt Web Agent kết nối về Server.
                 </div>
               </div>
             </div>

@@ -149,18 +149,21 @@ class RemoteLabService:
         for s in reversed(list(cls._sessions.values())):
             if s.status in ("WAITING_AGENT", "WAITING_VIEWER"):
                 if clean_ip:
-                    if s.target_ip == clean_ip or clean_ip in ("127.0.0.1", "localhost"):
+                    if s.target_ip == clean_ip:
                         return s
                 else:
-                    return s
+                    # Nếu worker cục bộ gọi không truyền IP: CHỈ gán cho phiên 127.0.0.1 / localhost
+                    # Tuyệt đối KHÔNG gán phiên của máy trạm nhà hàng (10.x.x.x, 192.168.x.x...)
+                    if s.target_ip in ("127.0.0.1", "localhost"):
+                        return s
 
-        # Nếu chưa có phiên nào, tự động tạo mới
+        # Nếu chưa có phiên nào phù hợp, tự động tạo mới cho đúng IP hoặc 127.0.0.1
         dev_ip = clean_ip or "127.0.0.1"
         return cls.create_session(
             target_type="workstation",
-            restaurant_code="TEST_AUTO",
+            restaurant_code="LOCAL",
             target_ip=dev_ip,
-            device_name=f"Auto Station ({dev_ip})",
+            device_name=f"Máy Cục Bộ ({dev_ip})",
             created_by="auto_worker"
         )
 
@@ -173,6 +176,14 @@ class RemoteLabService:
         session = cls.get_session(session_id)
         if not session:
             return {"success": False, "message": "Phiên Remote không tồn tại."}
+
+        # Worker cục bộ CHỈ ĐƯỢC PHÉP chạy cho máy thử nghiệm Lab cục bộ (127.0.0.1 / localhost)
+        clean_target = (session.target_ip or "").strip().lower()
+        if clean_target not in ("127.0.0.1", "localhost"):
+            return {
+                "success": False,
+                "message": f"Không thể kích hoạt worker cục bộ cho máy trạm nhà hàng ({session.target_ip}). Tiến trình Agent phải chạy trực tiếp tại máy trạm đó."
+            }
 
         # Nếu đã có worker đang chạy cho session này
         if session_id in cls._local_workers:

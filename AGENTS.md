@@ -675,3 +675,8 @@
   + **Giải pháp khắc phục**:
     * Trong `frontend/src/components/layout/Sidebar.tsx`: Chuyển toàn bộ màu chữ cứng sang các biến CSS chuẩn hệ thống: `var(--text-primary)` (sẽ tự động thành `#F8FAFC` trắng sáng ở Dark Mode và `#111827` đen ở Light Mode) và `var(--text-secondary)` (thành `#CBD5E1` xám sáng ở Dark Mode).
     * Trong `frontend/src/styles/index.css`: Bổ sung rule CSS cho `[data-theme="dark"] .app-sidebar` đảm bảo toàn bộ menu text & span luôn hiển thị trắng sáng sắc nét, tương phản hoàn hảo trên nền tối.
+
+- **Khởi Tạo & Tinh Gọn Màn Hình Độc Lập 'Tích Hợp Thay Thế Remote' (Remote Desktop Lab) [2026-10-19]**:
+  + Thử nghiệm giải pháp Web-based Remote Desktop qua WebSocket & HTML5 Canvas thay thế TightVNC & Scrcpy.
+  + Chặn triệt để việc kết nối nhầm về máy IT: Sửa `remote_lab_service.py` chỉ cho phép gán worker cục bộ cho `127.0.0.1`/`localhost`. Mặc định ưu tiên số 1 mở TightVNC/Scrcpy kết nối trực tiếp máy trạm.
+  + Xóa bỏ Form Tùy Biến và gom thanh tìm kiếm thành 1 ô duy nhất trên đỉnh, đưa Bảng Danh Sách Máy Trạm lên ngay dưới Lưới Card với container cuộn độc lập (`flex: 1, minHeight: 0, overflowY: 'auto'`) chuẩn Single-Screen Viewport.
