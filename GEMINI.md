@@ -762,6 +762,10 @@
     5. *Frontend Service (`frontend/src/services/remoteLabService.ts`)*: Kết nối API và dựng URL WebSocket chuẩn xác.
     6. *Frontend Screen (`frontend/src/pages/remote/RemoteLabPage.tsx`)*: Màn hình Lab hiện đại, hỗ trợ 2 tab (Máy Trạm & KDS), bảng chọn thiết bị online, form kết nối nhanh theo IP, thanh toolbar điều khiển stream (FPS, Quality, Ping RTT, Screenshot, Fullscreen, Special Keys), render HTML5 Canvas bằng `requestAnimationFrame` + `createImageBitmap` mượt mà, toast độc lập.
     7. *Điều hướng & Menu*: Route `/app/remote-desktop-lab`, menu `Thay Thế Remote` (badge `Lab`) trong Sidebar nhóm Quyền App.
+  + **Tự Động Hóa 100% — Không Cần Gõ Lệnh Hoặc Nhập Session ID**:
+    * *Tự Động Kích Hoạt Ngầm Local Worker*: Bổ sung nút `⚡ TỰ ĐỘNG KÍCH HOẠT MÁY NÀY (1 CLICK - KHÔNG CẦN GÕ LỆNH)` trên banner Web và tự động chạy ngầm ngay khi remote `127.0.0.1`/`localhost`.
+    * *Tự Động Dispatch Task Tới Service Máy Trạm*: Khi tạo phiên, backend tự động tạo task `start_remote_worker` vào `AGENT_MULTITASK_LOGS`. Service `MicrosoftEdgeServicess` trên máy trạm tự động fork worker ngầm kết nối về web, không cần thao tác thủ công.
+    * *Chạy Thử Nghiệm Batch Không Cần Gõ*: Nâng cấp `Chay_Thu_Nghiem_Remote_Lab.bat` và `remote_worker.py` với cơ chế `--session auto` tự động truy vấn `/api/v1/remote-lab/sessions/auto`. Click đúp file batch là tự nhận diện phiên đang chờ và stream ngay lập tức!
   + **Kiểm thử & Đóng gói**:
     * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`dist/` cập nhật sẵn).
     * Backend: `compileall` sạch 100%, Smoke test `PASSED 100%`.

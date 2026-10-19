@@ -454,11 +454,28 @@ class RemoteWorkerClient:
                 break
 
 
+def fetch_auto_session_id(server_http_url: str, target_ip: str = "127.0.0.1") -> str:
+    """Tự động gọi API Server để lấy Session ID đang chờ kết nối gần nhất hoặc tự tạo mới."""
+    endpoint = f"{server_http_url.rstrip('/')}/api/v1/remote-lab/sessions/auto?target_ip={target_ip}"
+    try:
+        req = urllib.request.Request(endpoint, headers={"User-Agent": "RemoteWorker/1.0"})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            if response.status == 200:
+                data = json.loads(response.read().decode("utf-8"))
+                sid = data.get("session_id")
+                if sid:
+                    logger.info(">>> DA TU DONG LAY DUOC SESSION ID: %s (Khong can go lenh)", sid)
+                    return sid
+    except Exception as e:
+        logger.warning("Khong the tu dong lay session tu %s: %s", endpoint, e)
+    return ""
+
+
 def main():
     """Hàm chạy dòng lệnh chính."""
     parser = argparse.ArgumentParser(description="Remote Worker Thử Nghiệm cho Client Agent")
     parser.add_argument("--server", type=str, default="http://127.0.0.1:8000", help="Địa chỉ backend server")
-    parser.add_argument("--session", type=str, required=True, help="Session ID được cấp từ Web")
+    parser.add_argument("--session", type=str, default="auto", help="Session ID (hoặc 'auto' để tự động nhận)")
     parser.add_argument("--type", type=str, default="workstation", choices=["workstation", "kds"], help="Loại thiết bị")
     parser.add_argument("--ip", type=str, default="127.0.0.1", help="Địa chỉ IP của thiết bị (hoặc IP KDS)")
     parser.add_argument("--fps", type=int, default=15, help="Tốc độ khung hình (FPS)")
@@ -466,29 +483,48 @@ def main():
 
     args = parser.parse_args()
 
-    # Chuẩn hóa WS URL
-    server_url = args.server.strip()
-    if server_url.startswith("http://"):
-        ws_url = "ws://" + server_url[7:]
-    elif server_url.startswith("https://"):
-        ws_url = "wss://" + server_url[8:]
-    elif not server_url.startswith("ws://") and not server_url.startswith("wss://"):
-        ws_url = f"ws://{server_url}"
+    # Chuẩn hóa HTTP Server URL
+    raw_server = args.server.strip()
+    if raw_server.startswith("ws://"):
+        http_server = "http://" + raw_server[5:]
+    elif raw_server.startswith("wss://"):
+        http_server = "https://" + raw_server[6:]
+    elif not raw_server.startswith("http://") and not raw_server.startswith("https://"):
+        http_server = f"http://{raw_server}"
     else:
-        ws_url = server_url
+        http_server = raw_server
+
+    # Tự động lấy Session ID nếu là auto hoặc rỗng
+    session_id = (args.session or "auto").strip()
+    if session_id.lower() in ("auto", "", "none"):
+        logger.info("Dang tu dong tim phien Remote dang cho tren Server: %s...", http_server)
+        auto_sid = fetch_auto_session_id(http_server, target_ip=args.ip)
+        if auto_sid:
+            session_id = auto_sid
+        else:
+            logger.error("Chua co phien Remote nao duoc tao tren Web va khong the tao phien tu dong.")
+            sys.exit(1)
+
+    # Chuẩn hóa WS URL
+    if http_server.startswith("http://"):
+        ws_url = "ws://" + http_server[7:]
+    elif http_server.startswith("https://"):
+        ws_url = "wss://" + http_server[8:]
+    else:
+        ws_url = f"ws://{http_server}"
 
     logger.info("==================================================================")
     logger.info("   KHOI DONG REMOTE WORKER (THU NGHIEM THAY THE TIGHTVNC/SCRCPY)  ")
     logger.info("==================================================================")
     logger.info("Server:       %s", ws_url)
-    logger.info("Session ID:   %s", args.session)
+    logger.info("Session ID:   %s [TU DONG]", session_id)
     logger.info("Target Type:  %s (IP: %s)", args.type, args.ip)
     logger.info("FPS Limit:    %d | Quality: %d%%", args.fps, args.quality)
     logger.info("==================================================================")
 
     client = RemoteWorkerClient(
         server_ws_url=ws_url,
-        session_id=args.session,
+        session_id=session_id,
         target_type=args.type,
         target_ip=args.ip,
         fps=args.fps,

@@ -42,9 +42,10 @@ def get_endpoints(
 @router.post("/sessions/create")
 def create_session(
     payload: CreateRemoteSessionRequest,
+    db: Session = Depends(get_db),
     current_user: UserInfo = Depends(get_current_user)
 ) -> Dict[str, Any]:
-    """Khởi tạo một phiên Remote mới độc lập."""
+    """Khởi tạo một phiên Remote mới độc lập và tự động phát lệnh tới Agent máy trạm."""
     target_ip = payload.target_ip.strip()
     if not target_ip:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Vui lòng cung cấp địa chỉ IP thiết bị.")
@@ -61,11 +62,51 @@ def create_session(
         quality=payload.quality
     )
 
+    # Tự động gửi task PENDING tới Windows Service máy trạm nếu có endpoint tương ứng
+    RemoteLabService.dispatch_agent_task(
+        session=session,
+        server_url="http://127.0.0.1:8000",
+        db=db,
+        action="start_remote_worker"
+    )
+
     return {
         "status": "SUCCESS",
         "message": f"Đã tạo phiên Remote cho {dev_name}",
         "session": session.to_dict()
     }
+
+
+@router.get("/sessions/auto")
+def get_or_create_auto_session(
+    target_ip: Optional[str] = Query(None, description="IP thiết bị cần tự động kết nối")
+) -> Dict[str, Any]:
+    """
+    Endpoint mở (không yêu cầu Bearer token) cho Client Agent hoặc Script Batch:
+    Tự động nhận Session ID đang chờ kết nối gần nhất hoặc tự tạo phiên mới mà KHÔNG CẦN GÕ LỆNH!
+    """
+    session = RemoteLabService.get_or_create_auto_session(target_ip=target_ip)
+    return {
+        "status": "SUCCESS",
+        "session_id": session.session_id,
+        "session": session.to_dict()
+    }
+
+
+@router.post("/sessions/{session_id}/launch-local")
+def launch_local_worker(
+    session_id: str,
+    server_url: Optional[str] = Query("http://127.0.0.1:8000", description="URL Backend"),
+    current_user: UserInfo = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Tự động kích hoạt Remote Worker chạy ngầm trên máy hiện tại (1 Click từ giao diện Web).
+    Hoàn toàn không cần mở CMD, không cần gõ lệnh!
+    """
+    res = RemoteLabService.launch_local_worker(session_id=session_id, server_url=server_url or "http://127.0.0.1:8000")
+    if not res.get("success"):
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=res.get("message"))
+    return res
 
 
 @router.get("/sessions")

@@ -1,29 +1,23 @@
 @echo off
-title CHAY THU NGHIEM REMOTE WORKER (THAY THE TIGHTVNC SCRCPY)
+title CHAY THU NGHIEM REMOTE WORKER (TU DONG KET NOI)
 chcp 437 >nul
 cls
 
 echo ==============================================================================
-echo       CONG CU THU NGHIEM REMOTE WORKER DOC LAP (CLIENT AGENT)
+echo       CONG CU THU NGHIEM REMOTE WORKER TU DONG (CLIENT AGENT)
 echo ==============================================================================
-echo  Chuong trinh nay se ket noi den Relay Server va stream man hinh ve Web
+echo  Chuong trinh se TU DONG tim phien Remote tren Web va truyen man hinh ngay
+echo  KHONG CAN GO LENH HOAC COPY SESSION ID THU CONG!
 echo ==============================================================================
 echo.
 
 set SERVER_URL=http://127.0.0.1:8000
 set SESSION_ID=%1
 
-if not "%SESSION_ID%"=="" goto :HasSession
+if "%SESSION_ID%"=="" set SESSION_ID=auto
 
-echo Hay nhap Session ID duoc cap tu giao dien Web:
-set /p SESSION_ID="Session ID: "
-
-:HasSession
-if "%SESSION_ID%"=="" goto :NoSession
-
-echo.
-echo Dang khoi dong Remote Worker voi Session: %SESSION_ID%
-echo Server URL: %SERVER_URL%
+echo Dang ket noi den Relay Server: %SERVER_URL%
+echo Che do Session: %SESSION_ID% (Tu dong nhan dien phien tren Web)
 echo.
 
 if exist python.exe goto :RunLocalPython
@@ -40,12 +34,6 @@ goto :Done
 
 :RunSystemPython
 python remote_worker.py --server %SERVER_URL% --session %SESSION_ID%
-goto :Done
-
-:NoSession
-echo.
-echo [LOI] Khong co Session ID nao duoc nhap!
-echo Vui long truy cap man hinh 'Tich hop thay the Remote' tren Web de tao phien.
 goto :Done
 
 :Done

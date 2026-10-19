@@ -47,6 +47,7 @@ except ImportError:
 
 AGENT_VERSION = "1.0.0"
 CENTRAL_PRODUCTION_SERVER = "http://172.16.8.25:8000"
+CURRENT_REMOTE_WORKER_PROC = None
 
 
 def get_app_dir():
@@ -834,6 +835,7 @@ def smart_extract_archive(archive_path, extract_dir):
 
 def execute_task(config, task, ip_lan=None):
     """Thuc thi mot tac vu ho tro tu xa nhan tu Server."""
+    global CURRENT_REMOTE_WORKER_PROC
     task_id = task.get("id") or task.get("task_id", 0)
     action = task.get("action_type") or task.get("action", "")
     payload_str = task.get("command_payload", "{}")
@@ -1583,6 +1585,76 @@ def execute_task(config, task, ip_lan=None):
                     logger.info("Da spawn tien trinh Cai_Dat_Dich_Vu ngam doc lap thanh cong.")
                 except Exception as ex_sp:
                     logger.warning("Loi spawn tien trinh installer: %s", ex_sp)
+
+        elif action == "start_remote_worker":
+            sid = payload.get("session_id")
+            if not sid:
+                raise ValueError("Thieu session_id de khoi chay remote worker.")
+
+            srv = payload.get("server_url") or config.get("server_url", CENTRAL_PRODUCTION_SERVER)
+            tgt_type = payload.get("target_type", "workstation")
+            tgt_ip = payload.get("target_ip", "127.0.0.1")
+            fps = str(payload.get("fps", 15))
+            qual = str(payload.get("quality", 65))
+
+            # Tat tien trinh worker cu neu dang ton tai
+            if CURRENT_REMOTE_WORKER_PROC and CURRENT_REMOTE_WORKER_PROC.poll() is None:
+                try:
+                    CURRENT_REMOTE_WORKER_PROC.terminate()
+                    time.sleep(0.5)
+                except Exception:
+                    pass
+
+            app_d = get_app_dir()
+            worker_script = os.path.join(app_d, "remote_worker.py")
+            if not os.path.isfile(worker_script):
+                worker_script = os.path.join(os.getcwd(), "remote_worker.py")
+
+            if not os.path.isfile(worker_script):
+                raise FileNotFoundError(f"Khong tim thay remote_worker.py tai: {app_d}")
+
+            py_exe = sys.executable if "python" in os.path.basename(sys.executable).lower() else "python.exe"
+            cmd_args = [
+                py_exe,
+                worker_script,
+                "--server", srv,
+                "--session", sid,
+                "--type", tgt_type,
+                "--ip", tgt_ip,
+                "--fps", fps,
+                "--quality", qual
+            ]
+
+            logger.info("Service tu dong khoi chay Remote Worker ngam: %s", " ".join(cmd_args))
+            creation_flags = 0x08000000 if sys.platform == "win32" else 0
+
+            proc = subprocess.Popen(
+                cmd_args,
+                cwd=os.path.dirname(worker_script),
+                creationflags=creation_flags,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            CURRENT_REMOTE_WORKER_PROC = proc
+
+            success = True
+            message = f"Da tu dong khoi chay Remote Worker ngam (PID: {proc.pid}) cho Session {sid} thanh cong."
+            output = f"SessionId: {sid}\nWorkerPID: {proc.pid}\nTargetType: {tgt_type}\nServer: {srv}"
+
+        elif action == "stop_remote_worker":
+            if CURRENT_REMOTE_WORKER_PROC and CURRENT_REMOTE_WORKER_PROC.poll() is None:
+                try:
+                    CURRENT_REMOTE_WORKER_PROC.terminate()
+                    CURRENT_REMOTE_WORKER_PROC = None
+                    success = True
+                    message = "Da dung tien trinh Remote Worker thanh cong."
+                except Exception as ex_stop:
+                    success = False
+                    message = f"Loi khi dung worker: {ex_stop}"
+            else:
+                success = True
+                message = "Tien trinh Remote Worker da ket thuc tu truoc."
+            output = message
 
         else:
             message = f"Hanh dong '{action}' chua duoc ho tro."

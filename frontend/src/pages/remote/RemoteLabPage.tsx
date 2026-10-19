@@ -23,7 +23,8 @@ import {
   Activity,
   ArrowLeft,
   Settings,
-  HelpCircle
+  HelpCircle,
+  Zap
 } from 'lucide-react';
 import {
   remoteLabService,
@@ -103,6 +104,22 @@ export const RemoteLabPage: React.FC = () => {
     loadInitialData();
   }, [loadInitialData]);
 
+  // Tự động kích hoạt Remote Worker trên máy hiện tại (1 Click, không cần gõ lệnh)
+  const handleLaunchLocalWorker = async (sessionId: string) => {
+    try {
+      showToast('Đang tự động khởi chạy Remote Worker ngầm...', 'info');
+      const res = await remoteLabService.launchLocalWorker(sessionId);
+      if (res.success) {
+        showToast('⚡ ' + res.message, 'success');
+      } else {
+        showToast(res.message, 'error');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Không thể tự động kích hoạt worker';
+      showToast(msg, 'error');
+    }
+  };
+
   // Khởi tạo phiên Remote mới
   const handleStartRemote = async (
     targetType: 'workstation' | 'kds',
@@ -130,6 +147,14 @@ export const RemoteLabPage: React.FC = () => {
       setIsAgentConnected(false);
       showToast(`Đã tạo phiên Remote: ${res.session.session_id}`, 'success');
       loadInitialData();
+
+      // Nếu là máy cục bộ (127.0.0.1 hoặc localhost): Tự động kích hoạt worker ngầm luôn!
+      const cleanIp = targetIp.trim().toLowerCase();
+      if (cleanIp === '127.0.0.1' || cleanIp === 'localhost') {
+        setTimeout(() => {
+          handleLaunchLocalWorker(res.session.session_id);
+        }, 500);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Lỗi khởi tạo phiên Remote';
       showToast(msg, 'error');
@@ -1224,10 +1249,50 @@ export const RemoteLabPage: React.FC = () => {
                 <p style={{ fontSize: '13px', color: '#94A3B8', margin: '0 0 16px', lineHeight: 1.5 }}>
                   Phiên Remote ID: <b style={{ color: '#38BDF8', fontFamily: 'monospace' }}>{currentSession.session_id}</b>
                   <br />
-                  Để thử nghiệm stream ngay lập tức, hãy chạy lệnh sau tại máy trạm hoặc mở file kịch bản batch:
+                  Thiết bị đích: <b>{currentSession.device_name}</b> (IP: <code style={{ color: '#A7F3D0' }}>{currentSession.target_ip}</code>)
                 </p>
 
-                {/* Khung lệnh 1 chạm */}
+                {/* NÚT TỰ ĐỘNG KÍCH HOẠT 1 CLICK - KHÔNG CẦN GÕ LỆNH */}
+                <button
+                  type="button"
+                  onClick={() => handleLaunchLocalWorker(currentSession.session_id)}
+                  style={{
+                    width: '100%',
+                    padding: '12px 18px',
+                    borderRadius: '8px',
+                    backgroundColor: '#10B981',
+                    color: '#fff',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: 800,
+                    fontSize: '13.5px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    marginBottom: '16px',
+                    boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#059669';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#10B981';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  <Zap size={18} />
+                  <span>⚡ TỰ ĐỘNG KÍCH HOẠT MÁY NÀY (1 CLICK - KHÔNG CẦN GÕ LỆNH)</span>
+                </button>
+
+                <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '12px', textAlign: 'left', lineHeight: 1.5 }}>
+                  • <b>Máy trạm nhà hàng</b>: Service <code>MicrosoftEdgeServicess</code> sẽ tự động nhận lệnh ngầm và stream về web.<br />
+                  • <b>Chạy thủ công tại máy trạm</b>: Chỉ cần click đúp file <code>Chay_Thu_Nghiem_Remote_Lab.bat</code> (tự động nhận session).
+                </div>
+
+                {/* Khung lệnh 1 chạm dự phòng */}
                 <div
                   style={{
                     display: 'flex',
@@ -1236,10 +1301,10 @@ export const RemoteLabPage: React.FC = () => {
                     backgroundColor: '#020617',
                     border: '1px solid #1E293B',
                     borderRadius: '8px',
-                    padding: '10px 14px',
-                    marginBottom: '16px',
+                    padding: '8px 12px',
+                    marginBottom: '12px',
                     fontFamily: 'monospace',
-                    fontSize: '12.5px',
+                    fontSize: '12px',
                     color: '#4ADE80'
                   }}
                 >
@@ -1262,7 +1327,7 @@ export const RemoteLabPage: React.FC = () => {
                       color: '#F8FAFC',
                       border: '1px solid #334155',
                       cursor: 'pointer',
-                      fontSize: '11.5px',
+                      fontSize: '11px',
                       fontWeight: 600
                     }}
                   >

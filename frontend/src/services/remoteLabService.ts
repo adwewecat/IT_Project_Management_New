@@ -79,6 +79,12 @@ export const remoteLabService = {
     return res.data;
   },
 
+  /** Tự động kích hoạt Remote Worker chạy ngầm trên máy hiện tại (1 Click, không cần gõ lệnh) */
+  async launchLocalWorker(sessionId: string): Promise<{ success: boolean; message: string; pid?: number }> {
+    const res = await api.post(`/remote-lab/sessions/${sessionId}/launch-local`);
+    return res.data;
+  },
+
   /** Tạo URL WebSocket kết nối tới Relay Server */
   getViewerWsUrl(sessionId: string): string {
     const loc = window.location;

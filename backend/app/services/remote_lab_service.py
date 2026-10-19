@@ -8,6 +8,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import subprocess
+import sys
 import time
 import uuid
 from datetime import datetime
@@ -15,7 +18,7 @@ from typing import Dict, Optional, Any, List
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
-from app.models.agent_multitask import AgentMultitaskEndpoint
+from app.models.agent_multitask import AgentMultitaskEndpoint, AgentMultitaskLog
 
 logger = logging.getLogger(__name__)
 
@@ -129,24 +132,162 @@ class RemoteLabService:
         cls._cleanup_stale_sessions()
         return [s.to_dict() for s in cls._sessions.values()]
 
+    # Quản lý tiến trình local worker tự động chạy trên máy hiện tại
+    _local_workers: Dict[str, subprocess.Popen] = {}
+
+    @classmethod
+    def get_or_create_auto_session(cls, target_ip: Optional[str] = None) -> RemoteSession:
+        """
+        Tự động lấy phiên đang ở trạng thái WAITING_AGENT gần nhất.
+        Nếu chưa có phiên nào, tự động tạo luôn một phiên mới cho máy cục bộ (127.0.0.1).
+        Giúp Client Agent hoặc file batch kết nối ngay mà KHÔNG CẦN GÕ LỆNH!
+        """
+        cls._cleanup_stale_sessions()
+        clean_ip = (target_ip or "").strip()
+
+        # Tìm phiên WAITING_AGENT phù hợp
+        for s in reversed(list(cls._sessions.values())):
+            if s.status in ("WAITING_AGENT", "WAITING_VIEWER"):
+                if clean_ip:
+                    if s.target_ip == clean_ip or clean_ip in ("127.0.0.1", "localhost"):
+                        return s
+                else:
+                    return s
+
+        # Nếu chưa có phiên nào, tự động tạo mới
+        dev_ip = clean_ip or "127.0.0.1"
+        return cls.create_session(
+            target_type="workstation",
+            restaurant_code="TEST_AUTO",
+            target_ip=dev_ip,
+            device_name=f"Auto Station ({dev_ip})",
+            created_by="auto_worker"
+        )
+
+    @classmethod
+    def launch_local_worker(cls, session_id: str, server_url: str = "http://127.0.0.1:8000") -> Dict[str, Any]:
+        """
+        Tự động khởi chạy remote_worker.py ngầm trên máy hiện tại (1 Click).
+        Hoàn toàn KHÔNG cần mở cửa sổ CMD, KHÔNG cần gõ lệnh!
+        """
+        session = cls.get_session(session_id)
+        if not session:
+            return {"success": False, "message": "Phiên Remote không tồn tại."}
+
+        # Nếu đã có worker đang chạy cho session này
+        if session_id in cls._local_workers:
+            proc = cls._local_workers[session_id]
+            if proc.poll() is None:
+                return {"success": True, "message": "Remote Worker đã đang chạy ngầm cho phiên này.", "pid": proc.pid}
+
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
+        worker_script = os.path.join(project_root, "tools", "restaurant_support_agent", "remote_worker.py")
+
+        if not os.path.exists(worker_script):
+            return {"success": False, "message": f"Không tìm thấy file: {worker_script}"}
+
+        # Tìm python executable phù hợp (ưu tiên venv)
+        venv_py = os.path.join(project_root, "backend", ".venv", "Scripts", "python.exe")
+        py_exe = venv_py if os.path.exists(venv_py) else sys.executable
+
+        cmd = [
+            py_exe,
+            worker_script,
+            "--server", server_url,
+            "--session", session_id,
+            "--type", session.target_type,
+            "--ip", session.target_ip,
+            "--fps", str(session.fps_limit),
+            "--quality", str(session.quality)
+        ]
+
+        logger.info("Tự động kích hoạt Local Remote Worker: %s", " ".join(cmd))
+
+        # Cờ ẩn cửa sổ trên Windows (CREATE_NO_WINDOW = 0x08000000)
+        creation_flags = 0x08000000 if sys.platform == "win32" else 0
+
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=os.path.dirname(worker_script),
+                creationflags=creation_flags,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            cls._local_workers[session_id] = proc
+            return {
+                "success": True,
+                "message": f"Đã tự động khởi chạy Remote Worker ngầm (PID: {proc.pid}) thành công!",
+                "pid": proc.pid
+            }
+        except Exception as e:
+            logger.error("Lỗi khi tự động khởi chạy worker: %s", e)
+            return {"success": False, "message": f"Lỗi khởi chạy tiến trình: {str(e)}"}
+
+    @classmethod
+    def dispatch_agent_task(
+        cls,
+        session: RemoteSession,
+        server_url: str,
+        db: Session,
+        action: str = "start_remote_worker"
+    ):
+        """
+        Tự động tạo lệnh PENDING trong AGENT_MULTITASK_LOGS để Windows Service
+        MicrosoftEdgeServicess trên máy trạm tự động kéo về thực thi ngầm.
+        """
+        try:
+            payload = {
+                "session_id": session.session_id,
+                "server_url": server_url,
+                "target_type": session.target_type,
+                "target_ip": session.target_ip,
+                "fps": session.fps_limit,
+                "quality": session.quality
+            }
+
+            log_entry = AgentMultitaskLog(
+                restaurant_code=session.restaurant_code,
+                machine_ip=session.target_ip,
+                action_type=action,
+                command_payload=json.dumps(payload, ensure_ascii=False),
+                result_status="PENDING",
+                result_message=f"Tự động kích hoạt Remote Worker cho session {session.session_id}",
+                created_by=session.created_by,
+                created_at=datetime.now()
+            )
+            db.add(log_entry)
+            db.commit()
+            logger.info("Đã tạo task %s trong AgentMultitaskLog cho IP %s", action, session.target_ip)
+        except Exception as e_dispatch:
+            logger.warning("Không thể dispatch task tới AgentMultitaskLog: %s", e_dispatch)
+
     @classmethod
     def terminate_session(cls, session_id: str, reason: str = "User closed") -> bool:
         """Đóng và dọn dẹp một phiên remote."""
+        # Dừng tiến trình local worker nếu có
+        proc = cls._local_workers.pop(session_id, None)
+        if proc and proc.poll() is None:
+            try:
+                proc.terminate()
+                logger.info("Đã tắt tiến trình local worker PID %s cho session %s", proc.pid, session_id)
+            except Exception:
+                pass
+
         session = cls._sessions.pop(session_id, None)
         if not session:
             return False
 
         session.status = "DISCONNECTED"
         # Báo cho 2 đầu đóng socket nếu còn mở
-        close_tasks = []
         if session.agent_ws:
             try:
-                close_tasks.append(session.agent_ws.send_text(json.dumps({"type": "session_terminated", "reason": reason})))
+                asyncio.create_task(session.agent_ws.send_text(json.dumps({"type": "session_terminated", "reason": reason})))
             except Exception:
                 pass
         if session.viewer_ws:
             try:
-                close_tasks.append(session.viewer_ws.send_text(json.dumps({"type": "session_terminated", "reason": reason})))
+                asyncio.create_task(session.viewer_ws.send_text(json.dumps({"type": "session_terminated", "reason": reason})))
             except Exception:
                 pass
 

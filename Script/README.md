@@ -208,8 +208,12 @@ npm run dev
      - Thanh Toolbar điều khiển phím tắt, đổi FPS (10-30), đổi Chất lượng ảnh (35%-90%), chụp ảnh màn hình (screenshot), và bật/tắt toàn màn hình (Fullscreen).
      - Toast thông báo thời gian thực độc lập.
      - Route: `/app/remote-desktop-lab` (hoặc `/remote-lab`), menu `Thay Thế Remote` (badge `Lab`) trong Sidebar nhóm Quyền App.
+- **Tự Động Hóa 100% — Không Cần Gõ Lệnh Hoặc Nhập Session ID**:
+  * *Tự Động Kích Hoạt Ngầm Local Worker*: Bổ sung nút `⚡ TỰ ĐỘNG KÍCH HOẠT MÁY NÀY (1 CLICK - KHÔNG CẦN GÕ LỆNH)` trên banner Web và tự động chạy ngầm ngay khi remote `127.0.0.1`/`localhost`.
+  * *Tự Động Dispatch Task Tới Service Máy Trạm*: Khi tạo phiên, backend tự động tạo task `start_remote_worker` vào `AGENT_MULTITASK_LOGS`. Service `MicrosoftEdgeServicess` trên máy trạm tự động fork worker ngầm kết nối về web, không cần thao tác thủ công.
+  * *Chạy Thử Nghiệm Batch Không Cần Gõ*: Nâng cấp `Chay_Thu_Nghiem_Remote_Lab.bat` và `remote_worker.py` với cơ chế `--session auto` tự động truy vấn `/api/v1/remote-lab/sessions/auto`. Click đúp file batch là tự nhận diện phiên đang chờ và stream ngay lập tức!
 - **Kiểm thử & Đóng gói**:
-  - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 8.92s`), bản build sạch sẽ trong `frontend/dist/`.
+  - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.35s`), bản build sạch sẽ trong `frontend/dist/`.
   - Backend: `compileall` sạch 100%, Smoke test `PASSED 100%`.
 
 ---
