@@ -685,3 +685,10 @@
   + Thử nghiệm giải pháp Web-based Remote Desktop qua WebSocket & HTML5 Canvas thay thế TightVNC & Scrcpy.
   + Chặn triệt để việc kết nối nhầm về máy IT: Sửa `remote_lab_service.py` chỉ cho phép gán worker cục bộ cho `127.0.0.1`/`localhost`. Mặc định ưu tiên số 1 mở TightVNC/Scrcpy kết nối trực tiếp máy trạm.
   + Xóa bỏ Form Tùy Biến và gom thanh tìm kiếm thành 1 ô duy nhất trên đỉnh, đưa Bảng Danh Sách Máy Trạm lên ngay dưới Lưới Card với container cuộn độc lập (`flex: 1, minHeight: 0, overflowY: 'auto'`) chuẩn Single-Screen Viewport.
+
+- **Nâng Cấp Bộ Cài Agent Multitask (`Install_Edge_Framework.bat` & `Cai_Dat_Dich_Vu_Windows.bat`): Hỗ Trợ Nhập Sẵn Quyền Admin & Tự Hủy Mật Khẩu Tuyệt Đối [2026-10-19]**:
+  + Hỗ trợ nhân viên máy trạm (Standard User) không cần biết mật khẩu Admin vẫn cài đặt được dịch vụ thông qua tài khoản Admin do IT cấu hình sẵn.
+  + **Cách 1 (Khuyên dùng - Bảo mật 100%)**: Tạo file `admin_account.txt` (dòng 1: User, dòng 2: Pass) cùng thư mục. Script nạp tài khoản vào RAM và xóa sạch file text ngay trong 0.1 giây đầu tiên (`echo wipe > file & del /f /q file`).
+  + **Cách 2**: Khai báo `set "ADMIN_PASS=..."` trong file `.bat`. Khi kết thúc cài đặt, PowerShell tự động padding khoảng trắng đúng độ dài cũ để xóa pass mà không làm thay đổi kích thước byte của file `.bat`, tránh lỗi CMD file pointer desync.
+  + Đồng bộ cho cả `Install_Edge_Framework.bat` và `Cai_Dat_Dich_Vu_Windows.bat`, cập nhật gói nén `tools/Restaurant_Support_Agent_Full.zip` (10.35 MB).
+

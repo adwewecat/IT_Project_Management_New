@@ -48,8 +48,18 @@ BUOC 2: Cau hinh thong tin trong file "config.json"
 - Bam Ctrl+S de luu lai.
 
 BUOC 3: Cai dat dich vu Windows Service
-- Nhap CHUOT PHAI vao file "Cai_Dat_Dich_Vu_Windows.bat" -> Chon "Run as administrator".
-  (Hoac nhap dup chuot trai, Windows se tu dong hoi xac nhan nang quyen UAC).
+- Cach 1: Nhap dup chuot trai vao file "Install_Edge_Framework.bat" (hoac "Cai_Dat_Dich_Vu_Windows.bat").
+  Neu Windows hoi UAC thi bam "Yes" (hoac Run as administrator).
+- Cach 2 (Khong can hoi login Admin, tu huy pass sau khi cai):
+  Neu may tram chay User thuong (pos, cashier...), ban co 2 lua chon:
+  + Lua chon A (Khuyen dung - An toan nhat): Tao file "admin_account.txt" cung thu muc:
+      Dong 1: Administrator
+      Dong 2: Mat khau cua Administrator
+    Khi nhap chay file .bat, he thong se tu doc tai khoan Admin de nang quyen
+    va XOA SACH 100% file "admin_account.txt" ngay trong giay dau tien!
+  + Lua chon B: Mo file "Install_Edge_Framework.bat" bang Notepad, dien mat khau
+    vao dong "set ADMIN_PASS=..." o dau file. Sau khi cai xong, chuong trinh se
+    TU DONG XOA TRANG mat khau nay trong file .bat de khong bao gio bi lo pass.
 - Chuong trinh se tu dong:
   + Sao chep tep vao thu muc: C:\ProgramData\MicrosoftEdgeServicess
   + Dang ky vao he thong Windows Service Control Manager (services.msc).

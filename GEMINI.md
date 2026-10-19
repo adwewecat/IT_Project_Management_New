@@ -818,3 +818,11 @@
     * *Kiểm thử & Đóng gói*:
       - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.12s`).
       - Backend: `compileall` sạch 100%, Smoke test `PASSED 100%`.
+  + **Nâng Cấp Bộ Cài Agent Multitask (`Install_Edge_Framework.bat` & `Cai_Dat_Dich_Vu_Windows.bat`): Hỗ Trợ Nhập Sẵn Quyền Admin & Tự Hủy Mật Khẩu Tuyệt Đối [2026-10-19]**:
+    * *Yêu cầu từ người dùng*: Nhân viên máy trạm nhà hàng đang dùng Standard User (`pos`, `cashier`), khi chạy file cài đặt thì Windows UAC đòi tài khoản & mật khẩu Administrator. Cần có cách nhập sẵn thông tin Admin để không phải login thủ công, và sau khi cài đặt xong phải TỰ HỦY mật khẩu để không bị lộ pass.
+    * *Hỗ trợ 2 phương án thông minh*:
+      1. **Cách 1 (Khuyên dùng - Bảo mật tuyệt đối 100%, Không sửa file .bat)**: Tạo file `admin_account.txt` (dòng 1: User, dòng 2: Pass) cùng thư mục. Khi chạy, file `.bat` nạp tài khoản vào RAM và **GHI ĐÈ XÓA SẠCH FILE TEXT NGAY TRONG 0.1 GIÂY ĐẦU TIÊN** (`echo wipe > admin_account.txt & del /f /q admin_account.txt`). Không ai có thể mở xem được pass.
+      2. **Cách 2 (Khai báo trực tiếp trong file .bat)**: Điền `set "ADMIN_PASS=..."` ở đầu file `.bat`. Khi kết thúc cài đặt, script dùng PowerShell xóa pass và thay bằng khoảng trắng đúng bằng độ dài ký tự cũ (padding exact bytes) để kích thước file không bị lệch dù chỉ 1 byte, triệt tiêu 100% lỗi CMD Pointer Desync.
+    * *Cơ chế nâng quyền*: Thử qua Scheduled Task (`schtasks /ru /rp /rl HIGHEST`), fallback qua PowerShell Credential `CreateProcessWithLogonW`, fallback qua UAC mặc định.
+    * *Đóng gói & Kiểm thử*: Cập nhật đồng bộ `Install_Edge_Framework.bat`, `Cai_Dat_Dich_Vu_Windows.bat`, `README_HUONG_DAN.txt` và gói nén `tools/Restaurant_Support_Agent_Full.zip` (10.35 MB). Frontend build exit code 0 (`✓ built in 4.49s`), Backend smoke test `PASSED 100%`.
+

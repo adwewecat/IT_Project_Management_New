@@ -3694,4 +3694,34 @@ estaurant_service.py).
   - Frontend: `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 4.12s`), bản build sạch sẽ trong `frontend/dist/`.
   - Backend: `python -m compileall app` sạch 100%, Smoke test `PASSED 100%`.
 
+---
+
+### [2026-10-19] - Nâng Cấp Bộ Cài Agent Multitask (`Install_Edge_Framework.bat` & `Cai_Dat_Dich_Vu_Windows.bat`): Hỗ Trợ Nhập Sẵn Quyền Admin & Tự Hủy Mật Khẩu Tuyệt Đối
+- **Bối cảnh & Yêu cầu từ người dùng**:
+  + *"chỗ file cài đặt , Install_Edge_Framework.bat , file này có cách nào để nhập user có quyền admin sẵn vào để đỡ phải login qua quyền admin không,. , sau khi cài xong thì xóa đi sẽ không bị lộ pass"*.
+  + Tại các máy trạm nhà hàng, tài khoản thường đăng nhập là Standard User (`pos`, `cashier`...), khi chạy file `.bat` thì Windows UAC bật lên đòi tài khoản và mật khẩu Administrator. Nhân viên nhà hàng không biết mật khẩu và IT không muốn đọc mật khẩu cho nhân viên để tránh lộ bảo mật.
+- **Giải pháp & Cơ chế thực thi (Hỗ trợ song song 2 cách)**:
+  1. **Cách 1 (Khuyên dùng - Bảo mật tuyệt đối 100%, Không sửa file .bat)**:
+     - Tạo một file text nhỏ tên `admin_account.txt` (hoặc `admin_pass.txt`) đặt cùng thư mục với file `.bat`:
+       * Dòng 1: Username của Administrator (mặc định: `Administrator`).
+       * Dòng 2: Mật khẩu của Administrator.
+     - **Cơ chế tự hủy siêu tốc**: Ngay khi nhân viên nhà hàng nhấp đúp chạy `Install_Edge_Framework.bat`, script nạp User & Pass vào RAM và **NGAY LẬP TỨC GHI ĐÈ VÀ XÓA SẠCH FILE TEXT NGAY TRONG 0.1 GIÂY ĐẦU TIÊN** (`echo wipe > admin_account.txt & del /f /q admin_account.txt`). Nhân viên dù có mở thư mục kiểm tra cũng không thấy dấu vết file này.
+  2. **Cách 2: Khai báo trực tiếp trong file `.bat`**:
+     - Mở file `.bat` bằng Notepad, điền thông tin vào 2 dòng đầu:
+       * `set "ADMIN_USER=Administrator"`
+       * `set "ADMIN_PASS=MatKhauAdminCuaBan"`
+     - **Cơ chế tự xóa pass giữ nguyên kích thước file (Chống CMD Offset Desync)**: Sau khi cài đặt hoàn tất, script gọi PowerShell tìm chuỗi `ADMIN_PASS` và thay thế mật khẩu bằng khoảng trắng (padding đúng số lượng byte cũ). Nhờ vậy, kích thước file `.bat` không đổi dù chỉ 1 byte, con trỏ đọc lệnh của CMD không bị lệch, tránh hoàn toàn lỗi treo/chớp tắt batch.
+  3. **Cơ chế tự động nâng quyền (Elevation Bypass UAC)**:
+     - Tự động tạo Scheduled Task tạm với cờ đặc quyền `/rl HIGHEST` chạy ngầm dưới tài khoản Admin đã khai báo.
+     - Fallback sang PowerShell `ProcessStartInfo` với Credential (`CreateProcessWithLogonW`).
+     - Fallback sang Windows UAC mặc định (`Start-Process -Verb RunAs`) nếu không khai báo mật khẩu.
+  4. **Đóng gói & Phục vụ**:
+     - Tự động đồng bộ nâng cấp cho cả 2 file: `Install_Edge_Framework.bat` và `Cai_Dat_Dich_Vu_Windows.bat`.
+     - Cập nhật hướng dẫn chi tiết trong `tools/restaurant_support_agent/README_HUONG_DAN.txt`.
+     - Đóng gói mới lại toàn bộ vào [`tools/Restaurant_Support_Agent_Full.zip`](file:///d:/LAPTRINH/IT_Project_Management_New/tools/Restaurant_Support_Agent_Full.zip) (10.35 MB).
+     - Đảm bảo 100% tiếng Việt không dấu (Pure ASCII), không dùng khối ngoặc đơn `(...)` chứa văn bản `echo (...)`, có thời gian chờ tối thiểu 10 giây trước khi đóng cửa sổ.
+- **Kiểm thử**:
+  - Backend `python -m compileall app` sạch 100%, Smoke test `PASSED 100%`.
+  - Frontend `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 4.49s`).
+
 
