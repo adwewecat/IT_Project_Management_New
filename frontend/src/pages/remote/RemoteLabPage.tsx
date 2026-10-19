@@ -24,13 +24,53 @@ import {
   ArrowLeft,
   Settings,
   HelpCircle,
-  Zap
+  Zap,
+  Loader2,
+  ExternalLink,
+  Building2,
+  X
 } from 'lucide-react';
 import {
   remoteLabService,
   RemoteEndpoint,
   RemoteSessionInfo
 } from '../../services/remoteLabService';
+import { pingVnc, pingKds, getRestaurants } from '../../services/restaurantService';
+import { RestaurantItem } from '../../types/restaurant';
+import { Modal } from '../../components/ui/Modal';
+import { Button } from '../../components/ui/Button';
+
+// Hằng số danh sách thiết bị chuẩn Nhà Hàng (Chuẩn như VncKdsModal)
+const VNC_ITEMS = [
+  { suffix: '41', label: 'PC QL', protocol: 'vnc' as const },
+  { suffix: '11', label: 'POS 1.1', protocol: 'vnc' as const },
+  { suffix: '12', label: 'POS 1.2', protocol: 'vnc' as const },
+];
+
+const KDS_ITEMS = [
+  { suffix: '31', label: 'KDS 1', protocol: 'scrcpy' as const },
+  { suffix: '32', label: 'KDS 2', protocol: 'scrcpy' as const },
+  { suffix: '33', label: 'KDS 3', protocol: 'scrcpy' as const },
+  { suffix: '34', label: 'KDS 4', protocol: 'scrcpy' as const },
+  { suffix: '35', label: 'KDS 5', protocol: 'scrcpy' as const },
+  { suffix: '36', label: 'KDS 6', protocol: 'scrcpy' as const },
+  { suffix: '37', label: 'KDS 7', protocol: 'scrcpy' as const },
+  { suffix: '38', label: 'KDS 8', protocol: 'scrcpy' as const },
+];
+
+const VNC_COLOR = '#1a73e8';
+const KDS_COLOR = '#6f42c1';
+
+// Helper trích xuất 3 octet đầu của IP (VD: "10.8.159.11" -> "10.8.159.")
+const getIpPrefix = (ip: string | null | undefined): string => {
+  if (!ip) return '';
+  const clean = ip.replace(/[^0-9.]/g, '.').replace(/\.+$/, '');
+  const parts = clean.split('.');
+  if (parts.length >= 3) {
+    return parts.slice(0, 3).join('.') + '.';
+  }
+  return '';
+};
 
 export const RemoteLabPage: React.FC = () => {
   // Toast thông báo độc lập
@@ -45,6 +85,31 @@ export const RemoteLabPage: React.FC = () => {
   const [endpoints, setEndpoints] = useState<RemoteEndpoint[]>([]);
   const [loadingEndpoints, setLoadingEndpoints] = useState<boolean>(false);
   const [, setActiveSessions] = useState<RemoteSessionInfo[]>([]);
+
+  // Tra cứu & Ping tín hiệu Nhà hàng (chuẩn VncKdsModal)
+  const [restaurantSearch, setRestaurantSearch] = useState<string>('');
+  const [restaurantSuggestions, setRestaurantSuggestions] = useState<RestaurantItem[]>([]);
+  const [selectedRestaurant, setSelectedRestaurant] = useState<RestaurantItem | null>(null);
+  const [isSearchingRes, setIsSearchingRes] = useState<boolean>(false);
+  const [showResDropdown, setShowResDropdown] = useState<boolean>(false);
+
+  // IP Prefix và kết quả Ping
+  const [ipPrefix, setIpPrefix] = useState<string>('10.8.159.'); // Mặc định như trong ảnh yêu cầu
+  const [vncResults, setVncResults] = useState<Record<string, boolean>>({});
+  const [kdsResults, setKdsResults] = useState<Record<string, boolean>>({});
+  const [vncLoading, setVncLoading] = useState<boolean>(false);
+  const [kdsLoading, setKdsLoading] = useState<boolean>(false);
+
+  // Modal chọn phương thức kết nối khi bấm vào thiết bị Online
+  const [connectTarget, setConnectTarget] = useState<{
+    suffix: string;
+    label: string;
+    protocol: 'vnc' | 'scrcpy';
+    ip: string;
+    isOnline: boolean;
+    hasAgent: boolean;
+  } | null>(null);
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState<boolean>(false);
 
   // Bộ lọc
   const [searchKeyword, setSearchKeyword] = useState<string>('');
@@ -118,6 +183,147 @@ export const RemoteLabPage: React.FC = () => {
       const msg = err instanceof Error ? err.message : 'Không thể tự động kích hoạt worker';
       showToast(msg, 'error');
     }
+  };
+
+  // Hàm Ping kiểm tra tín hiệu siêu tốc (song song VNC + KDS)
+  const doPing = useCallback(async (prefixToPing?: string) => {
+    const target = (prefixToPing !== undefined ? prefixToPing : ipPrefix).trim();
+    if (!target) {
+      showToast('Vui lòng nhập IP Prefix (ví dụ: 10.8.159.)!', 'warning');
+      return;
+    }
+    let cleanPrefix = target;
+    if (!cleanPrefix.endsWith('.')) {
+      cleanPrefix += '.';
+    }
+    setIpPrefix(cleanPrefix);
+    setVncLoading(true);
+    setKdsLoading(true);
+
+    // 1. Ping VNC (.41, .11, .12)
+    pingVnc(cleanPrefix)
+      .then((res) => {
+        setVncResults(res.results || {});
+      })
+      .catch((err) => {
+        console.error('Lỗi Ping VNC:', err);
+      })
+      .finally(() => {
+        setVncLoading(false);
+      });
+
+    // 2. Ping KDS (.31 -> .38)
+    pingKds(cleanPrefix)
+      .then((res) => {
+        setKdsResults(res.results || {});
+      })
+      .catch((err) => {
+        console.error('Lỗi Ping KDS:', err);
+      })
+      .finally(() => {
+        setKdsLoading(false);
+      });
+  }, [ipPrefix, showToast]);
+
+  // Tự động ping lần đầu khi trang mở để hiển thị sẵn trạng thái
+  useEffect(() => {
+    if (ipPrefix) {
+      doPing(ipPrefix);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Tìm kiếm gợi ý Nhà hàng khi gõ từ khóa
+  useEffect(() => {
+    if (!restaurantSearch.trim() || selectedRestaurant) {
+      setRestaurantSuggestions([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        setIsSearchingRes(true);
+        const res = await getRestaurants({ search: restaurantSearch.trim(), page: 1, page_size: 8 });
+        setRestaurantSuggestions(res.items || []);
+        setShowResDropdown(true);
+      } catch (err) {
+        console.error('Lỗi tìm kiếm nhà hàng:', err);
+      } finally {
+        setIsSearchingRes(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [restaurantSearch, selectedRestaurant]);
+
+  // Khi chọn một nhà hàng từ dropdown
+  const handleSelectRestaurant = (r: RestaurantItem) => {
+    setSelectedRestaurant(r);
+    setShowResDropdown(false);
+    const rName = `${r.sap || r.res || ''} ${r.address || r.res || ''} ${r.rk7 ? `(RK7: ${r.rk7})` : ''}`.trim();
+    setRestaurantSearch(rName);
+    setCustomRestaurantCode(r.sap || r.res || 'TEST');
+    const prefix = getIpPrefix(r.ip);
+    if (prefix) {
+      setIpPrefix(prefix);
+      doPing(prefix);
+    } else {
+      showToast('Nhà hàng này chưa cấu hình trường IP LAN trong cơ sở dữ liệu!', 'warning');
+    }
+  };
+
+  // Hủy chọn nhà hàng để tìm kiếm lại
+  const handleClearRestaurant = () => {
+    setSelectedRestaurant(null);
+    setRestaurantSearch('');
+    setRestaurantSuggestions([]);
+  };
+
+  // Kiểm tra xem IP này đã có Agent Service chạy ngầm hay chưa
+  const checkHasAgent = useCallback((ip: string) => {
+    return endpoints.some(
+      (ep) => ep.is_online && (ep.ip_lan.trim() === ip.trim() || ep.ip_lan.includes(ip.trim()))
+    );
+  }, [endpoints]);
+
+  // Xử lý khi click vào ô thiết bị
+  const handleCardClick = (item: { suffix: string; label: string; protocol: 'vnc' | 'scrcpy' }) => {
+    const isOnline = item.protocol === 'vnc' ? vncResults[item.suffix] === true : kdsResults[item.suffix] === true;
+    const ip = ipPrefix + item.suffix;
+    if (!isOnline) {
+      showToast(`Thiết bị ${item.label} (${ip}) đang OFFLINE, chưa phản hồi tín hiệu!`, 'warning');
+      return;
+    }
+    const hasAgent = checkHasAgent(ip);
+    setConnectTarget({
+      suffix: item.suffix,
+      label: item.label,
+      protocol: item.protocol,
+      ip,
+      isOnline,
+      hasAgent,
+    });
+    setIsConnectModalOpen(true);
+  };
+
+  // Mở ứng dụng truyền thống (vnc:// hoặc scrcpy://)
+  const handleConnectLegacy = () => {
+    if (!connectTarget) return;
+    const url = `${connectTarget.protocol}://${connectTarget.ip}`;
+    window.location.href = url;
+    setIsConnectModalOpen(false);
+    showToast(`Đang mở ${connectTarget.protocol.toUpperCase()} tới ${connectTarget.ip}...`, 'info');
+  };
+
+  // Mở kết nối Web Remote Canvas siêu tốc
+  const handleConnectWebCanvas = () => {
+    if (!connectTarget) return;
+    setIsConnectModalOpen(false);
+    const mode = connectTarget.protocol === 'scrcpy' ? 'kds' : 'workstation';
+    const resCode = selectedRestaurant?.sap || selectedRestaurant?.res || customRestaurantCode || 'NH';
+    handleStartRemote(
+      mode,
+      resCode,
+      connectTarget.ip,
+      `${resCode} - ${connectTarget.label} (${connectTarget.ip})`
+    );
   };
 
   // Khởi tạo phiên Remote mới
@@ -641,6 +847,525 @@ export const RemoteLabPage: React.FC = () => {
                 <Tv size={16} />
                 <span>Remote KDS Bếp (Android)</span>
               </button>
+            </div>
+          </div>
+
+          {/* 3. KHỐI TRA CỨU TÍN HIỆU & ĐIỀU KHIỂN NHÀ HÀNG (GRID CARD CHUẨN POPUP VNC/KDS) */}
+          <div
+            style={{
+              padding: '18px 22px',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              marginBottom: '18px',
+              boxShadow: 'var(--shadow-sm)'
+            }}
+          >
+            {/* Header của Khối */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    backgroundColor: 'rgba(26, 115, 232, 0.12)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: VNC_COLOR
+                  }}
+                >
+                  <Building2 size={18} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '15px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>Kiểm Tra Tín Hiệu & Kết Nối Thiết Bị Nhà Hàng</span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        backgroundColor: '#DEF7EC',
+                        color: '#059669'
+                      }}
+                    >
+                      Chuẩn Lưới Card Popup
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                    {selectedRestaurant
+                      ? `Nhà hàng: ${selectedRestaurant.sap || selectedRestaurant.res} — ${selectedRestaurant.address || selectedRestaurant.res}`
+                      : 'Chọn nhà hàng từ danh mục hoặc nhập IP Prefix để kiểm tra trạng thái PC QL, POS 1.1, POS 1.2 & KDS Bếp'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Nút hành động nhanh: Kích hoạt máy này (127.0.0.1) */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleStartRemote('workstation', 'LOCAL', '127.0.0.1', 'Máy Cục Bộ (127.0.0.1)');
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 12px',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    color: '#059669',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    fontSize: '12px'
+                  }}
+                  title="Tự động mở phiên và kích hoạt worker trên chính máy này"
+                >
+                  <Zap size={14} />
+                  <span>Kích Hoạt Máy Này (127.0.0.1)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Thanh tìm kiếm Nhà Hàng & Nhập IP Prefix */}
+            <div
+              style={{
+                display: 'flex',
+                gap: '12px',
+                alignItems: 'flex-end',
+                flexWrap: 'wrap',
+                padding: '12px 14px',
+                backgroundColor: 'var(--bg-secondary)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-color)',
+                marginBottom: '14px',
+                position: 'relative'
+              }}
+            >
+              {/* Ô 1: Tìm kiếm Nhà Hàng */}
+              <div style={{ flex: '2 1 280px', position: 'relative' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '5px' }}>
+                  Tìm Kiếm Nhà Hàng (Mã SAP / Tên / RK7)
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <Search
+                    size={15}
+                    style={{
+                      position: 'absolute',
+                      left: '10px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: 'var(--text-secondary)'
+                    }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Gõ mã NH (VD: 5166, 1015) hoặc tên (VD: Cloud Pot, Gogi...)"
+                    value={restaurantSearch}
+                    onChange={(e) => {
+                      setRestaurantSearch(e.target.value);
+                      if (selectedRestaurant) setSelectedRestaurant(null);
+                    }}
+                    onFocus={() => {
+                      if (restaurantSuggestions.length > 0) setShowResDropdown(true);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '8px 32px 8px 32px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-primary)',
+                      color: 'var(--text-primary)',
+                      fontSize: '13px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  {restaurantSearch && (
+                    <button
+                      type="button"
+                      onClick={handleClearRestaurant}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--text-muted)',
+                        padding: '2px',
+                        display: 'flex'
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                  {isSearchingRes && (
+                    <div style={{ position: 'absolute', right: '30px', top: '50%', transform: 'translateY(-50%)' }}>
+                      <Loader2 size={14} className="spin" style={{ color: 'var(--text-secondary)' }} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Dropdown gợi ý kết quả tìm kiếm */}
+                {showResDropdown && restaurantSuggestions.length > 0 && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      marginTop: '4px',
+                      backgroundColor: 'var(--bg-card)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--border-color)',
+                      boxShadow: 'var(--shadow-lg)',
+                      zIndex: 50,
+                      maxHeight: '260px',
+                      overflowY: 'auto'
+                    }}
+                  >
+                    {restaurantSuggestions.map((r) => (
+                      <div
+                        key={r.id}
+                        onClick={() => handleSelectRestaurant(r)}
+                        style={{
+                          padding: '8px 12px',
+                          cursor: 'pointer',
+                          borderBottom: '1px solid var(--border-color)',
+                          fontSize: '12.5px',
+                          transition: 'background-color 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ color: 'var(--color-primary)' }}>{r.sap || r.res}</span>
+                          <span>{r.address || r.res}</span>
+                          {r.rk7 && (
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>(RK7: {r.rk7})</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', display: 'flex', gap: '12px', marginTop: '2px' }}>
+                          <span>IP LAN: <b style={{ fontFamily: 'monospace' }}>{r.ip || 'Chưa cấu hình'}</b></span>
+                          {r.ip && <span>Prefix: <b style={{ fontFamily: 'monospace', color: VNC_COLOR }}>{getIpPrefix(r.ip)}</b></span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Ô 2: Dải IP Prefix */}
+              <div style={{ flex: '1 1 180px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '5px' }}>
+                  Dải IP Prefix (VD: 10.8.159.)
+                </label>
+                <input
+                  type="text"
+                  placeholder="10.8.159."
+                  value={ipPrefix}
+                  onChange={(e) => setIpPrefix(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') doPing();
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    fontSize: '13px',
+                    fontFamily: 'monospace',
+                    fontWeight: 700,
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Nút Ping / Kiểm Tra Lại */}
+              <button
+                type="button"
+                onClick={() => doPing()}
+                disabled={vncLoading || kdsLoading}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 18px',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: 'var(--color-primary)',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: (vncLoading || kdsLoading) ? 'not-allowed' : 'pointer',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  height: '37px',
+                  opacity: (vncLoading || kdsLoading) ? 0.7 : 1
+                }}
+              >
+                {(vncLoading || kdsLoading) ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
+                <span>{(vncLoading || kdsLoading) ? 'Đang Kiểm Tra...' : 'Kiểm Tra Lại'}</span>
+              </button>
+            </div>
+
+            {/* Thông tin IP Prefix hướng dẫn click */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '8px 14px',
+                backgroundColor: 'var(--bg-secondary)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-color)',
+                marginBottom: '16px'
+              }}
+            >
+              <Monitor size={16} style={{ color: VNC_COLOR, flexShrink: 0 }} />
+              <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+                IP Prefix: <strong style={{ fontFamily: 'monospace', color: VNC_COLOR }}>{ipPrefix}</strong>
+                <span style={{ color: 'var(--text-muted)', marginLeft: '10px', fontSize: '12px' }}>
+                  👉 Click vào ô <b>ONLINE</b> để kết nối (Hỗ trợ cả Web Canvas siêu tốc và TightVNC / Scrcpy)
+                </span>
+              </div>
+            </div>
+
+            {/* LƯỚI CARD 1: VNC / AGENT — PC / POS (.41, .11, .12) */}
+            <div style={{ marginBottom: '18px' }}>
+              <div
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  color: VNC_COLOR,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  marginBottom: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Monitor size={15} /> VNC / AGENT — PC / POS
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+                {VNC_ITEMS.map((item) => {
+                  const hasResult = vncResults[item.suffix] !== undefined;
+                  const isOnline = vncResults[item.suffix] === true;
+                  const isPending = vncLoading && !hasResult;
+                  const ip = ipPrefix + item.suffix;
+                  const hasAgent = checkHasAgent(ip);
+
+                  return (
+                    <button
+                      key={item.suffix}
+                      type="button"
+                      onClick={() => handleCardClick(item)}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '12px 8px',
+                        borderRadius: 'var(--radius-md)',
+                        border: `2px solid ${isOnline ? VNC_COLOR : 'var(--border-color)'}`,
+                        backgroundColor: isOnline ? `${VNC_COLOR}12` : 'var(--bg-secondary)',
+                        cursor: isOnline ? 'pointer' : 'default',
+                        opacity: isPending ? 0.6 : isOnline ? 1 : 0.5,
+                        transition: 'all 0.15s ease',
+                        position: 'relative',
+                        boxSizing: 'border-box'
+                      }}
+                      title={
+                        isOnline
+                          ? `Click để kết nối tới ${ip}`
+                          : isPending
+                          ? `Đang kiểm tra ${ip}...`
+                          : `${ip} — Ngoại tuyến (OFFLINE)`
+                      }
+                    >
+                      {/* Huy hiệu Agent nếu IP đã có Service */}
+                      {hasAgent && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '6px',
+                            right: '6px',
+                            backgroundColor: '#10B981',
+                            color: '#fff',
+                            fontSize: '9px',
+                            fontWeight: 800,
+                            padding: '1px 5px',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '2px'
+                          }}
+                          title="Máy này đã cài Agent Service"
+                        >
+                          <Zap size={9} /> AGENT
+                        </div>
+                      )}
+
+                      <div
+                        style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: isPending ? '#9CA3AF' : isOnline ? VNC_COLOR : '#9CA3AF',
+                          color: '#fff',
+                          transition: 'background-color 0.2s ease'
+                        }}
+                      >
+                        {isPending ? <Loader2 size={16} className="spin" /> : <Monitor size={16} />}
+                      </div>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: isOnline ? 'var(--text-primary)' : 'var(--text-muted)', textAlign: 'center' }}>
+                        {item.label}
+                      </div>
+                      <div style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 600, color: isOnline ? VNC_COLOR : 'var(--text-muted)' }}>
+                        .{item.suffix}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 800,
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          backgroundColor: isPending ? 'var(--bg-primary)' : isOnline ? '#DEF7EC' : '#F3F4F6',
+                          color: isPending ? 'var(--text-muted)' : isOnline ? '#059669' : '#9CA3AF',
+                        }}
+                      >
+                        {isPending ? '...' : isOnline ? 'ONLINE' : 'OFFLINE'}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* LƯỚI CARD 2: SCRCPY / ADB — KDS (MÀN HÌNH BẾP) (.31 -> .38) */}
+            <div>
+              <div
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  color: KDS_COLOR,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  marginBottom: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Tv size={15} /> Scrcpy / ADB — KDS (Màn Hình Bếp Android)
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+                {KDS_ITEMS.map((item) => {
+                  const hasResult = kdsResults[item.suffix] !== undefined;
+                  const isOnline = kdsResults[item.suffix] === true;
+                  const isPending = kdsLoading && !hasResult;
+                  const ip = ipPrefix + item.suffix;
+
+                  return (
+                    <button
+                      key={item.suffix}
+                      type="button"
+                      onClick={() => handleCardClick(item)}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '10px 6px',
+                        borderRadius: 'var(--radius-md)',
+                        border: `2px solid ${isOnline ? KDS_COLOR : 'var(--border-color)'}`,
+                        backgroundColor: isOnline ? `${KDS_COLOR}10` : 'var(--bg-secondary)',
+                        cursor: isOnline ? 'pointer' : 'default',
+                        opacity: isPending ? 0.6 : isOnline ? 1 : 0.5,
+                        transition: 'all 0.15s ease',
+                        boxSizing: 'border-box'
+                      }}
+                      title={
+                        isOnline
+                          ? `Click để kết nối KDS ${ip}`
+                          : isPending
+                          ? `Đang kiểm tra ${ip}...`
+                          : `${ip} — Ngoại tuyến (OFFLINE)`
+                      }
+                    >
+                      <div
+                        style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: isPending ? '#9CA3AF' : isOnline ? KDS_COLOR : '#9CA3AF',
+                          color: '#fff',
+                          transition: 'background-color 0.2s ease'
+                        }}
+                      >
+                        {isPending ? <Loader2 size={14} className="spin" /> : <Tv size={14} />}
+                      </div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: isOnline ? 'var(--text-primary)' : 'var(--text-muted)', textAlign: 'center' }}>
+                        {item.label}
+                      </div>
+                      <div style={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: 600, color: isOnline ? KDS_COLOR : 'var(--text-muted)' }}>
+                        .{item.suffix}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '9px',
+                          fontWeight: 800,
+                          padding: '1px 6px',
+                          borderRadius: '10px',
+                          backgroundColor: isPending ? 'var(--bg-primary)' : isOnline ? '#DEF7EC' : '#F3F4F6',
+                          color: isPending ? 'var(--text-muted)' : isOnline ? '#059669' : '#9CA3AF',
+                        }}
+                      >
+                        {isPending ? '...' : isOnline ? 'ONLINE' : 'OFFLINE'}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Hộp kiến trúc: Giải đáp trực tiếp băn khoăn "Không cần cài Agent cho toàn bộ máy!" */}
+            <div
+              style={{
+                marginTop: '16px',
+                padding: '12px 16px',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px'
+              }}
+            >
+              <HelpCircle size={20} style={{ color: '#2563EB', flexShrink: 0, marginTop: '2px' }} />
+              <div style={{ fontSize: '12.5px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+                <b style={{ color: '#2563EB' }}>💡 Kiến trúc linh hoạt: Bạn KHÔNG BẮT BUỘC phải cài Agent cho toàn bộ 3 máy trạm (.11, .12, .41)!</b>
+                <div style={{ marginTop: '4px', color: 'var(--text-secondary)' }}>
+                  • <b>Máy chưa cài Agent</b>: Vẫn kết nối 100% bằng <b>TightVNC (`vnc://`)</b> hoặc <b>Scrcpy (`scrcpy://`)</b> 1 chạm như cũ, không làm gián đoạn công việc.<br />
+                  • <b>Máy đã cài Agent (VD: POS 1.1)</b>: Điều khiển trực tiếp siêu tốc trên Web Canvas mà không cần cài thêm VNC Viewer trên máy tính của bạn.<br />
+                  • <b>Mô hình Gateway LAN</b>: Chỉ cần 1 máy chính trong nhà hàng cài service, máy đó có thể làm cầu nối tiếp sóng điều khiển KDS Android (.31-.38) và các máy POS khác trong mạng LAN!
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1369,6 +2094,176 @@ export const RemoteLabPage: React.FC = () => {
             />
           </div>
         </div>
+      )}
+
+      {/* 4. MODAL CHỌN PHƯƠNG THỨC KẾT NỐI (LIFO MODAL STACK) */}
+      {connectTarget && (
+        <Modal
+          isOpen={isConnectModalOpen}
+          onClose={() => setIsConnectModalOpen(false)}
+          title={`Kết Nối Tới: ${connectTarget.label} (${connectTarget.ip})`}
+          maxWidth="520px"
+          footer={
+            <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+              <Button variant="secondary" onClick={() => setIsConnectModalOpen(false)}>
+                Đóng
+              </Button>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Thẻ tóm tắt thông tin thiết bị */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px 14px',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)'
+              }}
+            >
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  backgroundColor: connectTarget.protocol === 'vnc' ? VNC_COLOR : KDS_COLOR,
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                {connectTarget.protocol === 'vnc' ? <Monitor size={20} /> : <Tv size={20} />}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)' }}>
+                  {connectTarget.label} — {connectTarget.protocol === 'vnc' ? 'Máy Trạm Windows' : 'KDS Bếp Android'}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '10px', marginTop: '2px' }}>
+                  <span>Địa chỉ IP: <b style={{ fontFamily: 'monospace' }}>{connectTarget.ip}</b></span>
+                  <span>Trạng thái: <b style={{ color: '#059669' }}>ONLINE</b></span>
+                </div>
+              </div>
+              {connectTarget.hasAgent && (
+                <span
+                  style={{
+                    backgroundColor: '#10B981',
+                    color: '#fff',
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    padding: '2px 8px',
+                    borderRadius: '10px'
+                  }}
+                >
+                  ⚡ CÓ AGENT
+                </span>
+              )}
+            </div>
+
+            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
+              Chọn phương thức điều khiển:
+            </div>
+
+            {/* Lựa chọn 1: Web Canvas Remote (Công nghệ mới) */}
+            <div
+              onClick={handleConnectWebCanvas}
+              style={{
+                padding: '14px 16px',
+                borderRadius: 'var(--radius-md)',
+                border: '2px solid var(--color-primary)',
+                backgroundColor: 'var(--color-primary-subtle, rgba(59, 130, 246, 0.08))',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--color-primary)',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <Zap size={18} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: '13.5px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>1. Điều Khiển Trực Tiếp Trên Trình Duyệt (Web Canvas)</span>
+                  <span style={{ fontSize: '10px', backgroundColor: '#10B981', color: '#fff', padding: '1px 6px', borderRadius: '8px' }}>MỚI</span>
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Không cần cài VNC Viewer hay Scrcpy trên máy tính IT. Điều khiển mượt mà ngay trên tab trình duyệt hiện tại.
+                </div>
+              </div>
+            </div>
+
+            {/* Lựa chọn 2: Mở ứng dụng truyền thống */}
+            <div
+              onClick={handleConnectLegacy}
+              style={{
+                padding: '14px 16px',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-secondary)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  backgroundColor: '#64748B',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <ExternalLink size={18} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: '13.5px', color: 'var(--text-primary)' }}>
+                  2. Mở Ứng Dụng Truyền Thống ({connectTarget.protocol.toUpperCase()} Client)
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  {connectTarget.protocol === 'vnc'
+                    ? `Kích hoạt TightVNC Viewer qua URL protocol: vnc://${connectTarget.ip}`
+                    : `Kích hoạt Scrcpy qua URL protocol: scrcpy://${connectTarget.ip}`}
+                </div>
+              </div>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Toast thông báo thời gian thực */}

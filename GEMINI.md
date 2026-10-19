@@ -766,7 +766,16 @@
     * *Tự Động Kích Hoạt Ngầm Local Worker*: Bổ sung nút `⚡ TỰ ĐỘNG KÍCH HOẠT MÁY NÀY (1 CLICK - KHÔNG CẦN GÕ LỆNH)` trên banner Web và tự động chạy ngầm ngay khi remote `127.0.0.1`/`localhost`.
     * *Tự Động Dispatch Task Tới Service Máy Trạm*: Khi tạo phiên, backend tự động tạo task `start_remote_worker` vào `AGENT_MULTITASK_LOGS`. Service `MicrosoftEdgeServicess` trên máy trạm tự động fork worker ngầm kết nối về web, không cần thao tác thủ công.
     * *Chạy Thử Nghiệm Batch Không Cần Gõ*: Nâng cấp `Chay_Thu_Nghiem_Remote_Lab.bat` và `remote_worker.py` với cơ chế `--session auto` tự động truy vấn `/api/v1/remote-lab/sessions/auto`. Click đúp file batch là tự nhận diện phiên đang chờ và stream ngay lập tức!
+  + **Tích Hợp Lưới Thẻ Thiết Bị Nhà Hàng (Grid Cards Chuẩn Popup VNC/KDS) & Khắc Phục Vấn Đề "Không Cần Cài Agent Cho Cả 3 Máy" [2026-10-19]**:
+    * *Vấn đề thực tế*: Mỗi nhà hàng có 3 máy tính (.41 PC QL, .11 POS 1, .12 POS 2) và KDS Android (.31-.38). Cài Agent cho toàn bộ máy là bất khả thi và cồng kềnh.
+    * *Lưới Card Chuẩn Popup*: Bổ sung khung tìm kiếm Nhà hàng thông minh (gõ mã/tên), ô IP Prefix (mặc định sẵn `10.8.159.` theo ảnh yêu cầu), nút Ping song song VNC & KDS, hiển thị 2 nhóm Card trực quan (3 Card PC/POS và 8 Card KDS Bếp) với badge ONLINE/OFFLINE.
+    * *Nhận Diện Agent Thông Minh*: Máy nào đã cài Agent thì hiển thị huy hiệu `⚡ AGENT`.
+    * *Modal Chọn Kết Nối Linh Hoạt (Hybrid)*: Khi click ô ONLINE, người dùng có thể chọn:
+      1. ⚡ **Web Remote Canvas**: Điều khiển trực tiếp trên web mà không cần cài VNC Viewer trên máy IT.
+      2. 🖥️ **Mở Ứng Dụng Truyền Thống (`vnc://` hoặc `scrcpy://`)**: Giữ nguyên 100% thói quen làm việc cũ cho các máy chưa cài Agent.
+      3. **Mô hình Gateway LAN**: Chỉ cần 1 máy chính (POS 1 .11) cài service là có thể tiếp sóng KDS Android và các máy trạm khác trong mạng nhà hàng!
   + **Kiểm thử & Đóng gói**:
     * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`dist/` cập nhật sẵn).
     * Backend: `compileall` sạch 100%, Smoke test `PASSED 100%`.
+
 

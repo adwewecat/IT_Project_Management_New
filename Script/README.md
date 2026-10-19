@@ -3497,4 +3497,31 @@ estaurant_service.py).
     5. Áp dụng cơ chế tương tự cho hàm `_close_ticket` khi đóng ticket 3CX.
   + **Kiểm thử**: Backend `compileall` sạch 100%, Smoke test `PASSED 100%`, Frontend `npm run build` thành công exit code 0 (`✓ built in 3.90s`).
 
+---
+
+### [2026-10-19] - Tích Hợp Khối Tra Cứu Tín Hiệu & Lưới Thẻ Thiết Bị Nhà Hàng (Grid Cards Chuẩn Popup VNC/KDS) Vào Màn Hình "Tích Hợp Thay Thế Remote" (`RemoteLabPage.tsx`)
+- **Bối cảnh & Vấn đề thực tế**:
+  + Người dùng phản hồi: Web Remote Canvas đã kết nối và hiển thị hình ảnh thành công qua trình duyệt. Tuy nhiên tại mỗi nhà hàng thường có 3 máy tính Windows (PC QL `.41`, POS 1.1 `.11`, POS 1.2 `.12`) và các màn hình bếp Android KDS (`.31` -> `.38`). Nếu giải pháp mới bắt buộc IT phải cài Agent lên toàn bộ các máy thì rất bất tiện và tốn công.
+  + Người dùng yêu cầu tích hợp tính năng ping tín hiệu và hiển thị giao diện dạng Lưới Thẻ (Grid Cards) giống hệt popup kết nối từ xa hiện tại (như trong ảnh mẫu) ngay trong màn hình Remote Lab để tiện theo dõi và kết nối.
+- **Giải pháp Kiến trúc & Triển khai**:
+  1. **Thanh Tìm Kiếm & Nhập IP Prefix Thông Minh**:
+     - Ô tìm kiếm nhà hàng (gõ mã SAP / RK7 / Tên nhà hàng) kèm gợi ý dropdown autocomplete nhanh, tự động tách `ipPrefix` từ trường `ip` của nhà hàng.
+     - Ô nhập/sửa IP Prefix trực tiếp (mặc định sẵn `10.8.159.` chuẩn như ảnh yêu cầu của người dùng).
+     - Nút `Kiểm Tra Lại` gọi song song `pingVnc` (TCP 5900 + ICMP) và `pingKds` (TCP 5555 + ICMP).
+     - Nút 1-Click `⚡ Kích Hoạt Máy Này (127.0.0.1)`.
+  2. **Lưới Thẻ Grid Card Chuẩn Popup (2 Nhóm Thiết Bị)**:
+     - **Nhóm 1: `🖥️ VNC / AGENT — PC / POS`**: 3 card `.41` (PC QL), `.11` (POS 1.1), `.12` (POS 1.2).
+     - **Nhóm 2: `📺 SCRCPY / ADB — KDS (MÀN HÌNH BẾP)`**: 8 card `.31` đến `.38` (KDS 1 -> KDS 8).
+     - Hiển thị trực quan: Icon tròn, nhãn tên, đuôi IP, badge `ONLINE` / `OFFLINE` / `...` (đang ping).
+     - **Nhận diện Agent thông minh**: Nếu IP trùng với endpoint đã cài Agent Service đang online, hiển thị thêm badge nổi bật `⚡ AGENT`.
+  3. **Modal Chọn Phương Thức Kết Nối Linh Hoạt (Giải quyết triệt để vấn đề "không cần cài Agent cho toàn bộ máy")**:
+     - Khi bấm vào bất kỳ ô ONLINE nào: Modal mở ra cho phép chọn:
+       * ⚡ **1. Điều Khiển Trực Tiếp Trên Trình Duyệt (Web Canvas Remote)**: Công nghệ mới, không cần cài TightVNC hay Scrcpy trên máy IT.
+       * 🖥️ **2. Mở Ứng Dụng Truyền Thống (${protocol.toUpperCase()} Client)**: Kích hoạt TightVNC Viewer (`vnc://`) hoặc Scrcpy (`scrcpy://`) quen thuộc chỉ với 1 click!
+     - **Kiến trúc Hybrid (Không bắt buộc cài Agent cho cả 3 máy)**: Các máy chưa cài Agent (như `.12`, `.41`) vẫn điều khiển bình thường 100% qua TightVNC mà không làm thay đổi thói quen hay gián đoạn vận hành. Chỉ cần 1 máy chính (như POS 1.1) cài Agent là có thể làm cầu nối tiếp sóng cho toàn bộ nhà hàng!
+- **Kiểm thử & Đóng gói**:
+  - Frontend `npm run build` thành công exit code 0 (`✓ built in 3.99s`), bản build sạch sẽ trong `frontend/dist/`.
+  - Backend `compileall` và Smoke test `PASSED 100%`.
+
+
 
