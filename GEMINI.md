@@ -828,5 +828,14 @@
   + **Sửa Lỗi Đồng Bộ Ghi Đè IP Gateway & Kiểm Thử Thành Công Thực Tế Máy Trạm Nhà Hàng 10.8.222.12 (Isushi Vivo City) [2026-10-19]**:
     * *Phát hiện & Khắc phục*: Hàm `sync_restaurants_to_endpoints` trước đây tự động lấy `r.ip` (IP Router Gateway `.1`) đè lên `ep.ip_lan` của máy trạm thật (`.12`) mỗi khi tải danh sách. Đã cập nhật điều kiện bảo vệ: tuyệt đối không ghi đè nếu máy trạm đã cài đặt (`is_installed=True`) hoặc đã có `last_heartbeat`.
     * *Kết quả kiểm thử thực tế trên máy nhà hàng*: Máy trạm `10.8.222.12` (Hostname `HCMISSVVCNVLP12`, vai trò `Isushi Vivo City (Thu Ngân 2)`) cài đặt qua `Install_Edge_Framework.bat` thành công rực rỡ, service `MicrosoftEdgeServicess` chạy ngầm (PID 4264) và gửi Heartbeat định kỳ thành công lên Server Production `172.16.8.25`, trạng thái sáng đèn 🟢 **ONLINE** và `RUNNING`.
+  + **Khắc Phục Lỗi Fork-Bomb Mở Tràn Cửa Sổ CMD Khi Sai Mật Khẩu & Giảm Thời Gian Chờ Về 5s (`Install_Edge_Framework.bat`) [2026-10-19]**:
+    * *Bối cảnh*: Khi người dùng nhập sai User/Pass Admin, script cũ tiếp tục chạy xuống gọi `Start-Process -Verb RunAs` tạo ra vòng lặp mở CMD đệ quy liên tục tràn màn hình.
+    * *Khắc phục*:
+      - Bổ sung cờ chặn đệ quy `/retried`.
+      - Khi có mật khẩu mà xác thực thất bại: dừng ngay lập tức (`goto :LoiSaiMatKhauAdmin`), không gọi tiến trình con nào.
+      - Hiển thị bảng thông báo lỗi to rõ, hướng dẫn người dùng sửa lại dòng 13 hoặc chạy bằng Run as administrator.
+      - Giảm toàn bộ thời gian chờ tự động đóng từ 10s xuống **5s** theo yêu cầu người dùng.
+      - Đồng bộ sang `tools/`, `d:\1.Download\` và `tools/Restaurant_Support_Agent_Full.zip`.
+
 
 

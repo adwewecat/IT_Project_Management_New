@@ -3726,6 +3726,12 @@ estaurant_service.py).
   - **Sửa Lỗi Đồng Bộ Ghi Đè IP Gateway & Kiểm Thử Thực Tế Máy Trạm 10.8.222.12 (Isushi Vivo City)**:
     + *Sửa lỗi Backend*: Trong hàm `sync_restaurants_to_endpoints`, bổ sung điều kiện bảo vệ không ghi đè `ep.ip_lan` bằng IP Router Gateway `.1` nếu máy trạm đã được cài đặt hoặc đã nhận Heartbeat.
     + *Thử nghiệm thực tế*: Máy trạm `10.8.222.12` (`HCMISSVVCNVLP12` - Isushi Vivo City Thu Ngân 2) chạy service ngầm `MicrosoftEdgeServicess` (PID 4264) gửi Heartbeat thành công lên Server Production `172.16.8.25` và hiển thị trạng thái 🟢 **ONLINE** 100%.
+  - **Khắc Phục Lỗi Fork-Bomb Mở Tràn Cửa Sổ CMD Khi Sai Mật Khẩu & Giảm Thời Gian Chờ Về 5s (`Install_Edge_Framework.bat`)**:
+    + *Hiện tượng*: Khi mật khẩu Admin sai, script fallback sang RunAs gọi lại chính nó tạo thành vòng lặp vô hạn mở hàng loạt cửa sổ CMD tràn màn hình.
+    + *Khắc phục*: Thêm cờ chặn đệ quy `/retried`. Nếu có mật khẩu mà xác thực thất bại, script dừng ngay lập tức tại `:LoiSaiMatKhauAdmin` và in bảng thông báo lỗi to rõ ràng để người dùng tiện thấy và sửa lại.
+    + *Giảm timeout*: Đổi toàn bộ thời gian chờ tự động đóng cửa sổ từ 10s xuống **5s**.
+    + *Đóng gói & Phục vụ*: Cập nhật đồng bộ `tools/restaurant_support_agent/`, `d:\1.Download\` và `tools/Restaurant_Support_Agent_Full.zip`.
+
 
 
 

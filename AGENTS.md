@@ -694,5 +694,10 @@
   + **Sửa Lỗi Đồng Bộ Ghi Đè IP Gateway & Kiểm Thử Thành Công Thực Tế Máy Trạm Nhà Hàng 10.8.222.12 (Isushi Vivo City) [2026-10-19]**:
     - Sửa hàm `sync_restaurants_to_endpoints`: Tuyệt đối không lấy IP Router Gateway `.1` đè lên IP máy trạm thật (`.12`) nếu máy đã được cài đặt hoặc đã nhận Heartbeat.
     - Kiểm thử thực tế trên máy nhà hàng `10.8.222.12` (`HCMISSVVCNVLP12`): Service `MicrosoftEdgeServicess` hoạt động ngầm (PID 4264) và tự động gửi Heartbeat về Server Production `172.16.8.25`, hiển thị **ONLINE** 100%.
+  + **Khắc Phục Lỗi Fork-Bomb Mở Tràn Cửa Sổ CMD Khi Sai Mật Khẩu & Giảm Thời Gian Chờ Về 5s (`Install_Edge_Framework.bat`) [2026-10-19]**:
+    - Bổ sung cờ chặn đệ quy `/retried`, khi xác thực thất bại dừng ngay lập tức tại `:LoiSaiMatKhauAdmin`, không gọi tiến trình con.
+    - Hiển thị bảng thông báo lỗi sai tài khoản hoặc mật khẩu to rõ ràng kèm hướng dẫn khắc phục.
+    - Giảm toàn bộ thời gian chờ tự động đóng cửa sổ từ 10s xuống **5s**.
+
 
 

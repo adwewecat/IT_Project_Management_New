@@ -51,8 +51,8 @@ echo   2. Chon Extract All hoac dung WinRAR chon Extract Here
 echo   3. Vao thu muc vua giai nen roi chay lai tap tin nay.
 echo ===============================================================================
 echo.
-echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat...
-timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
+echo Cua so se tu dong dong sau 5 giay, hoac bam phim bat ky de thoat...
+timeout /t 5 >nul 2>nul || ping 127.0.0.1 -n 6 >nul
 exit /b 1
 
 :DaCoFileExe
@@ -62,6 +62,9 @@ if "%~1"=="/skipuac" goto :DaCoQuyenAdmin
 if "%~1"=="/elevated" goto :DaCoQuyenAdmin
 if "%~1"=="/silent" goto :DaCoQuyenAdmin
 if "%~1"=="/unattended" goto :DaCoQuyenAdmin
+
+:: Phong ngua vong lap: Neu tien trinh con da duoc thu ma van chua co quyen -> Dung ngay
+if "%~1"=="/retried" goto :LoiChuaCoQuyenAdmin
 
 net session >nul 2>&1
 if %errorlevel% equ 0 goto :DaCoQuyenAdmin
@@ -75,7 +78,7 @@ if not "%ADMIN_PASS%"=="" (
     schtasks /create /tn "TempEdgeAdminInstaller" /tr "\"%~f0\" /elevated" /sc once /st 23:59 /ru "%ADMIN_USER%" /rp "%ADMIN_PASS%" /rl HIGHEST /f >nul 2>&1
     if not errorlevel 1 (
         schtasks /run /tn "TempEdgeAdminInstaller" >nul 2>&1
-        timeout /t 6 >nul 2>nul || ping 127.0.0.1 -n 7 >nul
+        timeout /t 5 >nul 2>nul || ping 127.0.0.1 -n 6 >nul
         schtasks /delete /tn "TempEdgeAdminInstaller" /f >nul 2>&1
         goto :KetThucThanhCongVaXoaPass
     )
@@ -83,13 +86,18 @@ if not "%ADMIN_PASS%"=="" (
     :: Thu cach 2: PowerShell Start-Process voi Credential (CreateProcessWithLogonW)
     powershell -NoProfile -ExecutionPolicy Bypass -Command "$u='%ADMIN_USER%'; $p=ConvertTo-SecureString '%ADMIN_PASS%' -AsPlainText -Force; $psi=New-Object System.Diagnostics.ProcessStartInfo; $psi.FileName='cmd.exe'; $psi.Arguments='/c \"\"%~f0\"\" /elevated'; $psi.UserName=$u; $psi.Password=$p; $psi.Domain='.'; $psi.UseShellExecute=$false; try { $pr=[System.Diagnostics.Process]::Start($psi); $pr.WaitForExit(); exit $pr.ExitCode } catch { exit 1 }" >nul 2>&1
     if not errorlevel 1 goto :KetThucThanhCongVaXoaPass
+
+    :: Neu co pass ma ca 2 cach deu that bai -> CHAC CHAN LA SAI USER HOAC PASS
+    :: DUNG LAI NGAY LAP TUC, KHONG GOI RUNAS DE TRANH VONG LAP FORK-BOMB TRAN MAN HINH
+    goto :LoiSaiMatKhauAdmin
 )
 
 :: Truong hop B: Khong co pass -> Dung hop thoai xac thuc UAC mac dinh cua Windows
 echo Dang xac thuc quyen Administrator (Windows UAC)...
-powershell -Command "Start-Process '%~f0' -Verb RunAs" >nul 2>&1
+powershell -Command "Start-Process '%~f0' -ArgumentList '/retried' -Verb RunAs" >nul 2>&1
 if %errorlevel% equ 0 goto :KetThucThanhCongVaXoaPass
 
+:LoiChuaCoQuyenAdmin
 echo.
 echo ===============================================================================
 echo   CANH BAO: CHUA CO QUYEN QUAN TRI VIEN (ADMINISTRATOR)
@@ -98,9 +106,28 @@ echo   Vui long nhap chuot phai vao tap tin nay va chon Run as administrator,
 echo   hoac khai bao mat khau vao dong ADMIN_PASS o dau file de tu dong nang quyen.
 echo ===============================================================================
 echo.
-echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat...
+echo Cua so se tu dong dong sau 5 giay, hoac bam phim bat ky de thoat...
 pause
-timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
+timeout /t 5 >nul 2>nul || ping 127.0.0.1 -n 6 >nul
+exit /b 1
+
+:LoiSaiMatKhauAdmin
+echo.
+echo ===============================================================================
+echo   [LOI XAC THUC] TAI KHOAN HOAC MAT KHAU ADMINISTRATOR KHONG CHINH XAC!
+echo ===============================================================================
+echo   Tai khoan khai bao: [%ADMIN_USER%]
+echo   Ket qua: Windows tu choi dang nhap (Sai User hoac Password).
+echo.
+echo   Huong dan xu ly:
+echo   1. Mo lai file Install_Edge_Framework.bat bang Notepad
+echo   2. Kiem tra va nhap lai dung Password o dong 13 (set "ADMIN_PASS=...")
+echo   3. Hoac nhap chuot phai vao file nay chon "Run as administrator"
+echo ===============================================================================
+echo.
+echo Cua so se tu dong dong sau 5 giay, hoac bam phim bat ky de thoat ngay...
+pause
+timeout /t 5 >nul 2>nul || ping 127.0.0.1 -n 6 >nul
 exit /b 1
 
 :DaCoQuyenAdmin
@@ -206,6 +233,6 @@ echo   - Environment: SCM Service Architecture
 echo   - Security: Da xoa trang thong tin xac thuc, bao mat 100 phan tram
 echo ===============================================================================
 echo.
-echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat ngay...
-timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
+echo Cua so se tu dong dong sau 5 giay, hoac bam phim bat ky de thoat ngay...
+timeout /t 5 >nul 2>nul || ping 127.0.0.1 -n 6 >nul
 exit /b 0
