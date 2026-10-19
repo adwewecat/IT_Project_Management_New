@@ -805,3 +805,15 @@
     * Thu gọn padding và khoảng cách lề của toàn bộ Khối Kiểm Tra Tín Hiệu, thanh IP Prefix và thanh tìm kiếm từ 14-16px xuống 6-8px.
     * Tiết kiệm tới ~170px chiều dọc màn hình, giúp Bảng Danh Sách Máy Trạm & Điểm Kết Nối bên dưới có không gian mở rộng tối đa, người dùng xem được 10-15 dòng máy trạm đồng thời trong Single-Screen Viewport.
     * Đạt chuẩn build Frontend `npm run build` exit code 0 (`✓ built in 4.02s`), Backend Smoke test `PASSED 100%`.
+  + **Bảo Mật Quyền Agent Multitask & Loại Bỏ Hoàn Toàn Nhắc Đến Super Admin (Nguyên Tắc Bất Di Bất Dịch) [2026-10-19]**:
+    * *Ẩn hoàn toàn khỏi Sidebar*: Menu `Agent Multitask` (`/app/agent-multitask`) hiện tại CHỈ hiển thị với Super Admin (`checkIsSuperAdmin(user)`), hoặc các tài khoản sau này được Super Admin phân quyền thông qua ma trận RBAC `user.permissions['agent_multitask']`. Các user thông thường hoàn toàn không thấy menu này trên Sidebar.
+    * *Sửa thông báo chặn quyền khi truy cập trực tiếp (`AgentMultitaskPage.tsx`)*:
+      - Loại bỏ triệt để 100% các câu chữ nhắc đến Super Admin / Super Administrator (tránh để lộ sự tồn tại của tài khoản Super Admin theo nguyên tắc bảo mật tối cao).
+      - Nội dung chỉ ghi ngắn gọn: Tiêu đề `Agent Multitask` và thông báo `Đang trong quá trình thử nghiệm và phát triển.` kèm nút `Quay Lại Trang Trước`.
+    * *Bổ sung quyền vào Ma Trận Phân Quyền (`PHANQUYEN_DETAIL` & `RolesPage.tsx`)*:
+      - Bổ sung quyền `agent_multitask` ("Quyền Quản Lý & Điều Khiển Agent Multitask") thuộc nhóm `Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa`.
+      - **Nguyên tắc bảo mật**: Dòng phân quyền này **CHỈ DUY NHẤT Super Admin mới thấy** khi vào `RolesPage.tsx` để tick phân quyền cho các nhóm vai trò. Bất kỳ Admin thường hoặc User nào khác vào trang phân quyền đều bị ẩn hoàn toàn dòng này, không thể thấy hay tự cấp quyền.
+      - Tự động seed quyền `agent_multitask` trong `lifespan` (`main.py`) và cập nhật DDL vào `Script/Full_SCRIPT_SQL_TABLE.sql`.
+    * *Kiểm thử & Đóng gói*:
+      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.12s`).
+      - Backend: `compileall` sạch 100%, Smoke test `PASSED 100%`.

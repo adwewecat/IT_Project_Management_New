@@ -17,6 +17,7 @@ import {
 import { RoleItem, RoleCreatePayload, PermissionDetailItem } from '../../types/role';
 import { roleService } from '../../services/roleService';
 import { useAuth } from '../../contexts/AuthContext';
+import { checkIsSuperAdmin } from '../../utils/authUtils';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
@@ -70,6 +71,9 @@ const BASE_LABELS: Record<string, { label: string; module: string }> = {
   // Văn Phòng: Máy Photo & Ext
   code_photo: { label: 'Mã Máy Photo', module: 'Văn Phòng: Máy Photo & Ext' },
   ext_rsc: { label: 'Số Máy Nhánh Ext RSC Văn Phòng', module: 'Văn Phòng: Máy Photo & Ext' },
+
+  // Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa (Chỉ Super Admin mới thấy dòng này để phân quyền)
+  agent_multitask: { label: 'Quyền Quản Lý & Điều Khiển Agent Multitask', module: 'Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa' },
 };
 
 const PRESET_MODULE_OPTIONS = [
@@ -97,7 +101,7 @@ export const RolesPage: React.FC = () => {
 
   // Selected role for permission matrix
   const [selectedRole, setSelectedRole] = useState<RoleItem | null>(null);
-  const isSuperAdminUser = !!user?.is_super_admin || user?.username?.toLowerCase() === 'admin';
+  const isSuperAdminUser = checkIsSuperAdmin(user);
   const isSuperAdminRole = selectedRole?.id === 1 || selectedRole?.tenquyen?.toUpperCase() === 'ADMINISTRATOR';
   const [permissions, setPermissions] = useState<PermissionDetailItem[]>([]);
   const [permLoading, setPermLoading] = useState(false);
@@ -444,15 +448,26 @@ export const RolesPage: React.FC = () => {
 
   // Filter feature rows by search query
   const filteredFeatureRows = useMemo(() => {
-    if (!searchPerm.trim()) return allFeatureRows;
+    // NGUYÊN TẮC BẤT DI BẤT DỊCH: Quyền Agent Multitask CHỈ Super Admin mới thấy dòng này để phân quyền!
+    // Các tài khoản khác kể cả Admin thường khi vào xem phân quyền thì HOÀN TOÀN ẨN dòng này để tránh lộ!
+    const availableRows = isSuperAdminUser
+      ? allFeatureRows
+      : allFeatureRows.filter(
+          (r) =>
+            r.baseKey !== 'agent_multitask' &&
+            !r.moduleGroup.includes('Agent Multitask') &&
+            !r.moduleGroup.includes('Dịch Vụ Máy Trạm')
+        );
+
+    if (!searchPerm.trim()) return availableRows;
     const term = searchPerm.trim().toLowerCase();
-    return allFeatureRows.filter(
+    return availableRows.filter(
       (r) =>
         r.label.toLowerCase().includes(term) ||
         r.baseKey.toLowerCase().includes(term) ||
         r.moduleGroup.toLowerCase().includes(term)
     );
-  }, [allFeatureRows, searchPerm]);
+  }, [allFeatureRows, searchPerm, isSuperAdminUser]);
 
   // Group filtered feature rows by moduleGroup
   const groupedFeatureRows = useMemo(() => {

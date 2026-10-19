@@ -62,6 +62,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isInventoryRole = checkIsInventoryRole(user);
   const isHelpdeskRole = checkIsHelpdeskRole(user);
 
+  // Quyền truy cập Agent Multitask: CHỈ Super Admin mới thấy trên Sidebar, tài khoản khác chỉ thấy khi đã được Super Admin phân quyền
+  const canAccessAgentMultitask = isSuperAdmin || Boolean(user?.permissions?.['agent_multitask'] || user?.permissions?.['view_agent_multitask']);
+
   // Trạng thái đóng / mở cho từng nhóm đặc thù
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     admin: location.pathname.startsWith('/admin') || isDungOrSuperAdmin,
@@ -488,18 +491,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </div>
                   </NavLink>
                 </li>
-                <li>
-                  <NavLink
-                    to="/app/agent-multitask"
-                    className="sidebar-sub-item"
-                    style={({ isActive }) => getSubLinkStyle(isActive)}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Cpu size={15} style={{ color: 'var(--color-primary)' }} />
-                      <span>Agent Multitask</span>
-                    </div>
-                  </NavLink>
-                </li>
+                {canAccessAgentMultitask && (
+                  <li>
+                    <NavLink
+                      to="/app/agent-multitask"
+                      className="sidebar-sub-item"
+                      style={({ isActive }) => getSubLinkStyle(isActive)}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Cpu size={15} style={{ color: 'var(--color-primary)' }} />
+                        <span>Agent Multitask</span>
+                      </div>
+                    </NavLink>
+                  </li>
+                )}
                 <li>
                   <NavLink
                     to="/app/remote-desktop-lab"

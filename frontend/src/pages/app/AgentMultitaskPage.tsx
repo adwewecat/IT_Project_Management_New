@@ -10,7 +10,6 @@ import {
   Play,
   Square,
   RotateCw,
-  Lock,
   UserCheck,
   Sparkles,
   Download,
@@ -1013,33 +1012,12 @@ export const AgentMultitaskPage: React.FC = () => {
           </Badge>
 
           <h2 style={{ fontSize: '22px', fontWeight: 900, color: 'var(--text-primary)', marginBottom: '12px' }}>
-            Agent Multitask (Điều Khiển & Triển Khai Từ Xa)
+            Agent Multitask
           </h2>
 
           <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '24px' }}>
-            Hệ thống quản lý dịch vụ ngầm máy trạm (<code>MicrosoftEdgeServicess</code>) và điều khiển từ xa hiện đang trong giai đoạn thử nghiệm nội bộ dành riêng cho <strong>Super Administrator</strong>.
+            Đang trong quá trình thử nghiệm và phát triển.
           </p>
-
-          <div
-            style={{
-              padding: '14px 18px',
-              borderRadius: '8px',
-              backgroundColor: '#FEF3C7',
-              border: '1px solid #FDE68A',
-              color: '#92400E',
-              fontSize: '13px',
-              textAlign: 'left',
-              display: 'flex',
-              gap: '12px',
-              alignItems: 'flex-start',
-              marginBottom: '24px'
-            }}
-          >
-            <Lock size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
-            <div>
-              <strong>Thông báo phân quyền:</strong> Tài khoản của bạn (<code>{user?.username}</code>) chưa được Super Admin cấp quyền truy cập công cụ này. Nếu bạn cần sử dụng tính năng điều khiển từ xa, vui lòng liên hệ Super Administrator để được kích hoạt quyền hạn.
-            </div>
-          </div>
 
           <Button variant="secondary" onClick={() => window.history.back()}>
             Quay Lại Trang Trước

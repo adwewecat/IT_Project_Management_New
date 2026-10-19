@@ -143,6 +143,56 @@ async def lifespan(app: FastAPI):
                 _c.commit()
             except Exception as _ex_ep:
                 logger.warning("Lỗi tự động kiểm tra cột AGENT_MULTITASK_ENDPOINTS: %s", _ex_ep)
+
+            # Đảm bảo quyền agent_multitask tồn tại trong PHANQUYEN_DETAIL
+            try:
+                _c.execute(text("""
+                    IF OBJECT_ID('dbo.PHANQUYEN_DETAIL', 'U') IS NOT NULL
+                    BEGIN
+                        -- Chèn cho role Administrator (id_quyen = '1')
+                        IF NOT EXISTS (SELECT 1 FROM dbo.PHANQUYEN_DETAIL WHERE id_quyen = '1' AND chucnang = 'agent_multitask')
+                            INSERT INTO dbo.PHANQUYEN_DETAIL (id_quyen, chucnang, active) VALUES ('1', 'agent_multitask', 1);
+                        IF NOT EXISTS (SELECT 1 FROM dbo.PHANQUYEN_DETAIL WHERE id_quyen = '1' AND chucnang = 'view_agent_multitask')
+                            INSERT INTO dbo.PHANQUYEN_DETAIL (id_quyen, chucnang, active) VALUES ('1', 'view_agent_multitask', 1);
+                        IF NOT EXISTS (SELECT 1 FROM dbo.PHANQUYEN_DETAIL WHERE id_quyen = '1' AND chucnang = 'update_agent_multitask')
+                            INSERT INTO dbo.PHANQUYEN_DETAIL (id_quyen, chucnang, active) VALUES ('1', 'update_agent_multitask', 1);
+
+                        -- Đảm bảo các role khác (2, 3, 4...) có dòng này (active = 0) để Super Admin có thể bật phân quyền
+                        INSERT INTO dbo.PHANQUYEN_DETAIL (id_quyen, chucnang, active)
+                        SELECT DISTINCT CAST(id AS NVARCHAR(50)), 'agent_multitask', 0
+                        FROM dbo.LV_QUYEN
+                        WHERE id <> 1
+                          AND NOT EXISTS (
+                              SELECT 1 FROM dbo.PHANQUYEN_DETAIL 
+                              WHERE id_quyen = CAST(dbo.LV_QUYEN.id AS NVARCHAR(50)) 
+                                AND chucnang = 'agent_multitask'
+                          );
+
+                        INSERT INTO dbo.PHANQUYEN_DETAIL (id_quyen, chucnang, active)
+                        SELECT DISTINCT CAST(id AS NVARCHAR(50)), 'view_agent_multitask', 0
+                        FROM dbo.LV_QUYEN
+                        WHERE id <> 1
+                          AND NOT EXISTS (
+                              SELECT 1 FROM dbo.PHANQUYEN_DETAIL 
+                              WHERE id_quyen = CAST(dbo.LV_QUYEN.id AS NVARCHAR(50)) 
+                                AND chucnang = 'view_agent_multitask'
+                          );
+
+                        INSERT INTO dbo.PHANQUYEN_DETAIL (id_quyen, chucnang, active)
+                        SELECT DISTINCT CAST(id AS NVARCHAR(50)), 'update_agent_multitask', 0
+                        FROM dbo.LV_QUYEN
+                        WHERE id <> 1
+                          AND NOT EXISTS (
+                              SELECT 1 FROM dbo.PHANQUYEN_DETAIL 
+                              WHERE id_quyen = CAST(dbo.LV_QUYEN.id AS NVARCHAR(50)) 
+                                AND chucnang = 'update_agent_multitask'
+                          );
+                    END
+                """))
+                _c.commit()
+            except Exception as _ex_p:
+                logger.warning("Lỗi tự động khởi tạo quyền agent_multitask: %s", _ex_p)
+
             # Đảm bảo các cột cho bảng Projects và tạo bảng MemberTasks nếu chưa có
             try:
                 _c.execute(text("""

@@ -65,7 +65,8 @@ class AgentMultitaskService:
         """
         Kiểm tra người dùng có được phép sử dụng các tính năng Agent Multitask không:
         - Super Admin luôn có quyền (dung.nguyenanh, admin, is_super_admin=True, phanquyen=0).
-        - User cụ thể được Super Admin phân quyền trong config.allowed_users.
+        - User được Super Admin phân quyền trong config.allowed_users.
+        - User thuộc nhóm quyền có cờ active=True cho quyền agent_multitask trong bảng dbo.PHANQUYEN_DETAIL.
         """
         if is_super_admin:
             return True
@@ -73,11 +74,45 @@ class AgentMultitaskService:
         if clean_user in ["admin", "administrator", "dung.nguyenanh"]:
             return True
 
+        # 1. Kiểm tra trong danh sách allowed_users
         config = AgentMultitaskService.get_or_create_config(db)
         if config.allowed_users:
             allowed = [u.strip().lower() for u in config.allowed_users.split(",") if u.strip()]
             if clean_user in allowed:
                 return True
+
+        # 2. Kiểm tra trong ma trận phân quyền dbo.PHANQUYEN_DETAIL
+        try:
+            from app.models.user import User, PermissionDetail
+            from app.services.auth_service import parse_user_roles, ROLE_MAP
+            from sqlalchemy import func
+            db_user = db.query(User).filter(func.lower(User.user_name1) == clean_user).first()
+            if db_user:
+                if str(db_user.phanquyen or "").strip() == "0":
+                    return True
+
+                role_ids = set()
+                if db_user.quyen_mo_rong and str(db_user.quyen_mo_rong).strip() not in ["0", ""]:
+                    role_ids.add(str(db_user.quyen_mo_rong).strip())
+
+                roles, _ = parse_user_roles(db_user.phanquyen)
+                for r in roles:
+                    r_clean = str(r).strip().lower()
+                    if r_clean in ROLE_MAP:
+                        role_ids.add(str(ROLE_MAP[r_clean]["id"]))
+                    elif r_clean.isdigit():
+                        role_ids.add(r_clean)
+
+                if role_ids:
+                    has_perm = db.query(PermissionDetail).filter(
+                        PermissionDetail.id_quyen.in_(list(role_ids)),
+                        PermissionDetail.chucnang.in_(["agent_multitask", "view_agent_multitask"]),
+                        PermissionDetail.active == True
+                    ).first()
+                    if has_perm:
+                        return True
+        except Exception as e:
+            logger.error("Lỗi khi kiểm tra phân quyền agent_multitask trong DB: %s", e)
 
         return False
 

@@ -55,7 +55,7 @@ def get_current_user(
     if user is None or not user.active:
         raise credentials_exception
 
-    permissions = get_user_permissions(db, user.phanquyen, user.quyen_mo_rong)
+    permissions = get_user_permissions(db, user.phanquyen, user.quyen_mo_rong, user.user_name1)
     role_name = get_role_name(db, user.phanquyen, user.quyen_mo_rong)
     roles, _ = parse_user_roles(user.phanquyen)
 

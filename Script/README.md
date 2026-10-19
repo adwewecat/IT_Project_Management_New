@@ -3601,3 +3601,31 @@ estaurant_service.py).
   - Frontend: `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 4.02s`), bản build sạch sẽ được cập nhật trong `frontend/dist/`.
   - Backend: `python -c "from app.main import app; print('>>> BACKEND SMOKE TEST PASSED 100%')"` đạt kết quả `PASSED 100%`.
 
+---
+
+### [2026-10-19] - Bảo Mật Quyền Agent Multitask & Loại Bỏ Hoàn Toàn Nhắc Đến Super Admin (Nguyên Tắc Bất Di Bất Dịch)
+- **Bối cảnh & Yêu cầu từ người dùng**:
+  1. *"Agent Multitask đang chỉ quyền supper admin mới thấy, ai quyền thấy được cái này supper admin sẽ phân sau, chỉ supper admin mới thấy dòng này để phân quyền"*.
+  2. *"chỉnh lại các thông báo này... chỉ cần ghi 'Agent Multitask Đang trong quá trình thử nghiệm và phát triển' không được đề cập tới supper admin. đây là nguyên tác bất di bât dịch, tránh lộ có tồn tại tài khoản supper admin"*.
+  3. *"tôi cũng chưa thấy có chỗ nào phân quyền cho phần này"*.
+- **Giải pháp & Triển khai chi tiết**:
+  1. **Ẩn hoàn toàn Menu khỏi Sidebar cho người dùng thông thường (`Sidebar.tsx`)**:
+     - Menu `Agent Multitask` (`/app/agent-multitask`) hiện tại **CHỈ HIỂN THỊ** khi người dùng là Super Admin (`isSuperAdmin`) hoặc khi đã được Super Admin phân quyền RBAC (`user.permissions['agent_multitask']` / `user.permissions['view_agent_multitask']`).
+     - Với các tài khoản thông thường: Menu này hoàn toàn không xuất hiện trên Sidebar.
+  2. **Viết lại màn hình thông báo chặn quyền (`AgentMultitaskPage.tsx`)**:
+     - Xóa bỏ triệt để 100% câu chữ nhắc đến Super Admin / Super Administrator (tránh lộ thông tin quản trị cấp cao).
+     - Giao diện Card chỉ hiển thị tinh gọn:
+       * Badge: `⚡ TÍNH NĂNG ĐANG PHÁT TRIỂN`
+       * Tiêu đề: `Agent Multitask`
+       * Nội dung: `Đang trong quá trình thử nghiệm và phát triển.`
+       * Nút: `Quay Lại Trang Trước`
+  3. **Tích hợp Quyền vào Ma Trận Phân Quyền (`PHANQUYEN_DETAIL` & `RolesPage.tsx` / `auth_service.py`)**:
+     - Bổ sung quyền `agent_multitask` ("Quyền Quản Lý & Điều Khiển Agent Multitask") vào `BASE_PERMISSION_DEFINITIONS` và `ALL_PERMISSIONS`.
+     - **Nguyên tắc bảo mật tuyệt đối**: Dòng quyền này **CHỈ DUY NHẤT Super Admin mới thấy** khi vào màn hình Phân Quyền (`RolesPage.tsx`) để tick phân quyền cho các nhóm quyền (như IT Application, Admin...). Các tài khoản Admin thường hoặc User khác khi vào trang này bị ẩn hoàn toàn dòng này, không thể thấy và không thể tự cấp quyền.
+     - Hàm `check_user_permission` và `get_user_permissions` hỗ trợ đầy đủ 3 cấp độ: Super Admin luôn có quyền $\rightarrow$ Người dùng trong `allowed_users` $\rightarrow$ Nhóm quyền được bật trong ma trận `dbo.PHANQUYEN_DETAIL`.
+     - Seed tự động quyền trong `lifespan` (`main.py`) và cập nhật DDL trong `Script/Full_SCRIPT_SQL_TABLE.sql`.
+- **Kiểm thử & Đóng gói**:
+  - Frontend: `cmd /c "npm run build"` thành công exit code 0 (`✓ built in 4.12s`), bản build sạch sẽ trong `frontend/dist/`.
+  - Backend: `python -m compileall app` sạch 100%, Smoke test `PASSED 100%`.
+
+

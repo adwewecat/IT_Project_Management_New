@@ -31,7 +31,9 @@ ALL_PERMISSIONS = [
     "update_sys", "update_ftth", "update_dk_truyenthong", "update_pass_mail",
     "update_code_photo", "update_ext_rsc", "update_note_nh", "update_test",
     # Hotline 3CX permissions
-    "hotline_3cx_duty", "view_hotline_3cx_duty", "update_hotline_3cx_duty"
+    "hotline_3cx_duty", "view_hotline_3cx_duty", "update_hotline_3cx_duty",
+    # Agent Multitask permissions
+    "agent_multitask", "view_agent_multitask", "update_agent_multitask"
 ]
 
 ROLE_MAP = {
@@ -96,16 +98,28 @@ def parse_user_roles(phanquyen: Optional[str]) -> Tuple[list, str]:
     return codes, ", ".join(names) if names else phanquyen
 
 
-def get_user_permissions(db: Session, phanquyen: Optional[str], quyen_mo_rong: Optional[str]) -> Dict[str, bool]:
+def get_user_permissions(db: Session, phanquyen: Optional[str], quyen_mo_rong: Optional[str], username: Optional[str] = None) -> Dict[str, bool]:
     """Retrieve granular permissions based on role and quyen_mo_rong"""
     permissions: Dict[str, bool] = {key: False for key in ALL_PERMISSIONS}
 
     roles, _ = parse_user_roles(phanquyen)
-    # Admin gets all permissions
-    if "admin" in roles or phanquyen in ["0", "1"]:
+    clean_u = (username or "").strip().lower()
+    is_super = clean_u in ["admin", "administrator", "dung.nguyenanh"] or str(phanquyen or "").strip() == "0"
+
+    # Super Admin gets all permissions
+    if is_super:
         for key in permissions:
             permissions[key] = True
         return permissions
+
+    # Admin thường (phanquyen 1 hoặc roles admin) có toàn bộ quyền xem/sửa thông tin nghiệp vụ nhà hàng
+    if "admin" in roles or str(phanquyen or "").strip() == "1":
+        for key in permissions:
+            permissions[key] = True
+        # Agent Multitask thì không mặc định cấp cho admin thường, mà phụ thuộc ma trận phân quyền hoặc allowed_users
+        permissions["agent_multitask"] = False
+        permissions["view_agent_multitask"] = False
+        permissions["update_agent_multitask"] = False
 
     # Collect all role IDs associated with this user
     role_ids_to_check = set()
@@ -128,6 +142,20 @@ def get_user_permissions(db: Session, phanquyen: Optional[str], quyen_mo_rong: O
         details = db.scalars(stmt).all()
         for d in details:
             permissions[d.chucnang] = True
+
+    # Kiểm tra thêm trong allowed_users của Agent Multitask nếu có username
+    if clean_u:
+        try:
+            from app.models.agent_multitask import AgentMultitaskConfig
+            cfg = db.query(AgentMultitaskConfig).first()
+            if cfg and cfg.allowed_users:
+                allowed_list = [u.strip().lower() for u in cfg.allowed_users.split(",") if u.strip()]
+                if clean_u in allowed_list:
+                    permissions["agent_multitask"] = True
+                    permissions["view_agent_multitask"] = True
+                    permissions["update_agent_multitask"] = True
+        except Exception:
+            pass
 
     return permissions
 
@@ -191,7 +219,7 @@ def authenticate_user(db: Session, username: str, password: str) -> UserInfo:
             detail="Tên đăng nhập hoặc mật khẩu không chính xác."
         )
 
-    permissions = get_user_permissions(db, user.phanquyen, user.quyen_mo_rong)
+    permissions = get_user_permissions(db, user.phanquyen, user.quyen_mo_rong, user.user_name1)
     role_name = get_role_name(db, user.phanquyen, user.quyen_mo_rong)
     roles, _ = parse_user_roles(user.phanquyen)
 

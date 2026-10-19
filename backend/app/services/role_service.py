@@ -128,6 +128,11 @@ BASE_PERMISSION_DEFINITIONS = [
 
     # === HOTLINE 3CX: TỔNG ĐÀI & CUỘC GỌI NHỠ ===
     {"chucnang": "hotline_3cx_duty", "module": "Hotline 3CX: Trực Cuộc Gọi & Nhỡ", "action": "Quyền Trực Hotline 3CX (Bật/tắt trực & xem cuộc gọi nhỡ)"},
+
+    # === HỆ THỐNG: DỊCH VỤ MÁY TRẠM & ĐIỀU KHIỂN TỪ XA ===
+    {"chucnang": "agent_multitask", "module": "Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa", "action": "Quyền Quản Lý & Điều Khiển Agent Multitask"},
+    {"chucnang": "view_agent_multitask", "module": "Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa", "action": "Xem Trạng Thái Dịch Vụ Máy Trạm Agent Multitask"},
+    {"chucnang": "update_agent_multitask", "module": "Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa", "action": "Thực Thi Lệnh & Cấu Hình Agent Multitask"},
 ]
 
 

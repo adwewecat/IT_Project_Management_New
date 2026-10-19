@@ -1625,5 +1625,32 @@ BEGIN
 END
 GO
 
+-- ----------------------------------------------------------------------------
+-- PHÂN QUYỀN: [dbo].[PHANQUYEN_DETAIL] (Quyền Quản Lý & Điều Khiển Agent Multitask)
+-- ----------------------------------------------------------------------------
+IF OBJECT_ID(N'[dbo].[PHANQUYEN_DETAIL]', N'U') IS NOT NULL
+BEGIN
+    -- Cấp mặc định cho Administrator (id_quyen = '1')
+    IF NOT EXISTS (SELECT 1 FROM [dbo].[PHANQUYEN_DETAIL] WHERE [id_quyen] = '1' AND [chucnang] = 'agent_multitask')
+        INSERT INTO [dbo].[PHANQUYEN_DETAIL] ([id_quyen], [chucnang], [active]) VALUES ('1', 'agent_multitask', 1);
+    IF NOT EXISTS (SELECT 1 FROM [dbo].[PHANQUYEN_DETAIL] WHERE [id_quyen] = '1' AND [chucnang] = 'view_agent_multitask')
+        INSERT INTO [dbo].[PHANQUYEN_DETAIL] ([id_quyen], [chucnang], [active]) VALUES ('1', 'view_agent_multitask', 1);
+    IF NOT EXISTS (SELECT 1 FROM [dbo].[PHANQUYEN_DETAIL] WHERE [id_quyen] = '1' AND [chucnang] = 'update_agent_multitask')
+        INSERT INTO [dbo].[PHANQUYEN_DETAIL] ([id_quyen], [chucnang], [active]) VALUES ('1', 'update_agent_multitask', 1);
+
+    -- Seed cho các nhóm quyền khác (id_quyen <> 1) với trạng thái active = 0 (chỉ Super Admin mới thấy để phân quyền)
+    INSERT INTO [dbo].[PHANQUYEN_DETAIL] ([id_quyen], [chucnang], [active])
+    SELECT DISTINCT CAST(id AS nvarchar(50)), 'agent_multitask', 0
+    FROM [dbo].[LV_QUYEN]
+    WHERE id <> 1
+      AND NOT EXISTS (
+          SELECT 1 FROM [dbo].[PHANQUYEN_DETAIL] 
+          WHERE [id_quyen] = CAST([dbo].[LV_QUYEN].id AS nvarchar(50)) 
+            AND [chucnang] = 'agent_multitask'
+      );
+    PRINT N'Initialized agent_multitask permissions in [dbo].[PHANQUYEN_DETAIL] successfully.';
+END
+GO
+
 
 
