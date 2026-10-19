@@ -207,6 +207,7 @@ export interface KitchenAccountGroup {
   place_ids: number[];
   dish_count: number;
   role?: number;
+  is_orphan?: boolean;
 }
 
 export interface KdsItemDish {
@@ -1385,6 +1386,7 @@ export interface KdsPlaceItem {
   account_names: string[];
   dish_count: number;
   is_in_food_control?: boolean;
+  is_orphan?: boolean;
 }
 
 export interface KdsToggleFoodControlResponse {

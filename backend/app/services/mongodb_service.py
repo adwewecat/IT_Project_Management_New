@@ -1974,6 +1974,33 @@ class MongoDBService:
         except Exception:
             pass
 
+        # Bổ sung các quầy mồ côi (có món trong CONFIG_COOKING nhưng tài khoản trạm đã bị xóa khỏi ACCOUNT)
+        covered_pids = set()
+        for a in accounts_summary:
+            for p in a.place_ids:
+                covered_pids.add(p)
+
+        orphan_dish_counts: Dict[int, int] = {}
+        for cd in cooking_docs:
+            for pid in (cd.get("placeIds") or []):
+                try:
+                    p_int = int(pid)
+                    if p_int > 0 and p_int not in covered_pids:
+                        orphan_dish_counts[p_int] = orphan_dish_counts.get(p_int, 0) + 1
+                except (ValueError, TypeError):
+                    pass
+
+        for opid, op_count in sorted(orphan_dish_counts.items()):
+            accounts_summary.append(KitchenAccountGroup(
+                account_id=f"orphan_{opid}",
+                account_name=f"⚠️ Place #{opid} (Quầy đã xóa ở NH)",
+                acc_pass=None,
+                place_ids=[opid],
+                dish_count=op_count,
+                role=3,
+                is_orphan=True
+            ))
+
         return KdsItemsResponse(
             host=host,
             port=port,
@@ -2148,8 +2175,27 @@ class MongoDBService:
                     hall_plan_ids=hp_ids,
                     account_names=place_accounts.get(pid, []),
                     dish_count=dish_counts.get(pid, 0),
-                    is_in_food_control=is_in_fc
+                    is_in_food_control=is_in_fc,
+                    is_orphan=False
                 ))
+
+            # Quét các placeId mồ côi (có món trong CONFIG_COOKING nhưng quầy đã bị xóa dưới nhà hàng / thiếu trong CONFIG_KDS)
+            existing_pids = {p.id for p in places_out}
+            for pid, count in sorted(dish_counts.items()):
+                if pid > 0 and pid not in existing_pids and count > 0:
+                    places_out.append(KdsPlaceItem(
+                        id=pid,
+                        name=f"⚠️ Place #{pid} (Quầy đã xóa ở NH)",
+                        place_code=f"ORPHAN_{pid}",
+                        printer="",
+                        driver_name="",
+                        type="BEP",
+                        hall_plan_ids=[],
+                        account_names=[],
+                        dish_count=count,
+                        is_in_food_control=False,
+                        is_orphan=True
+                    ))
 
             return KdsPlaceListResponse(
                 host=host,
@@ -2567,17 +2613,21 @@ class MongoDBService:
                 if isinstance(p, dict) and p.get("id") is not None:
                     place_names[int(p["id"])] = p.get("name", f"Quầy #{p['id']}")
 
-            from_name = place_names.get(payload.from_place_id, f"Quầy #{payload.from_place_id}")
+            from_name = place_names.get(payload.from_place_id, f"Place #{payload.from_place_id} (Quầy đã xóa ở NH)")
             to_name = place_names.get(payload.to_place_id, f"Quầy #{payload.to_place_id}")
 
-            match_filter: Dict[str, Any] = {"placeIds": payload.from_place_id}
+            from_pid_int = int(payload.from_place_id)
+            from_pid_str = str(payload.from_place_id)
+            from_pids = [from_pid_int, from_pid_str]
+
+            match_filter: Dict[str, Any] = {"placeIds": {"$in": from_pids}}
             if payload.menu_item_codes and len(payload.menu_item_codes) > 0:
                 clean_codes = [str(c).strip() for c in payload.menu_item_codes if str(c).strip()]
                 int_codes = [int(c) for c in clean_codes if c.isdigit()]
                 all_codes = list(set(clean_codes + int_codes))
                 match_filter = {
                     "$and": [
-                        {"placeIds": payload.from_place_id},
+                        {"placeIds": {"$in": from_pids}},
                         {"menuItemCode": {"$in": all_codes}}
                     ]
                 }
@@ -2600,12 +2650,13 @@ class MongoDBService:
                 "code": to_code,
                 "name": to_code
             }
+            to_pid_int = int(payload.to_place_id) if str(payload.to_place_id).isdigit() else payload.to_place_id
             if not payload.keep_source:
                 cook_col.update_many(
                     {"_id": {"$in": doc_ids}},
                     {
-                        "$pull": {"placeIds": payload.from_place_id},
-                        "$addToSet": {"placeIds": payload.to_place_id},
+                        "$pull": {"placeIds": {"$in": from_pids}},
+                        "$addToSet": {"placeIds": to_pid_int},
                         "$set": {"groupTypeKds": to_grp_obj}
                     }
                 )
@@ -2613,7 +2664,7 @@ class MongoDBService:
                 cook_col.update_many(
                     {"_id": {"$in": doc_ids}},
                     {
-                        "$addToSet": {"placeIds": payload.to_place_id},
+                        "$addToSet": {"placeIds": to_pid_int},
                         "$set": {"groupTypeKds": to_grp_obj}
                     }
                 )
@@ -2742,20 +2793,42 @@ class MongoDBService:
 
             modified_count += assigned_count
 
-            # 2. Những món chưa được gán Quầy Bếp (ACCOUNT): bỏ nhóm bếp, cập nhật lại để trống
+            # 2. Xử lý các món không thuộc danh sách quầy chuẩn:
+            # - Món THỰC SỰ không có placeIds (rỗng [] hoặc [0]): làm trống nhóm bếp
+            # - Món có placeIds mồ côi (quầy bị xóa dưới NH): BẢO LƯU NGUYÊN VẸN nhóm bếp cũ để tránh mất cấu hình!
             unassigned_doc_ids = []
-            for doc in cook_col.find({}, {"_id": 1, "placeIds": 1}):
+            preserved_count = 0
+            orphan_assigned_count = 0
+
+            for doc in cook_col.find({}, {"_id": 1, "placeIds": 1, "groupTypeKds": 1}):
                 raw_pids = doc.get("placeIds")
-                if not raw_pids or not isinstance(raw_pids, list):
+                valid_int_pids = [int(p) for p in (raw_pids or []) if str(p).isdigit() and int(p) > 0]
+
+                # Nếu món THỰC SỰ không có bất kỳ placeIds hợp lệ nào
+                if not valid_int_pids:
                     unassigned_doc_ids.append(doc["_id"])
                     continue
-                has_valid = any(
-                    int(p) in all_valid_pids
-                    for p in raw_pids
-                    if str(p).isdigit()
-                )
-                if not has_valid:
-                    unassigned_doc_ids.append(doc["_id"])
+
+                # Nếu món có placeIds nhưng không nằm trong quầy chuẩn đã khai báo (quầy mồ côi)
+                if not any(p in all_valid_pids for p in valid_int_pids):
+                    old_grp = doc.get("groupTypeKds")
+                    has_old_grp = False
+                    if isinstance(old_grp, dict):
+                        has_old_grp = bool(str(old_grp.get("code") or old_grp.get("name") or "").strip())
+                    elif old_grp:
+                        has_old_grp = bool(str(old_grp).strip())
+
+                    if has_old_grp:
+                        # Bảo lưu an toàn nhóm bếp đã cấu hình trước đó, tuyệt đối không xóa trắng!
+                        preserved_count += 1
+                    else:
+                        # Nếu nhóm bếp đang trống, tạm thời gán theo mã quầy mồ côi
+                        fallback_code = f"Quay_{valid_int_pids[0]}"
+                        cook_col.update_one(
+                            {"_id": doc["_id"]},
+                            {"$set": {"groupTypeKds": {"id": 0, "code": fallback_code, "name": fallback_code}}}
+                        )
+                        orphan_assigned_count += 1
 
             empty_grp_obj = {
                 "id": 0,
@@ -2773,9 +2846,11 @@ class MongoDBService:
 
             msg = (
                 f"Đã đồng nhất Nhóm Bếp theo Quầy Bếp thành công: "
-                f"cập nhật {assigned_count} món theo quầy (VD: Quay_Thit), "
-                f"làm trống nhóm cho {empty_count} món chưa gán quầy!"
+                f"cập nhật {assigned_count} món theo quầy chuẩn, "
+                f"làm trống nhóm cho {empty_count} món chưa gán quầy."
             )
+            if preserved_count > 0 or orphan_assigned_count > 0:
+                msg += f" (Đã bảo lưu an toàn {preserved_count + orphan_assigned_count} món thuộc quầy mồ côi chưa khai báo dưới NH)."
 
             if db:
                 try:

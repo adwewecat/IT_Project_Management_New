@@ -498,6 +498,31 @@ estaurant_support_agent.py va tat ca cac file kich ban .bat duoc chuan hoa thanh
      - *Frontend*: Bổ sung icon bút chì `✏️` cạnh tên thiết bị, nút `✏️ Sửa` và `🗑️ Xóa` trên cột Thao Tác Nhanh, và Modal Chỉnh Sửa Thiết Bị toàn diện.
 
 
+### [2026-10-19] - Khắc Phục Hiện Tượng Quầy Mồ Côi KDS (Place #3, Place #4), Bảo Lưu An Toàn Nhóm Bếp & Cứu Hộ Dữ Liệu
+- **Màn hình**: Phân Tích MongoDB Nhà Hàng (`RestaurantMongoAnalysisPage.tsx`, `KdsQuayModals.tsx`, `mongodb_service.py`, `schemas/mongodb.py`, `mongoService.ts`).
+- **Hiện tượng & Nguyên nhân gốc rễ**:
+  1. *Thực tế tại [4349] Manwah Lotte Phan Văn Trị (`host: 10.8.210.41`)*: Bảng KDS hiển thị các món ăn thuộc Quầy Bếp `Place #3`, `Place #4`, nhưng trên thanh Quầy Bếp (ACCOUNT) ở đầu trang lại chỉ có `QUẦY THỊT 0 món`, `QUẦY HẢI SẢN 0 món`, `QUẦY THỊT TƯƠI 0 món`.
+  2. *Nguyên nhân kỹ thuật*: Nhân viên/kỹ thuật viên dưới nhà hàng thao tác xóa quầy bếp (xóa Quầy Rau [ID 3] và Quầy Lẩu [ID 4]) trên ứng dụng trạm KDS. Ứng dụng KDS chỉ xóa quầy trong `CONFIG_KDS.places` và `ACCOUNT`, nhưng **KHÔNG hề dọn dẹp các món ăn trong `CONFIG_COOKING`**, dẫn đến 82 món ăn bị kẹt mang `placeIds: [3]` và `placeIds: [4]` (món mồ côi quầy / orphaned placeIds).
+  3. *Hệ quả nghiêm trọng*:
+     - Thanh nút Quầy Bếp chỉ lấy từ `ACCOUNT` nên không có Place #3 và Place #4, không thể lọc.
+     - Modal "Chuyển món giữa các quầy" chỉ lấy từ `CONFIG_KDS.places` nên không có Place #3 và Place #4 để chuyển đi.
+     - Khi bấm nút "⚡ Đồng Nhất Nhóm Bếp Theo Quầy", hàm `sync_kds_groups_by_quays` thấy món có `placeIds` không nằm trong danh sách quầy hợp lệ nên coi là món chưa gán quầy $ightarrow$ tự động xóa sạch trường `groupTypeKds = {"id": 0, "code": "", "name": ""}`, làm mất hết nhóm bếp của các món này.
+- **Giải pháp xử lý toàn diện**:
+  1. **Backend (`mongodb_service.py` & `schemas/mongodb.py`)**:
+     - Thêm cờ `is_orphan: Optional[bool] = False` vào `KitchenAccountGroup` và `KdsPlaceItem`.
+     - Trong `get_kds_places` & `get_kds_items`: Tự động quét tất cả các `placeId` có món trong `CONFIG_COOKING` mà không tồn tại trong cấu hình KDS/Account, tự động gom thành nhóm quầy mồ côi (`⚠️ Place #X (Quầy đã xóa ở NH)`).
+     - Trong `sync_kds_groups_by_quays`: Nâng cấp cơ chế an toàn tuyệt đối — nếu món thuộc quầy mồ côi (có `placeIds` nhưng quầy bị xóa), hệ thống **BẢO LƯU NGUYÊN VẸN 100%** nhóm bếp cũ của họ, tuyệt đối không xóa trắng; nếu nhóm bếp rỗng thì tạm thời gán theo mã `Quay_{pid}`; CHỈ làm trống nhóm bếp khi món thực sự không có `placeIds` nào (`[]` hoặc `[0]`).
+     - Trong `transfer_kds_dishes_quay`: Hỗ trợ match filter và pull cả dạng số nguyên `int` và chuỗi `str`, gán quầy đích chuẩn xác; fallback tên quầy mồ côi để ghi nhật ký audit rõ ràng.
+  2. **Frontend (`RestaurantMongoAnalysisPage.tsx` & `KdsQuayModals.tsx`)**:
+     - Bổ sung Banner cảnh báo dữ liệu KDS màu vàng cam (`hasOrphanPlaces`) kèm nút hành động nhanh `Gom Chuyển Quầy Mồ Côi Ngay ➔`.
+     - Nút Quầy Bếp mồ côi hiển thị màu vàng cam nổi bật kèm icon `AlertTriangle`, text phụ `ID: X (Quầy bị xóa ở NH)`, click vào lọc ngay toàn bộ các món mồ côi.
+     - Modal `KdsTransferQuayModal`: Cho phép chọn Quầy Nguồn là quầy mồ côi để gom chuyển về quầy chuẩn; đồng thời lọc bỏ quầy mồ côi khỏi danh sách Quầy Đích để ngăn chuyển vào quầy rác. Sửa hàm gán `transferFromPlaceId` ưu tiên lấy `place_ids[0]` chuẩn xác thay vì ép kiểu `NaN`.
+- **Kiểm thử & Đóng gói**:
+  - Backend: `python -m compileall app` và Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
+  - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 10.16s`), bundle sạch sẽ trong `frontend/dist/`.
+
+---
+
 ### [2026-10-16] - Nâng Cấp Agent Multitask: Quản Lý Đa Máy Trạm (.11, .12, .41), Hỗ Trợ Máy Ngoài / User & Popup Chuẩn KDS
 - **Nghiệp vụ & Yêu cầu giải quyết**:
   1. *Đa máy trạm tại 1 nhà hàng*: 1 nhà hàng thường có 2-3 máy (.11 Server/POS 1, .12 POS 2, .41 KDS). Hệ thống phân biệt máy độc lập theo cặp `(restaurant_code, ip_lan)` hoặc `machine_name`, gắn badge vai trò trạm trực quan (`⚡ .11 Chủ/POS 1`, `💻 .12 Thu Ngân 2`, `🍳 .41 Bếp KDS`).

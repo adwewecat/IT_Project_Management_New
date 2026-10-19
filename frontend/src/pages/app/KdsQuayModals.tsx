@@ -2640,7 +2640,7 @@ export const KdsTransferQuayModal: React.FC<KdsTransferQuayModalProps> = ({
             >
               <option value="">-- Chọn quầy đích --</option>
               {places
-                .filter((p) => p.id !== fromPlaceId)
+                .filter((p) => p.id !== fromPlaceId && !p.is_orphan)
                 .map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} ({p.dish_count} món) - ID: {p.id}

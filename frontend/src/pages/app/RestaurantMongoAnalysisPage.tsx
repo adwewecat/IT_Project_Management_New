@@ -1468,6 +1468,14 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
     );
   }, [kdsData?.accounts_summary]);
 
+  // Kiểm tra xem có quầy mồ côi (có món trỏ vào ID quầy nhưng quầy đã bị xóa dưới nhà hàng)
+  const hasOrphanPlaces = useMemo(() => {
+    if (!kdsData?.accounts_summary || kdsData.accounts_summary.length === 0) return false;
+    return kdsData.accounts_summary.some(
+      (a) => a.is_orphan || a.account_id.startsWith('orphan_')
+    );
+  }, [kdsData?.accounts_summary]);
+
   // Modal: Gán món vào Quầy
   const [showAssignQuayModal, setShowAssignQuayModal] = useState<boolean>(false);
   const [assignTargetDishes, setAssignTargetDishes] = useState<KdsItemDish[]>([]);
@@ -5175,6 +5183,62 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
           {(connectedHost || selectedRestaurant) && (
             <>
+              {/* Banner cảnh báo phát hiện quầy mồ côi / quầy đã bị xóa dưới nhà hàng */}
+              {hasOrphanPlaces && (
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: '8px',
+                    backgroundColor: '#FFFBEB',
+                    border: '1.5px solid #FCD34D',
+                    fontSize: '13px',
+                    color: '#92400E',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    flexWrap: 'wrap'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <AlertTriangle size={20} color="#D97706" style={{ flexShrink: 0 }} />
+                    <div>
+                      <strong>Cảnh báo dữ liệu Quầy KDS:</strong> Phát hiện có món ăn đang trỏ vào Quầy chưa khai báo hoặc đã bị xóa dưới nhà hàng (ví dụ Place #3, #4). Cấu hình món ăn vẫn được bảo lưu an toàn.
+                      <div style={{ fontSize: '12px', marginTop: '2px', opacity: 0.9 }}>
+                        Bạn có thể bấm vào Quầy mồ côi (màu vàng cam) bên dưới để xem danh sách món, hoặc bấm nút gom chuyển sang quầy chuẩn.
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const orphanAcc = kdsData?.accounts_summary?.find((a) => a.is_orphan || a.account_id.startsWith('orphan_'));
+                      if (orphanAcc) {
+                        setTransferFromPlaceId(orphanAcc.place_ids?.[0] ?? null);
+                        setShowTransferQuayModal(true);
+                      }
+                    }}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: '6px',
+                      backgroundColor: '#D97706',
+                      color: '#fff',
+                      border: 'none',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 1px 3px rgba(217,119,6,0.3)'
+                    }}
+                  >
+                    <ArrowRightLeft size={14} />
+                    <span>Gom Chuyển Quầy Mồ Côi Ngay ➔</span>
+                  </button>
+                </div>
+              )}
+
               {/* Quầy Bếp (ACCOUNT - G_KITCHEN) Quick Filters */}
               {kdsData?.accounts_summary && kdsData.accounts_summary.length > 0 && (
                 <Card style={{ padding: '12px 16px' }}>
@@ -5202,6 +5266,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                     </button>
                     {kdsData.accounts_summary.map((acc) => {
                       const isSelected = kdsQuayFilter === acc.account_name;
+                      const isOrphan = Boolean(acc.is_orphan || acc.account_id.startsWith('orphan_'));
                       return (
                         <button
                           key={acc.account_id}
@@ -5212,9 +5277,15 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                             borderRadius: '20px',
                             fontSize: '12px',
                             fontWeight: isSelected ? 700 : 500,
-                            backgroundColor: isSelected ? '#059669' : 'var(--bg-secondary)',
-                            color: isSelected ? '#fff' : 'var(--text-primary)',
-                            border: isSelected ? '1px solid #059669' : '1px solid var(--border-color)',
+                            backgroundColor: isOrphan
+                              ? (isSelected ? '#D97706' : '#FEF3C7')
+                              : (isSelected ? '#059669' : 'var(--bg-secondary)'),
+                            color: isOrphan
+                              ? (isSelected ? '#fff' : '#92400E')
+                              : (isSelected ? '#fff' : 'var(--text-primary)'),
+                            border: isOrphan
+                              ? (isSelected ? '1.5px solid #D97706' : '1.5px solid #F59E0B')
+                              : (isSelected ? '1px solid #059669' : '1px solid var(--border-color)'),
                             cursor: 'pointer',
                             display: 'inline-flex',
                             flexDirection: 'column',
@@ -5224,12 +5295,16 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                           }}
                         >
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            {isOrphan && <AlertTriangle size={12} color={isSelected ? '#fff' : '#D97706'} />}
                             <span>{acc.account_name}</span>
                             <span
                               style={{
                                 padding: '1px 6px',
                                 borderRadius: '10px',
-                                backgroundColor: isSelected ? 'rgba(255,255,255,0.25)' : 'var(--bg-primary)',
+                                backgroundColor: isOrphan
+                                  ? (isSelected ? 'rgba(255,255,255,0.25)' : '#FDE68A')
+                                  : (isSelected ? 'rgba(255,255,255,0.25)' : 'var(--bg-primary)'),
+                                color: isOrphan && !isSelected ? '#92400E' : 'inherit',
                                 fontSize: '11px',
                                 fontWeight: 700,
                               }}
@@ -5237,16 +5312,27 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                               {acc.dish_count} món
                             </span>
                           </span>
-                          {acc.acc_pass !== undefined && acc.acc_pass !== null && (
+                          {isOrphan ? (
                             <span style={{
                               fontSize: '10px',
-                              fontWeight: 500,
-                              opacity: 0.85,
-                              fontFamily: 'monospace',
+                              fontWeight: 600,
+                              opacity: 0.9,
                               letterSpacing: '0.02em',
                             }}>
-                              {acc.account_id} / pass: {acc.acc_pass || '(trống)'}
+                              ID: {acc.place_ids.join(', ')} (Quầy bị xóa ở NH)
                             </span>
+                          ) : (
+                            acc.acc_pass !== undefined && acc.acc_pass !== null && (
+                              <span style={{
+                                fontSize: '10px',
+                                fontWeight: 500,
+                                opacity: 0.85,
+                                fontFamily: 'monospace',
+                                letterSpacing: '0.02em',
+                              }}>
+                                {acc.account_id} / pass: {acc.acc_pass || '(trống)'}
+                              </span>
+                            )
                           )}
                         </button>
                       );
@@ -5257,7 +5343,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                         type="button"
                         onClick={() => {
                           const selectedAcc = kdsData.accounts_summary.find((a) => a.account_name === kdsQuayFilter);
-                          setTransferFromPlaceId(selectedAcc ? Number(selectedAcc.account_id) : null);
+                          setTransferFromPlaceId(selectedAcc ? (selectedAcc.place_ids?.[0] ?? (Number(selectedAcc.account_id) || null)) : null);
                           setShowTransferQuayModal(true);
                         }}
                         style={{

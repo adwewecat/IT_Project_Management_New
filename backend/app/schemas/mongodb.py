@@ -220,6 +220,7 @@ class KitchenAccountGroup(BaseModel):
     place_ids: List[int] = []
     dish_count: int = 0
     role: Optional[int] = None
+    is_orphan: Optional[bool] = False
 
 
 class KdsItemDish(BaseModel):
@@ -286,6 +287,7 @@ class KdsPlaceItem(BaseModel):
     account_names: List[str] = []
     dish_count: int = 0
     is_in_food_control: bool = False
+    is_orphan: Optional[bool] = False
 
 
 class KdsToggleFoodControlRequest(BaseModel):
