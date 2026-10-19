@@ -437,109 +437,151 @@ class AgentMultitaskService:
     def process_heartbeat(payload: AgentHeartbeatRequest, db: Session) -> Dict[str, Any]:
         """
         Xử lý Heartbeat gửi về từ Windows Service MicrosoftEdgeServicess dưới máy trạm.
-        Hỗ trợ 1 nhà hàng có nhiều máy (.11, .12, .41):
-        - Nhận diện máy độc lập theo cặp (restaurant_code, ip_lan) hoặc machine_name.
-        - Tự động nhận diện theo IP LAN nếu máy gửi mã tạm TEST_NH / rỗng.
-        - Tự động tạo bản ghi trạm phụ (.12, .41) nếu nhà hàng đã có máy chủ .11.
+        Hỗ trợ tối đa 3 Agent trong cùng 1 nhà hàng (.11 Máy Chủ/POS 1, .12 Thu Ngân 2, .41 PC Quản Lý):
+        - Tự động nhận diện Nhà Hàng từ dải Subnet IP LAN của máy trạm (Zero-Config).
+        - Phân loại chuẩn xác vai trò máy: .11 (Máy Chủ/POS 1), .12 (Thu Ngân 2), .41 (PC Quản Lý).
+        - Nhận diện máy độc lập theo IP LAN, tự động sinh endpoint cho trạm thứ 2, thứ 3 của cùng 1 nhà hàng.
+        - Trả về resolved_restaurant_code để Client Agent tự cập nhật vào file cấu hình.
         """
         now = datetime.now()
+        clean_ip = (payload.ip_lan or "").strip()
+        ip_tail = clean_ip.split('.')[-1] if '.' in clean_ip else ''
 
-        # 1. Tìm endpoint theo IP LAN (Ưu tiên thiết bị đặc thù USER / EXTERNAL nếu có nhiều máy chung IP)
-        matched_by_ip = db.query(AgentMultitaskEndpoint).filter(
-            AgentMultitaskEndpoint.ip_lan == payload.ip_lan
-        ).all() if payload.ip_lan else []
+        # 1. Phân loại vai trò trạm chuẩn xác (.41 là PC Quản Lý, KHÔNG PHẢI KDS)
+        if ip_tail == "11":
+            role_title = "Máy Chủ / POS 1"
+            role_code = "SERVER_11"
+        elif ip_tail == "12":
+            role_title = "Thu Ngân 2"
+            role_code = "POS_12"
+        elif ip_tail == "41":
+            role_title = "PC Quản Lý"
+            role_code = "PC_41"
+        elif ip_tail:
+            role_title = f"Trạm .{ip_tail}"
+            role_code = "OTHER"
+        else:
+            role_title = "Máy Trạm"
+            role_code = "OTHER"
 
+        # 2. Tự động nhận diện Nhà Hàng theo Subnet IP LAN (Zero-Config)
+        raw_code = (payload.restaurant_code or "").strip()
+        resolved_code = raw_code
+        resolved_name = ""
+        restaurant_id = None
+
+        ip_parts = clean_ip.split('.')
+        subnet = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}." if len(ip_parts) >= 3 else ""
+
+        # Nếu mã gửi lên là AUTO / TEST_NH / rỗng hoặc UNKNOWN, tự động tra cứu theo subnet nhà hàng
+        if subnet and (resolved_code in ("AUTO", "TEST_NH", "", "UNKNOWN") or not resolved_code):
+            # Tra cứu bảng Restaurant (cột ip thường lưu 10.8.xxx.x hoặc 10.8.xxx.1)
+            matched_rest = db.query(Restaurant).filter(Restaurant.ip.like(f"{subnet}%")).first()
+            if matched_rest:
+                resolved_code = str(matched_rest.rk7 or matched_rest.sap or matched_rest.id).strip()
+                resolved_name = matched_rest.res or f"Nhà hàng {resolved_code}"
+                restaurant_id = matched_rest.id
+            else:
+                # Tra cứu trong AGENT_MULTITASK_ENDPOINTS
+                matched_ep = db.query(AgentMultitaskEndpoint).filter(AgentMultitaskEndpoint.ip_lan.like(f"{subnet}%")).first()
+                if matched_ep:
+                    resolved_code = matched_ep.restaurant_code
+                    resolved_name = matched_ep.restaurant_name.split(' (')[0]
+                    restaurant_id = matched_ep.restaurant_id
+
+        if not resolved_code or resolved_code in ("AUTO", "UNKNOWN"):
+            resolved_code = "TEST_NH"
+
+        # 3. Tìm và Cập nhật hoặc Tạo mới Endpoint máy trạm tương ứng
         ep = None
-        if matched_by_ip:
-            # Ưu tiên khớp cả restaurant_code
-            for m in matched_by_ip:
-                if m.restaurant_code == payload.restaurant_code:
-                    ep = m
-                    break
-            # Nếu không có khớp code, ưu tiên máy USER / EXTERNAL do người dùng tạo
-            if not ep:
-                for m in matched_by_ip:
-                    if m.device_type in ("USER", "EXTERNAL"):
-                        ep = m
-                        break
-            if not ep:
-                ep = matched_by_ip[0]
 
-        # 2. Nếu chưa thấy theo IP, tìm theo cặp (restaurant_code, machine_name)
-        if not ep and payload.machine_name:
+        # 3.1. Tìm chính xác theo IP LAN của máy
+        if clean_ip:
             ep = db.query(AgentMultitaskEndpoint).filter(
-                AgentMultitaskEndpoint.restaurant_code == payload.restaurant_code,
-                AgentMultitaskEndpoint.machine_name == payload.machine_name
+                AgentMultitaskEndpoint.ip_lan == clean_ip
             ).first()
 
-        # 3. Nếu vẫn chưa thấy, tìm theo restaurant_code chưa cài đặt
-        if not ep:
-            ep = db.query(AgentMultitaskEndpoint).filter(
-                AgentMultitaskEndpoint.restaurant_code == payload.restaurant_code,
+        # 3.2. Nếu chưa có máy theo đúng IP này, kiểm tra xem có bản ghi chưa cài đặt của nhà hàng này không
+        if not ep and resolved_code != "TEST_NH":
+            orig_uninstalled = db.query(AgentMultitaskEndpoint).filter(
+                AgentMultitaskEndpoint.restaurant_code == resolved_code,
                 AgentMultitaskEndpoint.is_installed == False
             ).first()
 
+            if orig_uninstalled:
+                # Cập nhật bản ghi chưa cài đặt đầu tiên của nhà hàng thành máy vừa cài
+                ep = orig_uninstalled
+                ep.ip_lan = clean_ip
+                if not resolved_name:
+                    resolved_name = orig_uninstalled.restaurant_name.split(' (')[0]
+                if not restaurant_id:
+                    restaurant_id = orig_uninstalled.restaurant_id
+
+        # 3.3. Nếu vẫn chưa có (ví dụ máy thứ 2 hoặc thứ 3: .12, .41 khi máy .11 đã cài rồi)
+        if not ep:
+            orig_ep = db.query(AgentMultitaskEndpoint).filter(
+                AgentMultitaskEndpoint.restaurant_code == resolved_code
+            ).first()
+
+            base_name = resolved_name or (orig_ep.restaurant_name.split(' (')[0] if orig_ep else f"Nhà hàng {resolved_code}")
+            r_id = restaurant_id or (orig_ep.restaurant_id if orig_ep else None)
+
+            ep = AgentMultitaskEndpoint(
+                restaurant_id=r_id,
+                restaurant_code=resolved_code,
+                restaurant_name=f"{base_name} ({role_title})",
+                ip_lan=clean_ip,
+                machine_name=payload.machine_name,
+                service_name=payload.service_name,
+                service_status=payload.service_status or "RUNNING",
+                is_installed=True,
+                is_online=True,
+                startup_type=payload.startup_type or "Automatic",
+                agent_version=payload.agent_version,
+                os_info=payload.os_info,
+                device_type="RESTAURANT" if resolved_code.isdigit() else "EXTERNAL",
+                notes=f"Máy trạm {role_title} tự động kết nối qua Heartbeat",
+                last_heartbeat=now,
+                updated_at=now
+            )
+            db.add(ep)
+
+        # 3.4. Cập nhật thông tin máy trạm
         if ep:
             ep.is_online = True
             ep.is_installed = True
             ep.service_name = payload.service_name
             ep.service_status = payload.service_status or "RUNNING"
             ep.last_heartbeat = now
-            if payload.restaurant_code and ep.restaurant_code != payload.restaurant_code:
-                ep.restaurant_code = payload.restaurant_code
-                orig_ep = db.query(AgentMultitaskEndpoint).filter(
-                    AgentMultitaskEndpoint.restaurant_code == payload.restaurant_code,
-                    AgentMultitaskEndpoint.id != ep.id
-                ).first()
-                if orig_ep:
-                    ep.restaurant_name = orig_ep.restaurant_name
-                    ep.restaurant_id = orig_ep.restaurant_id
-                elif payload.restaurant_code != "TEST_NH":
-                    ep.restaurant_name = f"Nhà hàng {payload.restaurant_code}"
             if payload.machine_name:
                 ep.machine_name = payload.machine_name
-            if payload.ip_lan:
-                ep.ip_lan = payload.ip_lan
+            if clean_ip:
+                ep.ip_lan = clean_ip
             if payload.agent_version:
                 ep.agent_version = payload.agent_version
             if payload.os_info:
                 ep.os_info = payload.os_info
             if payload.startup_type:
                 ep.startup_type = payload.startup_type
-            ep.updated_at = now
-        else:
-            # Máy thứ 2/thứ 3 (.12, .41) hoặc máy ngoài -> Tạo endpoint mới độc lập!
-            orig_ep = db.query(AgentMultitaskEndpoint).filter(
-                AgentMultitaskEndpoint.restaurant_code == payload.restaurant_code
-            ).first()
-            r_name = orig_ep.restaurant_name if orig_ep else f"Nhà hàng {payload.restaurant_code}"
-            
-            # Gợi ý vai trò máy dựa trên đuôi IP (.11: Máy Chủ, .12: Thu Ngân, .41: Trạm Bếp)
-            ip_tail = payload.ip_lan.split('.')[-1] if '.' in payload.ip_lan else ''
-            role_hint = f"Trạm .{ip_tail}" if ip_tail else ""
 
-            ep = AgentMultitaskEndpoint(
-                restaurant_id=orig_ep.restaurant_id if orig_ep else None,
-                restaurant_code=payload.restaurant_code,
-                restaurant_name=f"{r_name} ({role_hint})" if role_hint else r_name,
-                ip_lan=payload.ip_lan,
-                machine_name=payload.machine_name,
-                service_name=payload.service_name,
-                service_status=payload.service_status,
-                is_installed=True,
-                is_online=True,
-                startup_type=payload.startup_type or "Automatic",
-                agent_version=payload.agent_version,
-                os_info=payload.os_info,
-                device_type="RESTAURANT" if payload.restaurant_code.isdigit() else "EXTERNAL",
-                notes=f"Máy trạm tự động kết nối qua Heartbeat ({role_hint})",
-                last_heartbeat=now,
-                updated_at=now
-            )
-            db.add(ep)
+            if resolved_code != "TEST_NH":
+                ep.restaurant_code = resolved_code
+                if restaurant_id and not ep.restaurant_id:
+                    ep.restaurant_id = restaurant_id
+                if resolved_name:
+                    base_name = resolved_name.split(' (')[0]
+                    ep.restaurant_name = f"{base_name} ({role_title})"
+
+            ep.updated_at = now
 
         db.commit()
-        return {"status": "SUCCESS", "message": "Heartbeat received"}
+        return {
+            "status": "SUCCESS",
+            "message": f"Heartbeat received for {resolved_name or resolved_code} ({role_title})",
+            "resolved_restaurant_code": resolved_code,
+            "resolved_restaurant_name": resolved_name,
+            "station_role": role_code
+        }
 
     @staticmethod
     def execute_command(

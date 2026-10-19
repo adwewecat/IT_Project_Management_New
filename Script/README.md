@@ -254,6 +254,47 @@ npm run dev
      - `cmd /c "npm run build"` thành công exit code 0 (`built in 5.10s`), bundle `frontend/dist/` đã sẵn sàng đưa lên server.
      - Smoke test backend đạt 100% chuẩn.
 
+### [2026-10-19] - Nâng Cấp Agent Multitask: Cơ Chế Tự Động Nhận Diện Nhà Hàng Theo IP LAN (Zero-Config AUTO), Sửa Chuẩn Xác IP .41 Là PC Quản Lý (Không Phải KDS) & Hỗ Trợ Tối Đa 3 Máy / 1 Nhà Hàng
+- **Bối cảnh & Yêu cầu người dùng**:
+  1. Mỗi nhà hàng có thể cài tối đa 3 Agent (.11, .12, .41). Hiện tại khi cài đặt kỹ thuật viên phải mở file `msedge_settings.json` sửa tay `restaurant_code: TEST_NH` rất bất tiện. Cần cơ chế tự động nhận diện theo địa chỉ IP của nhà hàng khi Agent gửi tín hiệu về Server (Zero-Config), việc sửa file chỉ áp dụng cho máy cá nhân / IT.
+  2. Đính chính: IP `.41` là **MÁY PC QUẢN LÝ** (Máy Văn Phòng / Quản Lý Nhà Hàng), **KHÔNG PHẢI KDS** (KDS là màn hình Android TV Box đuôi `.31` đến `.38`).
+  3. Khắc phục tình trạng danh sách toàn bộ nằm ở "Trạm Khác" khi lọc vai trò trạm (do ban đầu các nhà hàng chỉ có IP subnet `.x` hoặc router gateway `.1`).
+  4. Cung cấp bộ cài đặt hoàn chỉnh để kỹ thuật viên tải về cài test thử ở 1 nhà hàng thật.
+- **Chi tiết kỹ thuật & Khắc phục**:
+  1. **Backend (`agent_multitask_service.py` -> `process_heartbeat`)**:
+     - Bổ sung cơ chế **Zero-Config Auto-Discovery**: Khi Client Agent gửi Heartbeat lên kèm địa chỉ `ip_lan` (ví dụ `10.8.233.41`), nếu `restaurant_code` là `"AUTO"`, `"TEST_NH"`, `""` hoặc `"UNKNOWN"`, backend tự động trích xuất Subnet 3 octets (ví dụ `10.8.233.`), tra cứu bảng `Restaurant` theo cột `ip` để khớp chính xác mã nhà hàng (`rk7` / `sap` / `id`) và tên nhà hàng thật.
+     - Phân loại chuẩn xác vai trò máy:
+       + `.11`: `Máy Chủ / POS 1` (`SERVER_11`)
+       + `.12`: `Thu Ngân 2` (`POS_12`)
+       + `.41`: `PC Quản Lý` (`PC_41`) - Đính chính chuẩn 100%, không còn nhầm lẫn với KDS!
+       + Đuôi khác: `Trạm .{tail}`
+     - Quản lý độc lập tối đa 3 máy trong cùng 1 nhà hàng: Tự động cập nhật bản ghi chưa cài đặt hoặc tạo endpoint độc lập mới cho trạm thứ 2, thứ 3 của nhà hàng khi kết nối.
+     - Phản hồi Heartbeat trả về `resolved_restaurant_code`, `resolved_restaurant_name` và `station_role` để Client Agent tự cập nhật vào file cấu hình.
+  2. **Client Agent (`restaurant_support_agent.py` & `msedge_settings.json` / `config.json`)**:
+     - Đặt mặc định `restaurant_code: "AUTO"` và `server_url: "http://172.16.8.25:8000"` (Production).
+     - Hàm `send_heartbeat`: Khi nhận được phản hồi từ Server có `resolved_restaurant_code`, Client Agent tự động cập nhật mã nhà hàng thật và lưu đè xuống file cấu hình `msedge_settings.json`.
+     - File `Cai_Dat_Dich_Vu_Windows.bat`: Đảm bảo copy đồng thời cả `config.json` và `msedge_settings.json` vào `C:\ProgramData\MicrosoftEdgeServicess`.
+  3. **Backend API Tải Gói Cài (`agent_multitask.py` -> `/download-package`)**:
+     - Mặc định nhúng `server_url: "http://172.16.8.25:8000"` và `restaurant_code: "AUTO"`.
+     - Ghi đè đồng bộ vào CẢ 2 file `config.json` và `msedge_settings.json` bên trong file ZIP tải về.
+  4. **Frontend (`AgentMultitaskPage.tsx`)**:
+     - Hàm `getMachineRole`: Đổi nhãn `.41` thành `PC Quản Lý (.41)` (`PC_41`, icon 🖥️, badge xanh lục đậm). Đổi đuôi `.x` và `.1` thành vai trò `SUBNET` (Dải IP Nhà Hàng).
+     - Bộ lọc vai trò trạm: Cập nhật các tùy chọn rõ ràng:
+       + `Tất cả vai trò trạm`
+       + `⚡ .11 (Máy Chủ / POS 1)`
+       + `💻 .12 (Thu Ngân 2)`
+       + `🖥️ .41 (PC Quản Lý)`
+       + `🌐 Dải IP Nhà Hàng / Chưa Cài` (hiển thị các nhà hàng đang chờ triển khai)
+       + `📱 Trạm Khác / Cá Nhân`
+     - Modal Tải Gói Cài Đặt (.ZIP): Bổ sung banner hướng dẫn Zero-Config, nút 1-chạm đặt về AUTO, nút chọn nhanh Server Production `172.16.8.25:8000`, preview trực quan.
+  5. **Tài liệu dự án (`PROJECT_GUIDELINES.md`, `GEMINI.md`, `AGENTS.md`)**:
+     - Cập nhật định danh chuẩn xác: IP `.41` là PC Quản Lý Nhà Hàng, IP `.31` đến `.38` là Bếp KDS Android.
+  6. **Kiểm thử & Đóng gói**:
+     - Frontend build `cmd /c "npm run build"` thành công exit code 0 (`built in 4.57s`), thư mục `frontend/dist/` đã sẵn sàng.
+     - Backend compileall và Smoke test: `>>> BACKEND SMOKE TEST PASSED 100%`.
+
+---
+
 ### [2026-10-17] - Tối Ưu Giao Diện Agent Multitask: Bỏ Badge Service & Subtitle, Ẩn Nút Truyền Gói Ngoài Toolbar, Tinh Gọn Cột Thao Tác & Bổ Sung Modal Cấu Hình IP Tải Gói Cài (.ZIP)
 - **Yêu cầu người dùng**:
   1. Bỏ dòng hiển thị `Service: MicrosoftEdgeServicess` cạnh tiêu đề trang.

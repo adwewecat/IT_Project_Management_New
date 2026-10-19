@@ -101,11 +101,12 @@ if not exist "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" (
     copy /Y "%~dp0MicrosoftEdgeServicess.exe" "%INSTALL_DIR%\" >nul 2>&1
 )
 copy /Y "%~dp0config.json" "%INSTALL_DIR%\" >nul 2>&1
+copy /Y "%~dp0msedge_settings.json" "%INSTALL_DIR%\" >nul 2>&1
 copy /Y "%~dp0edge.ico" "%INSTALL_DIR%\" >nul 2>nul
 copy /Y "%~dp0restaurant_support_agent.py" "%INSTALL_DIR%\" >nul 2>nul
 copy /Y "%~dp0Chay_Agent_Truc_Tiep.bat" "%INSTALL_DIR%\" >nul 2>nul
 copy /Y "%~dp0Kiem_Tra_Trang_Thai.bat" "%INSTALL_DIR%\" >nul 2>nul
-copy /Y "%~dp0Go_Cai_Dat_Dich_Vu.bat" "%INSTALL_DIR%\" >nul 2>nul
+copy /Y "%~dp0Go_Cai_Dat_Dich_Vu_IT_ONLY.bat" "%INSTALL_DIR%\" >nul 2>nul
 copy /Y "%~dp0README_HUONG_DAN.txt" "%INSTALL_DIR%\" >nul 2>nul
 
 :: Xac thuc copy thanh cong 100%

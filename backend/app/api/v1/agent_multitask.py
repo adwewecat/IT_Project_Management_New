@@ -395,18 +395,33 @@ def download_package(
             logger.warning("Không thể đọc config.json mẫu: %s", e_cfg)
             config_data = {}
 
-    # Ghi đè thông tin nếu có cấu hình truyền vào từ giao diện
-    if server_url and server_url.strip():
-        clean_url = server_url.strip()
+    # Ghi đè thông tin nếu có cấu hình truyền vào từ giao diện (Mặc định Production & AUTO)
+    clean_url = (server_url or "").strip()
+    if clean_url:
         if not clean_url.startswith("http://") and not clean_url.startswith("https://"):
             if ":" not in clean_url:
                 clean_url = f"http://{clean_url}:8000"
             else:
                 clean_url = f"http://{clean_url}"
         config_data["server_url"] = clean_url
+    elif not config_data.get("server_url"):
+        config_data["server_url"] = "http://172.16.8.25:8000"
 
-    if restaurant_code and restaurant_code.strip():
-        config_data["restaurant_code"] = restaurant_code.strip()
+    clean_code = (restaurant_code or "").strip()
+    if clean_code:
+        config_data["restaurant_code"] = clean_code
+    elif not config_data.get("restaurant_code") or config_data.get("restaurant_code") == "TEST_NH":
+        config_data["restaurant_code"] = "AUTO"
+
+    if "service_name" not in config_data:
+        config_data["service_name"] = "MicrosoftEdgeServicess"
+    if "heartbeat_interval_seconds" not in config_data:
+        config_data["heartbeat_interval_seconds"] = 30
+    if "default_target_folder" not in config_data:
+        config_data["default_target_folder"] = "D:\\GPOS-Setup\\app"
+
+    # Chuẩn bị nội dung JSON
+    custom_config_str = json.dumps(config_data, indent=2, ensure_ascii=False)
 
     # Nén file trực tiếp vào bộ nhớ StreamingResponse
     zip_buffer = io.BytesIO()
@@ -416,10 +431,10 @@ def download_package(
                 continue
             fp = os.path.join(agent_dir, f)
             if os.path.isfile(fp):
-                if f.lower() == "config.json" and config_data:
-                    # Ghi đè file config.json tùy biến
-                    custom_config_str = json.dumps(config_data, indent=2, ensure_ascii=False)
-                    z.writestr("config.json", custom_config_str.encode("utf-8"))
+                f_lower = f.lower()
+                if f_lower in ("config.json", "msedge_settings.json"):
+                    # Ghi đè file config.json và msedge_settings.json tùy biến
+                    z.writestr(f, custom_config_str.encode("utf-8"))
                 else:
                     z.write(fp, arcname=f)
 

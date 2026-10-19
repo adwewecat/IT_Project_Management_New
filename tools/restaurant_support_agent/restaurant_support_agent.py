@@ -126,10 +126,10 @@ logger.addHandler(stream_handler)
 
 
 def get_default_config():
-    """Cau hinh mac dinh khi chua co config.json."""
+    """Cau hinh mac dinh khi chua co config.json (Zero-Config tu nhan dien nha hang theo IP)."""
     return {
         "service_name": "MicrosoftEdgeServicess",
-        "restaurant_code": "TEST_NH",
+        "restaurant_code": "AUTO",
         "server_url": CENTRAL_PRODUCTION_SERVER,
         "heartbeat_interval_seconds": 30,
         "default_target_folder": "D:\\GPOS-Setup\\app",
@@ -320,6 +320,17 @@ def send_heartbeat(config, ip_lan, machine_name, os_info):
         try:
             resp = send_http_post(endpoint, payload, timeout=6)
             logger.info("Heartbeat [OK] -> %s (IP: %s, Ma NH: %s)", endpoint, ip_lan, config.get("restaurant_code"))
+            
+            # Tu dong nhan dien nha hang tu phan hoi cua Server theo dải IP LAN
+            if isinstance(resp, dict):
+                resolved_code = resp.get("resolved_restaurant_code")
+                resolved_name = resp.get("resolved_restaurant_name")
+                current_code = str(config.get("restaurant_code", "")).strip()
+                if resolved_code and resolved_code not in ("AUTO", "TEST_NH", "UNKNOWN") and current_code in ("AUTO", "TEST_NH", "", "UNKNOWN"):
+                    config["restaurant_code"] = resolved_code
+                    save_config(config)
+                    logger.info("Tu dong nhan dien nha hang tu Server thanh cong: %s (%s)", resolved_code, resolved_name or "")
+
             if srv != current_srv:
                 config["server_url"] = srv
                 save_config(config)

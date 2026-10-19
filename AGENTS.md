@@ -336,8 +336,12 @@
   - Một nhà hàng thường có 2 đến 3 máy trạm kết nối:
     + IP `.11`: Máy Chủ / Thu Ngân 1 / POS 1.
     + IP `.12`: Máy Thu Ngân 2 / POS 2.
-    + IP `.41`: Máy Trạm Bếp KDS.
-  - Khi cài đặt nhiều Agent tại cùng 1 nhà hàng: Mỗi máy gửi Heartbeat kèm IP LAN và Hostname riêng. Backend phân biệt theo cặp `(restaurant_code, ip_lan)` và tự động sinh bản ghi trạm phụ với badge nhận diện vai trò trực quan (`⚡ .11 Chủ/POS 1`, `💻 .12 Thu Ngân 2`, `🍳 .41 Bếp KDS`).
+    + IP `.41`: Máy PC Quản Lý Nhà Hàng (Máy Văn Phòng / Quản Lý - KHÔNG PHẢI KDS. Màn hình Bếp KDS là Android TV Box đuôi `.31` đến `.38`).
+  - **Cơ chế Tự Động Nhận Diện Nhà Hàng (Zero-Config)**:
+    + Gói cài đặt mặc định để `"restaurant_code": "AUTO"`. Khi Agent khởi chạy tại nhà hàng, hệ thống tự động tra cứu mã và tên nhà hàng theo dải Subnet IP LAN, tự động phân loại đúng vai trò máy (`⚡ .11 Chủ/POS 1`, `💻 .12 Thu Ngân 2`, `🖥️ .41 PC Quản Lý`).
+    + Kỹ thuật viên chỉ cần copy gói cài ra máy trạm nhà hàng chạy là xong (1-Click), hoàn toàn không cần mở file JSON sửa thủ công.
+    + Việc chỉnh sửa mã cụ thể trong file cấu hình chỉ áp dụng khi cấu hình cho máy cá nhân / IT Support (`USER`) hoặc máy ngoài văn phòng (`EXTERNAL`).
+  - Khi cài đặt nhiều Agent tại cùng 1 nhà hàng: Mỗi máy gửi Heartbeat kèm IP LAN và Hostname riêng. Backend phân biệt theo cặp `(restaurant_code, ip_lan)` và tự động quản lý tối đa 3 máy độc lập trên cùng giao diện.
 - **Hỗ trợ Máy Ngoài & User Cá Nhân (`device_type`)**:
   - Không chỉ máy nhà hàng, hệ thống hỗ trợ đăng ký máy ngoài văn phòng HO (`EXTERNAL`) và máy cá nhân của nhân viên IT Support (`USER`).
   - Nút `➕ Thêm Máy / User Ngoài`: Khởi tạo thiết bị với mã định danh tùy ý (VD: `HO_LAPTOP_01`), gán user phụ trách (`user_assigned`), tên máy và ghi chú.

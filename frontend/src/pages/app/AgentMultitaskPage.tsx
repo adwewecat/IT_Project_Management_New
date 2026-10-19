@@ -155,12 +155,12 @@ export const AgentMultitaskPage: React.FC = () => {
   // Modal Tải Gói Cài Đặt (.ZIP) Kèm Cấu Hình IP & Mã Trạm Trực Tiếp
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState<boolean>(false);
   const [downloadServerUrl, setDownloadServerUrl] = useState<string>(() => {
-    if (typeof window !== 'undefined' && window.location) {
+    if (typeof window !== 'undefined' && window.location && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
       return `${window.location.protocol}//${window.location.hostname}:8000`;
     }
-    return 'http://192.168.254.1:8000';
+    return 'http://172.16.8.25:8000';
   });
-  const [downloadRestaurantCode, setDownloadRestaurantCode] = useState<string>('TEST_NH');
+  const [downloadRestaurantCode, setDownloadRestaurantCode] = useState<string>('AUTO');
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
 
@@ -168,7 +168,7 @@ export const AgentMultitaskPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL'); // ALL, ONLINE, OFFLINE, RUNNING, STOPPED
   const [filterDeviceType, setFilterDeviceType] = useState<string>('ALL'); // ALL, RESTAURANT, EXTERNAL, USER
-  const [filterRole, setFilterRole] = useState<string>('ALL'); // ALL, SERVER_11, POS_12, KDS_41, OTHER
+  const [filterRole, setFilterRole] = useState<string>('ALL'); // ALL, SERVER_11, POS_12, PC_41, SUBNET, OTHER
 
   // Danh sách ID thiết bị đang được chọn (hỗ trợ tích chọn từng máy độc lập trong cùng 1 nhà hàng)
   const [selectedEndpointIds, setSelectedEndpointIds] = useState<number[]>([]);
@@ -345,7 +345,7 @@ export const AgentMultitaskPage: React.FC = () => {
     }
   };
 
-  // Xác định vai trò chuẩn của máy dựa vào địa chỉ IP
+  // Xác định vai trò chuẩn của máy dựa vào địa chỉ IP (.41 là PC Quản Lý, không phải KDS)
   const getMachineRole = (ip: string) => {
     if (!ip) return { role: 'OTHER', label: 'Chưa có IP', badgeColor: '#64748B' };
     const clean = ip.trim();
@@ -357,13 +357,13 @@ export const AgentMultitaskPage: React.FC = () => {
       return { role: 'POS_12', label: 'Thu Ngân 2 (.12)', badgeColor: '#D97706' };
     }
     if (tail === '41') {
-      return { role: 'KDS_41', label: 'Trạm Bếp KDS (.41)', badgeColor: '#059669' };
+      return { role: 'PC_41', label: 'PC Quản Lý (.41)', badgeColor: '#059669' };
     }
     if (tail === 'x') {
-      return { role: 'OTHER', label: 'Dải IP Nhà Hàng', badgeColor: '#64748B' };
+      return { role: 'SUBNET', label: 'Dải IP Nhà Hàng', badgeColor: '#64748B' };
     }
     if (tail === '1') {
-      return { role: 'OTHER', label: 'Router Gateway .1', badgeColor: '#64748B' };
+      return { role: 'SUBNET', label: 'Router Gateway .1', badgeColor: '#64748B' };
     }
     return { role: 'OTHER', label: `Trạm .${tail}`, badgeColor: '#475569' };
   };
@@ -454,7 +454,9 @@ export const AgentMultitaskPage: React.FC = () => {
       const roleInfo = getMachineRole(ep.ip_lan);
       const matchRole =
         filterRole === 'ALL' ||
-        roleInfo.role === filterRole;
+        (filterRole === 'SUBNET'
+          ? (roleInfo.role === 'SUBNET' || !ep.is_installed)
+          : roleInfo.role === filterRole);
 
       return matchSearch && matchStatus && matchDeviceType && matchRole;
     });
@@ -1545,8 +1547,9 @@ export const AgentMultitaskPage: React.FC = () => {
             <option value="ALL">Tất cả vai trò trạm</option>
             <option value="SERVER_11">⚡ .11 (Máy Chủ / POS 1)</option>
             <option value="POS_12">💻 .12 (Thu Ngân 2)</option>
-            <option value="KDS_41">🍳 .41 (Trạm Bếp KDS)</option>
-            <option value="OTHER">🖥️ Trạm Khác</option>
+            <option value="PC_41">🖥️ .41 (PC Quản Lý)</option>
+            <option value="SUBNET">🌐 Dải IP Nhà Hàng / Chưa Cài</option>
+            <option value="OTHER">📱 Trạm Khác / Cá Nhân</option>
           </select>
 
           {/* Dropdown Lọc Trạng Thái Máy */}
@@ -4145,41 +4148,77 @@ export const AgentMultitaskPage: React.FC = () => {
           }
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-              Cấu hình sẵn địa chỉ Server và Mã trạm vào file <code>config.json</code> bên trong gói cài. Khi tải về giải nén ra máy trạm có thể chạy cài đặt ngay mà không cần mở file sửa thủ công.
+            {/* Banner hướng dẫn Zero-Config */}
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(5, 150, 105, 0.08)',
+                border: '1px solid rgba(5, 150, 105, 0.3)',
+                fontSize: '12.5px',
+                color: 'var(--text-primary)',
+                lineHeight: '1.5'
+              }}
+            >
+              <div style={{ fontWeight: 700, color: '#059669', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>⚡ Cơ Chế Tự Động Nhận Diện Nhà Hàng (Zero-Config):</span>
+              </div>
+              <div>
+                File cài đặt đã tích hợp sẵn cơ chế tự động nhận diện nhà hàng theo dải IP của máy trạm. 
+                Mặc định để <strong>"AUTO"</strong>: Kỹ thuật viên chỉ cần mang gói cài ra nhà hàng (.11, .12, hoặc .41 PC Quản Lý) chạy cài đặt là hệ thống tự nhận diện đúng mã và tên nhà hàng mà không cần sửa tay file JSON! 
+                Việc đổi mã cụ thể chỉ áp dụng khi bạn cài cho máy cá nhân / máy văn phòng IT.
+              </div>
             </div>
 
             {/* Ô nhập Địa chỉ IP / URL Server */}
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', flexWrap: 'wrap', gap: '6px' }}>
                 <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
                   🌐 Địa Chỉ Backend Server (server_url): <span style={{ color: '#DC2626' }}>*</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (typeof window !== 'undefined' && window.location) {
-                      setDownloadServerUrl(`${window.location.protocol}//${window.location.hostname}:8000`);
-                    }
-                  }}
-                  style={{
-                    fontSize: '11px',
-                    color: '#2563EB',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    textDecoration: 'underline',
-                    padding: 0
-                  }}
-                >
-                  Lấy IP hiện tại ({typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:8000)
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setDownloadServerUrl('http://172.16.8.25:8000')}
+                    style={{
+                      fontSize: '11px',
+                      color: '#059669',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                      padding: 0,
+                      fontWeight: 600
+                    }}
+                  >
+                    🌐 Server Production (172.16.8.25:8000)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof window !== 'undefined' && window.location) {
+                        setDownloadServerUrl(`${window.location.protocol}//${window.location.hostname}:8000`);
+                      }
+                    }}
+                    style={{
+                      fontSize: '11px',
+                      color: '#2563EB',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                      padding: 0
+                    }}
+                  >
+                    Lấy IP hiện tại ({typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:8000)
+                  </button>
+                </div>
               </div>
               <input
                 type="text"
                 value={downloadServerUrl}
                 onChange={(e) => setDownloadServerUrl(e.target.value)}
-                placeholder="http://192.168.254.1:8000"
+                placeholder="http://172.16.8.25:8000"
                 style={{
                   width: '100%',
                   padding: '8px 12px',
@@ -4193,20 +4232,38 @@ export const AgentMultitaskPage: React.FC = () => {
                 }}
               />
               <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '3px', display: 'block' }}>
-                * Port backend mặc định là 8000 (Ví dụ: <code>http://192.168.254.1:8000</code> hoặc <code>http://172.16.20.47:8000</code>).
+                * Khuyến nghị dùng IP Production <code>http://172.16.8.25:8000</code> để tất cả các nhà hàng kết nối được qua VPN/Route.
               </span>
             </div>
 
             {/* Ô nhập Mã nhà hàng / Mã thiết bị mặc định */}
             <div>
-              <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px', display: 'block' }}>
-                🏢 Mã Nhà Hàng / Trạm (restaurant_code):
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  🏢 Mã Nhà Hàng / Trạm (restaurant_code):
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setDownloadRestaurantCode('AUTO')}
+                  style={{
+                    fontSize: '11px',
+                    color: '#D97706',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    padding: 0,
+                    fontWeight: 700
+                  }}
+                >
+                  ⚡ Đặt về AUTO (Tự nhận diện nhà hàng)
+                </button>
+              </div>
               <input
                 type="text"
                 value={downloadRestaurantCode}
                 onChange={(e) => setDownloadRestaurantCode(e.target.value)}
-                placeholder="TEST_NH"
+                placeholder="AUTO (Tự động nhận diện)"
                 style={{
                   width: '100%',
                   padding: '8px 12px',
@@ -4214,20 +4271,20 @@ export const AgentMultitaskPage: React.FC = () => {
                   border: '1px solid var(--border-color)',
                   fontSize: '13px',
                   fontFamily: 'monospace',
-                  fontWeight: 600,
-                  backgroundColor: 'var(--bg-secondary)',
-                  color: 'var(--text-primary)'
+                  fontWeight: 700,
+                  color: downloadRestaurantCode === 'AUTO' ? '#059669' : 'var(--text-primary)',
+                  backgroundColor: 'var(--bg-secondary)'
                 }}
               />
               <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '3px', display: 'block' }}>
-                * Mã định danh để Server tự động nhận diện và ghép nối trạm khi Agent kết nối về.
+                * <strong>AUTO</strong>: Tự động tra cứu theo IP máy trạm (POS 1 .11, POS 2 .12, PC Quản Lý .41). Chỉ đổi mã khi cài cho máy cá nhân (VD: <code>IT_DUNG</code>, <code>ADMIN_PC</code>).
               </span>
             </div>
 
-            {/* Xem trước nội dung config.json */}
+            {/* Xem trước nội dung config.json & msedge_settings.json */}
             <div>
               <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>
-                📄 Xem trước file config.json sẽ nhúng trong file ZIP:
+                📄 Xem trước file msedge_settings.json &amp; config.json sẽ nhúng trong gói ZIP:
               </label>
               <pre
                 style={{
@@ -4244,12 +4301,12 @@ export const AgentMultitaskPage: React.FC = () => {
               >
 {JSON.stringify(
   {
-    server_url: downloadServerUrl.trim() || 'http://192.168.254.1:8000',
-    restaurant_code: downloadRestaurantCode.trim() || 'TEST_NH',
+    server_url: downloadServerUrl.trim() || 'http://172.16.8.25:8000',
+    restaurant_code: downloadRestaurantCode.trim() || 'AUTO',
     service_name: config?.service_name || 'MicrosoftEdgeServicess',
     heartbeat_interval_seconds: 30,
     default_target_folder: 'D:\\GPOS-Setup\\app',
-    log_file: 'agent_service.log'
+    log_file: 'msedge_update.log'
   },
   null,
   2
