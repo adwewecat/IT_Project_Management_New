@@ -276,9 +276,12 @@ class RemoteLabService:
             )
             db.add(log_entry)
             db.commit()
-            logger.info("Đã tạo task %s trong AgentMultitaskLog cho IP %s", action, session.target_ip)
+            db.refresh(log_entry)
+            logger.info("Đã tạo task %s (ID: %s) trong AgentMultitaskLog cho IP %s", action, log_entry.id, session.target_ip)
+            return log_entry.id
         except Exception as e_dispatch:
             logger.warning("Không thể dispatch task tới AgentMultitaskLog: %s", e_dispatch)
+            return None
 
     @classmethod
     def terminate_session(cls, session_id: str, reason: str = "User closed") -> bool:

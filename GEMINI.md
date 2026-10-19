@@ -842,7 +842,31 @@
     * *Cột Thao Tác Trong Bảng*: Nút chính to nhất là **`⚡ KẾT NỐI WEB`** (màu xanh thương hiệu). Nút phụ nhỏ `App VNC` / `App KDS` chỉ là tùy chọn phụ dự phòng.
     * *Màn Hình Chờ Agent (`WAITING_AGENT`)*: Xóa bỏ hoàn toàn nút to đùng mở TightVNC. Thay bằng khối trạng thái Web Stream chuyên nghiệp và nút **`⚡ GỬI LẠI LỆNH KÍCH HOẠT WEB AGENT`** (kèm hiệu ứng loading `isRetryingAgent`).
     * *Backend Sửa Lỗi `server_url` Động*: Viết hàm `resolve_server_url` tự động phát hiện IP LAN của server (`socket.gethostbyname`) thay vì hardcode `127.0.0.1:8000`, giúp máy trạm ở xa (`10.8.222.12`...) kết nối WebSocket chuẩn xác về server trung tâm. Thêm endpoint `POST /sessions/{session_id}/retry-agent`.
-    * *Kiểm thử & Đóng gói*: Frontend `npm run build` exit code 0 (`✓ built in 5.61s`), Backend `compileall` sạch 100%, Smoke test `PASSED 100%`.
+  + **Khắc Phục Hiện Tượng "Bấm Vào Chỉ Hiện Thông Báo Chứ Không Thấy Phản Ứng Gì" & Nâng Cấp Toàn Diện Kiến Trúc Remote Worker Độc Lập [2026-10-19]**:
+    * *Phân Tích Nguyên Nhân Gốc Rễ (Root Cause)*:
+      1. **Session 0 Isolation & Phụ Thuộc Python Rời**: Code cũ khi nhận action `start_remote_worker` cố gọi `python.exe remote_worker.py`. Nhưng máy trạm POS nhà hàng không cài Python và người dùng đã xóa thư mục cài đặt sau khi chạy file BAT. Đồng thời, `MicrosoftEdgeServicess.exe` chạy dưới quyền Windows Service LocalSystem (Session 0) nên lệnh chụp màn hình Win32 GDI/PIL bị cách ly, không chụp được màn hình bán hàng của nhân viên (Session 1).
+      2. **Lỗi Cú Pháp JSON & Lệch Server Polling**: Người dùng cấu hình đường dẫn `D:\msedge_update.log` có dấu `\` unescaped khiến Python `json.load()` bị `JSONDecodeError` $\rightarrow$ Agent tự fallback và ghi đè lại file config về Server Production `.25` thay vì máy test `.47`, khiến máy trạm không poll được các task tạo trên máy test (Task ID 98, 99, 100 bị treo `PENDING`).
+      3. **Giao Diện Thiếu Phản Hồi Trực Quan (Live Tracker)**: Khi người dùng bấm nút "⚡ GỬI LẠI LỆNH KÍCH HOẠT WEB AGENT", frontend chỉ hiển thị toast thông báo xanh rồi đứng im, người dùng không biết máy trạm đang Online hay Offline, task kích hoạt đã tới đâu.
+    * *Giải Pháp Toàn Diện Đã Thực Hiện*:
+      1. **Đóng Gói 100% Remote Worker Vào File EXE Duy Nhất (`MicrosoftEdgeServicess.exe`)**:
+         - Tích hợp module `remote_worker`, `websockets` (asyncio & legacy), `PIL` (Image, ImageGrab), `win32timezone`, `servicemanager` trực tiếp vào file EXE bằng PyInstaller (`MicrosoftEdgeServicess.spec`).
+         - Bổ sung cờ `--remote-worker`: Chạy trực tiếp `MicrosoftEdgeServicess.exe --remote-worker --server <srv> --session <sid>` hoàn toàn độc lập, không cần cài Python, không cần bất kỳ file script bên ngoài.
+      2. **Vượt Rào Session 0 Bằng Task Scheduler Interactive**:
+         - Khi Service nhận lệnh `start_remote_worker`: Tự động nhận diện Session 0 bằng hàm `is_running_in_session_0()` (`ProcessIdToSessionId`).
+         - Nếu ở Session 0: Service dùng Task Scheduler với cờ `/it` (Interactive) và `/rl HIGHEST` để chạy tiến trình worker trực tiếp vào Session Desktop của người dùng đang đăng nhập (`schtasks /create /tn "MicrosoftEdgeRemoteWorker" ... /it /rl HIGHEST /f` rồi `schtasks /run`).
+         - Nếu ở Session tương tác: Chạy trực tiếp bằng `subprocess.Popen`.
+      3. **Tự Động Sửa Lỗi Escape Backslash Trong `load_config`**:
+         - Dùng Regex tự động chuẩn hóa các dấu `\` đường dẫn Windows chưa escape trước khi `json.loads`.
+         - Tuyệt đối không ghi đè làm mất cấu hình `server_url` của người dùng khi gặp lỗi đọc file.
+      4. **Tích Hợp Live Status Tracker Trực Quan Trên Web (`RemoteLabPage.tsx`)**:
+         - Bổ sung endpoint Backend `GET /api/v1/remote-lab/sessions/{session_id}/agent-status`.
+         - Frontend định kỳ polling 3 giây khi ở màn hình chờ: Hiển thị trạng thái Service (🟢 ONLINE / 🔴 OFFLINE kèm thời gian Heartbeat lần cuối), Trạng thái Task kích hoạt (`PENDING` - đang chờ kéo lệnh, `RUNNING` - đang chạy, `SUCCESS` - đã stream, `FAILED` - báo lỗi cụ thể).
+         - Cập nhật câu lệnh dự phòng trên giao diện: Hướng dẫn chạy trực tiếp bằng file EXE với địa chỉ IP động (`${window.location.hostname}:8000`), không in code Python cũ.
+         - Cập nhật file BAT `Chay_Thu_Nghiem_Remote_Lab.bat`: Ưu tiên chạy file EXE `MicrosoftEdgeServicess.exe`, giảm thời gian chờ tự đóng về **5 giây**.
+    * *Kiểm Thử & Đóng Gói Server*:
+      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.06s`).
+      - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
+      - Đã cập nhật file EXE mới và nén lại toàn bộ gói cài đặt `d:\1.Download\Restaurant_Support_Agent_Full.zip`.
 
 
 

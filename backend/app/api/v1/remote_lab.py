@@ -6,6 +6,7 @@ Cung cấp WebSocket Endpoint và REST API quản lý phiên Remote độc lập
 from __future__ import annotations
 import logging
 import socket
+from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, status, Query, Request
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.schemas.auth import UserInfo
+from app.models.agent_multitask import AgentMultitaskEndpoint, AgentMultitaskLog
 from app.services.remote_lab_service import RemoteLabService
 
 logger = logging.getLogger(__name__)
@@ -133,7 +135,7 @@ def retry_agent_task(
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Phiên không tồn tại hoặc đã đóng.")
     eff_server_url = resolve_server_url(request, server_url, session.target_ip)
-    RemoteLabService.dispatch_agent_task(
+    task_id = RemoteLabService.dispatch_agent_task(
         session=session,
         server_url=eff_server_url,
         db=db,
@@ -142,7 +144,63 @@ def retry_agent_task(
     return {
         "status": "SUCCESS",
         "message": f"Đã gửi lại tín hiệu kích hoạt Web Worker tới {session.target_ip}",
+        "task_id": task_id,
         "server_url": eff_server_url
+    }
+
+
+@router.get("/sessions/{session_id}/agent-status")
+def get_session_agent_status(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Kiểm tra tình trạng online của máy trạm và trạng thái task kích hoạt Web Worker gần nhất."""
+    session = RemoteLabService.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Phiên không tồn tại hoặc đã đóng.")
+
+    # Tìm thông tin Endpoint máy trạm theo IP
+    endpoint = db.query(AgentMultitaskEndpoint).filter(
+        AgentMultitaskEndpoint.ip_lan == session.target_ip
+    ).first()
+
+    is_online = False
+    last_hb_str = None
+    seconds_ago = None
+    if endpoint and endpoint.last_heartbeat:
+        delta = datetime.now() - endpoint.last_heartbeat
+        seconds_ago = int(delta.total_seconds())
+        is_online = (seconds_ago <= 90) and (endpoint.service_status == "RUNNING")
+        last_hb_str = endpoint.last_heartbeat.strftime("%H:%M:%S %d/%m/%Y")
+
+    # Tìm task start_remote_worker gần nhất của IP này
+    latest_task = db.query(AgentMultitaskLog).filter(
+        AgentMultitaskLog.machine_ip == session.target_ip,
+        AgentMultitaskLog.action_type == "start_remote_worker"
+    ).order_by(AgentMultitaskLog.id.desc()).first()
+
+    task_info = None
+    if latest_task:
+        task_info = {
+            "task_id": latest_task.id,
+            "status": latest_task.result_status,
+            "message": latest_task.result_message,
+            "created_at": latest_task.created_at.strftime("%H:%M:%S") if latest_task.created_at else None
+        }
+
+    return {
+        "status": "SUCCESS",
+        "session_id": session_id,
+        "target_ip": session.target_ip,
+        "is_online": is_online,
+        "seconds_since_heartbeat": seconds_ago,
+        "last_heartbeat": last_hb_str,
+        "service_status": endpoint.service_status if endpoint else "UNKNOWN",
+        "machine_name": endpoint.machine_name if endpoint else None,
+        "agent_version": endpoint.agent_version if endpoint else None,
+        "latest_task": task_info,
+        "is_worker_connected": session.worker_ws is not None
     }
 
 

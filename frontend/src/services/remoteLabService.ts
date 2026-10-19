@@ -84,6 +84,29 @@ export const remoteLabService = {
     return res.data;
   },
 
+  /** Kiểm tra trạng thái máy trạm và task kích hoạt worker gần nhất */
+  async getAgentStatus(sessionId: string): Promise<{
+    status: string;
+    session_id: string;
+    target_ip: string;
+    is_online: boolean;
+    seconds_since_heartbeat?: number | null;
+    last_heartbeat?: string | null;
+    service_status?: string;
+    machine_name?: string | null;
+    agent_version?: string | null;
+    latest_task?: {
+      task_id: number;
+      status: string;
+      message?: string | null;
+      created_at?: string | null;
+    } | null;
+    is_worker_connected: boolean;
+  }> {
+    const res = await api.get(`/remote-lab/sessions/${sessionId}/agent-status`);
+    return res.data;
+  },
+
   /** Lấy danh sách các phiên đang mở */
   async listSessions(): Promise<RemoteSessionInfo[]> {
     const res = await api.get<RemoteSessionInfo[]>('/remote-lab/sessions');

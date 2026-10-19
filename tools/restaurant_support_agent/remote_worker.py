@@ -471,7 +471,7 @@ def fetch_auto_session_id(server_http_url: str, target_ip: str = "127.0.0.1") ->
     return ""
 
 
-def main():
+def main(args_list=None):
     """Hàm chạy dòng lệnh chính."""
     parser = argparse.ArgumentParser(description="Remote Worker Thử Nghiệm cho Client Agent")
     parser.add_argument("--server", type=str, default="http://127.0.0.1:8000", help="Địa chỉ backend server")
@@ -481,7 +481,7 @@ def main():
     parser.add_argument("--fps", type=int, default=15, help="Tốc độ khung hình (FPS)")
     parser.add_argument("--quality", type=int, default=65, help="Chất lượng nén JPEG")
 
-    args = parser.parse_args()
+    args = parser.parse_args(args_list)
 
     # Chuẩn hóa HTTP Server URL
     raw_server = args.server.strip()

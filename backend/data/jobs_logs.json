@@ -1,5 +1,17 @@
 [
   {
+    "id": "3d47221f",
+    "job_id": "job_sync_pim_requests",
+    "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",
+    "started_at": "2026-10-19 16:30:19",
+    "finished_at": "2026-10-19 16:30:19",
+    "duration_seconds": 13.72,
+    "status": "success",
+    "message": "Thành công lúc 16:30 (Quét: 5 | Mới: 0 | Cập nhật: 5)",
+    "details": "Tự động quét PIM theo lịch 3 khung giờ lúc 16:30:\n- Tổng quét: 5\n- Mới: 0\n- Cập nhật: 5",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
     "id": "d717f387",
     "job_id": "job_sync_pim_requests",
     "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",

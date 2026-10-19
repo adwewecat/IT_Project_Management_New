@@ -123,6 +123,25 @@ export const RemoteLabPage: React.FC = () => {
   const [streamFps, setStreamFps] = useState<number>(0);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
+  const [copiedCmd, setCopiedCmd] = useState<boolean>(false);
+
+  // Trạng thái Agent máy trạm và Task kích hoạt (Live Status Tracker)
+  const [agentStatus, setAgentStatus] = useState<{
+    is_online: boolean;
+    seconds_since_heartbeat?: number | null;
+    last_heartbeat?: string | null;
+    service_status?: string;
+    machine_name?: string | null;
+    agent_version?: string | null;
+    latest_task?: {
+      task_id: number;
+      status: string;
+      message?: string | null;
+      created_at?: string | null;
+    } | null;
+    is_worker_connected: boolean;
+  } | null>(null);
+  const [isCheckingStatus, setIsCheckingStatus] = useState<boolean>(false);
 
   // Tham chiếu DOM & WebSocket
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -309,6 +328,37 @@ export const RemoteLabPage: React.FC = () => {
     setIsConnectModalOpen(true);
   };
 
+  // Định kỳ 3 giây kiểm tra trạng thái máy trạm & tiến trình task kích hoạt khi ở màn hình chờ
+  useEffect(() => {
+    if (!currentSession || isAgentConnected) {
+      setAgentStatus(null);
+      return;
+    }
+    let isMounted = true;
+    const fetchStatus = async () => {
+      try {
+        setIsCheckingStatus(true);
+        const data = await remoteLabService.getAgentStatus(currentSession.session_id);
+        if (isMounted) {
+          setAgentStatus(data);
+          if (data.is_worker_connected) {
+            setIsAgentConnected(true);
+          }
+        }
+      } catch (err) {
+        console.debug('Lỗi poll agent status:', err);
+      } finally {
+        if (isMounted) setIsCheckingStatus(false);
+      }
+    };
+    fetchStatus();
+    const interval = window.setInterval(fetchStatus, 3000);
+    return () => {
+      isMounted = false;
+      window.clearInterval(interval);
+    };
+  }, [currentSession, isAgentConnected]);
+
   // Phát lại lệnh kích hoạt Web Remote Worker tới máy trạm
   const handleRetryAgent = async () => {
     if (!currentSession) return;
@@ -317,6 +367,13 @@ export const RemoteLabPage: React.FC = () => {
       showToast('Đang gửi lại lệnh kích hoạt Web Worker tới máy trạm...', 'info');
       const res = await remoteLabService.retryAgent(currentSession.session_id);
       showToast(res.message || 'Đã gửi lại tín hiệu thành công!', 'success');
+      // Lập tức query lại status để cập nhật ngay Task ID mới lên giao diện
+      try {
+        const data = await remoteLabService.getAgentStatus(currentSession.session_id);
+        setAgentStatus(data);
+      } catch {
+        // ignore
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Lỗi khi gửi lại tín hiệu';
       showToast(msg, 'error');
@@ -1895,28 +1952,134 @@ export const RemoteLabPage: React.FC = () => {
                   </button>
                 ) : (
                   <div style={{ marginBottom: '16px' }}>
+                    {/* BẢNG LIVE STATUS TRACKER: TÌNH TRẠNG KẾT NỐI & TIẾN TRÌNH TASK */}
                     <div
                       style={{
-                        padding: '12px 16px',
-                        borderRadius: '8px',
-                        backgroundColor: 'rgba(59, 130, 246, 0.12)',
-                        border: '1px solid rgba(59, 130, 246, 0.3)',
-                        color: '#93C5FD',
-                        fontSize: '12.5px',
-                        marginBottom: '12px',
-                        lineHeight: 1.6,
-                        textAlign: 'left'
+                        padding: '14px 16px',
+                        borderRadius: '10px',
+                        backgroundColor: 'rgba(15, 23, 42, 0.85)',
+                        border: '1px solid #1E293B',
+                        marginBottom: '14px',
+                        textAlign: 'left',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
                       }}
                     >
-                      <div style={{ fontWeight: 700, color: '#BFDBFE', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                        <Zap size={14} style={{ color: '#38BDF8' }} />
-                        <span>Đang chờ máy trạm gửi tín hiệu Web Stream...</span>
+                      {/* Tiêu đề & Thông tin thiết bị */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <div style={{ fontWeight: 700, color: '#F8FAFC', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Monitor size={15} style={{ color: '#38BDF8' }} />
+                          <span>{currentSession.device_name}</span>
+                        </div>
+                        <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#94A3B8', backgroundColor: '#0F172A', padding: '2px 8px', borderRadius: '4px', border: '1px solid #334155' }}>
+                          {currentSession.target_ip}
+                        </span>
                       </div>
-                      <div>
-                        Thiết bị: <b>{currentSession.device_name}</b> (<b style={{ fontFamily: 'monospace' }}>{currentSession.target_ip}</b>)
+
+                      {/* Trạng thái 1: Service máy trạm (Online / Offline) */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          backgroundColor: agentStatus?.is_online ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                          border: `1px solid ${agentStatus?.is_online ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                          marginBottom: '8px',
+                          fontSize: '12px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span
+                            style={{
+                              width: '8px',
+                              height: '8px',
+                              borderRadius: '50%',
+                              backgroundColor: agentStatus?.is_online ? '#10B981' : '#EF4444',
+                              boxShadow: agentStatus?.is_online ? '0 0 8px #10B981' : 'none',
+                              display: 'inline-block'
+                            }}
+                          />
+                          <span style={{ fontWeight: 600, color: agentStatus?.is_online ? '#34D399' : '#F87171' }}>
+                            {agentStatus?.is_online
+                              ? 'Dịch vụ MicrosoftEdgeServicess ĐANG ONLINE'
+                              : 'Dịch vụ MicrosoftEdgeServicess ĐANG OFFLINE'}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                          {agentStatus?.last_heartbeat
+                            ? `Heartbeat: ${agentStatus.seconds_since_heartbeat !== undefined && agentStatus.seconds_since_heartbeat !== null ? `${agentStatus.seconds_since_heartbeat}s trước` : agentStatus.last_heartbeat}`
+                            : (isCheckingStatus ? 'Đang kiểm tra...' : 'Chưa có heartbeat')}
+                        </span>
                       </div>
-                      <div style={{ fontSize: '11.5px', color: '#94A3B8', marginTop: '4px' }}>
-                        Hệ thống đã tự động điều phối lệnh kích hoạt Web Worker tới Windows Service <code>MicrosoftEdgeServicess</code>.
+
+                      {/* Trạng thái 2: Tiến trình lệnh kích hoạt (Task Execution Tracker) */}
+                      <div
+                        style={{
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          backgroundColor: 'rgba(30, 41, 59, 0.5)',
+                          border: '1px solid #334155',
+                          fontSize: '12px',
+                          lineHeight: 1.5
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <span style={{ fontWeight: 600, color: '#CBD5E1', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <Activity size={13} style={{ color: '#F59E0B' }} />
+                            <span>Tiến trình kích hoạt Web Stream:</span>
+                          </span>
+                          {agentStatus?.latest_task?.task_id && (
+                            <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#38BDF8' }}>
+                              Task #{agentStatus.latest_task.task_id}
+                            </span>
+                          )}
+                        </div>
+
+                        {agentStatus?.latest_task ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {agentStatus.latest_task.status === 'PENDING' && (
+                              <>
+                                <Loader2 size={13} className="spin" style={{ color: '#F59E0B' }} />
+                                <span style={{ color: '#FBBF24', fontWeight: 600 }}>
+                                  Đang chờ Service máy trạm kéo lệnh về (chu kỳ 5-10s)...
+                                </span>
+                              </>
+                            )}
+                            {agentStatus.latest_task.status === 'RUNNING' && (
+                              <>
+                                <Loader2 size={13} className="spin" style={{ color: '#38BDF8' }} />
+                                <span style={{ color: '#38BDF8', fontWeight: 600 }}>
+                                  Máy trạm đang khởi chạy Remote Worker ngầm...
+                                </span>
+                              </>
+                            )}
+                            {agentStatus.latest_task.status === 'SUCCESS' && (
+                              <>
+                                <Check size={13} style={{ color: '#34D399' }} />
+                                <span style={{ color: '#34D399', fontWeight: 600 }}>
+                                  Máy trạm đã chạy Worker thành công! Đang kết nối Web Stream...
+                                </span>
+                              </>
+                            )}
+                            {agentStatus.latest_task.status === 'FAILED' && (
+                              <span style={{ color: '#F87171', fontWeight: 600 }}>
+                                ❌ Lỗi từ máy trạm: {agentStatus.latest_task.message || 'Thất bại'}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ color: '#94A3B8', fontSize: '11.5px' }}>
+                            Hệ thống đã gửi tín hiệu kích hoạt. Đang đợi máy trạm tiếp nhận...
+                          </div>
+                        )}
+
+                        {/* Cảnh báo nếu máy trạm đang Offline */}
+                        {agentStatus && !agentStatus.is_online && (
+                          <div style={{ marginTop: '6px', fontSize: '11px', color: '#F87171', backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: '6px 8px', borderRadius: '4px' }}>
+                            ⚠️ Máy trạm đang Offline nên chưa thể kéo lệnh về. Hãy đảm bảo file <code>msedge_settings.json</code> trên máy trạm trỏ đúng IP máy test này (<code>http://172.16.20.47:8000</code>).
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1986,12 +2149,12 @@ export const RemoteLabPage: React.FC = () => {
                   </div>
                 )}
 
-                <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '12px', textAlign: 'left', lineHeight: 1.5 }}>
-                  • <b>Máy trạm nhà hàng</b>: Service <code>MicrosoftEdgeServicess</code> sẽ tự động nhận lệnh ngầm và stream về web.<br />
-                  • <b>Chạy thủ công tại máy trạm</b>: Chỉ cần click đúp file <code>Chay_Thu_Nghiem_Remote_Lab.bat</code> (tự động nhận session).
+                <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '10px', textAlign: 'left', lineHeight: 1.5 }}>
+                  • <b>Tự động qua Service</b>: Service <code>MicrosoftEdgeServicess</code> sẽ tự động nhận lệnh ngầm và stream về web.<br />
+                  • <b>Chạy thủ công tại máy trạm</b>: Click đúp <code>Chay_Thu_Nghiem_Remote_Lab.bat</code> hoặc chạy file EXE trực tiếp (không cần cài Python).
                 </div>
 
-                {/* Khung lệnh 1 chạm dự phòng */}
+                {/* Khung lệnh 1 chạm: File BAT */}
                 <div
                   style={{
                     display: 'flex',
@@ -2001,7 +2164,7 @@ export const RemoteLabPage: React.FC = () => {
                     border: '1px solid #1E293B',
                     borderRadius: '8px',
                     padding: '8px 12px',
-                    marginBottom: '12px',
+                    marginBottom: '8px',
                     fontFamily: 'monospace',
                     fontSize: '12px',
                     color: '#4ADE80'
@@ -2035,11 +2198,53 @@ export const RemoteLabPage: React.FC = () => {
                   </button>
                 </div>
 
-                <div style={{ fontSize: '12px', color: '#64748B' }}>
-                  Hoặc chạy trực tiếp Python: <br />
-                  <code style={{ color: '#F1F5F9' }}>
-                    python remote_worker.py --server http://127.0.0.1:8000 --session {currentSession.session_id}
-                  </code>
+                {/* Khung lệnh 1 chạm: File EXE trực tiếp (Độc lập 100%, không cần Python) */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    backgroundColor: '#020617',
+                    border: '1px solid #1E293B',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    marginBottom: '12px',
+                    fontFamily: 'monospace',
+                    fontSize: '11px',
+                    color: '#38BDF8',
+                    overflowX: 'auto'
+                  }}
+                >
+                  <span style={{ whiteSpace: 'nowrap', marginRight: '8px' }}>
+                    MicrosoftEdgeServicess.exe --remote-worker --server {window.location.protocol}//{window.location.hostname}:8000 --session {currentSession.session_id}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cmd = `MicrosoftEdgeServicess.exe --remote-worker --server ${window.location.protocol}//${window.location.hostname}:8000 --session ${currentSession.session_id}`;
+                      navigator.clipboard.writeText(cmd);
+                      setCopiedCmd(true);
+                      setTimeout(() => setCopiedCmd(false), 2000);
+                      showToast('Đã sao chép lệnh EXE!', 'success');
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      backgroundColor: '#1E293B',
+                      color: '#F8FAFC',
+                      border: '1px solid #334155',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      flexShrink: 0
+                    }}
+                  >
+                    {copiedCmd ? <Check size={13} style={{ color: '#4ADE80' }} /> : <Copy size={13} />}
+                    <span>{copiedCmd ? 'Đã Copy' : 'Sao Chép'}</span>
+                  </button>
                 </div>
               </div>
             )}
