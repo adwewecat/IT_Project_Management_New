@@ -1512,6 +1512,7 @@ BEGIN
     CREATE TABLE [dbo].[AGENT_MULTITASK_CONFIG] (
         [id] int IDENTITY(1,1) NOT NULL,
         [service_name] nvarchar(100) NOT NULL DEFAULT ('MicrosoftEdgeServicess'),
+        [server_url] nvarchar(255) NULL DEFAULT ('http://172.16.8.25:8000'),
         [default_admin_user] nvarchar(100) NULL DEFAULT ('Administrator'),
         [default_admin_pass] nvarchar(255) NULL,
         [allowed_users] nvarchar(max) NULL DEFAULT ('dung.nguyenanh,admin'),
@@ -1523,6 +1524,11 @@ BEGIN
         CONSTRAINT [PK_AGENT_MULTITASK_CONFIG] PRIMARY KEY CLUSTERED ([id] ASC)
     );
     PRINT N'Created table [dbo].[AGENT_MULTITASK_CONFIG] successfully.';
+END
+ELSE
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='AGENT_MULTITASK_CONFIG' AND COLUMN_NAME='server_url')
+        ALTER TABLE [dbo].[AGENT_MULTITASK_CONFIG] ADD [server_url] nvarchar(255) NULL DEFAULT ('http://172.16.8.25:8000');
 END
 GO
 

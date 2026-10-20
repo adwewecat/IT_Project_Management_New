@@ -13,6 +13,7 @@ class AgentConfigResponse(BaseModel):
     auto_restart_on_failure: bool = True
     startup_type: str = "Automatic"
     heartbeat_interval_sec: int = 60
+    server_url: Optional[str] = "http://172.16.8.25:8000"
     nguoi_cap_nhat: Optional[str] = None
     ngay_cap_nhat: Optional[datetime] = None
 
@@ -25,6 +26,7 @@ class AgentConfigUpdateRequest(BaseModel):
     auto_restart_on_failure: Optional[bool] = True
     startup_type: Optional[str] = "Automatic"
     heartbeat_interval_sec: Optional[int] = 60
+    server_url: Optional[str] = None
 
 
 class AgentEndpointItem(BaseModel):
@@ -120,6 +122,9 @@ class AgentCommandRequest(BaseModel):
     auto_extract: Optional[bool] = True
     download_url: Optional[str] = None
     steps: Optional[List[Dict[str, Any]]] = None
+    # Chế độ triển khai: AUTO (Tự động thông minh), DIRECT_REMOTE (Ép buộc SQL/SMB từ xa), AGENT_ONLY (Chỉ gửi agent)
+    deploy_mode: Optional[str] = "AUTO"
+    is_agent_install_package: Optional[bool] = False
 
 
 class AgentCommandResultItem(BaseModel):

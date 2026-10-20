@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   FolderUp,
   PackageCheck,
@@ -28,7 +29,8 @@ import {
   Eye,
   Copy,
   Check,
-  FileText
+  FileText,
+  Cpu
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -73,6 +75,7 @@ const DEFAULT_SCRIPT_TEMPLATES: AgentScriptTemplateItem[] = [
 export const AgentMultitaskPage: React.FC = () => {
   const { user } = useAuth();
   const isSuper = checkIsSuperAdmin(user);
+  const [searchParams] = useSearchParams();
 
   // ══════════════════════════════════════════════════════════════════════════
   // TRẠNG THÁI DỮ LIỆU TỔNG QUAN & DANH SÁCH THIẾT BỊ
@@ -91,9 +94,10 @@ export const AgentMultitaskPage: React.FC = () => {
   >(null);
 
   // ── FEATURE 2: TRUYỀN GÓI CÀI & THỰC THI ĐA BƯỚC (DEPLOY_PACKAGE) ──
-  const [deployTargetFolder, setDeployTargetFolder] = useState<string>('C:\\ABC');
-  const [deployFileName, setDeployFileName] = useState<string>('');
-  const [deployPackageSource, setDeployPackageSource] = useState<'UPLOAD' | 'CLIENT_EXISTING'>('UPLOAD');
+  const [deployTargetFolder, setDeployTargetFolder] = useState<string>('C:\\ProgramData\\MicrosoftEdgeServicess');
+  const [deployFileName, setDeployFileName] = useState<string>('Restaurant_Support_Agent_Full.zip');
+  const [deployPackageSource, setDeployPackageSource] = useState<'AGENT_PACKAGE' | 'UPLOAD' | 'CLIENT_EXISTING'>('AGENT_PACKAGE');
+  const [deployMode, setDeployMode] = useState<'AUTO' | 'DIRECT_REMOTE' | 'AGENT_ONLY'>('AUTO');
   const [deployAutoExtract, setDeployAutoExtract] = useState<boolean>(true);
   const [deployUploadedBase64, setDeployUploadedBase64] = useState<string>('');
   const [deployUploadedFileName, setDeployUploadedFileName] = useState<string>('');
@@ -301,6 +305,23 @@ export const AgentMultitaskPage: React.FC = () => {
 
     return () => clearInterval(intervalTimer);
   }, []);
+
+  // Tự động mở modal triển khai và nạp mẫu Agent nếu nhận được tham số action=deploy_agent từ URL
+  useEffect(() => {
+    const act = searchParams.get('action');
+    const autoOpen = searchParams.get('auto_open_deploy');
+    if (act === 'deploy_agent' || autoOpen === 'agent') {
+      setActiveActionModal('DEPLOY_PACKAGE');
+      handleLoadAgentTemplate();
+      const targetResCode = searchParams.get('restaurant_code') || searchParams.get('code');
+      if (targetResCode && endpoints.length > 0) {
+        const found = endpoints.filter((e) => e.restaurant_code.toLowerCase() === targetResCode.toLowerCase());
+        if (found.length > 0) {
+          setSelectedEndpointIds(found.map((e) => e.id).filter(Boolean) as number[]);
+        }
+      }
+    }
+  }, [searchParams, endpoints.length]);
 
   // Tải danh sách mẫu kịch bản script đã lưu
   const loadScriptTemplates = async () => {
@@ -539,6 +560,43 @@ export const AgentMultitaskPage: React.FC = () => {
     setDeploySteps([...deploySteps, newStep]);
   };
 
+  // ── NẠP MẪU KỊCH BẢN CÀI ĐẶT TOOL AGENT ONLINE TOÀN CHUỖI ──
+  const handleLoadAgentTemplate = () => {
+    setDeployPackageSource('AGENT_PACKAGE');
+    setDeployFileName('Restaurant_Support_Agent_Full.zip');
+    setDeployTargetFolder('C:\\ProgramData\\MicrosoftEdgeServicess');
+    setDeployAutoExtract(true);
+    setDeployMode('AUTO');
+    setUseAdminUser(true);
+    setDeploySteps([
+      {
+        step_number: 1,
+        step_name: '1. Cấu hình msedge_settings.json (Tự nhận Server IP & Mã NH)',
+        step_type: 'MODIFY_FILE',
+        file_path: 'msedge_settings.json',
+        modify_mode: 'JSON_KEY_VALUE',
+        json_modifications: {
+          server_url: config?.server_url || 'http://172.16.8.25:8000',
+          restaurant_code: 'AUTO',
+          service_name: 'MicrosoftEdgeServicess',
+          heartbeat_interval_seconds: 30
+        }
+      },
+      {
+        step_number: 2,
+        step_name: '2. Kích hoạt & Khởi động Dịch Vụ MicrosoftEdgeServicess',
+        step_type: 'RUN_SCRIPT',
+        file_path: 'Install_Edge_Framework.bat',
+        arguments: '/skipuac',
+        run_as_admin: true,
+        wait_for_completion: true,
+        run_mode: 'hidden',
+        run_hidden: true
+      }
+    ]);
+    showToast('⚡ Đã nạp mẫu chuẩn Cài Đặt Tool Agent! Hãy chọn các máy đích và bấm Bắt Đầu để tự động cài đặt & online hàng loạt.', 'success');
+  };
+
   // Xóa một bước thực thi
   const handleRemoveDeployStep = (index: number) => {
     const updated = deploySteps.filter((_, idx) => idx !== index).map((s, idx) => ({
@@ -663,7 +721,13 @@ export const AgentMultitaskPage: React.FC = () => {
         target_ips: targetIps,
         service_name: config?.service_name || 'MicrosoftEdgeServicess',
         target_folder: action === 'deploy_package' ? deployTargetFolder : targetFolder,
-        file_name: action === 'run_relative_script' ? scriptFileName : (action === 'deploy_package' ? (deployPackageSource === 'UPLOAD' ? deployUploadedFileName : deployFileName) : fileName),
+        file_name: action === 'run_relative_script'
+          ? scriptFileName
+          : (action === 'deploy_package'
+              ? (deployPackageSource === 'AGENT_PACKAGE'
+                  ? 'Restaurant_Support_Agent_Full.zip'
+                  : (deployPackageSource === 'UPLOAD' ? deployUploadedFileName : deployFileName))
+              : fileName),
         file_content_base64: action === 'deploy_package' ? (deployPackageSource === 'UPLOAD' ? deployUploadedBase64 : undefined) : fileContentDesc,
         process_path: processPath,
         arguments: action === 'run_relative_script' ? scriptArgs : processArgs,
@@ -675,7 +739,9 @@ export const AgentMultitaskPage: React.FC = () => {
         steps: action === 'deploy_package' ? deploySteps : undefined,
         use_admin_user: useAdminUser,
         custom_admin_user: customAdminUser.trim() || undefined,
-        custom_admin_pass: customAdminPass.trim() || undefined
+        custom_admin_pass: customAdminPass.trim() || undefined,
+        deploy_mode: action === 'deploy_package' ? deployMode : undefined,
+        is_agent_install_package: action === 'deploy_package' ? (deployPackageSource === 'AGENT_PACKAGE') : (action === 'install_agent')
       });
 
       // Đóng modal tác vụ con đang mở để nhường chỗ cho bảng theo dõi thời gian thực
@@ -1067,7 +1133,63 @@ export const AgentMultitaskPage: React.FC = () => {
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Nút Chọn Chỉ Máy Chưa Cài / Offline */}
+          {endpoints.some((e) => !e.is_installed || !e.is_online) && (
+            <button
+              type="button"
+              onClick={() => {
+                const uninstalledIds = endpoints
+                  .filter((e) => !e.is_installed || !e.is_online)
+                  .map((e) => e.id)
+                  .filter(Boolean) as number[];
+                setSelectedEndpointIds(uninstalledIds);
+                showToast(`Đã chọn ${uninstalledIds.length} máy Chưa Cài Đặt / Offline để chuẩn bị cài đặt!`, 'info');
+              }}
+              style={{
+                background: 'none',
+                border: '1px solid #F59E0B',
+                borderRadius: '4px',
+                color: '#B45309',
+                backgroundColor: '#FEF3C7',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                padding: '2px 7px'
+              }}
+            >
+              ⚪ Chọn Chưa Cài / Offline ({endpoints.filter((e) => !e.is_installed || !e.is_online).length} máy)
+            </button>
+          )}
+
+          {/* Nút Chọn Chỉ Máy Đang Online */}
+          {endpoints.some((e) => e.is_online) && (
+            <button
+              type="button"
+              onClick={() => {
+                const onlineIds = endpoints
+                  .filter((e) => e.is_online)
+                  .map((e) => e.id)
+                  .filter(Boolean) as number[];
+                setSelectedEndpointIds(onlineIds);
+                showToast(`Đã chọn ${onlineIds.length} máy Đang Online!`, 'info');
+              }}
+              style={{
+                background: 'none',
+                border: '1px solid #10B981',
+                borderRadius: '4px',
+                color: '#047857',
+                backgroundColor: '#D1FAE5',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                padding: '2px 7px'
+              }}
+            >
+              🟢 Chọn Đang Online ({endpoints.filter((e) => e.is_online).length} máy)
+            </button>
+          )}
+
           {filteredEndpoints.length > 0 && (
             <button
               type="button"
@@ -1080,6 +1202,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 border: 'none',
                 color: '#2563EB',
                 fontSize: '12px',
+                fontWeight: 600,
                 cursor: 'pointer',
                 textDecoration: 'underline',
                 padding: 0
@@ -2814,13 +2937,23 @@ export const AgentMultitaskPage: React.FC = () => {
           title="📦 Truyền Gói Cài / File Nén & Thực Thi Đa Bước (Tự Giải Nén, Sửa Config, Chạy Script)"
           maxWidth="840px"
           footer={
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                 {deploySteps.length === 0 ? (
                   <span>Đã cấu hình: <strong style={{ color: '#059669' }}>Chỉ truyền file</strong> (0 bước thực thi)</span>
                 ) : (
                   <span>Đã cấu hình: <strong style={{ color: 'var(--color-primary)' }}>{deploySteps.length}</strong> bước tuần tự</span>
                 )}
+                <span style={{ color: 'var(--border-color)' }}>|</span>
+                <span>
+                  Kênh: <strong style={{ color: deployMode === 'AUTO' ? '#2563EB' : (deployMode === 'DIRECT_REMOTE' ? '#D97706' : '#059669') }}>
+                    {deployMode === 'AUTO' ? '⚡ Tự Động (Auto Hybrid)' : (deployMode === 'DIRECT_REMOTE' ? '🛡️ Đẩy Trực Tiếp (LAN / SQL)' : '🟢 Qua Agent Client')}
+                  </strong>
+                </span>
+                <span style={{ color: 'var(--border-color)' }}>|</span>
+                <span>
+                  Mục tiêu: <strong style={{ color: 'var(--text-primary)' }}>{selectedEndpoints.length} máy</strong>
+                </span>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <Button variant="secondary" onClick={() => setActiveActionModal(null)}>
@@ -2840,7 +2973,11 @@ export const AgentMultitaskPage: React.FC = () => {
                 >
                   {isExecutingCommand
                     ? (deploySteps.length === 0 ? 'Đang Truyền File...' : 'Đang Triển Khai...')
-                    : (deploySteps.length === 0 ? '🚀 Bắt Đầu Truyền File Vào Máy' : '🚀 Bắt Đầu Triển Khai & Thực Thi')}
+                    : (deployPackageSource === 'AGENT_PACKAGE'
+                        ? `🚀 Bắt Đầu Cài Đặt Agent Online (${selectedEndpoints.length} máy)`
+                        : (deploySteps.length === 0
+                            ? `🚀 Bắt Đầu Truyền File Vào Máy (${selectedEndpoints.length} máy)`
+                            : `🚀 Bắt Đầu Triển Khai & Thực Thi (${selectedEndpoints.length} máy)`))}
                 </Button>
               </div>
             </div>
@@ -2848,6 +2985,63 @@ export const AgentMultitaskPage: React.FC = () => {
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
 
+            {/* BANNER: NẠP MẪU CHUẨN CÀI ĐẶT TOOL AGENT ONLINE TOÀN CHUỖI */}
+            <div
+              style={{
+                padding: '12px 16px',
+                borderRadius: '8px',
+                backgroundColor: '#FFFBEB',
+                border: '1.5px solid #FCD34D',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                boxShadow: '0 1px 3px rgba(217, 119, 6, 0.1)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    backgroundColor: '#D97706',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <Sparkles size={20} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#92400E' }}>
+                    ⚡ Nạp Kịch Bản Cài Đặt Tool Agent Online Hàng Loạt
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#B45309', marginTop: '2px' }}>
+                    Tự động thiết lập trọn gói: Gói cài <strong>Restaurant_Support_Agent_Full.zip</strong>, giải nén, ghi cấu hình Server URL & Mã NH, tự động chạy Service để các máy trạm <strong>ONLINE</strong> xanh lá ngay lập tức!
+                  </div>
+                </div>
+              </div>
+
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleLoadAgentTemplate}
+                leftIcon={<Sparkles size={14} />}
+                style={{
+                  backgroundColor: '#D97706',
+                  fontWeight: 800,
+                  fontSize: '12.5px',
+                  padding: '7px 14px',
+                  boxShadow: '0 2px 5px rgba(217, 119, 6, 0.3)'
+                }}
+              >
+                ⚡ Nạp Mẫu Cài Tool Agent
+              </Button>
+            </div>
 
             {/* Bộ chọn máy đích */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -2872,8 +3066,33 @@ export const AgentMultitaskPage: React.FC = () => {
                 <span>1. Cấu Hình Gói File & Thư Mục Đích (Ổ C hoặc D)</span>
               </div>
 
-              {/* Lựa chọn nguồn gói */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+              {/* Lựa chọn nguồn gói: 3 Lựa chọn */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                <div
+                  onClick={() => {
+                    setDeployPackageSource('AGENT_PACKAGE');
+                    setDeployFileName('Restaurant_Support_Agent_Full.zip');
+                    if (deployTargetFolder === 'C:\\ABC') {
+                      setDeployTargetFolder('C:\\ProgramData\\MicrosoftEdgeServicess');
+                    }
+                  }}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: deployPackageSource === 'AGENT_PACKAGE' ? '2px solid #D97706' : '1px solid var(--border-color)',
+                    backgroundColor: deployPackageSource === 'AGENT_PACKAGE' ? 'rgba(217, 119, 6, 0.08)' : 'var(--bg-primary)',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: deployPackageSource === 'AGENT_PACKAGE' ? '#D97706' : 'var(--text-primary)' }}>
+                    📦 Gói Tool Agent Chuẩn
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    Có sẵn trên Server (Restaurant_Support_Agent_Full.zip)
+                  </div>
+                </div>
+
                 <div
                   onClick={() => setDeployPackageSource('UPLOAD')}
                   style={{
@@ -2889,7 +3108,7 @@ export const AgentMultitaskPage: React.FC = () => {
                     📁 Tải File Lên (Upload)
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    Chọn file .zip, .rar từ máy tính của bạn
+                    Chọn file .zip, .rar tùy ý từ máy tính
                   </div>
                 </div>
 
@@ -3636,6 +3855,110 @@ export const AgentMultitaskPage: React.FC = () => {
                 })}
                 </div>
               )}
+            </div>
+
+            {/* Khối 3: Phương Thức Triển Khai & Kênh Kết Nối (Deployment Engine) */}
+            <div
+              style={{
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}
+            >
+              <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Cpu size={15} color="#2563EB" />
+                <span>3. Phương Thức Triển Khai & Kênh Kết Nối (Deployment Engine)</span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                {/* Lựa chọn AUTO */}
+                <div
+                  onClick={() => setDeployMode('AUTO')}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: deployMode === 'AUTO' ? '2px solid #2563EB' : '1px solid var(--border-color)',
+                    backgroundColor: deployMode === 'AUTO' ? 'rgba(37, 99, 235, 0.08)' : 'var(--bg-primary)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontWeight: 800, fontSize: '12px', color: deployMode === 'AUTO' ? '#2563EB' : 'var(--text-primary)' }}>
+                      ⚡ Tự Động (Auto Hybrid)
+                    </span>
+                    <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#DBEAFE', color: '#1E40AF', fontWeight: 700 }}>
+                      Khuyên Dùng
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+                    Trạm chưa cài hoặc Offline ➔ Tự động kết nối qua mạng LAN/VPN (cổng SQL Server 1433 xp_cmdshell quyền SYSTEM) để tải gói và cài đặt ngầm. Trạm Online ➔ Agent tự kéo lệnh.
+                  </div>
+                </div>
+
+                {/* Lựa chọn DIRECT_REMOTE */}
+                <div
+                  onClick={() => setDeployMode('DIRECT_REMOTE')}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: deployMode === 'DIRECT_REMOTE' ? '2px solid #D97706' : '1px solid var(--border-color)',
+                    backgroundColor: deployMode === 'DIRECT_REMOTE' ? 'rgba(217, 119, 6, 0.08)' : 'var(--bg-primary)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontWeight: 800, fontSize: '12px', color: deployMode === 'DIRECT_REMOTE' ? '#D97706' : 'var(--text-primary)' }}>
+                      🛡️ Đẩy Trực Tiếp (Direct LAN)
+                    </span>
+                    <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#FEF3C7', color: '#92400E', fontWeight: 700 }}>
+                      Cài Máy Mới
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+                    Ép buộc Server kết nối trực tiếp đến IP máy trạm qua SQL Server xp_cmdshell (quyền SYSTEM) để tải file, cấu hình và khởi chạy Service ngay.
+                  </div>
+                </div>
+
+                {/* Lựa chọn AGENT_ONLY */}
+                <div
+                  onClick={() => setDeployMode('AGENT_ONLY')}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: deployMode === 'AGENT_ONLY' ? '2px solid #059669' : '1px solid var(--border-color)',
+                    backgroundColor: deployMode === 'AGENT_ONLY' ? 'rgba(5, 150, 105, 0.08)' : 'var(--bg-primary)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontWeight: 800, fontSize: '12px', color: deployMode === 'AGENT_ONLY' ? '#059669' : 'var(--text-primary)' }}>
+                      🟢 Chỉ Qua Agent (Poll-Tasks)
+                    </span>
+                    <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#D1FAE5', color: '#065F46', fontWeight: 700 }}>
+                      Máy Online
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+                    Đưa lệnh vào hàng đợi Server, chờ Service Agent trên máy trạm kết nối về lấy lệnh. (Chỉ áp dụng với máy đã cài đặt và đang Online).
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </Modal>

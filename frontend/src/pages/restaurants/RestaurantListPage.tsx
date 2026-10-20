@@ -17,6 +17,7 @@ import {
   X,
   Phone,
   PhoneCall,
+  Cpu,
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -80,6 +81,7 @@ export const RestaurantListPage: React.FC = () => {
   const shouldShowDailyNotice = isAppRole || isDungOrSuperAdmin || isSuperAdmin;
   const hasExtendedPermission = !!user?.quyen_mo_rong && user?.quyen_mo_rong !== '0';
   const canManageBrandRegion = isAdmin || hasExtendedPermission;
+  const canAccessAgentMultitask = isSuperAdmin || Boolean(user?.permissions?.['agent_multitask'] || user?.permissions?.['view_agent_multitask']);
 
   // 3CX Hotline Call Alert
   const {
@@ -511,6 +513,23 @@ export const RestaurantListPage: React.FC = () => {
           >
             Cài Đặt VNC / KDS
           </Button>
+          {canAccessAgentMultitask && (
+            <Button
+              variant="secondary"
+              leftIcon={<Cpu size={15} style={{ color: '#D97706' }} />}
+              className="mobile-action-btn"
+              onClick={() => navigate('/app/agent-multitask?action=deploy_agent')}
+              title="Truyền file và cài đặt tool agent hàng loạt cho toàn chuỗi nhà hàng"
+              style={{
+                borderColor: '#FCD34D',
+                backgroundColor: '#FFFBEB',
+                color: '#92400E',
+                fontWeight: 700
+              }}
+            >
+              🤖 Cài Tool Agent Hàng Loạt
+            </Button>
+          )}
           <Button
             variant="secondary"
             leftIcon={<ClipboardList size={16} />}

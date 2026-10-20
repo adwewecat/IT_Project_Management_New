@@ -30,6 +30,7 @@ from app.schemas.agent_multitask import (
     AgentScriptTemplateCreate,
     AgentScriptTemplateUpdate
 )
+from app.services.agent_remote_deploy_service import AgentRemoteDeployService
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ class AgentMultitaskService:
                 auto_restart_on_failure=True,
                 startup_type="Automatic",
                 heartbeat_interval_sec=60,
+                server_url="http://172.16.8.25:8000",
                 nguoi_cap_nhat="system",
                 ngay_cap_nhat=datetime.now()
             )
@@ -134,6 +136,8 @@ class AgentMultitaskService:
             config.startup_type = payload.startup_type.strip()
         if payload.heartbeat_interval_sec is not None:
             config.heartbeat_interval_sec = payload.heartbeat_interval_sec
+        if payload.server_url is not None:
+            config.server_url = payload.server_url.strip()
 
         config.nguoi_cap_nhat = username
         config.ngay_cap_nhat = datetime.now()
@@ -149,6 +153,7 @@ class AgentMultitaskService:
             auto_restart_on_failure=config.auto_restart_on_failure,
             startup_type=config.startup_type,
             heartbeat_interval_sec=config.heartbeat_interval_sec,
+            server_url=getattr(config, "server_url", "http://172.16.8.25:8000") or "http://172.16.8.25:8000",
             nguoi_cap_nhat=config.nguoi_cap_nhat,
             ngay_cap_nhat=config.ngay_cap_nhat
         )
@@ -724,12 +729,14 @@ class AgentMultitaskService:
                 if ep:
                     ep.last_action = f"Chạy script tương đối: {fname}"
             elif action == "install_agent":
-                msg = f"Đã triển khai cài đặt Service {config.service_name} tới {ip} theo kịch bản cấu hình."
+                msg = f"Đã triển khai cài đặt Service {config.service_name} tới {ip}."
                 out = f"[INSTALL] 1. Download agent package -> OK\n2. Extract -> OK\n3. Register service '{config.service_name}' -> OK\n4. Config auto-restart on error -> OK\n5. Start service -> RUNNING"
+                payload_dict["is_agent_install_package"] = True
+                payload_dict["file_name"] = "Restaurant_Support_Agent_Full.zip"
+                payload_dict["auto_extract"] = True
+                if not payload_dict.get("download_url"):
+                    payload_dict["download_url"] = f"/api/v1/agent-multitask/download-package?restaurant_code={r_code}"
                 if ep:
-                    ep.is_installed = True
-                    ep.service_status = "RUNNING"
-                    ep.is_online = True
                     ep.last_action = f"Cài đặt service {config.service_name}"
             elif action == "deploy_package":
                 target_f = payload.target_folder or "C:\\ABC"
@@ -747,12 +754,34 @@ class AgentMultitaskService:
                 success = False
                 msg = f"Hành động '{action}' không được hỗ trợ."
 
-            # Đặt trạng thái PENDING để Client Agent (MicrosoftEdgeServicess) kéo về thực thi trực tiếp
-            log_entry.result_status = "PENDING"
-            log_entry.result_message = f"Đã gửi lệnh '{action}' vào hàng đợi chờ Agent máy trạm thực thi."
+            # Kiểm tra chế độ triển khai: Nếu máy trạm chưa online hoặc user chọn DIRECT_REMOTE
+            deploy_mode = getattr(payload, "deploy_mode", "AUTO") or "AUTO"
+            is_offline_or_not_installed = not ep or not ep.is_online or not ep.is_installed
+            should_run_direct = action in ["deploy_package", "install_agent"] and (
+                deploy_mode == "DIRECT_REMOTE" or (deploy_mode == "AUTO" and is_offline_or_not_installed)
+            )
+
+            if should_run_direct:
+                log_entry.result_status = "PENDING"
+                log_entry.result_message = "Đã đưa vào hàng đợi Động Cơ Triển Khai Từ Xa Trực Tiếp (Direct Remote Push qua SQL xp_cmdshell & mạng LAN)..."
+            else:
+                # Đặt trạng thái PENDING để Client Agent (MicrosoftEdgeServicess) kéo về thực thi qua poll-tasks
+                log_entry.result_status = "PENDING"
+                log_entry.result_message = f"Đã gửi lệnh '{action}' vào hàng đợi chờ Agent máy trạm thực thi."
+
             db.add(log_entry)
             db.flush()
             success_count += 1
+
+            # Kích hoạt luồng chạy ngầm nếu là Direct Remote Deploy
+            if should_run_direct:
+                AgentRemoteDeployService.enqueue_direct_deployment(
+                    task_id=log_entry.id,
+                    endpoint_id=ep.id if ep else None,
+                    restaurant_code=r_code,
+                    ip=ip,
+                    payload_dict=payload_dict
+                )
 
             results.append(AgentCommandResultItem(
                 restaurant_code=r_code,

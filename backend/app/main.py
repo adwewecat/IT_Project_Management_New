@@ -139,10 +139,16 @@ async def lifespan(app: FastAPI):
                         IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='AGENT_MULTITASK_ENDPOINTS' AND COLUMN_NAME='admin_pass')
                             ALTER TABLE dbo.AGENT_MULTITASK_ENDPOINTS ADD admin_pass NVARCHAR(255) NULL;
                     END
+
+                    IF OBJECT_ID('dbo.AGENT_MULTITASK_CONFIG', 'U') IS NOT NULL
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='AGENT_MULTITASK_CONFIG' AND COLUMN_NAME='server_url')
+                            ALTER TABLE dbo.AGENT_MULTITASK_CONFIG ADD server_url NVARCHAR(255) NULL DEFAULT ('http://172.16.8.25:8000');
+                    END
                 """))
                 _c.commit()
             except Exception as _ex_ep:
-                logger.warning("Lỗi tự động kiểm tra cột AGENT_MULTITASK_ENDPOINTS: %s", _ex_ep)
+                logger.warning("Lỗi tự động kiểm tra cột AGENT_MULTITASK_ENDPOINTS/CONFIG: %s", _ex_ep)
 
             # Đảm bảo quyền agent_multitask tồn tại trong PHANQUYEN_DETAIL
             try:

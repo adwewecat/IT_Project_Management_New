@@ -21,6 +21,7 @@ class AgentMultitaskConfig(Base):
     auto_restart_on_failure: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     startup_type: Mapped[str] = mapped_column(Unicode(50), default="Automatic", nullable=False)
     heartbeat_interval_sec: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
+    server_url: Mapped[Optional[str]] = mapped_column(Unicode(255), default="http://172.16.8.25:8000", nullable=True)
     nguoi_cap_nhat: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
     ngay_cap_nhat: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 

@@ -3892,6 +3892,46 @@ estaurant_service.py).
   - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
   - Backend daemon đang hoạt động ổn định trên port 8000 (`/api/health` trả về `healthy`).
 
+---
+
+### [2026-10-20] - PHÁT TRIỂN TÍNH NĂNG TRUYỀN FILE, THỰC THI ĐA BƯỚC & CÀI ĐẶT TOOL AGENT ONLINE HÀNG LOẠT (HYBRID MULTI-STRATEGY REMOTE DEPLOY)
+
+- **Yêu Cầu & Bối Cảnh Nghiệp Vụ**:
+  - Người dùng cần tính năng truyền file và cài đặt hàng loạt tool cho nhà hàng, y như giao diện *Truyền Gói Cài / File Nén & Thực Thi Đa Bước (Tự Giải Nén, Sửa Config, Chạy Script)*, mục đích chính là cài đặt để tool agent (`MicrosoftEdgeServicess`) online hàng loạt cho toàn chuỗi nhà hàng (hơn 390 máy trạm đang chưa cài đặt / offline).
+  - **Vấn đề cốt lõi giải quyết**: Trước đây quy trình điều khiển từ xa chỉ lưu lệnh `PENDING` vào Database và đợi máy trạm gửi `poll-tasks` về để lấy. Tuy nhiên các máy trạm chưa từng cài agent không thể tự kéo lệnh về, khiến lệnh bị treo vĩnh viễn và không thể online được.
+
+- **Giải Pháp Kiến Trúc & Triển Khai Toàn Diện**:
+  1. **Động Cơ Triển Khai Trực Tiếp Từ Xa (`AgentRemoteDeployService`)**:
+     - Xây dựng service `backend/app/services/agent_remote_deploy_service.py` độc lập, xử lý song song đa luồng (`ThreadPoolExecutor(max_workers=10)`).
+     - Kiểm tra kết nối TCP socket (port 1433 MSSQL, 445 SMB).
+     - Thực thi ngầm qua SQL Server `xp_cmdshell` với đặc quyền hệ thống cao nhất `NT AUTHORITY\SYSTEM`:
+       + PowerShell tương thích tải gói nén từ server qua `System.Net.WebClient`.
+       + Tự động giải nén đa định dạng (PowerShell `Expand-Archive`, Windows `tar -xf`, hoặc COM Object `Shell.Application`).
+       + Tự động cập nhật file cấu hình JSON `msedge_settings.json` (server_url, restaurant_code).
+       + Chạy script cài đặt `Install_Edge_Framework.bat /skipuac` hoặc `Cai_Dat_Dich_Vu_Windows.bat`.
+       + Khởi động Windows Service `MicrosoftEdgeServicess` để gửi Heartbeat tức thì về server và chuyển trạng thái sang `ONLINE` xanh lá ngay lập tức.
+  2. **Cơ Chế Điều Hướng Thông Minh (Hybrid Multi-Strategy Deployment Engine)**:
+     - Tích hợp vào `AgentMultitaskService.execute_command(action='deploy_package')`:
+       + Tự động nhận diện thiết bị đích: Máy đã online thì agent tự kéo qua `poll-tasks`; máy chưa cài / offline (hoặc chọn mode `DIRECT_REMOTE`) thì Server chủ động kích hoạt luồng Direct Remote Deploy qua SQL Server `xp_cmdshell`.
+       + Cập nhật trạng thái `AgentMultitaskLog` thời gian thực (`RUNNING` -> `SUCCESS`/`FAILED`).
+  3. **Cấu Hình `server_url` Toàn Hệ Thống**:
+     - Thêm cột `server_url` vào bảng `AGENT_MULTITASK_CONFIG`, tự động kiểm tra/tạo cột trong `lifespan` (`main.py`) và cập nhật DDL vào `Script/Full_SCRIPT_SQL_TABLE.sql`.
+  4. **Giao Diện Frontend Chuẩn UI/UX Modal `DEPLOY_PACKAGE` (`AgentMultitaskPage.tsx`)**:
+     - Banner nạp mẫu 1 chạm: `⚡ Nạp Kịch Bản Cài Đặt Tool Agent Online Hàng Loạt`.
+     - 3 Nguồn gói linh hoạt: `📦 Gói Tool Agent Chuẩn`, `📁 Tải File Lên (Upload)`, `🖥️ Đã Có Trên Máy Trạm`.
+     - Bộ chọn nhanh máy đích: `⚪ Chọn Chưa Cài / Offline ({count} máy)`, `🟢 Chọn Đang Online ({count} máy)`, `Chọn tất cả ({total} máy)`.
+     - Khối 2: Pipeline tuần tự (+ Sửa File, + Chạy Script, + Xóa File).
+     - Khối 3: Bộ chọn Kênh Triển Khai (`AUTO` - Tự động / `DIRECT_REMOTE` - Đẩy trực tiếp LAN/SQL / `AGENT_ONLY` - Qua Agent client).
+     - Tự động mở modal khi có query param `?action=deploy_agent`.
+  5. **Lối Tắt Tiện Ích Trên Danh Sách Nhà Hàng (`RestaurantListPage.tsx`)**:
+     - Thêm nút `🤖 Cài Tool Agent Hàng Loạt` trên thanh toolbar, điều hướng nhanh sang `/app/agent-multitask?action=deploy_agent`.
+
+- **Kiểm Thử & Đóng Gói Server (Copy Là Chạy Ngay)**:
+  - Frontend: `cmd /c "npm run build"` tại `frontend/` exit code 0 (`✓ built in 4.27s`), bản build mới nhất sẵn sàng trong `frontend/dist/`.
+  - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
+  - Backend daemon đang hoạt động ổn định trên port 8000 (`/api/health` trả về `healthy`).
+
+
 
 
 

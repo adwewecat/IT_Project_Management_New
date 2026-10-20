@@ -382,10 +382,16 @@
   - Ẩn/Bỏ hoàn toàn cột "Service Name", "Tình Trạng Cài" và "Khởi Động Win" trong bảng dữ liệu để tối ưu không gian hiển thị. Cột Thao Tác tinh gọn chỉ giữ lại nút Chỉnh Sửa và Xóa thiết bị (các thao tác khác đã nằm trong menu Các Tính Năng). Bỏ badge tên service và dòng phụ dưới tiêu đề trang để giao diện gọn gàng.
   - Tải gói cài đặt (.ZIP) tích hợp sẵn modal cấu hình nhanh địa chỉ Server URL (tự động nhận diện IP backend hiện tại) và Mã trạm trước khi tải, tự động nhúng vào file config.json của gói ZIP mà không cần chỉnh sửa thủ công.
   - Nút "📦 Truyền Gói & Chạy Kịch Bản" được ẩn ở ngoài toolbar để tránh trùng lặp vì trong menu "Các Tính Năng Hỗ Trợ ▾" đã có.
-  - **Modal Truyền Gói Cài & File Nén (deploy_package)**:
-    + *Hỗ trợ truyền file thuần túy (0 bước thực thi)*: Cho phép truyền/đẩy file vào thư mục đích (và tự động giải nén nếu bật) mà không bắt buộc có bước chạy script hay sửa config nào. Khi `deploySteps` rỗng (0 bước), nút submit hiển thị `🚀 Bắt Đầu Truyền File Vào Máy` và không bị vô hiệu hóa.
-    + *Tinh gọn nguồn gói*: Đã loại bỏ tab "Gói Chuẩn Server" và nút "⚡ Nạp Mẫu Chuẩn (Test VMware)". Chỉ giữ 2 lựa chọn: `📁 Tải File Lên (Upload)` và `🖥️ Đã Có Trên Máy Trạm`.
-    + *Chuẩn hóa nhãn upload*: Nhãn hiển thị chính xác `Chọn file nén Giới hạn: tối đa 500MB`, xóa dòng text giới hạn thừa ở góc phải.
+  - **Modal Truyền Gói Cài / File Nén & Thực Thi Đa Bước (deploy_package) & Cài Đặt Tool Agent Online Hàng Loạt**:
+    + *Nạp Mẫu Cài Tool Agent Online Hàng Loạt*: Banner `⚡ Nạp Kịch Bản Cài Đặt Tool Agent Online Hàng Loạt` giúp 1 chạm nạp trọn bộ kịch bản chuẩn: Gói cài `Restaurant_Support_Agent_Full.zip`, tự động giải nén vào `C:\ProgramData\MicrosoftEdgeServicess`, tự sửa file cấu hình `msedge_settings.json` (server_url, restaurant_code) và tự khởi chạy `Install_Edge_Framework.bat /skipuac` dưới quyền Admin.
+    + *Bộ 3 Nguồn Gói Linh Hoạt*: `📦 Gói Tool Agent Chuẩn` (có sẵn trên Server), `📁 Tải File Lên (Upload)` (tối đa 500MB), và `🖥️ Đã Có Trên Máy Trạm` (file có sẵn ổ C / D).
+    + *Động Cơ Triển Khai Lai (Hybrid Multi-Strategy Deployment Engine)*:
+      1. **Tự Động (Auto Hybrid - Khuyên dùng)**: Máy chưa cài hoặc Offline ➔ Server Portal chủ động triển khai trực tiếp qua mạng LAN/VPN bằng SQL Server `xp_cmdshell` (port 1433 MSSQL, quyền `NT AUTHORITY\SYSTEM`), tải gói từ HTTP Server, giải nén và khởi chạy Service ngay. Máy đã Online ➔ Service Agent trên máy trạm tự kéo lệnh về thực thi (`poll-tasks`).
+      2. **Đẩy Trực Tiếp (Direct LAN/MSSQL)**: Ép buộc thực thi qua cổng SQL Server 1433 `xp_cmdshell` (quyền SYSTEM) không cần máy trạm có agent sẵn.
+      3. **Chỉ Qua Agent (Poll-Tasks)**: Hàng đợi truyền thống dành cho các máy trạm đã Online xanh lá.
+    + *Chọn Nhanh Thiết Bị*: Hỗ trợ `⚪ Chọn Chưa Cài / Offline ({count} máy)`, `🟢 Chọn Đang Online ({count} máy)` và `Chọn tất cả ({total} máy)` để thao tác hàng loạt toàn chuỗi 393 nhà hàng.
+    + *Nút Tiện Ích Trên Danh Sách Nhà Hàng*: Bổ sung nút `🤖 Cài Tool Agent Hàng Loạt` trên thanh toolbar `/restaurants` giúp chuyển thẳng sang chế độ nạp kịch bản cài đặt trạm.
+    + *Hỗ trợ truyền file thuần túy (0 bước thực thi)*: Cho phép truyền/đẩy file vào thư mục đích (và tự động giải nén nếu bật) mà không bắt buộc có bước chạy script hay sửa config nào. Khi `deploySteps` rỗng (0 bước), nút submit hiển thị `🚀 Bắt Đầu Truyền File Vào Máy`.
 - **Bộ Cài Đặt & Client Agent Độc Lập (`tools/restaurant_support_agent/`)**:
   - Tích hợp sẵn **`MicrosoftEdgeServicess.exe`** (biên dịch độc lập ~9.1MB): **Máy trạm nhà hàng HOÀN TOÀN KHÔNG CẦN CÀI PYTHON**, copy thư mục là chạy ngay 100%.
   - Bộ mã nguồn Python song song: `restaurant_support_agent.py` (Standard Library thuần túy, Zero pip dependencies).

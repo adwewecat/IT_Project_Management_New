@@ -9,6 +9,7 @@ export interface AgentConfigResponse {
   auto_restart_on_failure: boolean;
   startup_type: string;
   heartbeat_interval_sec: number;
+  server_url?: string;
   nguoi_cap_nhat?: string;
   ngay_cap_nhat?: string;
 }
@@ -21,6 +22,7 @@ export interface AgentConfigUpdateRequest {
   auto_restart_on_failure?: boolean;
   startup_type?: string;
   heartbeat_interval_sec?: number;
+  server_url?: string;
 }
 
 export interface AgentEndpointItem {
@@ -130,6 +132,8 @@ export interface AgentCommandRequest {
   use_admin_user?: boolean;
   custom_admin_user?: string;
   custom_admin_pass?: string;
+  deploy_mode?: 'AUTO' | 'DIRECT_REMOTE' | 'AGENT_ONLY';
+  is_agent_install_package?: boolean;
 }
 
 export interface AgentCommandResultItem {

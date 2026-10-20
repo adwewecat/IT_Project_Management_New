@@ -176,6 +176,7 @@ def get_config(
         auto_restart_on_failure=config.auto_restart_on_failure,
         startup_type=config.startup_type,
         heartbeat_interval_sec=config.heartbeat_interval_sec,
+        server_url=getattr(config, "server_url", "http://172.16.8.25:8000") or "http://172.16.8.25:8000",
         nguoi_cap_nhat=config.nguoi_cap_nhat,
         ngay_cap_nhat=config.ngay_cap_nhat
     )
