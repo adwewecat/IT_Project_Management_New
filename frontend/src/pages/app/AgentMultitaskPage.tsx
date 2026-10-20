@@ -270,12 +270,14 @@ export const AgentMultitaskPage: React.FC = () => {
 
         // Chỉ dừng polling nếu:
         // 1. Toàn bộ trackingTaskIds đều đã có bản ghi từ server
-        // 2. Không có bản ghi nào còn ở trạng thái PENDING
+        // 2. Không có bản ghi nào còn ở trạng thái PENDING hoặc RUNNING (đang xử lý ngầm)
         const validResults = results.filter((r) => r && r.logItem);
         const hasAllResults = validResults.length === trackingTaskIds.length;
-        const anyPending = validResults.some((r) => r!.logItem.result_status === 'PENDING');
+        const anyInProgress = validResults.some(
+          (r) => r!.logItem.result_status === 'PENDING' || r!.logItem.result_status === 'RUNNING'
+        );
 
-        if (hasAllResults && !anyPending && validResults.length > 0) {
+        if (hasAllResults && !anyInProgress && validResults.length > 0) {
           setIsTrackingPolling(false);
           // Tự động nạp lại danh sách máy
           agentMultitaskService.getEndpoints().then((eps) => setEndpoints(eps)).catch(() => {});
@@ -5078,22 +5080,37 @@ export const AgentMultitaskPage: React.FC = () => {
           isOpen={trackingModalOpen}
           onClose={() => setTrackingModalOpen(false)}
           title={
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              {isTrackingPolling ? (
-                <RefreshCw size={20} className="animate-spin" style={{ color: '#2563EB' }} />
-              ) : Object.values(trackingLogs).some((l) => l.result_status === 'FAILED') ? (
-                <AlertTriangle size={20} style={{ color: '#EF4444' }} />
-              ) : (
-                <CheckCircle size={20} style={{ color: '#10B981' }} />
-              )}
-              <span style={{ fontSize: '16px', fontWeight: 800 }}>
-                {isTrackingPolling
-                  ? '⏳ Đang Thực Thi Lệnh Từ Xa (Thời Gian Thực)...'
-                  : Object.values(trackingLogs).some((l) => l.result_status === 'FAILED')
-                  ? '❌ Lệnh Thực Thi Thất Bại / Có Lỗi Phát Sinh'
-                  : '✅ Lệnh Thực Thi Hoàn Tất Thành Công 100%'}
-              </span>
-            </div>
+            (() => {
+              const logsList = Object.values(trackingLogs);
+              const hasAnyRunning = logsList.some((l) => l.result_status === 'PENDING' || l.result_status === 'RUNNING');
+              const hasAnyFailed = logsList.some((l) => l.result_status === 'FAILED');
+              const allCompletedSuccess = logsList.length > 0 && logsList.every((l) => l.result_status === 'SUCCESS');
+
+              const isStillWorking = isTrackingPolling || hasAnyRunning;
+
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {isStillWorking ? (
+                    <RefreshCw size={20} className="animate-spin" style={{ color: '#2563EB' }} />
+                  ) : hasAnyFailed ? (
+                    <AlertTriangle size={20} style={{ color: '#EF4444' }} />
+                  ) : allCompletedSuccess ? (
+                    <CheckCircle size={20} style={{ color: '#10B981' }} />
+                  ) : (
+                    <RefreshCw size={20} className="animate-spin" style={{ color: '#2563EB' }} />
+                  )}
+                  <span style={{ fontSize: '16px', fontWeight: 800 }}>
+                    {isStillWorking
+                      ? '⏳ Đang Thực Thi Lệnh Từ Xa (Thời Gian Thực)...'
+                      : hasAnyFailed
+                      ? '❌ Triển Khai Thất Bại / Có Lỗi Phát Sinh'
+                      : allCompletedSuccess
+                      ? '✅ Lệnh Thực Thi Hoàn Tất Thành Công 100%'
+                      : '⏳ Đang Xử Lý Lệnh...'}
+                  </span>
+                </div>
+              );
+            })()
           }
           maxWidth="880px"
           footer={
@@ -5127,58 +5144,68 @@ export const AgentMultitaskPage: React.FC = () => {
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '72vh', overflowY: 'auto' }}>
             {/* Thanh trạng thái tổng quan */}
-            <div
-              style={{
-                padding: '12px 16px',
-                borderRadius: '8px',
-                backgroundColor: isTrackingPolling
-                  ? 'rgba(37, 99, 235, 0.08)'
-                  : Object.values(trackingLogs).some((l) => l.result_status === 'FAILED')
-                  ? 'rgba(239, 68, 68, 0.08)'
-                  : 'rgba(16, 185, 129, 0.08)',
-                border: `1.5px solid ${
-                  isTrackingPolling
-                    ? '#93C5FD'
-                    : Object.values(trackingLogs).some((l) => l.result_status === 'FAILED')
-                    ? '#FCA5A5'
-                    : '#6EE7B7'
-                }`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '10px'
-              }}
-            >
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '2px' }}>
-                  🎯 Tác Vụ:{' '}
-                  <span style={{ color: '#2563EB', textTransform: 'uppercase' }}>
-                    {trackingAction}
-                  </span>{' '}
-                  | Thiết bị: {trackingTargets.map((t) => `${t.code} (${t.ip})`).join(', ')}
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  {isTrackingPolling
-                    ? 'Server đã gửi lệnh vào hàng đợi. Client Agent máy trạm đang tiếp nhận và chạy các bước...'
-                    : Object.values(trackingLogs).some((l) => l.result_status === 'FAILED')
-                    ? '⚠️ Quá trình thực thi gặp lỗi. Vui lòng xem chi tiết nguyên nhân bên dưới để khắc phục!'
-                    : '🎉 Toàn bộ các bước cài đặt / cấu hình đã hoàn tất chuẩn xác trên máy trạm.'}
-                </div>
-              </div>
+            {(() => {
+              const logsList = Object.values(trackingLogs);
+              const hasAnyRunning = logsList.some((l) => l.result_status === 'PENDING' || l.result_status === 'RUNNING');
+              const hasAnyFailed = logsList.some((l) => l.result_status === 'FAILED');
+              const isStillWorking = isTrackingPolling || hasAnyRunning;
 
-              {isTrackingPolling && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#2563EB', fontWeight: 700 }}>
-                  <RefreshCw size={14} className="animate-spin" /> Đang chạy... ({trackingElapsedSeconds}s)
+              return (
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: '8px',
+                    backgroundColor: isStillWorking
+                      ? 'rgba(37, 99, 235, 0.08)'
+                      : hasAnyFailed
+                      ? 'rgba(239, 68, 68, 0.08)'
+                      : 'rgba(16, 185, 129, 0.08)',
+                    border: `1.5px solid ${
+                      isStillWorking
+                        ? '#93C5FD'
+                        : hasAnyFailed
+                        ? '#FCA5A5'
+                        : '#6EE7B7'
+                    }`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '10px'
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '2px' }}>
+                      🎯 Tác Vụ:{' '}
+                      <span style={{ color: '#2563EB', textTransform: 'uppercase' }}>
+                        {trackingAction}
+                      </span>{' '}
+                      | Thiết bị: {trackingTargets.map((t) => `${t.code} (${t.ip})`).join(', ')}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                      {isStillWorking
+                        ? 'Server đã gửi lệnh vào hàng đợi. Đang tiến hành kết nối và triển khai xuống máy trạm...'
+                        : hasAnyFailed
+                        ? '⚠️ Quá trình thực thi gặp lỗi. Vui lòng xem chi tiết nguyên nhân và gợi ý khắc phục bên dưới!'
+                        : '🎉 Toàn bộ các bước cài đặt / cấu hình đã hoàn tất chuẩn xác trên máy trạm.'}
+                    </div>
+                  </div>
+
+                  {isStillWorking && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#2563EB', fontWeight: 700 }}>
+                      <RefreshCw size={14} className="animate-spin" /> Đang chạy... ({trackingElapsedSeconds}s)
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
             {/* Chi tiết từng thiết bị thực thi */}
             {trackingTaskIds.map((tid, idx) => {
               const log = trackingLogs[tid];
               const target = trackingTargets[idx] || { code: 'N/A', ip: 'N/A', name: '' };
               const isPending = !log || log.result_status === 'PENDING';
+              const isRunning = log && log.result_status === 'RUNNING';
               const isFailed = log && log.result_status === 'FAILED';
               const isSuccess = log && log.result_status === 'SUCCESS';
 
@@ -5198,7 +5225,7 @@ export const AgentMultitaskPage: React.FC = () => {
                   key={tid}
                   style={{
                     borderRadius: '8px',
-                    border: `1.5px solid ${isFailed ? '#EF4444' : isSuccess ? '#10B981' : '#CBD5E1'}`,
+                    border: `1.5px solid ${isFailed ? '#EF4444' : isSuccess ? '#10B981' : isRunning ? '#3B82F6' : '#CBD5E1'}`,
                     backgroundColor: 'var(--bg-secondary)',
                     overflow: 'hidden'
                   }}
@@ -5207,7 +5234,7 @@ export const AgentMultitaskPage: React.FC = () => {
                   <div
                     style={{
                       padding: '10px 14px',
-                      backgroundColor: isFailed ? '#FEF2F2' : isSuccess ? '#F0FDF4' : '#F8FAFC',
+                      backgroundColor: isFailed ? '#FEF2F2' : isSuccess ? '#F0FDF4' : isRunning ? '#EFF6FF' : '#F8FAFC',
                       borderBottom: '1px solid var(--border-color)',
                       display: 'flex',
                       alignItems: 'center',
@@ -5217,7 +5244,7 @@ export const AgentMultitaskPage: React.FC = () => {
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Monitor size={16} style={{ color: isFailed ? '#EF4444' : isSuccess ? '#10B981' : '#64748B' }} />
+                      <Monitor size={16} style={{ color: isFailed ? '#EF4444' : isSuccess ? '#10B981' : isRunning ? '#3B82F6' : '#64748B' }} />
                       <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
                         {target.name || target.code} ({target.ip})
                       </span>
@@ -5229,7 +5256,12 @@ export const AgentMultitaskPage: React.FC = () => {
                     <div>
                       {isPending && (
                         <Badge variant="warning" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <RefreshCw size={11} className="animate-spin" /> Đang Chờ Agent Nhận ({trackingElapsedSeconds}s)
+                          <RefreshCw size={11} className="animate-spin" /> Đang Chờ ({trackingElapsedSeconds}s)
+                        </Badge>
+                      )}
+                      {isRunning && (
+                        <Badge variant="info" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <RefreshCw size={11} className="animate-spin" /> Đang Triển Khai ({trackingElapsedSeconds}s)
                         </Badge>
                       )}
                       {isSuccess && (
@@ -5261,14 +5293,17 @@ export const AgentMultitaskPage: React.FC = () => {
                         }}
                       >
                         <div>⚠️ <strong>CHI TIẾT LỖI PHÁT SINH TẠI MÁY TRẠM:</strong></div>
-                        <div style={{ marginTop: '4px', color: '#B91C1C', fontFamily: 'monospace' }}>
+                        <div style={{ marginTop: '4px', color: '#B91C1C', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
                           {errorLine || log?.result_message || 'Không xác định được nguyên nhân cụ thể.'}
                         </div>
                         {errorLine && errorLine.toLowerCase().includes('1326') && (
                           <div style={{ marginTop: '6px', fontSize: '11.5px', fontWeight: 500, color: '#7F1D1D' }}>
-                            💡 <strong>Gợi ý khắc phục:</strong> Bạn đang nhập sai mật khẩu của tài khoản Windows (Lỗi 1326: Logon failure). Vui lòng tích chọn User khác hoặc nhập đúng mật khẩu của User có quyền Administrator như <code>APP</code> hoặc <code>LILI</code>.
+                            💡 <strong>Gợi ý:</strong> Bạn đang nhập sai mật khẩu Windows (Lỗi 1326: Logon failure). Vui lòng thử User khác hoặc nhập đúng mật khẩu Administrator.
                           </div>
                         )}
+                        <div style={{ marginTop: '8px', padding: '8px 10px', borderRadius: '4px', backgroundColor: 'rgba(37, 99, 235, 0.08)', border: '1px dashed #60A5FA', color: '#1E40AF', fontSize: '11.5px', fontWeight: 500 }}>
+                          💡 <strong>Gợi ý nhanh (Máy không có SQL hoặc chặn Remote SMB):</strong> Bạn có thể mở TightVNC kết nối tới IP <code>{target.ip}</code> (mật khẩu <code>1234a@</code>) ➔ bấm nút <strong>Transfer Files</strong> chuyển file gói cài đặt vào ổ <code>D:\</code> ➔ giải nén và chuột phải chọn <strong>Run as administrator</strong> file script cài đặt 1 lần duy nhất. Sau đó máy trạm sẽ lập tức Online 🟢 trên Portal!
+                        </div>
                       </div>
                     )}
 

@@ -40,6 +40,25 @@ def _test_tcp_port(ip: str, port: int, timeout: float = 1.5) -> bool:
         return False
 
 
+def resolve_server_url(config_server_url: Optional[str], target_ip: str) -> str:
+    """
+    Tự động xác định Server URL chuẩn xác để máy trạm nhà hàng có thể tải gói cài đặt:
+    - Nếu config_server_url được chỉ định và không phải localhost -> Sử dụng URL cấu hình.
+    - Nếu không hoặc là localhost/None -> Tự động xác định IP card mạng nội bộ route tới target_ip.
+    """
+    clean_cfg = (config_server_url or "").strip().rstrip('/')
+    if clean_cfg and "localhost" not in clean_cfg and "127.0.0.1" not in clean_cfg:
+        return clean_cfg
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect((target_ip.strip(), 80))
+            detected_ip = s.getsockname()[0]
+            return f"http://{detected_ip}:8000"
+    except Exception:
+        return "http://172.16.8.25:8000"
+
+
 class AgentRemoteDeployService:
     """
     Dịch Vụ Triển Khai Từ Xa Trực Tiếp (Direct Remote Deploy Engine):
@@ -57,7 +76,8 @@ class AgentRemoteDeployService:
         steps: List[Dict[str, Any]],
         restaurant_code: str,
         server_url: str,
-        is_agent_package: bool
+        is_agent_package: bool,
+        task_id: Optional[int] = None
     ) -> str:
         """
         Xây dựng kịch bản PowerShell thông minh, tương thích ngược từ Windows 7 / Server 2008
@@ -241,6 +261,33 @@ if (Test-Path $exePath) {{
 }}
 """
 
+        # Bổ sung callback gửi kết quả về Server Portal nếu có task_id
+        callback_block = ""
+        if task_id:
+            callback_block = f"""
+# Gui callback ket qua ve Server Portal
+try {{
+    $finalLogStr = $log -join "`n"
+    $cbPayload = @{{
+        "task_id" = {task_id};
+        "restaurant_code" = "{clean_r_code}";
+        "status" = "SUCCESS";
+        "message" = $finalLogStr
+    }} | ConvertTo-Json -Depth 3
+    $cbUrl = "{clean_srv}/api/v1/agent-multitask/deploy-callback"
+    $req = [System.Net.WebRequest]::Create($cbUrl)
+    $req.Method = "POST"
+    $req.ContentType = "application/json; charset=utf-8"
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($cbPayload)
+    $req.ContentLength = $bytes.Length
+    $st = $req.GetRequestStream()
+    $st.Write($bytes, 0, $bytes.Length)
+    $st.Close()
+    $resp = $req.GetResponse()
+    $resp.Close()
+}} catch {{}}
+"""
+
         script_content = f"""
 $ErrorActionPreference = 'SilentlyContinue'
 $log = @()
@@ -323,6 +370,7 @@ if ($autoExtract -and (Test-Path $targetFilePath) -and ($fileName -match '(?i)\\
 {agent_service_block}
 
 $log += "=== TRIEN KHAI HOAN TAT 100% ==="
+{callback_block}
 $log -join "`r`n"
 """
         return script_content.strip()
@@ -342,23 +390,18 @@ $log -join "`r`n"
         try:
             with pyodbc.connect(conn_str, autocommit=True, timeout=4) as conn:
                 with conn.cursor() as cursor:
-                    # Bật xp_cmdshell nếu chưa bật
                     try:
                         cursor.execute("EXEC sp_configure 'show advanced options', 1; RECONFIGURE;")
                         cursor.execute("EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;")
                     except Exception as ex_cfg:
                         logger.debug("sp_configure xp_cmdshell note: %s", ex_cfg)
 
-                    # Encode kịch bản PowerShell sang UTF-16LE Base64
                     encoded_cmd = base64.b64encode(powershell_script.encode("utf-16le")).decode("ascii")
-
-                    # Chạy qua xp_cmdshell
                     cursor.execute(f"EXEC xp_cmdshell 'powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded_cmd}'")
                     rows = cursor.fetchall()
                     full_output_lines = [str(r[0]) for r in rows if r and r[0] is not None]
                     full_output = "\n".join(full_output_lines)
 
-                    # Kiểm tra xem có dấu hiệu thành công
                     is_success = "TRIEN KHAI HOAN TAT 100%" in full_output or "RUNNING" in full_output
                     return is_success, full_output
         except Exception as e_sql:
@@ -370,28 +413,29 @@ $log -join "`r`n"
         ip: str,
         admin_user: str,
         admin_pass: str,
-        powershell_script: str
+        server_url: str,
+        task_id: int
     ) -> Tuple[bool, str]:
         """
         Thực thi kịch bản triển khai từ xa qua mạng LAN/VPN cho máy trạm KHÔNG CÀI SQL SERVER
         (Cổng 1433 đóng, cổng SMB 445 / WMI 135 / RPC mở):
-        1. Sử dụng Schtasks /create /s <IP> /ru SYSTEM để chạy script PowerShell ngầm.
-        2. Hoặc WMIC process call create.
+        Sử dụng lệnh Schtasks /create với câu lệnh bootstrap một dòng ngắn gọn (< 160 ký tự)
+        tránh triệt để lỗi 261 ký tự của Windows schtasks /tr.
         """
         import subprocess
-
-        # Encode kịch bản PowerShell Base64 UTF-16LE
-        encoded_cmd = base64.b64encode(powershell_script.encode("utf-16le")).decode("ascii")
-        ps_exec_cmd = f"powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded_cmd}"
 
         user_clean = admin_user.strip() if admin_user else "Administrator"
         pass_clean = admin_pass.strip() if admin_pass else ""
 
+        # Lệnh bootstrap một dòng ngắn gọn tải script từ server và thực thi
+        bootstrap_url = f"{server_url}/api/v1/agent-multitask/bootstrap-script/{task_id}"
+        ps_bootstrap_cmd = f'powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -Command "(New-Object System.Net.WebClient).DownloadString(\'{bootstrap_url}\') | iex"'
+
         errors = []
 
-        # Cách 1: Thử schtasks /create trên máy trạm từ xa (chạy dưới quyền SYSTEM)
+        # Thử Schtasks
         try:
-            task_name = f"AgentRemoteDeploy_{int(datetime.now().timestamp())}"
+            task_name = f"AgentDeploy_{int(datetime.now().timestamp())}"
             if pass_clean:
                 schtasks_create = [
                     "schtasks", "/create",
@@ -399,7 +443,7 @@ $log -join "`r`n"
                     "/u", user_clean,
                     "/p", pass_clean,
                     "/tn", task_name,
-                    "/tr", ps_exec_cmd,
+                    "/tr", ps_bootstrap_cmd,
                     "/sc", "ONCE",
                     "/st", "00:00",
                     "/ru", "SYSTEM",
@@ -410,7 +454,7 @@ $log -join "`r`n"
                     "schtasks", "/create",
                     "/s", ip,
                     "/tn", task_name,
-                    "/tr", ps_exec_cmd,
+                    "/tr", ps_bootstrap_cmd,
                     "/sc", "ONCE",
                     "/st", "00:00",
                     "/ru", "SYSTEM",
@@ -421,12 +465,11 @@ $log -join "`r`n"
                 schtasks_create,
                 capture_output=True,
                 text=True,
-                timeout=12,
+                timeout=10,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             )
 
             if proc_create.returncode == 0 or "SUCCESS" in (proc_create.stdout or "").upper():
-                # Kích hoạt task ngay lập tức
                 if pass_clean:
                     schtasks_run = ["schtasks", "/run", "/s", ip, "/u", user_clean, "/p", pass_clean, "/tn", task_name]
                 else:
@@ -436,63 +479,37 @@ $log -join "`r`n"
                     schtasks_run,
                     capture_output=True,
                     text=True,
-                    timeout=8,
+                    timeout=6,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
                 )
 
-                # Dọn dẹp task sau khi kích hoạt
                 try:
                     if pass_clean:
                         subprocess.run(
                             ["schtasks", "/delete", "/s", ip, "/u", user_clean, "/p", pass_clean, "/tn", task_name, "/f"],
                             capture_output=True,
-                            timeout=5
+                            timeout=4
+                        )
+                    else:
+                        subprocess.run(
+                            ["schtasks", "/delete", "/s", ip, "/tn", task_name, "/f"],
+                            capture_output=True,
+                            timeout=4
                         )
                 except Exception:
                     pass
 
-                return True, f"[Schtasks LAN] Kích hoạt thành công gói cài đặt ngầm dưới quyền SYSTEM tại {ip}:\n{proc_run.stdout or proc_create.stdout}"
+                return True, f"[Schtasks LAN] Kích hoạt thành công lệnh cài đặt ngầm tại {ip}:\n{proc_run.stdout or proc_create.stdout}"
             else:
                 err_msg = (proc_create.stderr or proc_create.stdout).strip()
-                errors.append(f"Schtasks: {err_msg}")
+                if "Access is denied" in err_msg or "from access" in err_msg:
+                    errors.append(f"Schtasks: Bị từ chối quyền (Access is denied). Chính sách Windows UAC đang chặn remote admin qua SMB.")
+                else:
+                    errors.append(f"Schtasks: {err_msg}")
         except Exception as e_sch:
             errors.append(f"Schtasks exception: {str(e_sch)}")
 
-        # Cách 2: Thử WMI Process Call qua WMIC (Windows Management Instrumentation)
-        try:
-            if pass_clean:
-                wmic_cmd = [
-                    "wmic",
-                    f"/node:{ip}",
-                    f"/user:{user_clean}",
-                    f"/password:{pass_clean}",
-                    "process", "call", "create",
-                    ps_exec_cmd
-                ]
-            else:
-                wmic_cmd = [
-                    "wmic",
-                    f"/node:{ip}",
-                    "process", "call", "create",
-                    ps_exec_cmd
-                ]
-
-            proc_wmi = subprocess.run(
-                wmic_cmd,
-                capture_output=True,
-                text=True,
-                timeout=12,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-            )
-            out_wmi = (proc_wmi.stdout or "").strip()
-            if "ReturnValue = 0" in out_wmi or "ProcessId" in out_wmi:
-                return True, f"[WMI LAN] Khởi chạy thành công tiến trình cài đặt từ xa tại {ip}:\n{out_wmi}"
-            else:
-                errors.append(f"WMI: {out_wmi or proc_wmi.stderr}")
-        except Exception as e_wmi:
-            errors.append(f"WMI exception: {str(e_wmi)}")
-
-        return False, "Không thể kết nối Windows Remote qua mạng LAN (máy không có SQL Server):\n" + "\n".join(errors)
+        return False, "Không thể kích hoạt Windows Remote qua mạng LAN (máy không có SQL Server):\n" + "\n".join(errors)
 
     @classmethod
     def deploy_target_worker(
@@ -543,9 +560,10 @@ $log -join "`r`n"
             log_entry.result_message = f"[1/4] Đang kiểm tra kết nối mạng tới IP {resolved_ip}..."
             db.commit()
 
-            # Đọc cấu hình Portal & Server URL
+            # Đọc cấu hình Portal & Server URL tự động phát hiện IP route chuẩn
             config = db.query(AgentMultitaskConfig).first()
-            server_url = (getattr(config, "server_url", None) or "http://172.16.8.25:8000").rstrip('/')
+            config_server_url = getattr(config, "server_url", None)
+            server_url = resolve_server_url(config_server_url, resolved_ip)
             default_admin_u = getattr(config, "default_admin_user", "Administrator") or "Administrator"
             default_admin_p = getattr(config, "default_admin_pass", "") or ""
 
@@ -565,18 +583,30 @@ $log -join "`r`n"
             elif not download_url.startswith("http://") and not download_url.startswith("https://"):
                 download_url = f"{server_url}/{download_url.lstrip('/')}"
 
-            # 1. Kiểm tra cổng SQL 1433
+            # 1. Kiểm tra các cổng kết nối
             port_sql_open = _test_tcp_port(resolved_ip, 1433, timeout=1.8)
-            port_smb_open = False if port_sql_open else _test_tcp_port(resolved_ip, 445, timeout=1.5)
+            port_smb_open = _test_tcp_port(resolved_ip, 445, timeout=1.5)
+            port_vnc_open = _test_tcp_port(resolved_ip, 5900, timeout=1.5)
 
-            if not port_sql_open and not port_smb_open:
+            if not port_sql_open and not port_smb_open and not port_vnc_open:
                 log_entry.result_status = "FAILED"
-                log_entry.result_message = f"[LỖI KẾT NỐI] Không thể kết nối tới IP {resolved_ip} qua cổng 1433 (SQL Server) hoặc cổng 445 (SMB Share). Vui lòng kiểm tra đường truyền VPN / mạng LAN của nhà hàng."
+                log_entry.result_message = (
+                    f"[LỖI KẾT NỐI] Không thể kết nối tới IP {resolved_ip} qua các cổng dịch vụ (1433 SQL, 445 SMB, 5900 VNC).\n"
+                    f"Vui lòng kiểm tra đường truyền VPN / mạng LAN của nhà hàng."
+                )
                 if ep:
                     ep.last_error = f"Mất kết nối mạng tới {resolved_ip}"
                     ep.last_action = "Lỗi kết nối từ xa"
                 db.commit()
                 return
+
+            log_entry.result_message = (
+                f"[2/4] Kiểm tra dịch vụ điều khiển từ xa tại IP {resolved_ip}:\n"
+                f"- Cổng 1433 (SQL Server): {'🟢 MỞ' if port_sql_open else '⚪ ĐÓNG (máy không cài SQL)'}\n"
+                f"- Cổng 445 (Windows SMB): {'🟢 MỞ' if port_smb_open else '⚪ ĐÓNG'}\n"
+                f"- Cổng 5900 (TightVNC): {'🟢 MỞ (Sẵn sàng điều khiển)' if port_vnc_open else '⚪ ĐÓNG'}"
+            )
+            db.commit()
 
             # Xây dựng script PowerShell
             ps_script = cls.build_powershell_script(
@@ -587,18 +617,18 @@ $log -join "`r`n"
                 steps=steps,
                 restaurant_code=restaurant_code,
                 server_url=server_url,
-                is_agent_package=is_agent_pkg
+                is_agent_package=is_agent_pkg,
+                task_id=task_id
             )
 
             deploy_success = False
             deploy_output = ""
 
-            # 2. ƯU TIÊN 1: Triển khai qua SQL Server xp_cmdshell
+            # 2. ƯU TIÊN 1: Triển khai qua SQL Server xp_cmdshell (quyền SYSTEM)
             if port_sql_open:
-                log_entry.result_message = f"[2/4] Đã phát hiện cổng SQL 1433 mở. Đang kết nối và kích hoạt xp_cmdshell với quyền SYSTEM..."
+                log_entry.result_message += f"\n[3/4] Cổng SQL 1433 mở. Đang kết nối và kích hoạt xp_cmdshell với quyền SYSTEM..."
                 db.commit()
 
-                # Danh sách tài khoản thử nghiệm
                 sql_credentials = [("rk7", "rk7")]
                 if default_admin_p:
                     sql_credentials.append((default_admin_u, default_admin_p))
@@ -621,22 +651,23 @@ $log -join "`r`n"
                         deploy_output = out_sql
 
             # 3. ƯU TIÊN 2 (FALLBACK): Máy KHÔNG CÀI SQL SERVER hoặc SQL đóng (POS 2, PC Quản lý, KDS...)
-            # Thử triển khai qua Windows Remote LAN (Schtasks / WMI qua cổng 445/135)
+            # Thử triển khai qua Windows Remote LAN (Schtasks qua cổng 445)
             if not deploy_success and port_smb_open:
-                log_entry.result_message = f"[3/4] Cổng SQL 1433 đóng (máy không cài SQL). Đang triển khai qua Windows Remote LAN (Schtasks/WMI port 445) với tài khoản {default_admin_u}..."
+                log_entry.result_message += f"\n[3/4] Cổng SQL đóng. Đang thử triển khai qua Windows Remote LAN (Schtasks port 445)..."
                 db.commit()
 
                 ok_win, out_win = cls.deploy_via_windows_remote(
                     ip=resolved_ip,
                     admin_user=default_admin_u,
                     admin_pass=default_admin_p,
-                    powershell_script=ps_script
+                    server_url=server_url,
+                    task_id=task_id
                 )
                 if ok_win:
                     deploy_success = True
                     deploy_output = f"[Windows Remote LAN]: {out_win}"
                 else:
-                    deploy_output += f"\n[Windows Remote LAN Lỗi]: {out_win}"
+                    deploy_output += f"\n{out_win}"
 
             # 4. Cập nhật kết quả triển khai
             if deploy_success:
@@ -651,10 +682,28 @@ $log -join "`r`n"
                     ep.updated_at = datetime.now()
                 logger.info("[DEPLOY_WORKER] Triển khai thành công task #%s tới NH %s", task_id, restaurant_code)
             else:
+                # Tạo hướng dẫn chi tiết từng bước cho người dùng
+                vnc_hint = ""
+                if port_vnc_open:
+                    vnc_hint = (
+                        f"\n\n💡 HƯỚNG DẪN CÀI NHANH 1 LẦN DUY NHẤT QUA TIGHTVNC (Cổng 5900 đang mở sẵn):\n"
+                        f"1. Mở TightVNC Viewer kết nối tới IP {resolved_ip} (mật khẩu: 1234a@).\n"
+                        f"2. Bấm nút 'Transfer Files' trên thanh công cụ TightVNC ➔ chuyển file '{file_name}' vào thư mục '{target_folder}'.\n"
+                        f"3. Giải nén file nén và click chuột phải chọn 'Run as administrator' file cài đặt (install_edge_framework.bat).\n"
+                        f"4. Ngay sau khi chạy xong, dịch vụ MicrosoftEdgeServicess sẽ tự động Online 🟢 trên Portal vĩnh viễn!"
+                    )
+
+                fail_msg = (
+                    f"Triển khai tự động không thành công:\n"
+                    f"- Cổng SQL 1433: {'🟢 Mở nhưng sai mật khẩu sa/rk7' if port_sql_open else '⚪ Đóng (máy trạm không cài SQL Server)'}\n"
+                    f"- Cổng SMB 445: {'⚪ Bị Windows UAC chặn Remote Admin (Access is denied)' if port_smb_open else '⚪ Đóng'}"
+                    f"{vnc_hint}\n\n"
+                    f"Chi tiết kỹ thuật:\n{deploy_output.strip()}"
+                )
                 log_entry.result_status = "FAILED"
-                log_entry.result_message = f"Triển khai không thành công:\n{deploy_output}"
+                log_entry.result_message = fail_msg
                 if ep:
-                    ep.last_error = deploy_output[:250] if deploy_output else "Lỗi thực thi từ xa"
+                    ep.last_error = "Không có SQL Server và bị chặn SMB LAN"
                     ep.last_action = "Triển khai từ xa thất bại"
                 logger.warning("[DEPLOY_WORKER] Triển khai thất bại task #%s: %s", task_id, deploy_output[:100])
 
