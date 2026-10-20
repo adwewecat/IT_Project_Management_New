@@ -102,3 +102,27 @@ export const checkIsDungOrSuperAdmin = (user?: UserInfo | null): boolean => {
   if (!user) return false;
   return checkIsSuperAdmin(user) || (user.username || '').toLowerCase().trim() === 'dung.nguyenanh';
 };
+
+/**
+ * Quy tắc bất di bất dịch về màn hình mới (New Screen Access Rule):
+ * - Mặc định: Chỉ Admin (và Super Admin) mới có quyền thấy trên Sidebar và truy cập vào Route.
+ * - Nhóm quyền / User khác chỉ thấy và truy cập được khi đã được Admin phân quyền
+ *   (thông qua bảng dbo.PHANQUYEN_DETAIL hoặc permissions dict từ server).
+ *
+ * @param user Đối tượng người dùng hiện tại
+ * @param screenKey Mã định danh chức năng/màn hình mới (VD: 'remote_desktop_lab', ...)
+ */
+export const hasNewScreenAccess = (user?: UserInfo | null, screenKey?: string): boolean => {
+  if (!user) return false;
+  // Super Admin hoặc Admin luôn có toàn quyền truy cập mặc định
+  if (checkIsAdmin(user) || checkIsSuperAdmin(user)) return true;
+  if (!screenKey) return false;
+
+  const cleanKey = screenKey.trim().toLowerCase();
+  const perms = user.permissions || {};
+  return Boolean(
+    perms[cleanKey] ||
+    perms[`view_${cleanKey}`] ||
+    perms[`access_${cleanKey}`]
+  );
+};

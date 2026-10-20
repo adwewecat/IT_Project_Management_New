@@ -3833,26 +3833,64 @@ estaurant_service.py).
 
 ---
 
-### [2026-10-20] - Phân Quyền Chế Độ Lab Cho Phân Hệ 'Thay Thế Remote' (Chỉ User Admin Mới Thấy)
+### [2026-10-20] - Phân Quyền Chế Độ Lab Cho Phân Hệ 'Thay Thế Remote' (Mặc Định Chỉ Admin, Cho Phép Cấp Quyền Qua dbo.PHANQUYEN_DETAIL)
 - **Yêu cầu & Bối cảnh**:
   - Phân hệ *Thay Thế Remote* (`/app/remote-desktop-lab`) đang trong giai đoạn thử nghiệm (Lab mode).
-  - Cần bảo vệ và giới hạn: **CHỈ CÓ TÀI KHOẢN ADMIN/SUPER ADMIN MỚI THẤY VÀ TRUY CẬP ĐƯỢC**.
+  - Quy chuẩn phân quyền màn hình mới: **Mặc định CHỈ có tài khoản Admin/Super Admin thấy và truy cập được**, các nhóm quyền khác (App, Helpdesk, Inventory...) chỉ thấy khi đã được Admin cấp quyền trong mục *Quản Lý Phân Quyền* (`dbo.PHANQUYEN_DETAIL`).
 - **Giải Pháp & Triển Khai Toàn Diện**:
   1. **Frontend Menu Navigation (`Sidebar.tsx`)**:
-     - Bọc mục menu `Thay Thế Remote` (badge `Lab`) trong điều kiện `isAdmin` (thay vì toàn bộ tài khoản nhóm App `isAppRole`).
-     - Người dùng nhóm App/Helpdesk/Inventory hoặc nhân viên thông thường sẽ không nhìn thấy menu này trên thanh điều hướng.
+     - Sử dụng hàm chuẩn dự án `canAccessRemoteLab = hasNewScreenAccess(user, 'remote_desktop_lab')`.
+     - Bọc mục menu `Thay Thế Remote` (badge `Lab`) trong điều kiện `canAccessRemoteLab`. Mặc định chỉ Admin thấy; nếu tài khoản khác được cấp quyền `remote_desktop_lab` hoặc `view_remote_desktop_lab` trong permissions thì sẽ tự động hiển thị.
   2. **Frontend UI Guard (`RemoteLabPage.tsx`)**:
-     - Kiểm tra quyền Quản trị viên (`const isAdmin = checkIsAdmin(user);`).
-     - Nếu không phải Admin: Hiển thị giao diện chặn truy cập trang nhã với thẻ icon Monitor, badge `🧪 Chế Độ Thử Nghiệm (Lab)`, thông báo: *"Phân hệ đang trong giai đoạn thử nghiệm nội bộ (Lab mode) và chỉ dành riêng cho tài khoản Quản trị viên (Admin)"* kèm nút *"Quay Lại Trang Trước"*.
-     - Ngắt các hook `loadInitialData` và `doPing` ngầm khi tài khoản không có quyền Admin, tránh gửi request rác về server.
+     - Kiểm tra quyền truy cập thông qua `canAccess = hasNewScreenAccess(user, 'remote_desktop_lab')`.
+     - Nếu chưa được cấp quyền: Hiển thị giao diện chặn truy cập với thông báo chi tiết: *"Phân hệ đang trong giai đoạn thử nghiệm nội bộ (Lab mode). Theo quy định hệ thống, mặc định chỉ Quản trị viên (Admin) mới có quyền truy cập. Nếu bạn cần sử dụng tính năng này, vui lòng liên hệ Admin để được cấp quyền trong mục Quản Lý Phân Quyền."* kèm nút *"Quay Lại Trang Trước"*.
+     - Ngắt các hook `loadInitialData` và `doPing` ngầm khi tài khoản chưa có quyền truy cập, bảo đảm an toàn dữ liệu và tối ưu hiệu năng.
   3. **Backend API Protection (`backend/app/api/v1/remote_lab.py`)**:
-     - Tạo dependency `require_admin_user` sử dụng hàm `is_admin_user(current_user)` từ `app.services.auth_service`.
+     - Cập nhật dependency `require_admin_user` kiểm tra kết hợp: Cho phép Quản trị viên (`is_admin_user`), hoặc tài khoản có quyền `remote_desktop_lab` / `view_remote_desktop_lab` trong `current_user.permissions` (`dbo.PHANQUYEN_DETAIL`).
      - Áp dụng bảo vệ toàn bộ 8 REST endpoint quản lý: `/endpoints`, `/sessions/create`, `/sessions/{id}/retry-agent`, `/sessions/{id}/agent-status`, `/sessions/{id}/launch-local`, `/sessions`, `/sessions/{id}`, `/sessions/{id}/terminate`.
-     - Tự động chặn và trả về lỗi HTTP 403 Forbidden nếu người dùng không phải Quản trị viên.
+     - Tự động chặn và trả về lỗi HTTP 403 Forbidden nếu chưa được cấp quyền.
 - **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
-  - Frontend: `cmd /c "npm run build"` exit code 0 (`✓ built in 9.87s`), `frontend/dist/` sạch sẽ.
+  - Frontend: `cmd /c "npm run build"` exit code 0 (`✓ built in 4.28s`), `frontend/dist/` sạch sẽ.
   - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
   - Đã khởi động lại Backend daemon mới trên port 8000.
+
+---
+
+### [2026-10-20] - BAN HÀNH QUY TẮC BẤT DI BẤT DỊCH: MÀN HÌNH MỚI MẶC ĐỊNH CHỈ ADMIN MỚI THẤY & CƠ CHẾ PHÂN QUYỀN LINH HOẠT THEO NHU CẦU
+
+- **Yêu Cầu & Bối Cảnh Nghiệp Vụ**:
+  - Người dùng yêu cầu chuẩn hóa thành quy tắc kiến trúc bắt buộc cho toàn bộ dự án: Khi phát triển bất kỳ màn hình mới / chức năng mới nào:
+    1. Mặc định chỉ có **Quản trị viên (Admin & Super Admin)** mới nhìn thấy trên Menu/Sidebar và mới truy cập được vào Route.
+    2. Trong giao diện Quản Trị Hệ Thống (`/admin/users` -> tab Nhóm Quyền & Phân Quyền Chi Tiết), màn hình mới phải có sẵn mục cấu hình để Admin có thể phân quyền cho bất kỳ nhóm quyền (Role) hoặc tài khoản nào khi cần thiết.
+    3. Khi được Admin cấp quyền, nhóm đó mới nhìn thấy mục menu và truy cập được vào màn hình mới.
+
+- **Các Giải Pháp Kỹ Thuật Đã Triển Khai Toàn Diện**:
+  1. **Cập Nhật Cẩm Nang Dự Án (`AGENTS.md`, `GEMINI.md`, `PROJECT_GUIDELINES.md`)**:
+     - Bổ sung **Nguyên Tắc Bất Di Bất Dịch Số 10**: *Quy tắc Màn Hình & Chức Năng Mới (Mặc Định Chỉ Admin Mới Thấy, Admin Toàn Quyền Phân Quyền Khi Cần)* vào danh sách 10 nguyên tắc cốt lõi ở đầu tất cả các file đặc tả dự án.
+     - Bổ sung **Mục 4.4**: *Quy Chuẩn Màn Hình Mới & Phân Quyền Theo Nhu Cầu (New Screen Access & Delegation Standard)* quy định chi tiết 5 bước chuẩn hóa khi tạo màn hình mới cho AI và Developer.
+  2. **Tiện Ích Kiểm Tra Quyền Chuẩn Hóa (`frontend/src/utils/authUtils.ts`)**:
+     - Bổ sung hàm `hasNewScreenAccess(user, screenKey)`:
+       + Admin (`checkIsAdmin(user)`) hoặc Super Admin (`checkIsSuperAdmin(user)`): Trả về `true` mặc định 100%.
+       + Các role/user khác: Trả về `true` khi và chỉ khi `user.permissions[screenKey]` hoặc `user.permissions['view_' + screenKey]` được gán bằng `true` từ server.
+  3. **Nâng Cấp Bộ Định Tuyến Bảo Vệ (`frontend/src/routes/ProtectedRoute.tsx`)**:
+     - Bổ sung props `requiredPermission?: string` và `adminOnly?: boolean`.
+     - Tích hợp giao diện cảnh báo phân quyền 403 Forbidden trang nhã, đúng phong cách Golden Gate (thông báo rõ: *"Màn hình này đang trong giai đoạn quản trị hoặc phân quyền thử nghiệm. Mặc định chỉ Quản trị viên (Admin) mới có quyền truy cập. Vui lòng liên hệ Admin để được cấp quyền trong mục Quản Lý Phân Quyền"* kèm nút *"Quay lại"* và *"Về Danh Sách Nhà Hàng"*).
+  4. **Bảo Vệ Đa Tầng Cho Toàn Bộ Route (`frontend/src/routes/AppRoutes.tsx`)**:
+     - Các route Quản trị (`admin/users`, `admin/jobs`, `admin/violations-leaves`): Bọc trong `<ProtectedRoute adminOnly>`.
+     - Màn hình mới Agent Multitask: Bọc trong `<ProtectedRoute requiredPermission="agent_multitask">`.
+     - Màn hình mới Thay Thế Remote (Remote Lab): Bọc trong `<ProtectedRoute requiredPermission="remote_desktop_lab">` cho cả route chính và các alias (`remote-lab`, `app/remote-lab`).
+  5. **Cấu Hình Phân Quyền Ma Trận Trong Admin (`frontend/src/pages/admin/RolesPage.tsx`)**:
+     - Bổ sung module danh mục `'Màn Hình & Phân Hệ Mới'` vào `PRESET_MODULE_OPTIONS`.
+     - Khai báo mapping `remote_desktop_lab` vào `BASE_LABELS` trỏ về module `'Màn Hình & Phân Hệ Mới'`, giúp Admin dễ dàng tìm kiếm, xem và bật/tắt quyền cho từng Role trong bảng `dbo.PHANQUYEN_DETAIL`.
+  6. **Khai Báo Phân Quyền Backend (`role_service.py` & `auth_service.py`)**:
+     - `BASE_PERMISSION_DEFINITIONS`: Thêm `remote_desktop_lab`, `view_remote_desktop_lab`, `update_remote_desktop_lab` thuộc module "Màn Hình & Phân Hệ Mới".
+     - `ALL_PERMISSIONS`: Đăng ký đầy đủ danh mục quyền để backend nạp vào session người dùng lúc đăng nhập.
+     - `backend/app/api/v1/remote_lab.py`: Cập nhật `require_admin_user` kiểm tra kết hợp giữa `is_admin_user` và `current_user.permissions` cho phép tài khoản được ủy quyền từ Admin sử dụng API.
+
+- **Kiểm Thử & Đóng Gói Server (Copy Là Chạy Ngay)**:
+  - Frontend: `cmd /c "npm run build"` tại `frontend/` exit code 0 (`✓ built in 4.41s`), bản build mới nhất trong `frontend/dist/`.
+  - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
+  - Backend daemon đang hoạt động ổn định trên port 8000 (`/api/health` trả về `healthy`).
 
 
 

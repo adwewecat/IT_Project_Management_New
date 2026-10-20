@@ -25,13 +25,19 @@ router = APIRouter(prefix="/remote-lab", tags=["Remote Lab"])
 
 
 def require_admin_user(current_user: UserInfo = Depends(get_current_user)) -> UserInfo:
-    """Yêu cầu quyền Quản trị viên (Admin) cho các endpoint thử nghiệm Remote Lab."""
-    if not is_admin_user(current_user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Chức năng Thay Thế Remote đang trong chế độ Lab, chỉ dành riêng cho tài khoản Quản trị viên (Admin)."
-        )
-    return current_user
+    """
+    Quy tắc màn hình mới: Mặc định chỉ Admin truy cập được.
+    Các tài khoản khác chỉ được truy cập khi đã được Admin phân quyền trong dbo.PHANQUYEN_DETAIL.
+    """
+    if is_admin_user(current_user):
+        return current_user
+    perms = current_user.permissions or {}
+    if perms.get("remote_desktop_lab") or perms.get("view_remote_desktop_lab"):
+        return current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Chức năng này mặc định chỉ dành cho Quản trị viên (Admin). Tài khoản của bạn chưa được Admin cấp quyền truy cập."
+    )
 
 
 def resolve_server_url(request: Request, client_server_url: Optional[str] = None, target_ip: Optional[str] = None) -> str:

@@ -33,7 +33,9 @@ ALL_PERMISSIONS = [
     # Hotline 3CX permissions
     "hotline_3cx_duty", "view_hotline_3cx_duty", "update_hotline_3cx_duty",
     # Agent Multitask permissions
-    "agent_multitask", "view_agent_multitask", "update_agent_multitask"
+    "agent_multitask", "view_agent_multitask", "update_agent_multitask",
+    # Màn Hình & Phân Hệ Mới permissions (Mặc định chỉ Admin, phân quyền khi cần)
+    "remote_desktop_lab", "view_remote_desktop_lab", "update_remote_desktop_lab",
 ]
 
 ROLE_MAP = {

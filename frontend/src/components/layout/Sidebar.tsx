@@ -39,6 +39,7 @@ import {
   checkIsAppRole,
   checkIsHelpdeskRole,
   checkIsInventoryRole,
+  hasNewScreenAccess,
 } from '../../utils/authUtils';
 
 export interface SidebarProps {
@@ -64,6 +65,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Quyền truy cập Agent Multitask: CHỈ Super Admin mới thấy trên Sidebar, tài khoản khác chỉ thấy khi đã được Super Admin phân quyền
   const canAccessAgentMultitask = isSuperAdmin || Boolean(user?.permissions?.['agent_multitask'] || user?.permissions?.['view_agent_multitask']);
+
+  // Quyền truy cập Thay Thế Remote (Lab): Mặc định chỉ Admin thấy, các nhóm quyền khác chỉ thấy khi đã được Admin phân quyền
+  const canAccessRemoteLab = hasNewScreenAccess(user, 'remote_desktop_lab');
 
   // Trạng thái đóng / mở cho từng nhóm đặc thù
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
@@ -505,8 +509,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </NavLink>
                   </li>
                 )}
-                {/* Thay Thế Remote (Lab) - Chỉ user admin mới thấy */}
-                {isAdmin && (
+                {/* Thay Thế Remote (Lab) - Mặc định chỉ Admin thấy, các nhóm khác chỉ thấy khi đã được phân quyền */}
+                {canAccessRemoteLab && (
                   <li>
                     <NavLink
                       to="/app/remote-desktop-lab"

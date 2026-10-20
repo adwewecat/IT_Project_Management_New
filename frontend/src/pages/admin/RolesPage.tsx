@@ -74,6 +74,9 @@ const BASE_LABELS: Record<string, { label: string; module: string }> = {
 
   // Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa (Chỉ Super Admin mới thấy dòng này để phân quyền)
   agent_multitask: { label: 'Quyền Quản Lý & Điều Khiển Agent Multitask', module: 'Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa' },
+
+  // Màn Hình & Phân Hệ Mới (Mặc định chỉ Admin thấy, Admin có thể phân quyền cho nhóm khác khi cần)
+  remote_desktop_lab: { label: 'Màn Hình: Thay Thế Remote (Remote Desktop Lab)', module: 'Màn Hình & Phân Hệ Mới' },
 };
 
 const PRESET_MODULE_OPTIONS = [
@@ -82,6 +85,8 @@ const PRESET_MODULE_OPTIONS = [
   { value: 'DS Nhà Hàng: Remote & Máy Trạm', label: 'DS Nhà Hàng: Remote & Máy Trạm' },
   { value: 'DS Nhà Hàng: Hạ Tầng Mạng & FTTH', label: 'DS Nhà Hàng: Hạ Tầng Mạng & FTTH' },
   { value: 'Văn Phòng: Máy Photo & Ext', label: 'Văn Phòng: Máy Photo & Ext' },
+  { value: 'Màn Hình & Phân Hệ Mới', label: 'Màn Hình & Phân Hệ Mới' },
+  { value: 'Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa', label: 'Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa' },
   { value: 'Cột Tùy Biến Bổ Sung', label: 'Cột Tùy Biến Bổ Sung' },
 ];
 

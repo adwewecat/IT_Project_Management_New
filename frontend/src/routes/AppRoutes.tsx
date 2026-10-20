@@ -50,10 +50,32 @@ export const AppRoutes: React.FC = () => {
         <Route path="restaurants/logs" element={<RestaurantAuditLogsPage />} />
         <Route path="restaurant-logs" element={<Navigate to="/restaurants/logs" replace />} />
         <Route path="hotline" element={<HotlineSchedulePage />} />
-        <Route path="admin/users" element={<UserManagementHub />} />
-        <Route path="admin/jobs" element={<JobManagementPage />} />
+        {/* Phân hệ Quản Trị Hệ Thống - Yêu cầu quyền Admin */}
+        <Route
+          path="admin/users"
+          element={
+            <ProtectedRoute adminOnly>
+              <UserManagementHub />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/jobs"
+          element={
+            <ProtectedRoute adminOnly>
+              <JobManagementPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="jobs" element={<Navigate to="/admin/jobs" replace />} />
-        <Route path="admin/violations-leaves" element={<ViolationAndLeavePage />} />
+        <Route
+          path="admin/violations-leaves"
+          element={
+            <ProtectedRoute adminOnly>
+              <ViolationAndLeavePage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="violations-leaves" element={<Navigate to="/admin/violations-leaves" replace />} />
         <Route path="reports/staff-evaluation" element={<StaffEvaluationReportPage />} />
         <Route path="staff-evaluation" element={<Navigate to="/reports/staff-evaluation" replace />} />
@@ -91,13 +113,32 @@ export const AppRoutes: React.FC = () => {
         <Route path="sso-management" element={<Navigate to="/app/sso-management" replace />} />
         <Route path="app/sso" element={<Navigate to="/app/sso-management" replace />} />
         <Route path="sso" element={<Navigate to="/app/sso-management" replace />} />
-        <Route path="app/agent-multitask" element={<AgentMultitaskPage />} />
+        
+        {/* Màn hình mới: Agent Multitask (Mặc định chỉ Admin, phân quyền khi cần) */}
+        <Route
+          path="app/agent-multitask"
+          element={
+            <ProtectedRoute requiredPermission="agent_multitask">
+              <AgentMultitaskPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="agent-multitask" element={<Navigate to="/app/agent-multitask" replace />} />
         <Route path="app/multitask" element={<Navigate to="/app/agent-multitask" replace />} />
         <Route path="multitask" element={<Navigate to="/app/agent-multitask" replace />} />
-        <Route path="app/remote-desktop-lab" element={<RemoteLabPage />} />
+
+        {/* Màn hình mới: Thay Thế Remote (Remote Desktop Lab - Mặc định chỉ Admin, phân quyền khi cần) */}
+        <Route
+          path="app/remote-desktop-lab"
+          element={
+            <ProtectedRoute requiredPermission="remote_desktop_lab">
+              <RemoteLabPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="remote-lab" element={<Navigate to="/app/remote-desktop-lab" replace />} />
         <Route path="app/remote-lab" element={<Navigate to="/app/remote-desktop-lab" replace />} />
+
         <Route path="inventory/pr-po-do" element={<TheodoiPrPoDoPage />} />
         <Route path="helpdesk/ext-rsc" element={<ExtRscPage />} />
         <Route path="helpdesk/code-photo" element={<CodePhotoPage />} />

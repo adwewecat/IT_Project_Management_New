@@ -37,7 +37,7 @@ import { RestaurantItem } from '../../types/restaurant';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
-import { checkIsAdmin } from '../../utils/authUtils';
+import { hasNewScreenAccess } from '../../utils/authUtils';
 
 // Hằng số danh sách thiết bị chuẩn Nhà Hàng (Chuẩn như VncKdsModal)
 const VNC_ITEMS = [
@@ -73,7 +73,7 @@ const getIpPrefix = (ip: string | null | undefined): string => {
 
 export const RemoteLabPage: React.FC = () => {
   const { user } = useAuth();
-  const isAdmin = checkIsAdmin(user);
+  const canAccess = hasNewScreenAccess(user, 'remote_desktop_lab');
 
   // Toast thông báo độc lập
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
@@ -162,9 +162,9 @@ export const RemoteLabPage: React.FC = () => {
     height: 1080
   });
 
-  // Tải danh sách endpoints và active sessions (Chỉ chạy khi có quyền Admin)
+  // Tải danh sách endpoints và active sessions (Chỉ chạy khi có quyền truy cập)
   const loadInitialData = useCallback(async () => {
-    if (!isAdmin) return;
+    if (!canAccess) return;
     try {
       setLoadingEndpoints(true);
       const [eps, sessions] = await Promise.all([
@@ -179,13 +179,13 @@ export const RemoteLabPage: React.FC = () => {
     } finally {
       setLoadingEndpoints(false);
     }
-  }, [isAdmin, showToast]);
+  }, [canAccess, showToast]);
 
   useEffect(() => {
-    if (isAdmin) {
+    if (canAccess) {
       loadInitialData();
     }
-  }, [isAdmin, loadInitialData]);
+  }, [canAccess, loadInitialData]);
 
   // Tự động kích hoạt Remote Worker trên máy hiện tại (1 Click, không cần gõ lệnh)
   const handleLaunchLocalWorker = async (sessionId: string) => {
@@ -243,12 +243,12 @@ export const RemoteLabPage: React.FC = () => {
       });
   }, [ipPrefix, showToast]);
 
-  // Tự động ping lần đầu khi trang mở để hiển thị sẵn trạng thái (Chỉ chạy khi có quyền Admin)
+  // Tự động ping lần đầu khi trang mở để hiển thị sẵn trạng thái (Chỉ chạy khi có quyền truy cập)
   useEffect(() => {
-    if (isAdmin && ipPrefix) {
+    if (canAccess && ipPrefix) {
       doPing(ipPrefix);
     }
-  }, [isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [canAccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tìm kiếm gợi ý Nhà hàng khi gõ từ khóa
   useEffect(() => {
@@ -714,8 +714,8 @@ export const RemoteLabPage: React.FC = () => {
     return true;
   });
 
-  // Chặn người dùng không có quyền Admin xem trang thử nghiệm Remote Lab
-  if (!isAdmin) {
+  // Chặn người dùng chưa được cấp quyền xem trang thử nghiệm Remote Lab
+  if (!canAccess) {
     return (
       <div
         style={{
@@ -778,7 +778,7 @@ export const RemoteLabPage: React.FC = () => {
           </h2>
 
           <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '22px' }}>
-            Phân hệ đang trong giai đoạn thử nghiệm nội bộ (Lab mode) và chỉ dành riêng cho tài khoản Quản trị viên (Admin).
+            Phân hệ đang trong giai đoạn thử nghiệm nội bộ (Lab mode). Theo quy định hệ thống, mặc định chỉ Quản trị viên (Admin) mới có quyền truy cập. Nếu bạn cần sử dụng tính năng này, vui lòng liên hệ Admin để được cấp quyền trong mục <em>Quản Lý Phân Quyền</em>.
           </p>
 
           <Button variant="secondary" onClick={() => window.history.back()}>
