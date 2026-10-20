@@ -251,6 +251,13 @@
   4. **Tự động tăng z-index**: Mỗi tầng modal mở thêm tự động cộng thêm `+20` z-index (`zIndex = baseZIndex + depth * 20`) để đảm bảo modal con luôn hiển thị nổi lên trên modal cha mà không cần hard-code z-index lung tung.
   5. **Khóa cuộn trang (Body Scroll Lock)**: Tự động khóa cuộn `body` khi có ít nhất 1 modal mở, và chỉ mở lại cuộn trang khi toàn bộ modal trong stack đã đóng hết.
 
+### 5.6. Quy Tắc Bất Di Bất Dịch: Danh Sách / Dropdown / List Item Trên 10 Dòng Bắt Buộc Phải Có Input Search
+- **Quy tắc**: Tuyệt đối KHÔNG dùng thẻ HTML `<select>` native chứa danh sách lớn (> 10 options) mà không thể tìm kiếm, gây khó khăn cho việc tra cứu trên máy tính và điện thoại.
+- **Giải pháp bắt buộc**:
+  1. Với bất kỳ ô chọn/dropdown nào sổ ra danh sách dữ liệu trên 10 dòng, **BẮT BUỘC phải có ô `Input Search`** nằm trên cùng (placeholder rõ ràng: `🔍 Tìm kiếm theo...`, kèm nút `✕` xóa nhanh từ khóa).
+  2. Danh sách dữ liệu bên dưới phải có thanh cuộn riêng (`maxHeight: '190px - 220px'`, `overflowY: 'auto'`), hiển thị rõ ràng mã định danh, tên, IP, trạng thái Online/Offline và checkbox/radio item.
+  3. Nếu bên ngoài đã có bảng danh sách tích chọn thiết bị/nhà hàng: Bên trong modal **bỏ hoàn toàn việc bắt chọn lại**, chỉ hiển thị thanh tóm tắt số lượng trạm đã chọn từ ngoài (màu xanh lá trang nhã) kèm nút đổi/chọn lại khi cần.
+
 ---
 
 ## 6. QUY ĐỊNH NGHIỆP VỤ TỪNG PHÂN HỆ CHÍNH

@@ -23,6 +23,7 @@ from app.services.role_service import (
     add_custom_column_permission,
 )
 from app.api.deps import require_admin, require_super_admin
+from app.services.auth_service import is_super_admin_user
 
 router = APIRouter(prefix="/roles", tags=["Roles & Permissions"])
 
@@ -110,7 +111,13 @@ def api_update_role_permissions(
     db: Session = Depends(get_db),
     admin: UserInfo = Depends(require_admin)
 ):
-    return update_role_permissions(db, role_id, payload, actor=admin.username)
+    return update_role_permissions(
+        db,
+        role_id,
+        payload,
+        actor=admin.username,
+        is_super_admin=getattr(admin, "is_super_admin", False) or is_super_admin_user(admin)
+    )
 
 
 @router.post(

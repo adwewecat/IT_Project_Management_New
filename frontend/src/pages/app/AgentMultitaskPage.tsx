@@ -176,6 +176,8 @@ export const AgentMultitaskPage: React.FC = () => {
 
   // Danh sách ID thiết bị đang được chọn (hỗ trợ tích chọn từng máy độc lập trong cùng 1 nhà hàng)
   const [selectedEndpointIds, setSelectedEndpointIds] = useState<number[]>([]);
+  // Từ khóa tìm kiếm nhanh thiết bị trong popup modal (tuân thủ quy tắc dropdown > 10 dòng phải có ô search)
+  const [modalDeviceSearchQuery, setModalDeviceSearchQuery] = useState<string>('');
 
   // Form Truyền File Cập Nhật (Push File)
   const [targetFolder, setTargetFolder] = useState<string>('D:\\GPOS-Setup\\app');
@@ -1098,171 +1100,332 @@ export const AgentMultitaskPage: React.FC = () => {
   // ══════════════════════════════════════════════════════════════════════════
   // HELPER: BỘ CHỌN THIẾT BỊ ĐÍCH TRONG CÁC MODAL HÀNH ĐỘNG
   // ══════════════════════════════════════════════════════════════════════════
-  const renderTargetDevicePicker = () => (
-    <div
-      style={{
-        padding: '10px 12px',
-        borderRadius: '8px',
-        backgroundColor: selectedEndpoints.length === 0 ? '#FEF2F2' : 'var(--bg-secondary)',
-        border: `1px solid ${selectedEndpoints.length === 0 ? '#FECACA' : 'var(--border-color)'}`,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px'
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '8px',
-          fontSize: '13px'
-        }}
-      >
-        <div>
-          🎯 Thiết Bị Thực Thi:{' '}
-          {selectedEndpoints.length > 0 ? (
-            <strong style={{ color: '#059669' }}>
-              {selectedEndpoints.length} máy đã chọn: {selectedEndpoints.map((e) => e.machine_name || e.ip_lan).join(', ')}
-            </strong>
-          ) : (
-            <strong style={{ color: '#DC2626' }}>
-              ⚠️ Chưa chọn máy nào (chọn máy bên dưới để tiếp tục)
-            </strong>
-          )}
-        </div>
+  const renderTargetDevicePicker = () => {
+    // 1. TRƯỜNG HỢP ĐÃ CHỌN MÁY TỪ DANH SÁCH BÊN NGOÀI:
+    // Không bắt chọn lại bên trong, ẩn bộ chọn và chỉ hiển thị tóm tắt số máy kèm nút đổi
+    if (selectedEndpoints.length > 0) {
+      return (
+        <div
+          style={{
+            padding: '10px 14px',
+            borderRadius: '8px',
+            backgroundColor: '#F0FDF4',
+            border: '1.5px solid #86EFAC',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '8px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: '16px', flexShrink: 0 }}>🎯</span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: '#166534' }}>
+                Thiết Bị Thực Thi: Đã chọn {selectedEndpoints.length} máy từ danh sách bên ngoài
+              </div>
+              <div
+                style={{
+                  fontSize: '11.5px',
+                  color: '#15803D',
+                  marginTop: '2px',
+                  maxHeight: '36px',
+                  overflowY: 'auto',
+                  lineHeight: '1.4'
+                }}
+              >
+                {selectedEndpoints.map((e) => `${e.restaurant_code ? `[${e.restaurant_code}] ` : ''}${e.restaurant_name || e.machine_name || e.ip_lan} (${e.ip_lan})`).join(' • ')}
+              </div>
+            </div>
+          </div>
 
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Nút Chọn Chỉ Máy Chưa Cài / Offline */}
-          {endpoints.some((e) => !e.is_installed || !e.is_online) && (
-            <button
-              type="button"
-              onClick={() => {
-                const uninstalledIds = endpoints
-                  .filter((e) => !e.is_installed || !e.is_online)
-                  .map((e) => e.id)
-                  .filter(Boolean) as number[];
-                setSelectedEndpointIds(uninstalledIds);
-                showToast(`Đã chọn ${uninstalledIds.length} máy Chưa Cài Đặt / Offline để chuẩn bị cài đặt!`, 'info');
-              }}
-              style={{
-                background: 'none',
-                border: '1px solid #F59E0B',
-                borderRadius: '4px',
-                color: '#B45309',
-                backgroundColor: '#FEF3C7',
-                fontSize: '11.5px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                padding: '2px 7px'
-              }}
-            >
-              ⚪ Chọn Chưa Cài / Offline ({endpoints.filter((e) => !e.is_installed || !e.is_online).length} máy)
-            </button>
-          )}
-
-          {/* Nút Chọn Chỉ Máy Đang Online */}
-          {endpoints.some((e) => e.is_online) && (
-            <button
-              type="button"
-              onClick={() => {
-                const onlineIds = endpoints
-                  .filter((e) => e.is_online)
-                  .map((e) => e.id)
-                  .filter(Boolean) as number[];
-                setSelectedEndpointIds(onlineIds);
-                showToast(`Đã chọn ${onlineIds.length} máy Đang Online!`, 'info');
-              }}
-              style={{
-                background: 'none',
-                border: '1px solid #10B981',
-                borderRadius: '4px',
-                color: '#047857',
-                backgroundColor: '#D1FAE5',
-                fontSize: '11.5px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                padding: '2px 7px'
-              }}
-            >
-              🟢 Chọn Đang Online ({endpoints.filter((e) => e.is_online).length} máy)
-            </button>
-          )}
-
-          {filteredEndpoints.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                const allIds = filteredEndpoints.map((e) => e.id).filter(Boolean) as number[];
-                setSelectedEndpointIds(allIds);
-              }}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#2563EB',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                textDecoration: 'underline',
-                padding: 0
-              }}
-            >
-              Chọn tất cả ({filteredEndpoints.length} máy)
-            </button>
-          )}
-          {selectedEndpoints.length > 0 && (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
             <button
               type="button"
               onClick={() => setSelectedEndpointIds([])}
               style={{
+                background: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                borderRadius: '5px',
+                padding: '4px 10px',
+                color: '#475569',
+                fontSize: '11.5px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s'
+              }}
+              title="Bỏ chọn để tìm và chọn trạm khác"
+            >
+              ✕ Bỏ chọn / Đổi máy
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // 2. TRƯỜNG HỢP CHƯA CHỌN MÁY:
+    // Hiển thị bộ chọn có INPUT SEARCH lọc nhanh và danh sách cuộn độc lập (tuân thủ quy tắc > 10 dòng phải có input search)
+    const searchLower = modalDeviceSearchQuery.toLowerCase().trim();
+    const filteredSearchEndpoints = endpoints.filter((ep) => {
+      if (!searchLower) return true;
+      return (
+        (ep.restaurant_code && ep.restaurant_code.toLowerCase().includes(searchLower)) ||
+        (ep.restaurant_name && ep.restaurant_name.toLowerCase().includes(searchLower)) ||
+        (ep.ip_lan && ep.ip_lan.toLowerCase().includes(searchLower)) ||
+        (ep.machine_name && ep.machine_name.toLowerCase().includes(searchLower))
+      );
+    });
+
+    const uninstalledEndpoints = endpoints.filter((e) => !e.is_installed || !e.is_online);
+    const onlineEndpoints = endpoints.filter((e) => e.is_online);
+
+    return (
+      <div
+        style={{
+          padding: '12px',
+          borderRadius: '8px',
+          backgroundColor: '#FEF2F2',
+          border: '1px solid #FECACA',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px'
+        }}
+      >
+        {/* Header thông báo & các nút chọn nhanh */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '8px',
+            fontSize: '13px'
+          }}
+        >
+          <div style={{ fontWeight: 800, color: '#DC2626', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span>🎯</span>
+            <span>Thiết Bị Thực Thi: Chưa chọn máy nào (tìm và tích chọn máy bên dưới):</span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {/* Nút Chọn Chỉ Máy Chưa Cài / Offline */}
+            {uninstalledEndpoints.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const uninstalledIds = uninstalledEndpoints.map((e) => e.id).filter(Boolean) as number[];
+                  setSelectedEndpointIds(uninstalledIds);
+                  showToast(`Đã chọn ${uninstalledIds.length} máy Chưa Cài Đặt / Offline để chuẩn bị cài đặt!`, 'info');
+                }}
+                style={{
+                  background: '#FEF3C7',
+                  border: '1px solid #F59E0B',
+                  borderRadius: '4px',
+                  color: '#B45309',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  padding: '3px 8px'
+                }}
+              >
+                ⚪ Chọn Chưa Cài / Offline ({uninstalledEndpoints.length} máy)
+              </button>
+            )}
+
+            {/* Nút Chọn Chỉ Máy Đang Online */}
+            {onlineEndpoints.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const onlineIds = onlineEndpoints.map((e) => e.id).filter(Boolean) as number[];
+                  setSelectedEndpointIds(onlineIds);
+                  showToast(`Đã chọn ${onlineIds.length} máy Đang Online!`, 'info');
+                }}
+                style={{
+                  background: '#D1FAE5',
+                  border: '1px solid #10B981',
+                  borderRadius: '4px',
+                  color: '#047857',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  padding: '3px 8px'
+                }}
+              >
+                🟢 Chọn Đang Online ({onlineEndpoints.length} máy)
+              </button>
+            )}
+
+            {/* Nút Chọn tất cả */}
+            {endpoints.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const allIds = endpoints.map((e) => e.id).filter(Boolean) as number[];
+                  setSelectedEndpointIds(allIds);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#2563EB',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  padding: '0 4px'
+                }}
+              >
+                Chọn tất cả ({endpoints.length} máy)
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Ô INPUT SEARCH: BẮT BUỘC THEO QUY TẮC BẤT DI BẤT DỊCH CHO DANH SÁCH > 10 DÒNG */}
+        <div style={{ position: 'relative', width: '100%' }}>
+          <input
+            type="text"
+            value={modalDeviceSearchQuery}
+            onChange={(e) => setModalDeviceSearchQuery(e.target.value)}
+            placeholder="🔍 Tìm kiếm nhanh theo Mã NH, Tên nhà hàng, IP LAN, Hostname..."
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '7px 28px 7px 10px',
+              borderRadius: '6px',
+              border: '1px solid #CBD5E1',
+              fontSize: '12.5px',
+              backgroundColor: '#FFFFFF',
+              color: '#1E293B',
+              outline: 'none',
+              fontWeight: 500
+            }}
+          />
+          {modalDeviceSearchQuery && (
+            <button
+              type="button"
+              onClick={() => setModalDeviceSearchQuery('')}
+              style={{
+                position: 'absolute',
+                right: '8px',
+                top: '50%',
+                transform: 'translateY(-50%)',
                 background: 'none',
                 border: 'none',
-                color: '#64748B',
-                fontSize: '12px',
                 cursor: 'pointer',
-                textDecoration: 'underline',
-                padding: 0
+                color: '#94A3B8',
+                fontWeight: 700,
+                fontSize: '13px',
+                padding: '2px 4px'
               }}
+              title="Xóa tìm kiếm"
             >
-              Bỏ chọn
+              ✕
             </button>
           )}
         </div>
-      </div>
 
-      {selectedEndpoints.length === 0 && (
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <select
-            style={{
-              width: '100%',
-              padding: '7px 10px',
-              borderRadius: '6px',
-              border: '1px solid #FCA5A5',
-              backgroundColor: '#FFFFFF',
-              fontSize: '13px',
-              color: '#1E293B',
-              fontWeight: 600
-            }}
-            value=""
-            onChange={(e) => {
-              const id = Number(e.target.value);
-              if (id) {
-                setSelectedEndpointIds([id]);
-              }
-            }}
-          >
-            <option value="">👉 Nhấp vào đây để chọn máy đích muốn thực thi...</option>
-            {endpoints.map((ep) => (
-              <option key={ep.id} value={ep.id}>
-                {ep.restaurant_name ? `${ep.restaurant_name} (${ep.restaurant_code})` : ep.machine_name || 'Thiết bị'} - {ep.machine_name || ep.ip_lan} ({ep.ip_lan}) - {ep.is_online ? '🟢 Online' : '⚪ Offline'}
-              </option>
-            ))}
-          </select>
+        {/* DANH SÁCH THIẾT BỊ KHỚP TÌM KIẾM (SCROLL RIÊNG BIỆT) */}
+        <div
+          style={{
+            maxHeight: '190px',
+            overflowY: 'auto',
+            border: '1px solid #CBD5E1',
+            borderRadius: '6px',
+            backgroundColor: '#FFFFFF',
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+        >
+          {filteredSearchEndpoints.length === 0 ? (
+            <div style={{ padding: '16px', textAlign: 'center', fontSize: '12px', color: '#64748B' }}>
+              Không tìm thấy máy trạm nào khớp với từ khóa "{modalDeviceSearchQuery}".
+            </div>
+          ) : (
+            filteredSearchEndpoints.map((ep) => {
+              const isSelected = ep.id ? selectedEndpointIds.includes(ep.id) : false;
+              return (
+                <div
+                  key={ep.id}
+                  onClick={() => {
+                    if (!ep.id) return;
+                    if (isSelected) {
+                      setSelectedEndpointIds(selectedEndpointIds.filter((id) => id !== ep.id));
+                    } else {
+                      setSelectedEndpointIds([...selectedEndpointIds, ep.id]);
+                    }
+                  }}
+                  style={{
+                    padding: '7px 10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    borderBottom: '1px solid #F1F5F9',
+                    backgroundColor: isSelected ? '#EFF6FF' : 'transparent',
+                    fontSize: '12px',
+                    transition: 'background-color 0.1s'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) e.currentTarget.style.backgroundColor = '#F8FAFC';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {}}
+                      style={{ cursor: 'pointer', width: '14px', height: '14px', flexShrink: 0 }}
+                    />
+                    <span style={{ fontWeight: 700, color: '#1E293B', whiteSpace: 'nowrap' }}>
+                      {ep.restaurant_code ? `[${ep.restaurant_code}] ` : ''}
+                      {ep.restaurant_name || ep.machine_name}
+                    </span>
+                    <span style={{ color: '#64748B', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                      ({ep.machine_name ? `${ep.machine_name} - ` : ''}{ep.ip_lan})
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                    <span
+                      style={{
+                        fontSize: '10.5px',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        fontWeight: 700,
+                        backgroundColor: ep.is_online ? '#DCFCE7' : '#F1F5F9',
+                        color: ep.is_online ? '#15803D' : '#64748B'
+                      }}
+                    >
+                      {ep.is_online ? '🟢 Online' : '⚪ Offline'}
+                    </span>
+                    {!ep.is_installed && (
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          padding: '1px 5px',
+                          borderRadius: '4px',
+                          fontWeight: 700,
+                          backgroundColor: '#FEF3C7',
+                          color: '#B45309'
+                        }}
+                      >
+                        Chưa Cài
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
-      )}
-    </div>
-  );
+      </div>
+    );
+  };
 
   // ══════════════════════════════════════════════════════════════════════════
   // HELPER: TÙY CHỌN THỰC THI DƯỚI QUYỀN USER APP / ADMIN MẶC ĐỊNH
@@ -3899,7 +4062,7 @@ export const AgentMultitaskPage: React.FC = () => {
                     </span>
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-                    Trạm chưa cài hoặc Offline ➔ Tự động kết nối qua mạng LAN/VPN (cổng SQL Server 1433 xp_cmdshell quyền SYSTEM) để tải gói và cài đặt ngầm. Trạm Online ➔ Agent tự kéo lệnh.
+                    Trạm Online ➔ Agent tự kéo lệnh. Trạm chưa cài hoặc Offline ➔ Tự động đẩy qua mạng LAN/VPN: dùng SQL Server 1433 xp_cmdshell (máy có SQL) hoặc tự động fallback sang Windows Remote LAN (máy không cài SQL).
                   </div>
                 </div>
 
@@ -3927,7 +4090,7 @@ export const AgentMultitaskPage: React.FC = () => {
                     </span>
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-                    Ép buộc Server kết nối trực tiếp đến IP máy trạm qua SQL Server xp_cmdshell (quyền SYSTEM) để tải file, cấu hình và khởi chạy Service ngay.
+                    Ép buộc Server kết nối trực tiếp đến IP máy trạm qua mạng LAN/VPN: Tự động dùng SQL Server 1433 (nếu có SQL) hoặc Windows Remote Schtasks/WMI (nếu máy không cài SQL) để tải file, cấu hình và khởi chạy Service ngay.
                   </div>
                 </div>
 

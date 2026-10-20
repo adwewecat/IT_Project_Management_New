@@ -376,10 +376,15 @@ def get_role_permissions(db: Session, role_id: int) -> RoleWithPermissionsRespon
                 )
             )
 
-    # For Administrator (Super Admin), always enforce full permissions (100% active)
+    # Đối với nhóm Administrator (role_id 1 hoặc tên ADMINISTRATOR):
+    # Nếu quyền đã được cấu hình trong DB (details_map), lấy đúng giá trị active từ DB.
+    # Chỉ mặc định True đối với các quyền chưa từng được cấu hình.
     if role_id == 1 or (role.tenquyen and role.tenquyen.strip().upper() == "ADMINISTRATOR"):
         for p in permissions:
-            p.active = True
+            if p.chucnang in details_map:
+                p.active = details_map[p.chucnang][1]
+            else:
+                p.active = True
 
     return RoleWithPermissionsResponse(role=role_info, permissions=permissions)
 
@@ -388,17 +393,20 @@ def update_role_permissions(
     db: Session,
     role_id: int,
     data: UpdateRolePermissionsRequest,
-    actor: str
+    actor: str,
+    is_super_admin: bool = False
 ) -> RoleWithPermissionsResponse:
     role = db.get(RoleLevel, role_id)
     if not role:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy nhóm quyền.")
 
-    # IMMUNITY: Do not allow modifying permissions of Super Admin (Administrator)
-    if role_id == 1 or (role.tenquyen and role.tenquyen.strip().upper() == "ADMINISTRATOR"):
+    # Cho phép Super Admin toàn quyền điều chỉnh phân quyền cho nhóm Administrator
+    actor_clean = (actor or "").lower().strip()
+    is_super_actor = is_super_admin or actor_clean in ["admin", "administrator", "dung.nguyenanh"]
+    if (role_id == 1 or (role.tenquyen and role.tenquyen.strip().upper() == "ADMINISTRATOR")) and not is_super_actor:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Nhóm Administrator là nhóm Quản trị được bảo vệ bất biến, không được phép thay đổi hoặc hạn chế phân quyền."
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ có Super Admin mới có quyền điều chỉnh phân quyền cho nhóm Administrator."
         )
 
     existing_details = db.scalars(

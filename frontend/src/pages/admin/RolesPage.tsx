@@ -108,6 +108,8 @@ export const RolesPage: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<RoleItem | null>(null);
   const isSuperAdminUser = checkIsSuperAdmin(user);
   const isSuperAdminRole = selectedRole?.id === 1 || selectedRole?.tenquyen?.toUpperCase() === 'ADMINISTRATOR';
+  // Chỉ khóa nếu người đang thao tác KHÔNG PHẢI Super Admin (Super Admin toàn quyền phân quyền mọi nhóm kể cả Administrator)
+  const isRoleLocked = !isSuperAdminUser && isSuperAdminRole;
   const [permissions, setPermissions] = useState<PermissionDetailItem[]>([]);
   const [permLoading, setPermLoading] = useState(false);
   const [permSaving, setPermSaving] = useState(false);
@@ -334,7 +336,7 @@ export const RolesPage: React.FC = () => {
 
   // Toggle single permission checkbox (with support for syncing insertPerm alongside updatePerm)
   const handleTogglePermission = (chucnang?: string, extraChucnang?: string) => {
-    if (!chucnang || isSuperAdminRole) return;
+    if (!chucnang || isRoleLocked) return;
     setPermissions((prev) => {
       const target = prev.find((p) => p.chucnang === chucnang);
       const nextActive = target ? !target.active : true;
@@ -349,7 +351,7 @@ export const RolesPage: React.FC = () => {
 
   // Bulk toggle column type (all view, or all update) for a module
   const handleToggleColumnTypeForModule = (moduleGroup: string, type: 'view' | 'update' | 'insert', makeActive: boolean) => {
-    if (isSuperAdminRole) return;
+    if (isRoleLocked) return;
     setPermissions((prev) =>
       prev.map((p) => {
         if (p.module_group === moduleGroup) {
@@ -367,7 +369,7 @@ export const RolesPage: React.FC = () => {
 
   // Bulk toggle all currently visible items in search
   const handleToggleVisibleType = (type: 'view' | 'update' | 'all', makeActive: boolean) => {
-    if (isSuperAdminRole) return;
+    if (isRoleLocked) return;
     const visibleKeys = new Set(
       filteredFeatureRows.flatMap((row) => {
         const keys: string[] = [];
@@ -484,8 +486,8 @@ export const RolesPage: React.FC = () => {
   }, [filteredFeatureRows]);
 
   const totalPermissionsCount = permissions.length;
-  const activePermissionsCount = isSuperAdminRole ? totalPermissionsCount : permissions.filter((p) => p.active).length;
-  const activeColumnsCount = isSuperAdminRole ? allFeatureRows.length : allFeatureRows.filter(
+  const activePermissionsCount = isRoleLocked ? totalPermissionsCount : permissions.filter((p) => p.active).length;
+  const activeColumnsCount = isRoleLocked ? allFeatureRows.length : allFeatureRows.filter(
     (r) => (r.viewPerm?.active || r.updatePerm?.active)
   ).length;
 
@@ -664,8 +666,8 @@ export const RolesPage: React.FC = () => {
                     Ma Trận Phân Quyền Chi Tiết (1 Dòng / Cột)
                   </h3>
                   {selectedRole && (
-                    <Badge variant={isSuperAdminRole ? 'success' : 'primary'}>
-                      {isSuperAdminRole
+                    <Badge variant={isRoleLocked ? 'success' : 'primary'}>
+                      {isRoleLocked
                         ? `Toàn Quyền Hệ Thống (${totalPermissionsCount}/${totalPermissionsCount})`
                         : `${activePermissionsCount} / ${totalPermissionsCount} quyền (${activeColumnsCount} / ${allFeatureRows.length} cột đã bật)`}
                     </Badge>
@@ -673,9 +675,13 @@ export const RolesPage: React.FC = () => {
                 </div>
                 {selectedRole && (
                   <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    {isSuperAdminRole ? (
+                    {isRoleLocked ? (
                       <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
                         ★ Nhóm Administrator: Luôn có toàn quyền mặc định và được bảo vệ bất biến
+                      </span>
+                    ) : isSuperAdminRole ? (
+                      <span style={{ color: '#2563EB', fontWeight: 600 }}>
+                        👑 Đang cấu hình phân quyền cho nhóm Administrator (Chế độ Super Admin)
                       </span>
                     ) : (
                       <>
@@ -705,11 +711,12 @@ export const RolesPage: React.FC = () => {
                     size="md"
                     onClick={handleSavePermissions}
                     isLoading={permSaving}
-                    disabled={isSuperAdminRole}
-                    leftIcon={isSuperAdminRole ? <Lock size={16} /> : <Save size={16} />}
-                    title={isSuperAdminRole ? "Nhóm Administrator luôn có toàn quyền và được bảo vệ bất biến" : "Lưu Phân Quyền"}
+                    disabled={isRoleLocked}
+                    leftIcon={isRoleLocked ? <Lock size={16} /> : <Save size={16} />}
+                    title={isRoleLocked ? "Nhóm Administrator luôn có toàn quyền và được bảo vệ bất biến" : (isSuperAdminRole ? "Lưu phân quyền Administrator" : "Lưu Phân Quyền")}
+                    style={isSuperAdminRole && !isRoleLocked ? { backgroundColor: '#2563EB', fontWeight: 700 } : undefined}
                   >
-                    {isSuperAdminRole ? "Được Bảo Vệ (Toàn Quyền)" : "Lưu Phân Quyền"}
+                    {isRoleLocked ? "Được Bảo Vệ (Toàn Quyền)" : (isSuperAdminRole ? "Lưu Phân Quyền Administrator" : "Lưu Phân Quyền")}
                   </Button>
                 )}
               </div>
@@ -745,7 +752,7 @@ export const RolesPage: React.FC = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => handleToggleVisibleType('view', true)}
-                  disabled={isSuperAdminRole}
+                  disabled={isRoleLocked}
                   leftIcon={<Eye size={13} />}
                   title="Bật tất cả quyền XEM cho các cột đang hiển thị"
                 >
@@ -755,7 +762,7 @@ export const RolesPage: React.FC = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => handleToggleVisibleType('update', true)}
-                  disabled={isSuperAdminRole}
+                  disabled={isRoleLocked}
                   leftIcon={<Check size={13} />}
                   title="Bật tất cả quyền CẬP NHẬT cho các cột đang hiển thị"
                 >
@@ -765,7 +772,7 @@ export const RolesPage: React.FC = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => handleToggleVisibleType('all', false)}
-                  disabled={isSuperAdminRole}
+                  disabled={isRoleLocked}
                   leftIcon={<X size={13} />}
                   title="Tắt tất cả quyền cho các cột đang hiển thị"
                 >
@@ -776,7 +783,7 @@ export const RolesPage: React.FC = () => {
 
             {/* Matrix Body: 1 ROW PER COLUMN/FEATURE */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-              {isSuperAdminRole && (
+              {isRoleLocked ? (
                 <div
                   style={{
                     padding: '14px 18px',
@@ -795,7 +802,30 @@ export const RolesPage: React.FC = () => {
                       Nhóm Administrator là Nhóm Quản Trị Hệ Thống - Được Bảo Vệ Bất Biến
                     </strong>
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      Nhóm này mặc định sở hữu 100% quyền hạn trên mọi tính năng và dữ liệu của toàn bộ hệ thống. Quyền của Administrator không thể bị hạ cấp, chỉnh sửa hoặc can thiệp bởi bất kỳ ai.
+                      Nhóm này mặc định sở hữu 100% quyền hạn trên mọi tính năng và dữ liệu của toàn bộ hệ thống. Quyền của Administrator không thể bị hạ cấp, chỉnh sửa hoặc can thiệp bởi tài khoản thường.
+                    </span>
+                  </div>
+                </div>
+              ) : isSuperAdminRole && (
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: '#EFF6FF',
+                    border: '1.5px solid #93C5FD',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <Shield size={24} color="#2563EB" style={{ flexShrink: 0 }} />
+                  <div>
+                    <strong style={{ color: '#1E40AF', fontSize: '13.5px', display: 'block' }}>
+                      👑 Đặc Quyền Super Admin: Phân Quyền Chi Tiết Cho Nhóm Administrator
+                    </strong>
+                    <span style={{ fontSize: '12px', color: '#1E3A8A' }}>
+                      Bạn đang sử dụng quyền Super Admin để điều chỉnh phân quyền cho nhóm Administrator. Các quyền tắt đi sẽ lập tức hạn chế đối với người dùng thuộc nhóm Administrator khi đăng nhập.
                     </span>
                   </div>
                 </div>
@@ -861,7 +891,7 @@ export const RolesPage: React.FC = () => {
                             </span>
                           </div>
 
-                          {!isSuperAdminRole && (
+                          {!isRoleLocked && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px' }}>
                               <button
                                 type="button"
@@ -923,8 +953,8 @@ export const RolesPage: React.FC = () => {
                           </thead>
                           <tbody>
                             {rows.map((row) => {
-                              const isRowViewActive = isSuperAdminRole ? true : !!row.viewPerm?.active;
-                              const isRowUpdateActive = isSuperAdminRole ? true : !!row.updatePerm?.active;
+                              const isRowViewActive = isRoleLocked ? true : !!row.viewPerm?.active;
+                              const isRowUpdateActive = isRoleLocked ? true : !!row.updatePerm?.active;
 
                               return (
                                 <tr
@@ -977,7 +1007,7 @@ export const RolesPage: React.FC = () => {
                                           display: 'inline-flex',
                                           alignItems: 'center',
                                           gap: '6px',
-                                          cursor: isSuperAdminRole ? 'not-allowed' : 'pointer',
+                                          cursor: isRoleLocked ? 'not-allowed' : 'pointer',
                                           padding: '4px 10px',
                                           borderRadius: 'var(--radius-sm)',
                                           backgroundColor: isRowViewActive ? 'var(--color-primary)' : 'var(--bg-secondary)',
@@ -986,19 +1016,19 @@ export const RolesPage: React.FC = () => {
                                           border: '1px solid var(--border-color)',
                                           transition: 'all var(--transition-fast)',
                                           userSelect: 'none',
-                                          opacity: isSuperAdminRole ? 0.9 : 1,
+                                          opacity: isRoleLocked ? 0.9 : 1,
                                         }}
                                       >
                                         <input
                                           type="checkbox"
                                           checked={isRowViewActive}
-                                          disabled={isSuperAdminRole}
+                                          disabled={isRoleLocked}
                                           onChange={() => handleTogglePermission(row.viewPerm?.chucnang)}
                                           style={{
                                             accentColor: 'var(--color-primary-text)',
                                             width: '15px',
                                             height: '15px',
-                                            cursor: isSuperAdminRole ? 'not-allowed' : 'pointer',
+                                            cursor: isRoleLocked ? 'not-allowed' : 'pointer',
                                           }}
                                         />
                                         <span>Xem</span>
@@ -1016,7 +1046,7 @@ export const RolesPage: React.FC = () => {
                                           display: 'inline-flex',
                                           alignItems: 'center',
                                           gap: '6px',
-                                          cursor: isSuperAdminRole ? 'not-allowed' : 'pointer',
+                                          cursor: isRoleLocked ? 'not-allowed' : 'pointer',
                                           padding: '4px 10px',
                                           borderRadius: 'var(--radius-sm)',
                                           backgroundColor: isRowUpdateActive ? 'var(--color-primary)' : 'var(--bg-secondary)',
@@ -1025,19 +1055,19 @@ export const RolesPage: React.FC = () => {
                                           border: '1px solid var(--border-color)',
                                           transition: 'all var(--transition-fast)',
                                           userSelect: 'none',
-                                          opacity: isSuperAdminRole ? 0.9 : 1,
+                                          opacity: isRoleLocked ? 0.9 : 1,
                                         }}
                                       >
                                         <input
                                           type="checkbox"
                                           checked={isRowUpdateActive}
-                                          disabled={isSuperAdminRole}
+                                          disabled={isRoleLocked}
                                           onChange={() => handleTogglePermission(row.updatePerm?.chucnang, row.insertPerm?.chucnang)}
                                           style={{
                                             accentColor: 'var(--color-primary-text)',
                                             width: '15px',
                                             height: '15px',
-                                            cursor: isSuperAdminRole ? 'not-allowed' : 'pointer',
+                                            cursor: isRoleLocked ? 'not-allowed' : 'pointer',
                                           }}
                                         />
                                         <span>Cập Nhật</span>

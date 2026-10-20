@@ -357,6 +357,135 @@ $log -join "`r`n"
             logger.warning("[DEPLOY_ENGINE] Lỗi kết nối SQL xp_cmdshell tại %s: %s", ip, e_sql)
             return False, f"Lỗi kết nối SQL Server (port {sql_port}): {str(e_sql)}"
 
+    @staticmethod
+    def deploy_via_windows_remote(
+        ip: str,
+        admin_user: str,
+        admin_pass: str,
+        powershell_script: str
+    ) -> Tuple[bool, str]:
+        """
+        Thực thi kịch bản triển khai từ xa qua mạng LAN/VPN cho máy trạm KHÔNG CÀI SQL SERVER
+        (Cổng 1433 đóng, cổng SMB 445 / WMI 135 / RPC mở):
+        1. Sử dụng Schtasks /create /s <IP> /ru SYSTEM để chạy script PowerShell ngầm.
+        2. Hoặc WMIC process call create.
+        """
+        import subprocess
+
+        # Encode kịch bản PowerShell Base64 UTF-16LE
+        encoded_cmd = base64.b64encode(powershell_script.encode("utf-16le")).decode("ascii")
+        ps_exec_cmd = f"powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded_cmd}"
+
+        user_clean = admin_user.strip() if admin_user else "Administrator"
+        pass_clean = admin_pass.strip() if admin_pass else ""
+
+        errors = []
+
+        # Cách 1: Thử schtasks /create trên máy trạm từ xa (chạy dưới quyền SYSTEM)
+        try:
+            task_name = f"AgentRemoteDeploy_{int(datetime.now().timestamp())}"
+            if pass_clean:
+                schtasks_create = [
+                    "schtasks", "/create",
+                    "/s", ip,
+                    "/u", user_clean,
+                    "/p", pass_clean,
+                    "/tn", task_name,
+                    "/tr", ps_exec_cmd,
+                    "/sc", "ONCE",
+                    "/st", "00:00",
+                    "/ru", "SYSTEM",
+                    "/f"
+                ]
+            else:
+                schtasks_create = [
+                    "schtasks", "/create",
+                    "/s", ip,
+                    "/tn", task_name,
+                    "/tr", ps_exec_cmd,
+                    "/sc", "ONCE",
+                    "/st", "00:00",
+                    "/ru", "SYSTEM",
+                    "/f"
+                ]
+
+            proc_create = subprocess.run(
+                schtasks_create,
+                capture_output=True,
+                text=True,
+                timeout=12,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+
+            if proc_create.returncode == 0 or "SUCCESS" in (proc_create.stdout or "").upper():
+                # Kích hoạt task ngay lập tức
+                if pass_clean:
+                    schtasks_run = ["schtasks", "/run", "/s", ip, "/u", user_clean, "/p", pass_clean, "/tn", task_name]
+                else:
+                    schtasks_run = ["schtasks", "/run", "/s", ip, "/tn", task_name]
+
+                proc_run = subprocess.run(
+                    schtasks_run,
+                    capture_output=True,
+                    text=True,
+                    timeout=8,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                )
+
+                # Dọn dẹp task sau khi kích hoạt
+                try:
+                    if pass_clean:
+                        subprocess.run(
+                            ["schtasks", "/delete", "/s", ip, "/u", user_clean, "/p", pass_clean, "/tn", task_name, "/f"],
+                            capture_output=True,
+                            timeout=5
+                        )
+                except Exception:
+                    pass
+
+                return True, f"[Schtasks LAN] Kích hoạt thành công gói cài đặt ngầm dưới quyền SYSTEM tại {ip}:\n{proc_run.stdout or proc_create.stdout}"
+            else:
+                err_msg = (proc_create.stderr or proc_create.stdout).strip()
+                errors.append(f"Schtasks: {err_msg}")
+        except Exception as e_sch:
+            errors.append(f"Schtasks exception: {str(e_sch)}")
+
+        # Cách 2: Thử WMI Process Call qua WMIC (Windows Management Instrumentation)
+        try:
+            if pass_clean:
+                wmic_cmd = [
+                    "wmic",
+                    f"/node:{ip}",
+                    f"/user:{user_clean}",
+                    f"/password:{pass_clean}",
+                    "process", "call", "create",
+                    ps_exec_cmd
+                ]
+            else:
+                wmic_cmd = [
+                    "wmic",
+                    f"/node:{ip}",
+                    "process", "call", "create",
+                    ps_exec_cmd
+                ]
+
+            proc_wmi = subprocess.run(
+                wmic_cmd,
+                capture_output=True,
+                text=True,
+                timeout=12,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+            out_wmi = (proc_wmi.stdout or "").strip()
+            if "ReturnValue = 0" in out_wmi or "ProcessId" in out_wmi:
+                return True, f"[WMI LAN] Khởi chạy thành công tiến trình cài đặt từ xa tại {ip}:\n{out_wmi}"
+            else:
+                errors.append(f"WMI: {out_wmi or proc_wmi.stderr}")
+        except Exception as e_wmi:
+            errors.append(f"WMI exception: {str(e_wmi)}")
+
+        return False, "Không thể kết nối Windows Remote qua mạng LAN (máy không có SQL Server):\n" + "\n".join(errors)
+
     @classmethod
     def deploy_target_worker(
         cls,
@@ -480,15 +609,33 @@ $log -join "`r`n"
                     else:
                         deploy_output = out_sql
 
-            # 3. Nếu triển khai thành công
+            # 3. ƯU TIÊN 2 (FALLBACK): Máy KHÔNG CÀI SQL SERVER hoặc SQL đóng (POS 2, PC Quản lý, KDS...)
+            # Thử triển khai qua Windows Remote LAN (Schtasks / WMI qua cổng 445/135)
+            if not deploy_success and port_smb_open:
+                log_entry.result_message = f"[3/4] Cổng SQL 1433 đóng (máy không cài SQL). Đang triển khai qua Windows Remote LAN (Schtasks/WMI port 445) với tài khoản {default_admin_u}..."
+                db.commit()
+
+                ok_win, out_win = cls.deploy_via_windows_remote(
+                    ip=resolved_ip,
+                    admin_user=default_admin_u,
+                    admin_pass=default_admin_p,
+                    powershell_script=ps_script
+                )
+                if ok_win:
+                    deploy_success = True
+                    deploy_output = f"[Windows Remote LAN]: {out_win}"
+                else:
+                    deploy_output += f"\n[Windows Remote LAN Lỗi]: {out_win}"
+
+            # 4. Cập nhật kết quả triển khai
             if deploy_success:
                 log_entry.result_status = "SUCCESS"
-                log_entry.result_message = f"Triển khai trực tiếp thành công qua SQL Server xp_cmdshell:\n{deploy_output}"
+                log_entry.result_message = f"Triển khai trực tiếp thành công:\n{deploy_output}"
                 if ep:
                     ep.is_installed = True
                     ep.is_online = True
                     ep.service_status = "RUNNING"
-                    ep.last_action = f"Đã cài đặt & Online thành công qua Remote Push"
+                    ep.last_action = f"Đã cài đặt & Online thành công qua Remote Push LAN"
                     ep.last_error = None
                     ep.updated_at = datetime.now()
                 logger.info("[DEPLOY_WORKER] Triển khai thành công task #%s tới NH %s", task_id, restaurant_code)

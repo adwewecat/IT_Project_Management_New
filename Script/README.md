@@ -130,6 +130,31 @@ npm run dev
 
 ---
 
+### [2026-10-20] - Mở Phân Quyền Nhóm Administrator Cho Super Admin, Áp Dụng Input Search Danh Sách > 10 Dòng & Nâng Cấp Direct LAN Fallback Cho Máy Không Có SQL
+- **Yêu cầu người dùng**:
+  1. Dùng quyền Super Admin mà đang không phân quyền được nhóm Administrator (các checkbox bị khóa và nút lưu bị vô hiệu hóa).
+  2. Quy tắc bất di bất dịch: Bất kỳ ô nào sổ ra danh sách list item trên 10 dòng bắt buộc phải có input search (bộ chọn trạm trong modal trước đây dùng thẻ `<select>` 393 dòng không có ô tìm kiếm).
+  3. Thiết Bị Thực Thi: Bên ngoài đã có đánh dấu các nhà hàng cần thực thi rồi thì bên trong modal bỏ việc bắt chọn lại; chỉ hiển thị tóm tắt.
+  4. Câu hỏi kiến trúc: Các máy không cài SQL Server (POS 2, PC quản lý, KDS...), nếu dùng "Đẩy Trực Tiếp (Direct LAN)" thì có ok hơn không?
+- **Chi tiết kỹ thuật & Khắc phục**:
+  1. **Phân Quyền Nhóm Administrator Cho Super Admin (`RolesPage.tsx`, `role_service.py`, `roles.py`, `auth_service.py`)**:
+     - Định nghĩa `isRoleLocked = !isSuperAdminUser && isSuperAdminRole`. Super Admin (`dung.nguyenanh`, `admin`, `is_super_admin`, `phanquyen=0`) được phép toàn quyền toggle bật/tắt các quyền và bấm Lưu phân quyền cho nhóm Administrator. Chỉ chặn đối với người dùng không phải Super Admin.
+     - Backend: Cho phép Super Admin cập nhật `PHANQUYEN_DETAIL` cho role id 1, và `get_role_permissions` đọc đúng trạng thái từ DB.
+  2. **Quy Tắc Bất Di Bất Dịch: Searchable Device Picker Có Input Search Cho Danh Sách > 10 Dòng (`AgentMultitaskPage.tsx`)**:
+     - Thay thế thẻ `<select>` native bằng Searchable Device Picker:
+       + Khi `selectedEndpoints.length > 0`: Bỏ hoàn toàn dropdown và cảnh báo đỏ; hiển thị thanh tóm tắt màu xanh lá trang nhã `🎯 Thiết Bị Thực Thi: Đã chọn ${count} máy từ danh sách bên ngoài` kèm danh sách trạm và nút `[✕ Bỏ chọn / Đổi máy]`.
+       + Khi `selectedEndpoints.length === 0`: Hiển thị ô `Input Search` `🔍 Tìm kiếm nhanh theo Mã NH, Tên nhà hàng, IP LAN, Hostname...` (kèm nút xóa nhanh ✕). Danh sách kết quả lọc có thanh cuộn riêng (`maxHeight: 190px`), checkbox từng máy, badge `Online/Offline`, nút chọn nhanh `⚪ Chưa Cài / Offline`, `🟢 Đang Online`, `Chọn tất cả`.
+  3. **Nâng Cấp Động Cơ Đẩy Trực Tiếp (Direct LAN) Cho Máy Không Cài SQL Server (`agent_remote_deploy_service.py`)**:
+     - Bổ sung phương thức `deploy_via_windows_remote(ip, admin_user, admin_pass, powershell_script)`:
+       + Máy có SQL Server (cổng 1433 mở - Server POS 1): Ưu tiên chạy qua `xp_cmdshell` quyền SYSTEM.
+       + Máy KHÔNG cài SQL Server (cổng 1433 đóng, cổng SMB 445/WMI mở - POS 2, PC quản lý, KDS): Tự động Fallback sang Windows Remote LAN (Schtasks `/create /s <IP> /ru SYSTEM` hoặc WMIC process call) bằng tài khoản quản trị viên máy trạm để kích hoạt kịch bản PowerShell ngầm.
+     - Cập nhật mô tả trực quan trên giao diện cho cả 2 chế độ `Auto Hybrid` và `Direct LAN`.
+  4. **Kiểm thử & Đóng gói Server**:
+     - Frontend build: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 5.06s`), bundle mới trong `frontend/dist/`.
+     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`, backend daemon khởi động lại thành công trên port 8000.
+
+---
+
 ### [2026-10-18] - Cải Tiến Modal Truyền Gói Cài & File Nén (Agent Multitask): Hỗ Trợ Truyền File Thuần Túy Không Cần Bước Thực Thi & Tinh Gọn Giao Diện
 - **Yêu cầu người dùng**:
   1. Hỗ trợ truyền file thuần túy vào thư mục yêu cầu mà không bắt buộc phải có bước thực thi script hay sửa file. Trước đây nếu không có bước thực thi nào (`steps.length === 0`) thì nút submit bị vô hiệu hóa không tiến hành được.

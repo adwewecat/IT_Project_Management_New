@@ -138,12 +138,11 @@ def get_user_permissions(db: Session, phanquyen: Optional[str], quyen_mo_rong: O
 
     if role_ids_to_check:
         stmt = select(PermissionDetail).where(
-            PermissionDetail.id_quyen.in_(list(role_ids_to_check)),
-            PermissionDetail.active == True
+            PermissionDetail.id_quyen.in_(list(role_ids_to_check))
         )
         details = db.scalars(stmt).all()
         for d in details:
-            permissions[d.chucnang] = True
+            permissions[d.chucnang] = bool(d.active)
 
     # Kiểm tra thêm trong allowed_users của Agent Multitask nếu có username
     if clean_u:
