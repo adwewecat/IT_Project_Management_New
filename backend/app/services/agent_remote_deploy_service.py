@@ -130,13 +130,21 @@ try {{
 """)
 
             elif st_type in ["RUN_SCRIPT", "EXECUTE"]:
-                script_f = (st.get("file_name") or st.get("script_name") or "").strip()
+                script_f = (st.get("file_name") or st.get("file_path") or st.get("script_name") or "").strip()
+                custom_folder = (st.get("folder_path") or st.get("working_directory") or "").strip().replace('/', '\\')
                 script_args = (st.get("arguments") or "").strip()
+
+                if custom_folder:
+                    folder_code = f"$scriptBaseFolder = '{custom_folder}'"
+                else:
+                    folder_code = "$scriptBaseFolder = $targetFolder"
+
                 steps_ps_code.append(f"""
 # [{st_name}] Chay script {script_f}
-$fScript = Join-Path $targetFolder '{script_f}'
+{folder_code}
+$fScript = Join-Path $scriptBaseFolder '{script_f}'
 if (-not (Test-Path $fScript)) {{
-    $foundS = Get-ChildItem -Path $targetFolder -Filter '{os.path.basename(script_f)}' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $foundS = Get-ChildItem -Path $scriptBaseFolder -Filter '{os.path.basename(script_f)}' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($foundS) {{ $fScript = $foundS.FullName }}
 }}
 if (Test-Path $fScript) {{
@@ -157,12 +165,12 @@ if (Test-Path $fScript) {{
         $p = [System.Diagnostics.Process]::Start($pInfo)
         $p.WaitForExit(60000)
         $outText = $p.StandardOutput.ReadToEnd()
-        $log += "[STEP {idx}] Chay {script_f} (ExitCode: $($p.ExitCode)): OK"
+        $log += "[STEP {idx}] Chay {script_f} tai $sDir (ExitCode: $($p.ExitCode)): OK"
     }} catch {{
         $log += "[STEP {idx}-ERR] Loi chay script {script_f}: $_"
     }}
 }} else {{
-    $log += "[STEP {idx}-SKIP] Khong tim thay script {script_f} de chay."
+    $log += "[STEP {idx}-SKIP] Khong tim thay script {script_f} tai $scriptBaseFolder de chay."
 }}
 """)
 
@@ -520,6 +528,9 @@ $log -join "`r`n"
                 ).first()
                 if r_obj and r_obj.ip:
                     resolved_ip = r_obj.ip.strip()
+
+            if resolved_ip and resolved_ip.lower().endswith(".x"):
+                resolved_ip = resolved_ip[:-2] + ".11"
 
             if not resolved_ip:
                 log_entry.result_status = "FAILED"

@@ -103,6 +103,8 @@ export interface DeployStepItem {
   content?: string;
   // Cho Run script
   arguments?: string;
+  folder_path?: string;
+  working_directory?: string;
   run_as_admin?: boolean;
   wait_for_completion?: boolean;
   run_mode?: 'interactive' | 'hidden';

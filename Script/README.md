@@ -3956,6 +3956,39 @@ estaurant_service.py).
   - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
   - Backend daemon đang hoạt động ổn định trên port 8000 (`/api/health` trả về `healthy`).
 
+---
+
+### [2026-10-20] - TÙY BIẾN THƯ MỤC CHỨA SCRIPT & BỔ SUNG BỘ CHỌN IP MÁY TRẠM CỤ THỂ TRONG DẢI IP NHÀ HÀNG (.11, .12, .41)
+
+- **Yêu Cầu & Bối Cảnh Nghiệp Vụ**:
+  1. Trong bước Chạy file script (`RUN_SCRIPT`) của modal *Truyền Gói Cài & Thực Thi Đa Bước*, người dùng không cần ô `Tham số truyền vào (Arguments):` mà cần 1 ô `Thư mục chứa file` để linh hoạt chỉ định vị trí file script nếu script nằm ở thư mục khác thư mục đích.
+  2. Khi người dùng tick chọn nhà hàng từ danh sách bên ngoài bảng chính có IP dạng dải (`10.8.153.x`), người dùng không biết lệnh sẽ thực thi vào máy nào trong nhà hàng, đồng thời cổng kết nối mạng LAN không thể kết nối tới `.x`. Cần có ô check để người dùng chọn IP cụ thể trong dải IP nhà hàng.
+
+- **Giải Pháp & Triển Khai Toàn Diện**:
+  1. **Tùy Biến Thư Mục Chứa Script Trong `DEPLOY_PACKAGE`**:
+     - `frontend/src/services/agentMultitaskService.ts`: Bổ sung `folder_path?: string` và `working_directory?: string` vào interface `DeployStepItem`.
+     - `frontend/src/pages/app/AgentMultitaskPage.tsx`: Loại bỏ ô *Tham số truyền vào (Arguments)*, thay bằng ô *Thư mục chứa file (Tùy chọn - Mặc định theo thư mục đích ở trên)* liên kết trực tiếp vào `step.folder_path` / `step.working_directory`.
+     - `backend/app/services/agent_remote_deploy_service.py`: Cập nhật hàm `build_powershell_script` trỏ `$scriptBaseFolder` vào đúng thư mục tùy chọn nếu có khai báo.
+     - `tools/restaurant_support_agent/restaurant_support_agent.py`: Cập nhật Client Agent thực thi bước `RUN_SCRIPT` trỏ vào `custom_step_dir`.
+
+  2. **Bộ Chọn Máy Trạm Đích Cụ Thể Trong Dải IP Nhà Hàng (.x)**:
+     - Thêm state `subnetTargetRoles`:
+       + `pos11: boolean` (Mặc định `true` - Máy Chủ / POS 1).
+       + `pos12: boolean` (Mặc định `false` - Máy Thu Ngân 2).
+       + `pc41: boolean` (Mặc định `false` - PC Quản Lý Nhà Hàng).
+       + `customSuffix: string` (Ô nhập đuôi IP khác tùy chỉnh, VD: `13, 14, 50`).
+     - Tự động nhận diện thiết bị có IP subnet (`isSubnetIp`) và phân giải danh sách IP cụ thể (`resolvedConcreteTargets`).
+     - Tích hợp khối giao diện **`🌐 Chọn Máy Trạm Đích Cụ Thể Trong Dải IP Nhà Hàng`** vào helper `renderTargetDevicePicker()` (hiển thị trên cả modal `DEPLOY_PACKAGE` lẫn `RELATIVE_SCRIPT`).
+     - Hiển thị xem trước (preview) danh sách các IP cụ thể sẽ được gửi lệnh thực thi (kèm badge vai trò trạm).
+     - Đồng bộ số lượng máy mục tiêu trên footer modal và trên nút bấm `🚀 Bắt Đầu Triển Khai & Thực Thi ({resolvedConcreteTargets.length} máy)`.
+     - Cập nhật `handleSendCommand`: Phân giải danh sách máy đích gửi lên backend qua mảng `target_ips` cụ thể và gán vào `trackingTargets` để bảng theo dõi thời gian thực (Live Execution Tracker) hiển thị chính xác kết quả từng máy trạm.
+     - Cơ chế phòng vệ Backend: Trong `AgentMultitaskService.send_command` và `AgentRemoteDeployService.deploy_target_worker`, tự động fallback đổi đuôi `.x` thành `.11` (Máy Chủ / POS 1) nếu có lệnh gọi API chưa phân giải đuôi.
+
+- **Kiểm Thử & Đóng Gói Server (Copy Là Chạy Ngay)**:
+  - Frontend: `cmd /c "npm run build"` tại `frontend/` exit code 0 (`✓ built in 4.43s`), bản build mới nhất sẵn sàng trong `frontend/dist/`.
+  - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
+  - Backend daemon đang hoạt động ổn định trên port 8000 (`/api/v1/agent-multitask/overview` trả về 200 OK).
+
 
 
 

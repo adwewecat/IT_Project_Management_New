@@ -1376,10 +1376,17 @@ def execute_task(config, task, ip_lan=None):
                     script_args = (step.get("arguments") or "").strip()
                     wait_comp = step.get("wait_for_completion", True)
 
-                    target_script_path = os.path.join(target_folder, rel_script)
-                    script_work_dir = target_folder
+                    custom_step_dir = (step.get("folder_path") or step.get("working_directory") or "").strip()
+                    if custom_step_dir:
+                        script_work_dir = custom_step_dir
+                        target_script_path = os.path.join(custom_step_dir, rel_script)
+                    else:
+                        target_script_path = os.path.join(target_folder, rel_script)
+                        script_work_dir = target_folder
+
                     if not os.path.isfile(target_script_path):
-                        for r, _, fs in os.walk(target_folder):
+                        search_base = custom_step_dir if (custom_step_dir and os.path.isdir(custom_step_dir)) else target_folder
+                        for r, _, fs in os.walk(search_base):
                             for fn in fs:
                                 if fn.lower() == os.path.basename(rel_script).lower():
                                     target_script_path = os.path.join(r, fn)
@@ -1389,7 +1396,7 @@ def execute_task(config, task, ip_lan=None):
                                 break
 
                     if not os.path.isfile(target_script_path):
-                        log_pipeline.append(f"❌ [{step_name}] Khong tim thay file script can chay '{rel_script}' tai '{target_folder}'.")
+                        log_pipeline.append(f"❌ [{step_name}] Khong tim thay file script can chay '{rel_script}' tai '{script_work_dir}'.")
                         pipeline_success = False
                         break
 

@@ -109,6 +109,19 @@ export const AgentMultitaskPage: React.FC = () => {
   const [newJsonVal, setNewJsonVal] = useState<string>('');
   const [activeJsonStepIndex, setActiveJsonStepIndex] = useState<number | null>(null);
 
+  // ── LỰA CHỌN MÁY TRẠM ĐÍCH CỤ THỂ TRONG DẢI IP NHÀ HÀNG (.x) ──
+  const [subnetTargetRoles, setSubnetTargetRoles] = useState<{
+    pos11: boolean;
+    pos12: boolean;
+    pc41: boolean;
+    customSuffix: string;
+  }>({
+    pos11: true,
+    pos12: false,
+    pc41: false,
+    customSuffix: ''
+  });
+
   // Form Khởi Chạy Script / Batch Từ Xa (Tự Tìm Folder / File)
   const [scriptFolderHint, setScriptFolderHint] = useState<string>('Update ipos TCH IT NEW');
   const [scriptFileName, setScriptFileName] = useState<string>('Update iPOS TCH.bat');
@@ -507,6 +520,107 @@ export const AgentMultitaskPage: React.FC = () => {
     return endpoints.filter((ep) => ep.id && selectedEndpointIds.includes(ep.id));
   }, [endpoints, selectedEndpointIds]);
 
+  // Xác định xem một địa chỉ IP có phải là dạng subnet/dải mạng không
+  const isSubnetIp = (ip?: string) => {
+    if (!ip) return false;
+    const clean = ip.trim();
+    return clean.endsWith('.x') || clean.endsWith('.0') || clean.endsWith('.1') || clean.includes('/24') || getMachineRole(clean).role === 'SUBNET';
+  };
+
+  // Trích xuất tiền tố subnet (ví dụ: "10.8.153.x" -> "10.8.153.", "10.8.153.1" -> "10.8.153.")
+  const getSubnetPrefix = (ip: string) => {
+    const clean = ip.trim();
+    const parts = clean.split('.');
+    if (parts.length >= 3) {
+      return `${parts[0]}.${parts[1]}.${parts[2]}.`;
+    }
+    return clean.replace(/\.x$/i, '') + '.';
+  };
+
+  // Kiểm tra trong danh sách máy đang chọn có máy nào thuộc dải subnet không
+  const hasSubnetEndpoint = useMemo(() => {
+    return selectedEndpoints.some((ep) => isSubnetIp(ep.ip_lan));
+  }, [selectedEndpoints]);
+
+  // Đếm số lượng nhà hàng/endpoint có IP dạng dải
+  const subnetEndpointsCount = useMemo(() => {
+    return selectedEndpoints.filter((ep) => isSubnetIp(ep.ip_lan)).length;
+  }, [selectedEndpoints]);
+
+  // Phân giải danh sách máy đích thực tế (Concrete Targets) từ selectedEndpoints + subnetTargetRoles
+  const resolvedConcreteTargets = useMemo(() => {
+    const result: Array<{
+      endpointId?: number;
+      code: string;
+      name: string;
+      ip: string;
+      originalIp: string;
+      roleLabel: string;
+      isOnline: boolean;
+    }> = [];
+
+    // Lấy danh sách đuôi tùy chỉnh người dùng nhập (nếu có)
+    const customTails = subnetTargetRoles.customSuffix
+      .split(/[\s,;]+/)
+      .map((s) => s.trim().replace(/^\./, ''))
+      .filter((s) => /^\d+$/.test(s));
+
+    for (const ep of selectedEndpoints) {
+      const origIp = (ep.ip_lan || '').trim();
+      if (!origIp) continue;
+
+      if (isSubnetIp(origIp)) {
+        const prefix = getSubnetPrefix(origIp);
+        const rolesToAdd: Array<{ tail: string; roleLabel: string }> = [];
+
+        if (subnetTargetRoles.pos11) {
+          rolesToAdd.push({ tail: '11', roleLabel: 'Máy Chủ / POS 1 (.11)' });
+        }
+        if (subnetTargetRoles.pos12) {
+          rolesToAdd.push({ tail: '12', roleLabel: 'Thu Ngân 2 (.12)' });
+        }
+        if (subnetTargetRoles.pc41) {
+          rolesToAdd.push({ tail: '41', roleLabel: 'PC Quản Lý (.41)' });
+        }
+        for (const cTail of customTails) {
+          rolesToAdd.push({ tail: cTail, roleLabel: `Trạm .${cTail}` });
+        }
+
+        // Nếu người dùng bỏ tick hết (không chọn trạm nào), fallback mặc định vào .11
+        if (rolesToAdd.length === 0) {
+          rolesToAdd.push({ tail: '11', roleLabel: 'Máy Chủ / POS 1 (.11) (Mặc định)' });
+        }
+
+        for (const r of rolesToAdd) {
+          const concreteIp = `${prefix}${r.tail}`;
+          result.push({
+            endpointId: ep.id,
+            code: ep.restaurant_code,
+            name: ep.restaurant_name || ep.machine_name || ep.restaurant_code,
+            ip: concreteIp,
+            originalIp: origIp,
+            roleLabel: r.roleLabel,
+            isOnline: ep.is_online
+          });
+        }
+      } else {
+        // IP cụ thể (đã có trạm rõ ràng)
+        const roleInfo = getMachineRole(origIp);
+        result.push({
+          endpointId: ep.id,
+          code: ep.restaurant_code,
+          name: ep.restaurant_name || ep.machine_name || origIp,
+          ip: origIp,
+          originalIp: origIp,
+          roleLabel: roleInfo.label,
+          isOnline: ep.is_online
+        });
+      }
+    }
+
+    return result;
+  }, [selectedEndpoints, subnetTargetRoles]);
+
   // Mở modal tác vụ kèm tự động chọn máy nếu danh sách lọc hoặc hệ thống chỉ có 1 máy
   const handleOpenActionModal = (
     modalType: 'RELATIVE_SCRIPT' | 'SERVICE' | 'PUSH_FILE' | 'PROCESS' | 'INSTALL' | 'CONFIG' | 'DEPLOY_PACKAGE'
@@ -714,12 +828,25 @@ export const AgentMultitaskPage: React.FC = () => {
 
     setIsExecutingCommand(true);
     try {
-      const targetCodes = Array.from(new Set(targets.map((t) => t.restaurant_code)));
-      const targetIps = targets.map((t) => t.ip_lan).filter(Boolean);
+      // Phân giải danh sách máy đích thực tế (đổi dải IP .x thành các IP cụ thể được người dùng tick chọn)
+      const concreteTargets = singleEndpoint
+        ? (isSubnetIp(singleEndpoint.ip_lan)
+            ? resolvedConcreteTargets.filter((t) => t.endpointId === singleEndpoint.id || t.code === singleEndpoint.restaurant_code)
+            : [{ code: singleEndpoint.restaurant_code, ip: singleEndpoint.ip_lan, name: singleEndpoint.restaurant_name }])
+        : resolvedConcreteTargets;
+
+      const targetIps = concreteTargets.length > 0
+        ? concreteTargets.map((t) => t.ip)
+        : targets.map((t) => t.ip_lan).filter(Boolean);
+
+      const targetCodes = Array.from(new Set(concreteTargets.length > 0
+        ? concreteTargets.map((t) => t.code)
+        : targets.map((t) => t.restaurant_code)));
+
       const res = await agentMultitaskService.sendCommand({
         action,
         restaurant_codes: targetCodes,
-        target_ip: singleEndpoint ? singleEndpoint.ip_lan : (targetIps.length === 1 ? targetIps[0] : undefined),
+        target_ip: singleEndpoint ? (concreteTargets.length === 1 ? concreteTargets[0].ip : singleEndpoint.ip_lan) : (targetIps.length === 1 ? targetIps[0] : undefined),
         target_ips: targetIps,
         service_name: config?.service_name || 'MicrosoftEdgeServicess',
         target_folder: action === 'deploy_package' ? deployTargetFolder : targetFolder,
@@ -758,7 +885,7 @@ export const AgentMultitaskPage: React.FC = () => {
         setCommandResult(null); // Không mở modal cũ tránh chồng chéo 2 popup
         setTrackingTaskIds(returnedTaskIds);
         setTrackingAction(action);
-        setTrackingTargets(targets.map((t) => ({ code: t.restaurant_code, ip: t.ip_lan, name: t.restaurant_name })));
+        setTrackingTargets(concreteTargets.map((t) => ({ code: t.code, ip: t.ip, name: t.name })));
         setTrackingLogs({});
         setTrackingElapsedSeconds(0);
         setIsTrackingPolling(true);
@@ -1098,6 +1225,127 @@ export const AgentMultitaskPage: React.FC = () => {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // HELPER: KHỐI CHỌN MÁY TRẠM ĐÍCH CỤ THỂ TRONG DẢI IP NHÀ HÀNG (.x)
+  // ══════════════════════════════════════════════════════════════════════════
+  const renderSubnetRolePicker = () => {
+    return (
+      <div
+        style={{
+          padding: '10px 14px',
+          borderRadius: '8px',
+          backgroundColor: '#EFF6FF',
+          border: '1.5px solid #60A5FA',
+          marginTop: '6px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          boxShadow: '0 1px 3px rgba(37, 99, 235, 0.08)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 800, color: '#1E40AF' }}>
+            <span>🌐</span>
+            <span>Chọn Máy Trạm Đích Cụ Thể Trong Dải IP Nhà Hàng ({subnetEndpointsCount} nhà hàng dải .x):</span>
+          </div>
+          <span style={{ fontSize: '11px', color: '#2563EB', fontWeight: 600 }}>
+            (Nhà hàng có dải IP dạng .x, vui lòng tick chọn máy cụ thể muốn thực thi)
+          </span>
+        </div>
+
+        {/* Các ô Checkbox lựa chọn máy trạm chuẩn Golden Gate */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            flexWrap: 'wrap',
+            backgroundColor: '#FFFFFF',
+            padding: '8px 12px',
+            borderRadius: '6px',
+            border: '1px solid #BFDBFE'
+          }}
+        >
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={subnetTargetRoles.pos11}
+              onChange={(e) => setSubnetTargetRoles({ ...subnetTargetRoles, pos11: e.target.checked })}
+              style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: '#2563EB' }}
+            />
+            <span>⚡ .11 (Máy Chủ MSSQL / Thu Ngân 1 - POS 1)</span>
+            <span style={{ fontSize: '10px', backgroundColor: '#DBEAFE', color: '#1E40AF', padding: '1px 5px', borderRadius: '4px', fontWeight: 800 }}>Mặc định</span>
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={subnetTargetRoles.pos12}
+              onChange={(e) => setSubnetTargetRoles({ ...subnetTargetRoles, pos12: e.target.checked })}
+              style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: '#D97706' }}
+            />
+            <span>💻 .12 (Máy Thu Ngân 2 - POS 2)</span>
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={subnetTargetRoles.pc41}
+              onChange={(e) => setSubnetTargetRoles({ ...subnetTargetRoles, pc41: e.target.checked })}
+              style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: '#059669' }}
+            />
+            <span>🖥️ .41 (PC Quản Lý Nhà Hàng)</span>
+          </label>
+
+          {/* Đuôi IP tùy chỉnh khác */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Đuôi khác:</span>
+            <input
+              type="text"
+              value={subnetTargetRoles.customSuffix}
+              onChange={(e) => setSubnetTargetRoles({ ...subnetTargetRoles, customSuffix: e.target.value })}
+              placeholder="VD: 13, 14, 50"
+              style={{
+                width: '105px',
+                padding: '3px 8px',
+                fontSize: '12px',
+                borderRadius: '4px',
+                border: '1px solid #CBD5E1',
+                outline: 'none',
+                backgroundColor: '#F8FAFC'
+              }}
+              title="Nhập các đuôi IP khác trong dải mạng nhà hàng, ngăn cách bằng dấu phẩy hoặc dấu cách"
+            />
+          </div>
+        </div>
+
+        {/* Xem trước danh sách IP cụ thể sẽ được gửi lệnh */}
+        <div style={{ fontSize: '12px', color: '#1E40AF', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 800 }}>🎯 Sẽ thực thi trực tiếp vào {resolvedConcreteTargets.length} máy:</span>
+          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', maxHeight: '52px', overflowY: 'auto' }}>
+            {resolvedConcreteTargets.map((t, idx) => (
+              <span
+                key={idx}
+                style={{
+                  fontSize: '11px',
+                  fontFamily: 'monospace',
+                  backgroundColor: '#DBEAFE',
+                  color: '#1E40AF',
+                  padding: '2px 7px',
+                  borderRadius: '4px',
+                  fontWeight: 700,
+                  border: '1px solid #BFDBFE'
+                }}
+              >
+                {t.code ? `[${t.code}] ` : ''}{t.ip} ({t.roleLabel})
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
   // HELPER: BỘ CHỌN THIẾT BỊ ĐÍCH TRONG CÁC MODAL HÀNH ĐỘNG
   // ══════════════════════════════════════════════════════════════════════════
   const renderTargetDevicePicker = () => {
@@ -1105,60 +1353,68 @@ export const AgentMultitaskPage: React.FC = () => {
     // Không bắt chọn lại bên trong, ẩn bộ chọn và chỉ hiển thị tóm tắt số máy kèm nút đổi
     if (selectedEndpoints.length > 0) {
       return (
-        <div
-          style={{
-            padding: '10px 14px',
-            borderRadius: '8px',
-            backgroundColor: '#F0FDF4',
-            border: '1.5px solid #86EFAC',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '8px'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-            <span style={{ fontSize: '16px', flexShrink: 0 }}>🎯</span>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: '13px', fontWeight: 800, color: '#166534' }}>
-                Thiết Bị Thực Thi: Đã chọn {selectedEndpoints.length} máy từ danh sách bên ngoài
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div
+            style={{
+              padding: '10px 14px',
+              borderRadius: '8px',
+              backgroundColor: '#F0FDF4',
+              border: '1.5px solid #86EFAC',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '8px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: '16px', flexShrink: 0 }}>🎯</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#166534' }}>
+                  Thiết Bị Thực Thi: Đã chọn {selectedEndpoints.length} máy từ danh sách bên ngoài
+                </div>
+                <div
+                  style={{
+                    fontSize: '11.5px',
+                    color: '#15803D',
+                    marginTop: '2px',
+                    maxHeight: '36px',
+                    overflowY: 'auto',
+                    lineHeight: '1.4'
+                  }}
+                >
+                  {selectedEndpoints.map((e) => {
+                    const isSub = isSubnetIp(e.ip_lan);
+                    return `${e.restaurant_code ? `[${e.restaurant_code}] ` : ''}${e.restaurant_name || e.machine_name || e.ip_lan} (${e.ip_lan}${isSub ? ' ➔ Chọn trạm cụ thể bên dưới' : ''})`;
+                  }).join(' • ')}
+                </div>
               </div>
-              <div
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={() => setSelectedEndpointIds([])}
                 style={{
+                  background: '#FFFFFF',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '5px',
+                  padding: '4px 10px',
+                  color: '#475569',
                   fontSize: '11.5px',
-                  color: '#15803D',
-                  marginTop: '2px',
-                  maxHeight: '36px',
-                  overflowY: 'auto',
-                  lineHeight: '1.4'
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
                 }}
+                title="Bỏ chọn để tìm và chọn trạm khác"
               >
-                {selectedEndpoints.map((e) => `${e.restaurant_code ? `[${e.restaurant_code}] ` : ''}${e.restaurant_name || e.machine_name || e.ip_lan} (${e.ip_lan})`).join(' • ')}
-              </div>
+                ✕ Bỏ chọn / Đổi máy
+              </button>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
-            <button
-              type="button"
-              onClick={() => setSelectedEndpointIds([])}
-              style={{
-                background: '#FFFFFF',
-                border: '1px solid #CBD5E1',
-                borderRadius: '5px',
-                padding: '4px 10px',
-                color: '#475569',
-                fontSize: '11.5px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.15s'
-              }}
-              title="Bỏ chọn để tìm và chọn trạm khác"
-            >
-              ✕ Bỏ chọn / Đổi máy
-            </button>
-          </div>
+          {/* Hiển thị chọn máy đích cụ thể nếu có ít nhất 1 trạm có dải IP dạng .x */}
+          {hasSubnetEndpoint && renderSubnetRolePicker()}
         </div>
       );
     }
@@ -1423,6 +1679,8 @@ export const AgentMultitaskPage: React.FC = () => {
             })
           )}
         </div>
+        {/* Hiển thị chọn máy đích cụ thể nếu có ít nhất 1 trạm có dải IP dạng .x */}
+        {hasSubnetEndpoint && renderSubnetRolePicker()}
       </div>
     );
   };
@@ -2725,11 +2983,11 @@ export const AgentMultitaskPage: React.FC = () => {
               <Button
                 variant="primary"
                 onClick={() => handleSendCommand('run_relative_script')}
-                disabled={selectedEndpoints.length === 0 || isExecutingCommand || !scriptFileName.trim()}
+                disabled={(resolvedConcreteTargets.length === 0 && selectedEndpoints.length === 0) || isExecutingCommand || !scriptFileName.trim()}
                 leftIcon={<Play size={14} className={isExecutingCommand ? 'animate-spin' : ''} />}
                 style={{ backgroundColor: '#059669', fontWeight: 800 }}
               >
-                {isExecutingCommand ? 'Đang Khởi Chạy...' : '🚀 Bắt Đầu Khởi Chạy'}
+                {isExecutingCommand ? 'Đang Khởi Chạy...' : `🚀 Bắt Đầu Khởi Chạy (${resolvedConcreteTargets.length > 0 ? resolvedConcreteTargets.length : selectedEndpoints.length} máy)`}
               </Button>
             </div>
           }
@@ -3115,7 +3373,15 @@ export const AgentMultitaskPage: React.FC = () => {
                 </span>
                 <span style={{ color: 'var(--border-color)' }}>|</span>
                 <span>
-                  Mục tiêu: <strong style={{ color: 'var(--text-primary)' }}>{selectedEndpoints.length} máy</strong>
+                  Mục tiêu:{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>
+                    {resolvedConcreteTargets.length > 0 ? `${resolvedConcreteTargets.length} máy` : `${selectedEndpoints.length} máy`}
+                  </strong>
+                  {hasSubnetEndpoint && resolvedConcreteTargets.length > 0 && (
+                    <span style={{ fontSize: '11px', color: '#2563EB', marginLeft: '4px' }}>
+                      ({resolvedConcreteTargets.map((t) => t.ip).slice(0, 3).join(', ')}{resolvedConcreteTargets.length > 3 ? '...' : ''})
+                    </span>
+                  )}
                 </span>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -3126,7 +3392,7 @@ export const AgentMultitaskPage: React.FC = () => {
                   variant="primary"
                   onClick={() => handleSendCommand('deploy_package')}
                   disabled={
-                    selectedEndpoints.length === 0 ||
+                    (resolvedConcreteTargets.length === 0 && selectedEndpoints.length === 0) ||
                     isExecutingCommand ||
                     !deployTargetFolder.trim() ||
                     (deployPackageSource === 'UPLOAD' ? (!deployUploadedFileName || isDeployUploading) : !deployFileName.trim())
@@ -3137,10 +3403,10 @@ export const AgentMultitaskPage: React.FC = () => {
                   {isExecutingCommand
                     ? (deploySteps.length === 0 ? 'Đang Truyền File...' : 'Đang Triển Khai...')
                     : (deployPackageSource === 'AGENT_PACKAGE'
-                        ? `🚀 Bắt Đầu Cài Đặt Agent Online (${selectedEndpoints.length} máy)`
+                        ? `🚀 Bắt Đầu Cài Đặt Agent Online (${resolvedConcreteTargets.length > 0 ? resolvedConcreteTargets.length : selectedEndpoints.length} máy)`
                         : (deploySteps.length === 0
-                            ? `🚀 Bắt Đầu Truyền File Vào Máy (${selectedEndpoints.length} máy)`
-                            : `🚀 Bắt Đầu Triển Khai & Thực Thi (${selectedEndpoints.length} máy)`))}
+                            ? `🚀 Bắt Đầu Truyền File Vào Máy (${resolvedConcreteTargets.length > 0 ? resolvedConcreteTargets.length : selectedEndpoints.length} máy)`
+                            : `🚀 Bắt Đầu Triển Khai & Thực Thi (${resolvedConcreteTargets.length > 0 ? resolvedConcreteTargets.length : selectedEndpoints.length} máy)`))}
                 </Button>
               </div>
             </div>
@@ -3875,27 +4141,28 @@ export const AgentMultitaskPage: React.FC = () => {
                                 }}
                               />
                             </div>
-                            <div>
-                              <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '2px' }}>
-                                Tham số truyền vào (Arguments):
-                              </label>
-                              <input
-                                type="text"
-                                value={step.arguments || ''}
-                                onChange={(e) => handleUpdateDeployStep(idx, { arguments: e.target.value })}
-                                placeholder="VD: /silent hoặc để trống"
-                                style={{
-                                  width: '100%',
-                                  padding: '5px 8px',
-                                  borderRadius: '4px',
-                                  border: '1px solid var(--border-color)',
-                                  fontSize: '12px',
-                                  backgroundColor: 'var(--bg-secondary)',
-                                  color: 'var(--text-primary)'
-                                }}
-                              />
+                              <div>
+                                <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', marginBottom: '2px' }}>
+                                  Thư mục chứa file (Tùy chọn - Mặc định theo thư mục đích ở trên):
+                                </label>
+                                <input
+                                  type="text"
+                                  value={step.folder_path || step.working_directory || ''}
+                                  onChange={(e) => handleUpdateDeployStep(idx, { folder_path: e.target.value, working_directory: e.target.value })}
+                                  placeholder="VD: D:\GPOS-Setup hoặc để trống để dùng thư mục đích"
+                                  style={{
+                                    width: '100%',
+                                    padding: '5px 8px',
+                                    borderRadius: '4px',
+                                    border: '1px solid var(--border-color)',
+                                    fontSize: '12px',
+                                    backgroundColor: 'var(--bg-secondary)',
+                                    color: 'var(--text-primary)',
+                                    fontFamily: 'monospace'
+                                  }}
+                                />
+                              </div>
                             </div>
-                          </div>
 
                           <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginTop: '2px', flexWrap: 'wrap' }}>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', cursor: 'pointer' }}>

@@ -612,22 +612,41 @@ class AgentMultitaskService:
         if payload.target_ip and payload.target_ip.strip() not in target_ip_list:
             target_ip_list.append(payload.target_ip.strip())
 
+        targets_to_run = []
         if target_ip_list:
-            endpoints = db.query(AgentMultitaskEndpoint).filter(
+            existing_eps = db.query(AgentMultitaskEndpoint).filter(
                 AgentMultitaskEndpoint.ip_lan.in_(target_ip_list)
             ).all()
+            ep_map = {ep.ip_lan: ep for ep in existing_eps}
+
+            for raw_target_ip in target_ip_list:
+                clean_ip = raw_target_ip
+                if clean_ip.lower().endswith(".x"):
+                    clean_ip = clean_ip[:-2] + ".11"
+
+                ep = ep_map.get(clean_ip) or ep_map.get(raw_target_ip)
+                if ep:
+                    targets_to_run.append((ep.restaurant_code, clean_ip, ep))
+                else:
+                    # Tra cứu mã nhà hàng từ payload hoặc dải subnet
+                    r_code = payload.restaurant_codes[0] if payload.restaurant_codes else "NH"
+                    targets_to_run.append((r_code, clean_ip, None))
         else:
             endpoints = db.query(AgentMultitaskEndpoint).filter(
                 AgentMultitaskEndpoint.restaurant_code.in_(payload.restaurant_codes)
             ).all()
-
-        targets_to_run = []
-        if endpoints:
-            for ep in endpoints:
-                targets_to_run.append((ep.restaurant_code, ep.ip_lan, ep))
-        else:
-            for r_code in payload.restaurant_codes:
-                targets_to_run.append((r_code, payload.target_ip or "", None))
+            if endpoints:
+                for ep in endpoints:
+                    clean_ip = ep.ip_lan
+                    if clean_ip and clean_ip.lower().endswith(".x"):
+                        clean_ip = clean_ip[:-2] + ".11"
+                    targets_to_run.append((ep.restaurant_code, clean_ip, ep))
+            else:
+                for r_code in payload.restaurant_codes:
+                    clean_ip = (payload.target_ip or "").strip()
+                    if clean_ip.lower().endswith(".x"):
+                        clean_ip = clean_ip[:-2] + ".11"
+                    targets_to_run.append((r_code, clean_ip, None))
 
         for r_code, ip, ep in targets_to_run:
             action = payload.action
