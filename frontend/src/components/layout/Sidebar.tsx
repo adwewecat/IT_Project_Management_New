@@ -505,31 +505,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </NavLink>
                   </li>
                 )}
-                <li>
-                  <NavLink
-                    to="/app/remote-desktop-lab"
-                    className="sidebar-sub-item"
-                    style={({ isActive }) => getSubLinkStyle(isActive)}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Monitor size={15} style={{ color: '#10B981' }} />
-                      <span>Thay Thế Remote</span>
-                    </div>
-                    <span
-                      style={{
-                        fontSize: '9.5px',
-                        fontWeight: 700,
-                        padding: '1px 6px',
-                        borderRadius: '8px',
-                        backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                        color: '#059669',
-                        textTransform: 'uppercase'
-                      }}
+                {/* Thay Thế Remote (Lab) - Chỉ user admin mới thấy */}
+                {isAdmin && (
+                  <li>
+                    <NavLink
+                      to="/app/remote-desktop-lab"
+                      className="sidebar-sub-item"
+                      style={({ isActive }) => getSubLinkStyle(isActive)}
                     >
-                      Lab
-                    </span>
-                  </NavLink>
-                </li>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Monitor size={15} style={{ color: '#10B981' }} />
+                        <span>Thay Thế Remote</span>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '9.5px',
+                          fontWeight: 700,
+                          padding: '1px 6px',
+                          borderRadius: '8px',
+                          backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                          color: '#059669',
+                          textTransform: 'uppercase'
+                        }}
+                      >
+                        Lab
+                      </span>
+                    </NavLink>
+                  </li>
+                )}
               </ul>
             )}
           </li>

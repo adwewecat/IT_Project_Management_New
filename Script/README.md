@@ -3831,6 +3831,30 @@ estaurant_service.py).
   - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
   - Khởi động lại Backend daemon mới trên port 8000 (task-2992).
 
+---
+
+### [2026-10-20] - Phân Quyền Chế Độ Lab Cho Phân Hệ 'Thay Thế Remote' (Chỉ User Admin Mới Thấy)
+- **Yêu cầu & Bối cảnh**:
+  - Phân hệ *Thay Thế Remote* (`/app/remote-desktop-lab`) đang trong giai đoạn thử nghiệm (Lab mode).
+  - Cần bảo vệ và giới hạn: **CHỈ CÓ TÀI KHOẢN ADMIN/SUPER ADMIN MỚI THẤY VÀ TRUY CẬP ĐƯỢC**.
+- **Giải Pháp & Triển Khai Toàn Diện**:
+  1. **Frontend Menu Navigation (`Sidebar.tsx`)**:
+     - Bọc mục menu `Thay Thế Remote` (badge `Lab`) trong điều kiện `isAdmin` (thay vì toàn bộ tài khoản nhóm App `isAppRole`).
+     - Người dùng nhóm App/Helpdesk/Inventory hoặc nhân viên thông thường sẽ không nhìn thấy menu này trên thanh điều hướng.
+  2. **Frontend UI Guard (`RemoteLabPage.tsx`)**:
+     - Kiểm tra quyền Quản trị viên (`const isAdmin = checkIsAdmin(user);`).
+     - Nếu không phải Admin: Hiển thị giao diện chặn truy cập trang nhã với thẻ icon Monitor, badge `🧪 Chế Độ Thử Nghiệm (Lab)`, thông báo: *"Phân hệ đang trong giai đoạn thử nghiệm nội bộ (Lab mode) và chỉ dành riêng cho tài khoản Quản trị viên (Admin)"* kèm nút *"Quay Lại Trang Trước"*.
+     - Ngắt các hook `loadInitialData` và `doPing` ngầm khi tài khoản không có quyền Admin, tránh gửi request rác về server.
+  3. **Backend API Protection (`backend/app/api/v1/remote_lab.py`)**:
+     - Tạo dependency `require_admin_user` sử dụng hàm `is_admin_user(current_user)` từ `app.services.auth_service`.
+     - Áp dụng bảo vệ toàn bộ 8 REST endpoint quản lý: `/endpoints`, `/sessions/create`, `/sessions/{id}/retry-agent`, `/sessions/{id}/agent-status`, `/sessions/{id}/launch-local`, `/sessions`, `/sessions/{id}`, `/sessions/{id}/terminate`.
+     - Tự động chặn và trả về lỗi HTTP 403 Forbidden nếu người dùng không phải Quản trị viên.
+- **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+  - Frontend: `cmd /c "npm run build"` exit code 0 (`✓ built in 9.87s`), `frontend/dist/` sạch sẽ.
+  - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
+  - Đã khởi động lại Backend daemon mới trên port 8000.
+
+
 
 
 

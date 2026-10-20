@@ -887,6 +887,17 @@
       - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
       - Đã nén lại file zip `tools/Restaurant_Support_Agent_Full.zip` và `d:\1.Download\Restaurant_Support_Agent_Full.zip`.
 
+- **Phân Quyền Chế Độ Lab Cho Phân Hệ 'Thay Thế Remote' (Chỉ User Admin Mới Thấy) [2026-10-20]**:
+  + **Bối cảnh & Yêu cầu**: Phân hệ *Thay Thế Remote* (`/app/remote-desktop-lab`) đang trong chế độ thử nghiệm nội bộ (Lab mode). Giới hạn chỉ tài khoản Quản trị viên (Admin / Super Admin) mới nhìn thấy menu và có quyền truy cập.
+  + **Triển khai**:
+    1. *Frontend Navigation (`Sidebar.tsx`)*: Bọc menu item `Thay Thế Remote` (badge `Lab`) trong điều kiện `isAdmin` (thay vì toàn bộ nhóm App).
+    2. *Frontend UI Guard (`RemoteLabPage.tsx`)*: Kiểm tra `isAdmin = checkIsAdmin(user)`. Nếu không phải Admin, hiển thị banner thông báo chặn truy cập "🧪 Chế Độ Thử Nghiệm (Lab) — Phân hệ đang trong giai đoạn thử nghiệm nội bộ và chỉ dành riêng cho tài khoản Quản trị viên (Admin)" kèm nút quay lại trang trước. Ngắt các hook `loadInitialData` và `doPing` ngầm khi tài khoản không có quyền Admin.
+    3. *Backend API Security (`remote_lab.py`)*: Thêm dependency `require_admin_user` sử dụng `is_admin_user(current_user)` bảo vệ 8 REST endpoints quản lý phiên và thiết bị, trả về HTTP 403 Forbidden đối với non-admin.
+  + **Build & Kiểm thử**:
+    - Frontend `npm run build` exit code 0 (`✓ built in 9.87s`), `frontend/dist/` sạch sẽ.
+    - Backend `compileall app` và Smoke Test 100% Passed. Đã khởi động lại Backend daemon mới trên port 8000.
+
+
 
 
 

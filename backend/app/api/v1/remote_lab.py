@@ -17,10 +17,21 @@ from app.api.deps import get_current_user
 from app.schemas.auth import UserInfo
 from app.models.agent_multitask import AgentMultitaskEndpoint, AgentMultitaskLog
 from app.services.remote_lab_service import RemoteLabService
+from app.services.auth_service import is_admin_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/remote-lab", tags=["Remote Lab"])
+
+
+def require_admin_user(current_user: UserInfo = Depends(get_current_user)) -> UserInfo:
+    """Yêu cầu quyền Quản trị viên (Admin) cho các endpoint thử nghiệm Remote Lab."""
+    if not is_admin_user(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chức năng Thay Thế Remote đang trong chế độ Lab, chỉ dành riêng cho tài khoản Quản trị viên (Admin)."
+        )
+    return current_user
 
 
 def resolve_server_url(request: Request, client_server_url: Optional[str] = None, target_ip: Optional[str] = None) -> str:
@@ -75,9 +86,9 @@ class CreateRemoteSessionRequest(BaseModel):
 @router.get("/endpoints")
 def get_endpoints(
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(require_admin_user)
 ) -> List[Dict[str, Any]]:
-    """Lấy danh sách các máy trạm & thiết bị có sẵn để kết nối Remote."""
+    """Lấy danh sách các máy trạm & thiết bị có sẵn để kết nối Remote (Yêu cầu quyền Admin)."""
     return RemoteLabService.get_available_endpoints(db=db)
 
 
@@ -86,9 +97,9 @@ def create_session(
     payload: CreateRemoteSessionRequest,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(require_admin_user)
 ) -> Dict[str, Any]:
-    """Khởi tạo một phiên Remote mới độc lập và tự động phát lệnh tới Agent máy trạm."""
+    """Khởi tạo một phiên Remote mới độc lập và tự động phát lệnh tới Agent máy trạm (Yêu cầu quyền Admin)."""
     target_ip = payload.target_ip.strip()
     if not target_ip:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Vui lòng cung cấp địa chỉ IP thiết bị.")
@@ -128,9 +139,9 @@ def retry_agent_task(
     request: Request,
     server_url: Optional[str] = Query(None, description="URL Backend"),
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(require_admin_user)
 ) -> Dict[str, Any]:
-    """Phát lại lệnh kích hoạt Remote Worker tới Agent máy trạm."""
+    """Phát lại lệnh kích hoạt Remote Worker tới Agent máy trạm (Yêu cầu quyền Admin)."""
     session = RemoteLabService.get_session(session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Phiên không tồn tại hoặc đã đóng.")
@@ -153,9 +164,9 @@ def retry_agent_task(
 def get_session_agent_status(
     session_id: str,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(require_admin_user)
 ) -> Dict[str, Any]:
-    """Kiểm tra tình trạng online của máy trạm và trạng thái task kích hoạt Web Worker gần nhất."""
+    """Kiểm tra tình trạng online của máy trạm và trạng thái task kích hoạt Web Worker gần nhất (Yêu cầu quyền Admin)."""
     session = RemoteLabService.get_session(session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Phiên không tồn tại hoặc đã đóng.")
@@ -224,10 +235,10 @@ def get_or_create_auto_session(
 def launch_local_worker(
     session_id: str,
     server_url: Optional[str] = Query("http://127.0.0.1:8000", description="URL Backend"),
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(require_admin_user)
 ) -> Dict[str, Any]:
     """
-    Tự động kích hoạt Remote Worker chạy ngầm trên máy hiện tại (1 Click từ giao diện Web).
+    Tự động kích hoạt Remote Worker chạy ngầm trên máy hiện tại (1 Click từ giao diện Web, Yêu cầu quyền Admin).
     Hoàn toàn không cần mở CMD, không cần gõ lệnh!
     """
     res = RemoteLabService.launch_local_worker(session_id=session_id, server_url=server_url or "http://127.0.0.1:8000")
@@ -238,18 +249,18 @@ def launch_local_worker(
 
 @router.get("/sessions")
 def list_sessions(
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(require_admin_user)
 ) -> List[Dict[str, Any]]:
-    """Lấy danh sách tất cả các phiên Remote đang mở."""
+    """Lấy danh sách tất cả các phiên Remote đang mở (Yêu cầu quyền Admin)."""
     return RemoteLabService.list_sessions()
 
 
 @router.get("/sessions/{session_id}")
 def get_session_detail(
     session_id: str,
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(require_admin_user)
 ) -> Dict[str, Any]:
-    """Xem chi tiết và tình trạng phiên Remote theo session_id."""
+    """Xem chi tiết và tình trạng phiên Remote theo session_id (Yêu cầu quyền Admin)."""
     session = RemoteLabService.get_session(session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Phiên Remote không tồn tại hoặc đã đóng.")
@@ -260,9 +271,9 @@ def get_session_detail(
 def terminate_session(
     session_id: str,
     reason: Optional[str] = Query("Đóng bởi người dùng", description="Lý do đóng"),
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(require_admin_user)
 ) -> Dict[str, Any]:
-    """Đóng phiên Remote an toàn."""
+    """Đóng phiên Remote an toàn (Yêu cầu quyền Admin)."""
     success = RemoteLabService.terminate_session(session_id, reason=reason)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Phiên không tìm thấy.")

@@ -1,5 +1,29 @@
 [
   {
+    "id": "6a140d91",
+    "job_id": "job_sync_pim_requests",
+    "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",
+    "started_at": "2026-10-20 12:00:15",
+    "finished_at": "2026-10-20 12:00:15",
+    "duration_seconds": 18.06,
+    "status": "success",
+    "message": "Thành công lúc 12:00 (Quét: 13 | Mới: 8 | Cập nhật: 5)",
+    "details": "Tự động quét PIM theo lịch 3 khung giờ lúc 12:00:\n- Tổng quét: 13\n- Mới: 8\n- Cập nhật: 5",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
+    "id": "785d417a",
+    "job_id": "job_review_missing_restaurant_info",
+    "job_name": "Rà Soát Thông Tin Nhà Hàng Còn Thiếu",
+    "started_at": "2026-10-20 09:30:06",
+    "finished_at": "2026-10-20 09:30:40",
+    "duration_seconds": 34.18,
+    "status": "failed",
+    "message": "Lỗi trong quá trình rà soát thông tin nhà hàng: _ssl.c:1064: The handshake operation timed out",
+    "details": "Ngoại lệ: _ssl.c:1064: The handshake operation timed out",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
     "id": "3d47221f",
     "job_id": "job_sync_pim_requests",
     "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",

@@ -36,6 +36,8 @@ import { pingVnc, pingKds, getRestaurants } from '../../services/restaurantServi
 import { RestaurantItem } from '../../types/restaurant';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
+import { useAuth } from '../../contexts/AuthContext';
+import { checkIsAdmin } from '../../utils/authUtils';
 
 // Hằng số danh sách thiết bị chuẩn Nhà Hàng (Chuẩn như VncKdsModal)
 const VNC_ITEMS = [
@@ -70,6 +72,9 @@ const getIpPrefix = (ip: string | null | undefined): string => {
 };
 
 export const RemoteLabPage: React.FC = () => {
+  const { user } = useAuth();
+  const isAdmin = checkIsAdmin(user);
+
   // Toast thông báo độc lập
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
 
@@ -157,8 +162,9 @@ export const RemoteLabPage: React.FC = () => {
     height: 1080
   });
 
-  // Tải danh sách endpoints và active sessions
+  // Tải danh sách endpoints và active sessions (Chỉ chạy khi có quyền Admin)
   const loadInitialData = useCallback(async () => {
+    if (!isAdmin) return;
     try {
       setLoadingEndpoints(true);
       const [eps, sessions] = await Promise.all([
@@ -173,11 +179,13 @@ export const RemoteLabPage: React.FC = () => {
     } finally {
       setLoadingEndpoints(false);
     }
-  }, [showToast]);
+  }, [isAdmin, showToast]);
 
   useEffect(() => {
-    loadInitialData();
-  }, [loadInitialData]);
+    if (isAdmin) {
+      loadInitialData();
+    }
+  }, [isAdmin, loadInitialData]);
 
   // Tự động kích hoạt Remote Worker trên máy hiện tại (1 Click, không cần gõ lệnh)
   const handleLaunchLocalWorker = async (sessionId: string) => {
@@ -235,12 +243,12 @@ export const RemoteLabPage: React.FC = () => {
       });
   }, [ipPrefix, showToast]);
 
-  // Tự động ping lần đầu khi trang mở để hiển thị sẵn trạng thái
+  // Tự động ping lần đầu khi trang mở để hiển thị sẵn trạng thái (Chỉ chạy khi có quyền Admin)
   useEffect(() => {
-    if (ipPrefix) {
+    if (isAdmin && ipPrefix) {
       doPing(ipPrefix);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tìm kiếm gợi ý Nhà hàng khi gõ từ khóa
   useEffect(() => {
@@ -705,6 +713,81 @@ export const RemoteLabPage: React.FC = () => {
 
     return true;
   });
+
+  // Chặn người dùng không có quyền Admin xem trang thử nghiệm Remote Lab
+  if (!isAdmin) {
+    return (
+      <div
+        style={{
+          width: '100%',
+          boxSizing: 'border-box',
+          padding: '24px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: 'calc(100vh - 120px)'
+        }}
+      >
+        <div
+          style={{
+            maxWidth: '560px',
+            width: '100%',
+            padding: '36px 28px',
+            textAlign: 'center',
+            borderRadius: '16px',
+            border: '1.5px dashed var(--border-color)',
+            backgroundColor: 'var(--bg-primary)',
+            boxShadow: 'var(--shadow-lg)'
+          }}
+        >
+          <div
+            style={{
+              width: '68px',
+              height: '68px',
+              borderRadius: '50%',
+              backgroundColor: '#ECFDF5',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 18px',
+              border: '2px solid #A7F3D0'
+            }}
+          >
+            <Monitor size={34} style={{ color: '#059669' }} />
+          </div>
+
+          <div
+            style={{
+              display: 'inline-block',
+              fontSize: '11px',
+              fontWeight: 700,
+              padding: '4px 12px',
+              borderRadius: '9999px',
+              backgroundColor: 'rgba(16, 185, 129, 0.15)',
+              color: '#059669',
+              marginBottom: '12px',
+              textTransform: 'uppercase'
+            }}
+          >
+            🧪 Chế Độ Thử Nghiệm (Lab)
+          </div>
+
+          <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>
+            Tích Hợp Thay Thế Remote
+          </h2>
+
+          <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '22px' }}>
+            Phân hệ đang trong giai đoạn thử nghiệm nội bộ (Lab mode) và chỉ dành riêng cho tài khoản Quản trị viên (Admin).
+          </p>
+
+          <Button variant="secondary" onClick={() => window.history.back()}>
+            Quay Lại Trang Trước
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
