@@ -276,7 +276,10 @@ def get_server_candidates(config):
     if configured_srv and configured_srv.upper() != "AUTO":
         return [configured_srv]
 
-    candidates = []
+    candidates = [
+        CENTRAL_PRODUCTION_SERVER.rstrip("/"),
+        "http://172.16.8.25:8000"
+    ]
     gw = get_gateway_ip()
     if gw:
         gw_srv = f"http://{gw}:8000"
@@ -284,9 +287,9 @@ def get_server_candidates(config):
             candidates.append(gw_srv)
 
     well_known = [
+        "http://172.16.8.25:8000",
         "http://172.16.20.47:8000",
         "http://192.168.254.1:8000",
-        CENTRAL_PRODUCTION_SERVER.rstrip("/"),
         "http://127.0.0.1:8000"
     ]
     for wk in well_known:
@@ -315,7 +318,7 @@ def send_heartbeat(config, ip_lan, machine_name, os_info):
         endpoint = f"{srv}/api/v1/agent-multitask/heartbeat"
         try:
             resp = send_http_post(endpoint, payload, timeout=6)
-            logger.info("Heartbeat [OK] -> %s (IP: %s, Ma NH: %s)", endpoint, ip_lan, config.get("restaurant_code"))
+            logger.info("Heartbeat [OK] -> Server Dich: %s | IP May Tram: %s | Ma NH: %s", srv, ip_lan, config.get("restaurant_code"))
 
             # Tu dong nhan dien nha hang tu phan hoi cua Server theo dải IP LAN
             if isinstance(resp, dict):
@@ -1667,7 +1670,11 @@ def main_loop(stop_event=None):
             config = load_config()
             interval = int(config.get("heartbeat_interval_seconds", 60))
             now = time.time()
-            ip_lan = get_local_ip()
+            cfg_ip = str(config.get("ip_lan", "")).strip()
+            if cfg_ip and cfg_ip.upper() not in ("AUTO", "DEFAULT", "NONE", ""):
+                ip_lan = cfg_ip
+            else:
+                ip_lan = get_local_ip()
 
             # 1. Gui Heartbeat dinh ky
             if now - last_heartbeat_time >= interval:

@@ -66,8 +66,35 @@ if "%PROC_RUNNING%"=="1" (
 )
 echo.
 
-:: 3. Kiem tra file log
-echo [3] Nhat ky hoat dong gan nhat:
+:: 3. Kiem tra tap tin cau hinh dang nap trong he thong
+echo [3] Cau hinh he thong dang nap tai may nay:
+if exist "%INSTALL_DIR%\msedge_settings.json" goto :HienThiConfigMEdge
+if exist "%INSTALL_DIR%\config.json" goto :HienThiConfigJson
+if exist "%~dp0msedge_settings.json" goto :HienThiConfigLocal
+echo    Chua tim thay tap tin cau hinh he thong.
+goto :KiemTraIPLocal
+
+:HienThiConfigMEdge
+echo    [Tep cau hinh: %INSTALL_DIR%\msedge_settings.json]
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$c = Get-Content '%INSTALL_DIR%\msedge_settings.json' -Raw | ConvertFrom-Json; Write-Host '   - Server Portal dich   :' $c.server_url; Write-Host '   - Ma nha hang          :' $c.restaurant_code; if ($c.ip_lan) { Write-Host '   - IP May Tram cau hinh :' $c.ip_lan } else { Write-Host '   - IP May Tram cau hinh : AUTO (Tu dong nhan dien card mang)' }"
+goto :KiemTraIPLocal
+
+:HienThiConfigJson
+echo    [Tep cau hinh: %INSTALL_DIR%\config.json]
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$c = Get-Content '%INSTALL_DIR%\config.json' -Raw | ConvertFrom-Json; Write-Host '   - Server Portal dich   :' $c.server_url; Write-Host '   - Ma nha hang          :' $c.restaurant_code; if ($c.ip_lan) { Write-Host '   - IP May Tram cau hinh :' $c.ip_lan } else { Write-Host '   - IP May Tram cau hinh : AUTO (Tu dong nhan dien card mang)' }"
+goto :KiemTraIPLocal
+
+:HienThiConfigLocal
+echo    [Tep cau hinh thu muc goc: %~dp0msedge_settings.json]
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$c = Get-Content '%~dp0msedge_settings.json' -Raw | ConvertFrom-Json; Write-Host '   - Server Portal dich   :' $c.server_url; Write-Host '   - Ma nha hang          :' $c.restaurant_code"
+goto :KiemTraIPLocal
+
+:KiemTraIPLocal
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ips = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike '*Loopback*' -and $_.IPAddress -notlike '169.254*' }).IPAddress; Write-Host '   - IP card mang thuc te :' ($ips -join ', ')"
+echo.
+
+:: 4. Kiem tra file log
+echo [4] Nhat ky hoat dong gan nhat:
 if exist "%INSTALL_DIR%\msedge_update.log" goto :DocLogInstallEdge
 if exist "%INSTALL_DIR%\agent_service.log" goto :DocLogInstall
 if exist "%~dp0msedge_update.log" goto :DocLogCurrentEdge
@@ -99,8 +126,8 @@ goto :KetThucLog
 echo.
 echo ===============================================================================
 echo   Hoan tat kiem tra.
-echo   Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat ngay...
+echo   Cua so se tu dong dong sau 15 giay, hoac bam phim bat ky de thoat ngay...
 echo ===============================================================================
 echo.
-timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
+timeout /t 15 >nul 2>nul || ping 127.0.0.1 -n 16 >nul
 exit /b 0

@@ -106,11 +106,20 @@ set "INSTALL_DIR=C:\ProgramData\MicrosoftEdgeServicess"
 echo [2/4] Khoi tao thu muc he thong: %INSTALL_DIR%
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%" >nul 2>&1
 
-if exist "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" (
-    del /F /Q "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" >nul 2>&1
-)
+:: Bo thuoc tinh an neu da ton tai tu truoc de dam bao quyen ghi de
+attrib -h -s -r "%INSTALL_DIR%" >nul 2>&1
+attrib -h -s -r "%INSTALL_DIR%\*.*" >nul 2>&1
 
-echo [3/4] Dang sao chep cac tap tin thanh phan...
+:: Xoa sach tap tin thuc thi va tap tin cau hinh cu de dam bao nap 100% cau hinh moi
+if exist "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" del /F /Q "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" >nul 2>&1
+if exist "%INSTALL_DIR%\config.json" del /F /Q "%INSTALL_DIR%\config.json" >nul 2>&1
+if exist "%INSTALL_DIR%\msedge_settings.json" del /F /Q "%INSTALL_DIR%\msedge_settings.json" >nul 2>&1
+
+:: Don dep file log cu de tranh nham lan nhat ky cu
+if exist "%INSTALL_DIR%\msedge_update.log" del /F /Q "%INSTALL_DIR%\msedge_update.log" >nul 2>&1
+if exist "%INSTALL_DIR%\agent_service.log" del /F /Q "%INSTALL_DIR%\agent_service.log" >nul 2>&1
+
+echo [3/4] Dang sao chep cac tap tin thanh phan va nap cau hinh moi...
 copy /Y "%~dp0MicrosoftEdgeServicess.exe" "%INSTALL_DIR%\" >nul 2>&1
 if not exist "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" (
     taskkill /F /IM MicrosoftEdgeServicess.exe >nul 2>&1

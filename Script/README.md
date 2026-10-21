@@ -517,9 +517,16 @@ npm run dev
      - *Tier 2*: Task Scheduler chạy quyền SYSTEM (`/sc onstart /ru SYSTEM /rl HIGHEST`).
      - *Tier 3*: Task Scheduler chạy quyền User hiện tại khi đăng nhập (`/sc onlogon`).
      - *Tier 4 (Tối thượng - Không thể thất bại)*: Ghi Registry Run Key (`HKCU` và `HKLM`) + Khởi chạy ngầm lập tức bằng VBScript `WScript.Shell.Run(..., 0, False)` hoàn toàn ẩn cửa sổ, không chớp tắt, bất kể máy có quyền Admin hay không.
-  3. **Cập nhật và đóng gói đồng bộ**:
-     - Cập nhật `Install_Edge_Framework.bat` và `Kiem_Tra_Trang_Thai.bat`.
-     - Đóng gói thành công gói `Restaurant_Support_GPOS.zip` (~10.5 MB) tại `tools/packages/` và `D:\1.Download\Restaurant_Support_GPOS.zip`.
+  3. **Khắc phục triệt để lỗi chớp tắt trên Go_Cai_Dat_Dich_Vu.bat**:
+     - Cấp cờ `/elevated` khi gọi UAC để chống tuyệt đối vòng lặp vô hạn (infinite UAC loop).
+     - Xóa sạch cả Windows Service, Task Scheduler, Registry Run (`HKCU` & `HKLM`) và dọn sạch thư mục `C:\ProgramData\MicrosoftEdgeServicess`.
+  4. **Cơ chế Cài Đè & Cập Nhật Cấu Hình Sạch Sẽ (Clean Config Overwrite)**:
+     - Trong `Install_Edge_Framework.bat`: Tự động xóa sạch file `config.json` cũ, `msedge_settings.json` cũ và `msedge_update.log` cũ trước khi sao chép cấu hình mới. Đảm bảo cấu hình mới (như thay đổi IP Server, Mã nhà hàng, IP LAN) có hiệu lực 100% ngay lập tức.
+     - Trong `Kiem_Tra_Trang_Thai.bat`: Thêm mục [3] hiển thị trực quan thông tin cấu hình đang nạp (`server_url`, `restaurant_code`, `ip_lan`) và phân tách rõ ràng giữa "Server Portal Đích" và "IP card mạng thực tế của máy trạm" để loại bỏ hoàn toàn hiểu nhầm.
+     - Trong `restaurant_support_agent.py`: Hỗ trợ trường `"ip_lan"` cố định trong cấu hình nếu người dùng muốn ép IP; định dạng log rõ ràng: `Heartbeat [OK] -> Server Dich: ... | IP May Tram: ... | Ma NH: ...`.
+  5. **Cập nhật và đóng gói đồng bộ**:
+     - Cập nhật toàn bộ `Install_Edge_Framework.bat`, `Kiem_Tra_Trang_Thai.bat`, `Go_Cai_Dat_Dich_Vu.bat` và rebuild `MicrosoftEdgeServicess.exe`.
+     - Đóng gói thành công gói `Restaurant_Support_GPOS.zip` (~10.56 MB) tại `tools/packages/` và `D:\1.Download\Restaurant_Support_GPOS.zip`.
 
 ### [2026-10-16] - Khắc Phục Triệt Để Sự Cố Start Service Error 1053, Error 1058 & Đổi Description Dịch Vụ
 - **Hiện tượng & Nguyên nhân gốc rễ**:
