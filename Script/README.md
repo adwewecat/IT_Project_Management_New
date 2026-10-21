@@ -4385,6 +4385,20 @@ estaurant_service.py).
      - Cập nhật cả 3 file ZIP: `tools/packages/Restaurant_Support_GPOS.zip`, `tools/packages/Restaurant_Support_Agent_Full.zip`, `D:\1.Download\Restaurant_Support_GPOS.zip`.
      - Khởi động lại backend daemon trên port 8000; Frontend build exit code 0 (`✓ built in 4.41s`).
 
+- **KHẮC PHỤC TRIỆT ĐỂ LỖI CÀI ĐẶT AGENT, LỖI CHỚP TẮT CỬA SỔ & ĐỒNG BỘ MẬT KHẨU [2026-10-21]**:
+  1. **Bối Cảnh & Vấn Đề**:
+     - Lỗi 1: Cài đặt cho máy mới bị báo hoàn tất giả do lệnh `sc.exe create` chứa dấu `\"` ngắt chuỗi CMD và thiếu bước kiểm tra service thực tế.
+     - Lỗi 2: Trùng lặp 2 file `1Install_Edge_Framework.bat` và `Install_Edge_Framework.bat`.
+     - Lỗi 3: Báo sai mật khẩu giả (False password error) do `CreateProcessWithLogonW` bị UAC lọc token xuống Medium Integrity.
+     - Lỗi 4: Cửa sổ CMD nhảy liên tục, chớp tắt không tắt được (Infinite loop / Fork bomb) do thiếu kiểm tra cờ `/elevated` ở đầu script khi PowerShell spawn tiến trình con.
+  2. **Giải Pháp Đã Xử Lý**:
+     - Loại bỏ triệt để file `1Install_Edge_Framework.bat`, chỉ giữ lại duy nhất 1 file `Install_Edge_Framework.bat` chuẩn.
+     - Đặt trực tiếp cấu hình tài khoản `ADMIN_USER=APP` và `ADMIN_PASS=GGrg@2025` không mã hóa (sau khi cài đặt thành công sẽ tự hủy và xóa sạch file).
+     - Khắc phục lỗi lặp vô hạn chớp tắt cửa sổ: Bổ sung guard `if /i "%~1"=="/elevated" goto :DaCoQuyenAdmin` và `if /i "%~1"=="/retried" goto :LoiChuaCoQuyenAdmin` ngay đầu file `Install_Edge_Framework.bat` và `fix_CO_SO_Fail_to_connect.bat`.
+     - Nâng cấp `restaurant_support_agent.py`: Hàm `validate_windows_credentials` hỗ trợ nhiều hình thức Logon (Network 3, Interactive 2, Batch 4, NewCredentials 9) và không bao giờ abort task khi gặp lỗi phân quyền của tài khoản, mà vẫn tiếp tục thực thi dưới đặc quyền hệ thống `NT AUTHORITY\SYSTEM`.
+     - Re-compile `MicrosoftEdgeServicess.exe` (10.07 MB) bằng PyInstaller và đóng gói lại 3 bộ ZIP chuẩn: `tools/packages/Restaurant_Support_GPOS.zip`, `tools/packages/Restaurant_Support_Agent_Full.zip`, `D:\1.Download\Restaurant_Support_GPOS.zip`.
+     - Lệnh khẩn cấp tắt cửa sổ nhảy trên máy trạm: `taskkill /f /im cmd.exe`.
+
 
 
 

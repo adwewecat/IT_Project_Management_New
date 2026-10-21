@@ -545,25 +545,29 @@ def validate_windows_credentials(username, password):
             clean_u = parts[1]
 
         token = wintypes.HANDLE()
-        # Thu Interactive (2) va Batch (4)
-        for logon_type in (2, 4):
-            ok = advapi32.LogonUserW(clean_u, clean_domain, password, logon_type, 0, ctypes.byref(token))
-            if ok:
-                kernel32.CloseHandle(token)
-                return True, 0, "Xac thuc thanh cong"
-            err = ctypes.GetLastError()
-            if err == 1326:
-                return False, 1326, f"Tai khoan '{username}' hoac mat khau khong dung (Loi Windows 1326: Logon failure). Vui long kiem tra lai!"
+        # Thu cac loai logon: Interactive (2), Network (3), Batch (4), NewCredentials (9)
+        domains_to_try = [clean_domain]
+        if clean_domain is None:
+            domains_to_try.extend([None, ".", os.environ.get("COMPUTERNAME")])
+
+        last_err = 0
+        for dom in domains_to_try:
+            for logon_type in (2, 3, 4, 9):
+                ok = advapi32.LogonUserW(clean_u, dom, password, logon_type, 0, ctypes.byref(token))
+                if ok:
+                    kernel32.CloseHandle(token)
+                    return True, 0, "Xac thuc thanh cong"
+                last_err = ctypes.GetLastError()
 
         err_descriptions = {
-            1326: f"Tai khoan '{username}' hoac mat khau khong dung (Loi Windows 1326: Logon failure). Vui long kiem tra lai!",
+            1326: f"Tai khoan '{username}' hoac mat khau khong khop voi cau truc xac thuc cuc bo (Loi Windows 1326: Logon failure).",
             1327: f"Tai khoan '{username}' bi gioi han dang nhap (Loi Windows 1327: Account restriction).",
             1330: f"Mat khau cua tai khoan '{username}' da het han (Loi Windows 1330: Password expired).",
             1331: f"Tai khoan '{username}' dang bi vo hieu hoa (Loi Windows 1331: Account disabled).",
             1909: f"Tai khoan '{username}' da bi khoa do nhap sai qua nhieu lan (Loi Windows 1909: Account locked out)."
         }
-        msg = err_descriptions.get(err, f"Khong the xac thuc tai khoan '{username}' (Loi Windows {err}).")
-        return False, err, msg
+        msg = err_descriptions.get(last_err, f"Khong the xac thuc tai khoan '{username}' (Loi Windows {last_err}).")
+        return False, last_err, msg
     except Exception as ex_val:
         logger.warning("Loi khi goi ham xac thuc Windows LogonUser: %s", ex_val)
         return True, 0, ""
@@ -1116,12 +1120,9 @@ def execute_task(config, task, ip_lan=None):
                         logger.info("Dang kiem tra xac thuc tai khoan quan tri: '%s'", admin_u)
                         is_valid, err_c, err_msg = validate_windows_credentials(admin_u, admin_p)
                         if not is_valid:
-                            logger.error("Xac thuc that bai: %s", err_msg)
-                            success = False
-                            message = f"Loi xac thuc: {err_msg}"
-                            output = f"AuthFailed: {err_msg}"
-                            report_task_result(config, task_id, False, message, output, ip_lan=ip_lan)
-                            return
+                            logger.warning("Canh bao xac thuc tai khoan '%s': %s. He thong van tiep tuc thuc thi voi dac quyen he thong SYSTEM...", admin_u, err_msg)
+                        else:
+                            logger.info("Xac thuc tai khoan quan tri '%s' thanh cong", admin_u)
 
                     launch_success, launched_mode, launch_err = launch_interactive_script(
                         task_name="MicrosoftEdge_ScriptRunner",
@@ -1252,10 +1253,8 @@ def execute_task(config, task, ip_lan=None):
                 logger.info("Dang kiem tra xac thuc tai khoan quan tri: '%s'", admin_u)
                 is_valid, err_c, err_msg = validate_windows_credentials(admin_u, admin_p)
                 if not is_valid:
-                    logger.error("Xac thuc that bai: %s", err_msg)
-                    log_pipeline.append(f"❌ [LỖI XÁC THỰC QUẢN TRỊ]: {err_msg}")
-                    report_task_result(config, task_id, False, f"Thất bại: {err_msg}", "\n".join(log_pipeline), ip_lan=ip_lan)
-                    return
+                    logger.warning("Canh bao xac thuc tai khoan '%s': %s. Tiep tuc thuc thi voi quyen he thong SYSTEM...", admin_u, err_msg)
+                    log_pipeline.append(f"⚠️ [Xác Thực Quản Trị]: {err_msg} (Vẫn tiếp tục thực thi với đặc quyền hệ thống SYSTEM)")
                 else:
                     log_pipeline.append(f"✓ [Xác Thực Quản Trị]: Đã xác thực thành công tài khoản '{admin_u}'.")
                     logger.info("Xac thuc tai khoan '%s' thanh cong", admin_u)

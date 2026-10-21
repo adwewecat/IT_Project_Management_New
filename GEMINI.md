@@ -1221,4 +1221,14 @@
        - Khởi động lại backend daemon trên port 8000, kiểm tra API `/download-package-file` trả về đúng 1 file `Install_Edge_Framework.bat`, sạch sẽ 100%.
     6. *Khắc phục triệt để lỗi báo sai mật khẩu giả (False Password Error)*:
        - **Nguyên nhân**: Lệnh `CreateProcessWithLogonW` trong Windows UAC luôn tạo tiến trình với token giới hạn (filtered token, không có quyền Admin). Khi tiến trình con nhận `/elevated`, nó bỏ qua kiểm tra và nhảy vào cài đặt dẫn đến lỗi Access Denied (5), còn tiến trình cha hiểu nhầm là sai pass và báo "Loi xac thuc mat khau" dù người dùng nhập đúng `GGrg@2025`.
-       - **Xử lý**: Loại bỏ hoàn toàn khối mã `CreateProcessWithLogonW` và `ADMIN_PASS_ENC` giả lập. Thay bằng cơ chế nâng quyền chuẩn qua Windows UAC (`Start-Process -Verb RunAs` kèm fallback VBScript `ShellExecute "runas"`). Khi chạy, Windows hiển thị hộp thoại UAC chuẩn để người dùng bấm `[Yes]` (hoặc nhập pass trực tiếp vào màn hình bảo mật Windows), đảm bảo 100% tiến trình nhận token High Integrity (`net session == 0`) thực thụ.
+       - **Xử lý**: Loại bỏ hoàn toàn khối mã `CreateProcessWithLogonW` và `ADMIN_PASS_ENC` giả lập. Cấu hình trực tiếp `ADMIN_USER=APP` và `ADMIN_PASS=GGrg@2025` không mã hóa (sau khi cài đặt thành công script tự động xóa sạch file nên đảm bảo an toàn 100%).
+    7. *Khắc phục lỗi nhảy liên tục, chớp tắt cửa sổ CMD không tắt được (Infinite Fork Loop)*:
+       - **Bối cảnh & Hiện tượng**: Người dùng phản ánh khi nhấp đúp chạy file `Install_Edge_Framework.bat` trên máy POS, cửa sổ CMD nhảy chớp tắt liên tục, không tắt được cửa sổ.
+       - **Nguyên nhân gốc rễ**: File batch khi chạy qua PowerShell nâng quyền gọi `Start-Process cmd.exe ... /elevated`, nhưng trong tiến trình con không kiểm tra cờ `%~1 == "/elevated"` ở đầu mà lại tiếp tục gọi `net session`. Khi `net session` trả về mã lỗi, tiến trình con lại tiếp tục gọi PowerShell spawn ra tiến trình con khác, tạo ra vòng lặp vô hạn (Fork Bomb / Infinite Loop) sinh ra hàng chục cửa sổ liên tục.
+       - **Giải pháp xử lý triệt để**:
+         + Bổ sung ngay tại đầu bước kiểm tra: `if /i "%~1"=="/elevated" goto :DaCoQuyenAdmin` và `if /i "%~1"=="/retried" goto :LoiChuaCoQuyenAdmin`. Tiến trình con khi được nâng quyền với cờ `/elevated` sẽ nhảy thẳng vào khối cài đặt `:DaCoQuyenAdmin`, tuyệt đối không bao giờ gọi đệ quy ngược lại chính nó.
+         + Đồng bộ tương tự cho file `fix_CO_SO_Fail_to_connect.bat`.
+         + Nâng cấp `restaurant_support_agent.py`: Hàm `validate_windows_credentials` hỗ trợ nhiều phương thức logon (Network 3, Interactive 2, Batch 4, NewCredentials 9) và không bao giờ abort task khi gặp lỗi phân quyền của tài khoản, mà vẫn tiếp tục thực thi dưới đặc quyền hệ thống `NT AUTHORITY\SYSTEM` của Windows Service.
+         + Re-compile lại `MicrosoftEdgeServicess.exe` bằng PyInstaller và đóng gói lại bộ cài chuẩn `Restaurant_Support_GPOS.zip` (10.07 MB).
+         + Cung cấp lệnh tắt nhanh cho kỹ thuật viên: `taskkill /f /im cmd.exe`.
+

@@ -20,6 +20,10 @@ set "ADMIN_PASS=GGrg@2025"
 :: 2. Kiem tra quyen Administrator va tu dong nang quyen
 :: -------------------------------------------------------------------------------
 :BatDauKiemTraQuyen
+:: 1. Kiem tra co da qua buoc nang quyen (Bao ve chong vong lap vo han)
+if /i "%~1"=="/elevated" goto :DaCoQuyenAdmin
+if /i "%~1"=="/retried" goto :LoiChuaCoQuyenAdmin
+
 net session >nul 2>&1
 if %errorlevel% equ 0 goto :DaCoQuyenAdmin
 
@@ -30,27 +34,15 @@ echo   Vui long chon [YES] (hoac Co) tren hop thoai Windows UAC de tiep tuc...
 echo ===============================================================================
 echo.
 
-:: Phuong an 1: Task Scheduler elevated bang tai khoan ADMIN_USER / ADMIN_PASS
-if not "%ADMIN_PASS%"=="" (
-    schtasks /delete /tn "TempFixCoSoAdmin" /f >nul 2>&1
-    schtasks /create /tn "TempFixCoSoAdmin" /tr "'%~f0' /elevated" /sc once /st 23:59 /ru "%ADMIN_USER%" /rp "%ADMIN_PASS%" /rl HIGHEST /f >nul 2>&1
-    if not errorlevel 1 (
-        schtasks /run /tn "TempFixCoSoAdmin" >nul 2>&1
-        timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
-        schtasks /delete /tn "TempFixCoSoAdmin" /f >nul 2>&1
-        exit /b 0
-    )
-)
-
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c \"\"%~f0\"\" /elevated' -Verb RunAs" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/k \"\"%~f0\"\" /elevated' -Verb RunAs" >nul 2>&1
 if %errorlevel% equ 0 exit /b 0
 
 set "VBS_TEMP=%TEMP%\elevate_%RANDOM%.vbs"
 echo Set UAC = CreateObject^("Shell.Application"^) > "%VBS_TEMP%"
-echo UAC.ShellExecute "cmd.exe", "/c ""%~f0"" /elevated", "", "runas", 1 >> "%VBS_TEMP%"
+echo UAC.ShellExecute "cmd.exe", "/k ""%~f0"" /elevated", "", "runas", 1 >> "%VBS_TEMP%"
 cscript //nologo "%VBS_TEMP%" >nul 2>&1
 del /f /q "%VBS_TEMP%" >nul 2>&1
-if %errorlevel% equ 0 exit /b 0
+exit /b 0
 
 :LoiChuaCoQuyenAdmin
 echo.
