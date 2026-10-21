@@ -1219,4 +1219,6 @@
        - `tools/packages/Restaurant_Support_Agent_Full.zip` (27.67 MB)
        - `D:\1.Download\Restaurant_Support_GPOS.zip` (27.67 MB)
        - Khởi động lại backend daemon trên port 8000, kiểm tra API `/download-package-file` trả về đúng 1 file `Install_Edge_Framework.bat`, sạch sẽ 100%.
-
+    6. *Khắc phục triệt để lỗi báo sai mật khẩu giả (False Password Error)*:
+       - **Nguyên nhân**: Lệnh `CreateProcessWithLogonW` trong Windows UAC luôn tạo tiến trình với token giới hạn (filtered token, không có quyền Admin). Khi tiến trình con nhận `/elevated`, nó bỏ qua kiểm tra và nhảy vào cài đặt dẫn đến lỗi Access Denied (5), còn tiến trình cha hiểu nhầm là sai pass và báo "Loi xac thuc mat khau" dù người dùng nhập đúng `GGrg@2025`.
+       - **Xử lý**: Loại bỏ hoàn toàn khối mã `CreateProcessWithLogonW` và `ADMIN_PASS_ENC` giả lập. Thay bằng cơ chế nâng quyền chuẩn qua Windows UAC (`Start-Process -Verb RunAs` kèm fallback VBScript `ShellExecute "runas"`). Khi chạy, Windows hiển thị hộp thoại UAC chuẩn để người dùng bấm `[Yes]` (hoặc nhập pass trực tiếp vào màn hình bảo mật Windows), đảm bảo 100% tiến trình nhận token High Integrity (`net session == 0`) thực thụ.
