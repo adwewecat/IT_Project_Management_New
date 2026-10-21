@@ -1166,6 +1166,23 @@
        - Đóng gói lại cả 3 gói ZIP chuẩn: `tools/packages/Restaurant_Support_GPOS.zip`, `tools/packages/Restaurant_Support_Agent_Full.zip`, `D:\1.Download\Restaurant_Support_GPOS.zip`.
        - Compileall Backend `backend/app` exit code 0; khởi động lại backend daemon trên port 8000.
        - Frontend `cmd /c "npm run build"` exit code 0 (`✓ built in 4.41s`).
-
-
-
+- **Cải Tiến Toàn Diện & Chuẩn Hóa Giao Diện Dark Mode Cho Phân Hệ Quản Lý Dự Án [2026-10-21]**:
+  + **Bối cảnh & Yêu cầu**:
+    - Người dùng phản ánh giao diện Dark Mode của phân hệ Quản Lý Dự Án (`ProjectManagementPage.tsx`) rất khó nhìn do còn nhiều khối màu trắng cứng chói mắt (header card dự án, khối mở rộng thành viên, khung mô tả dự án & file đính kèm, các modal tác vụ QuickAssign, AddMember, Export, Activity Logs...).
+  + **Chi tiết kỹ thuật & Khắc phục triệt để**:
+    1. *Thay thế triệt để các mã màu cứng sáng (Light Mode hardcoded colors)*:
+       - Thay `#FFFFFF`, `#F9FAFB`, `#F8FAFC`, `#F3F4F6`, `#EFF6FF`, `#F0FDF4` bằng hệ thống CSS variables chuẩn của Golden Gate: `var(--bg-card)`, `var(--bg-secondary)`, `var(--bg-primary)`, `var(--bg-hover)`, `var(--border-color)`, `var(--text-primary)`, `var(--text-secondary)`, `var(--text-muted)`.
+       - Sử dụng `rgba(255, 255, 255, ...)` và `rgba(59, 130, 246, ...)` với độ mờ tinh tế để các nút bấm, viền thẻ và hiệu ứng hover hài hòa trên cả giao diện sáng lẫn tối.
+    2. *Màn hình Quản Lý Dự Án (`ProjectManagementPage.tsx`)*:
+       - Bộ lọc trạng thái: tabs và đếm số lượng hiển thị trên nền `var(--bg-card)` và màu primary text chuẩn.
+       - Thẻ Dự Án (Project Card): Header card nền `var(--bg-card)`, thanh tiến độ `var(--bg-primary)`, các nút Tải Excel, Mô Tả & File, Xong việc, + Thành viên đổi sang màu nền và viền tối ưu.
+       - Vùng Thành Viên & Task (Accordion): Nền vùng mở rộng `var(--bg-secondary)`. Khung Mô Tả Dự Án chuyển sang nền `var(--bg-card)` với viền mềm `rgba(59, 130, 246, 0.35)`, ô nội dung mô tả nền `var(--bg-primary)` chữ `var(--text-primary)`, pill file đính kèm dịu mắt.
+       - Thẻ Thành Viên & Dòng Task: Card thành viên nền `var(--bg-card)`, viền `var(--border-color)`, hover `var(--bg-hover)`. Dòng task nền xen kẽ `var(--bg-card)` / `rgba(255,255,255,0.02)`, các nút Duyệt OK / Yêu cầu sửa / Đổi người dùng theme button mờ nhẹ sắc nét.
+       - Toàn bộ các Modal (Giao Việc Nhanh, Thêm/Sửa Dự Án, Thêm Thành Viên, Import Excel, Xuất Báo Cáo, Lịch Sử Thao Tác, Đánh Giá Thất Bại): Đồng bộ 100% sang Dark Mode với input, textarea, card danh sách nhân sự Team App, dropdown menu, avatar và tag.
+    3. *Modal Chỉnh Sửa Mô Tả Dự Án (`ProjectDescriptionModal.tsx`)*:
+       - Header tóm tắt dự án chuyển sang `var(--bg-secondary)`.
+       - Vùng dán ảnh `Ctrl + V`: Chuyển từ nền trắng chói `#EFF6FF` sang nền trong suốt `rgba(59, 130, 246, 0.08)` với viền nét đứt `rgba(59, 130, 246, 0.45)`, chữ hướng dẫn `var(--color-primary, #60A5FA)`.
+       - Danh sách file đính kèm: Nền `var(--bg-primary)` viền `rgba(59, 130, 246, 0.25)`.
+    4. *Kiểm thử & Đóng gói Server*:
+       - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.69s`), tạo bản build sạch sẽ trong `frontend/dist/`.
+       - Backend `python -m compileall app` đạt exit code 0, không có bất kỳ cảnh báo/lỗi cú pháp nào.

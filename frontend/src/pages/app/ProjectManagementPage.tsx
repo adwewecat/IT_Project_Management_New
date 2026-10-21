@@ -1155,8 +1155,8 @@ export const ProjectManagementPage: React.FC = () => {
                         fontWeight: 600,
                         cursor: 'pointer',
                         border: statusFilter === tab.id ? '1px solid var(--color-primary, #F5B800)' : '1px solid var(--border-color)',
-                        backgroundColor: statusFilter === tab.id ? 'var(--color-primary-light, #FFF8D6)' : '#FFFFFF',
-                        color: statusFilter === tab.id ? '#111827' : 'var(--text-secondary)',
+                        backgroundColor: statusFilter === tab.id ? 'var(--color-primary-subtle, rgba(245, 184, 0, 0.16))' : 'var(--bg-card)',
+                        color: statusFilter === tab.id ? 'var(--color-primary-text, #F5B800)' : 'var(--text-secondary)',
                         transition: 'var(--transition-fast)'
                       }}
                     >
@@ -1167,8 +1167,8 @@ export const ProjectManagementPage: React.FC = () => {
                           fontWeight: 700,
                           padding: '1px 7px',
                           borderRadius: '9999px',
-                          backgroundColor: statusFilter === tab.id ? '#F59E0B' : '#E5E7EB',
-                          color: statusFilter === tab.id ? '#FFFFFF' : '#4B5563',
+                          backgroundColor: statusFilter === tab.id ? 'var(--color-primary, #F5B800)' : 'var(--bg-hover)',
+                          color: statusFilter === tab.id ? '#000000' : 'var(--text-secondary)',
                           lineHeight: '1.3',
                         }}
                       >
@@ -1337,7 +1337,7 @@ export const ProjectManagementPage: React.FC = () => {
                   width: '54px',
                   height: '54px',
                   borderRadius: '50%',
-                  backgroundColor: '#F3F4F6',
+                  backgroundColor: 'var(--bg-secondary)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -1364,7 +1364,8 @@ export const ProjectManagementPage: React.FC = () => {
                     fontWeight: 500,
                     borderRadius: 'var(--radius-md)',
                     border: '1px solid var(--border-color)',
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-primary)',
                     cursor: 'pointer'
                   }}
                 >
@@ -1451,16 +1452,16 @@ export const ProjectManagementPage: React.FC = () => {
                         justifyContent: 'space-between',
                         gap: '14px',
                         borderBottom: isExpanded ? '1px solid var(--border-color)' : 'none',
-                        backgroundColor: '#FFFFFF',
+                        backgroundColor: 'var(--bg-card)',
                         cursor: 'pointer',
                         transition: 'background-color 0.15s ease',
                         userSelect: 'none'
                       }}
                       onMouseEnter={e => {
-                        e.currentTarget.style.backgroundColor = '#F9FAFB';
+                        e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
                       }}
                       onMouseLeave={e => {
-                        e.currentTarget.style.backgroundColor = '#FFFFFF';
+                        e.currentTarget.style.backgroundColor = 'var(--bg-card)';
                       }}
                     >
                       {/* Left: Accordion toggle + Project info */}
@@ -1474,7 +1475,7 @@ export const ProjectManagementPage: React.FC = () => {
                             height: '28px',
                             borderRadius: '6px',
                             border: '1px solid var(--border-color)',
-                            backgroundColor: '#F9FAFB',
+                            backgroundColor: 'var(--bg-secondary)',
                             color: 'var(--text-secondary)',
                             flexShrink: 0
                           }}
@@ -1526,9 +1527,9 @@ export const ProjectManagementPage: React.FC = () => {
                             fontWeight: 600,
                             padding: '4px 10px',
                             borderRadius: 'var(--radius-full)',
-                            backgroundColor: project.Status === 'completed' ? '#DCFCE7' : '#FEF3C7',
-                            color: project.Status === 'completed' ? '#15803D' : '#B45309',
-                            border: `1px solid ${project.Status === 'completed' ? '#BBF7D0' : '#FDE68A'}`
+                            backgroundColor: project.Status === 'completed' ? 'rgba(34, 197, 94, 0.14)' : 'rgba(245, 184, 0, 0.14)',
+                            color: project.Status === 'completed' ? '#4ADE80' : '#FBBF24',
+                            border: `1px solid ${project.Status === 'completed' ? 'rgba(34, 197, 94, 0.35)' : 'rgba(245, 184, 0, 0.35)'}`
                           }}
                         >
                           {project.Status === 'completed' ? <CheckCircle2 size={13} /> : <Clock size={13} />}
@@ -1539,7 +1540,7 @@ export const ProjectManagementPage: React.FC = () => {
                         <div style={{ minWidth: '150px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>
                             <span style={{ color: 'var(--text-secondary)' }}>Tiến độ</span>
-                            <span style={{ color: project.progress_percent === 100 ? '#15803D' : '#111827' }}>
+                            <span style={{ color: project.progress_percent === 100 ? '#4ADE80' : 'var(--text-primary)' }}>
                               {project.progress_percent}% ({project.done_tasks}/{project.total_tasks})
                             </span>
                           </div>
@@ -1548,7 +1549,7 @@ export const ProjectManagementPage: React.FC = () => {
                               width: '100%',
                               height: '8px',
                               borderRadius: '4px',
-                              backgroundColor: '#E5E7EB',
+                              backgroundColor: 'var(--border-color, #334155)',
                               overflow: 'hidden'
                             }}
                           >
@@ -1557,7 +1558,7 @@ export const ProjectManagementPage: React.FC = () => {
                                 width: `${project.progress_percent}%`,
                                 height: '100%',
                                 borderRadius: '4px',
-                                backgroundColor: project.progress_percent === 100 ? '#16A34A' : 'var(--color-primary, #F5B800)',
+                                backgroundColor: project.progress_percent === 100 ? '#22C55E' : 'var(--color-primary, #F5B800)',
                                 transition: 'width 0.3s ease'
                               }}
                             />
@@ -1577,10 +1578,10 @@ export const ProjectManagementPage: React.FC = () => {
                             style={{
                               padding: '6px 10px',
                               borderRadius: 'var(--radius-md)',
-                              border: '1px solid #BBF7D0',
-                              backgroundColor: '#F0FDF4',
+                              border: '1px solid rgba(34, 197, 94, 0.35)',
+                              backgroundColor: 'rgba(34, 197, 94, 0.1)',
                               cursor: 'pointer',
-                              color: '#16A34A',
+                              color: '#4ADE80',
                               display: 'flex',
                               alignItems: 'center',
                               gap: '4px'
@@ -1597,9 +1598,9 @@ export const ProjectManagementPage: React.FC = () => {
                             style={{
                               padding: '6px 10px',
                               borderRadius: 'var(--radius-md)',
-                              border: project.Description ? '1.5px solid #93C5FD' : '1px solid var(--border-color)',
-                              backgroundColor: project.Description ? '#EFF6FF' : '#FFFFFF',
-                              color: project.Description ? '#1D4ED8' : 'var(--text-primary)',
+                              border: project.Description ? '1.5px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--border-color)',
+                              backgroundColor: project.Description ? 'rgba(59, 130, 246, 0.14)' : 'var(--bg-card)',
+                              color: project.Description ? '#60A5FA' : 'var(--text-primary)',
                               cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
@@ -1610,7 +1611,7 @@ export const ProjectManagementPage: React.FC = () => {
                             }}
                             title="Xem & Thêm mô tả chi tiết, hình ảnh (Ctrl+V) và tệp tin đính kèm"
                           >
-                            <FileText size={14} color={project.Description ? '#2563EB' : 'currentColor'} />
+                            <FileText size={14} color={project.Description ? '#60A5FA' : 'currentColor'} />
                             <span>{project.Description ? 'Mô Tả & File' : '+ Thêm Mô Tả'}</span>
                             {(project.Images || project.Files) && (
                               <span style={{ fontSize: '10px', backgroundColor: '#2563EB', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontWeight: 700 }}>
@@ -1625,9 +1626,9 @@ export const ProjectManagementPage: React.FC = () => {
                             style={{
                               padding: '5px 10px',
                               borderRadius: 'var(--radius-md)',
-                              border: '1px solid ' + (project.Status === 'completed' ? '#A7F3D0' : 'var(--border-color)'),
-                              backgroundColor: project.Status === 'completed' ? '#ECFDF5' : '#FFFFFF',
-                              color: project.Status === 'completed' ? '#059669' : '#111827',
+                              border: '1px solid ' + (project.Status === 'completed' ? 'rgba(34, 197, 94, 0.4)' : 'var(--border-color)'),
+                              backgroundColor: project.Status === 'completed' ? 'rgba(34, 197, 94, 0.14)' : 'var(--bg-card)',
+                              color: project.Status === 'completed' ? '#4ADE80' : 'var(--text-primary)',
                               cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
@@ -1638,7 +1639,7 @@ export const ProjectManagementPage: React.FC = () => {
                             }}
                             title={project.Status === 'completed' ? 'Đánh dấu dự án chưa hoàn thành' : 'Đánh dấu tất cả công việc trong dự án đã hoàn thành'}
                           >
-                            <CheckCircle2 size={14} color={project.Status === 'completed' ? '#059669' : '#10B981'} />
+                            <CheckCircle2 size={14} color={project.Status === 'completed' ? '#4ADE80' : '#10B981'} />
                             <span>{project.Status === 'completed' ? '✓ Đã xong hết' : '✓ Xong tất cả việc'}</span>
                           </button>
 
@@ -1658,7 +1659,8 @@ export const ProjectManagementPage: React.FC = () => {
                                   fontWeight: 500,
                                   borderRadius: 'var(--radius-md)',
                                   border: '1px solid var(--border-color)',
-                                  backgroundColor: '#FFFFFF',
+                                  backgroundColor: 'var(--bg-card)',
+                                  color: 'var(--text-primary)',
                                   cursor: 'pointer'
                                 }}
                                 title="Thêm thành viên vào dự án"
@@ -1707,29 +1709,29 @@ export const ProjectManagementPage: React.FC = () => {
 
                     {/* Members & Tasks Container */}
                     {isExpanded && (
-                      <div style={{ padding: '16px 20px', backgroundColor: '#F9FAFB', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ padding: '16px 20px', backgroundColor: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         {/* ── KHUNG MÔ TẢ DỰ ÁN & TÀI LIỆU ĐÍNH KÈM (NẾU CÓ) ── */}
                         {(project.Description || project.Images || project.Files) && (
                           <div
                             style={{
-                              backgroundColor: '#FFFFFF',
+                              backgroundColor: 'var(--bg-card)',
                               borderRadius: '8px',
-                              border: '1.5px solid #BFDBFE',
+                              border: '1.5px solid rgba(59, 130, 246, 0.35)',
                               padding: '14px 16px',
                               display: 'flex',
                               flexDirection: 'column',
                               gap: '10px',
-                              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                             }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <FileText size={16} color="#2563EB" />
-                                <span style={{ fontWeight: 800, fontSize: '13.5px', color: '#1E3A8A' }}>
+                                <FileText size={16} color="var(--color-primary, #60A5FA)" />
+                                <span style={{ fontWeight: 800, fontSize: '13.5px', color: 'var(--color-primary, #60A5FA)' }}>
                                   Mô Tả Chi Tiết &amp; Diễn Giải Sự Vụ Dự Án
                                 </span>
                                 {project.DescriptionUpdatedBy && (
-                                  <span style={{ fontSize: '11px', color: '#64748B' }}>
+                                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                                     (Cập nhật bởi: {project.DescriptionUpdatedBy})
                                   </span>
                                 )}
@@ -1745,9 +1747,9 @@ export const ProjectManagementPage: React.FC = () => {
                                   fontSize: '11.5px',
                                   fontWeight: 600,
                                   borderRadius: '6px',
-                                  border: '1px solid #93C5FD',
-                                  backgroundColor: '#EFF6FF',
-                                  color: '#1D4ED8',
+                                  border: '1px solid rgba(59, 130, 246, 0.4)',
+                                  backgroundColor: 'rgba(59, 130, 246, 0.12)',
+                                  color: 'var(--color-primary, #60A5FA)',
                                   cursor: 'pointer'
                                 }}
                               >
@@ -1761,13 +1763,13 @@ export const ProjectManagementPage: React.FC = () => {
                               <div
                                 style={{
                                   fontSize: '13px',
-                                  color: '#334155',
+                                  color: 'var(--text-primary)',
                                   lineHeight: 1.6,
                                   whiteSpace: 'pre-wrap',
-                                  backgroundColor: '#F8FAFC',
+                                  backgroundColor: 'var(--bg-primary)',
                                   padding: '10px 12px',
                                   borderRadius: '6px',
-                                  border: '1px solid #E2E8F0'
+                                  border: '1px solid var(--border-color)'
                                 }}
                               >
                                 {project.Description}
@@ -1788,7 +1790,7 @@ export const ProjectManagementPage: React.FC = () => {
                                           target="_blank"
                                           rel="noreferrer"
                                           style={{
-                                            border: '1px solid #CBD5E1',
+                                            border: '1px solid var(--border-color)',
                                             borderRadius: '6px',
                                             overflow: 'hidden',
                                             width: '90px',
@@ -1833,15 +1835,15 @@ export const ProjectManagementPage: React.FC = () => {
                                               gap: '6px',
                                               padding: '4px 10px',
                                               borderRadius: '6px',
-                                              backgroundColor: '#F1F5F9',
-                                              border: '1px solid #CBD5E1',
-                                              color: '#0F172A',
+                                              backgroundColor: 'var(--bg-primary)',
+                                              border: '1px solid var(--border-color)',
+                                              color: 'var(--text-primary)',
                                               fontSize: '12px',
                                               textDecoration: 'none',
                                               fontWeight: 600
                                             }}
                                           >
-                                            <Paperclip size={13} color="#2563EB" />
+                                            <Paperclip size={13} color="var(--color-primary, #60A5FA)" />
                                             <span>{fn}</span>
                                           </a>
                                         );
@@ -1874,9 +1876,9 @@ export const ProjectManagementPage: React.FC = () => {
                                     padding: '6px 12px',
                                     fontSize: '12px',
                                     fontWeight: 600,
-                                    color: '#1E40AF',
-                                    backgroundColor: '#EFF6FF',
-                                    border: '1px solid #BFDBFE',
+                                    color: 'var(--color-primary, #60A5FA)',
+                                    backgroundColor: 'rgba(59, 130, 246, 0.12)',
+                                    border: '1px solid rgba(59, 130, 246, 0.4)',
                                     borderRadius: 'var(--radius-md)',
                                     cursor: 'pointer'
                                   }}
@@ -1909,7 +1911,7 @@ export const ProjectManagementPage: React.FC = () => {
                               <div
                                 key={member.MemberID}
                                 style={{
-                                  backgroundColor: '#FFFFFF',
+                                  backgroundColor: 'var(--bg-card)',
                                   borderRadius: 'var(--radius-md)',
                                   border: member.hasMatches && cleanQ ? '1px solid #F5B800' : '1px solid var(--border-color)',
                                   overflow: 'hidden'
@@ -1924,17 +1926,17 @@ export const ProjectManagementPage: React.FC = () => {
                                     alignItems: 'center',
                                     justifyContent: 'space-between',
                                     gap: '12px',
-                                    borderBottom: isMemberExpanded ? '1px solid #F3F4F6' : 'none',
-                                    backgroundColor: isAllMemberDone ? '#F0FDF4' : '#FFFFFF',
+                                    borderBottom: isMemberExpanded ? '1px solid var(--border-color)' : 'none',
+                                    backgroundColor: isAllMemberDone ? 'rgba(34, 197, 94, 0.08)' : 'var(--bg-card)',
                                     cursor: 'pointer',
                                     transition: 'background-color 0.15s ease',
                                     userSelect: 'none'
                                   }}
                                   onMouseEnter={e => {
-                                    e.currentTarget.style.backgroundColor = isAllMemberDone ? '#DCFCE7' : '#F9FAFB';
+                                    e.currentTarget.style.backgroundColor = isAllMemberDone ? 'rgba(34, 197, 94, 0.16)' : 'var(--bg-hover)';
                                   }}
                                   onMouseLeave={e => {
-                                    e.currentTarget.style.backgroundColor = isAllMemberDone ? '#F0FDF4' : '#FFFFFF';
+                                    e.currentTarget.style.backgroundColor = isAllMemberDone ? 'rgba(34, 197, 94, 0.08)' : 'var(--bg-card)';
                                   }}
                                 >
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1956,8 +1958,8 @@ export const ProjectManagementPage: React.FC = () => {
                                           width: '24px',
                                           height: '24px',
                                           borderRadius: '50%',
-                                          backgroundColor: '#E0E7FF',
-                                          color: '#4338CA',
+                                          backgroundColor: 'rgba(99, 102, 241, 0.18)',
+                                          color: '#818CF8',
                                           display: 'flex',
                                           alignItems: 'center',
                                           justifyContent: 'center',
@@ -1980,8 +1982,8 @@ export const ProjectManagementPage: React.FC = () => {
                                             fontWeight: 700,
                                             padding: '1px 6px',
                                             borderRadius: '4px',
-                                            backgroundColor: '#FEF08A',
-                                            color: '#854D0E'
+                                            backgroundColor: 'rgba(234, 179, 8, 0.2)',
+                                            color: '#FACC15'
                                           }}
                                         >
                                           {member.matchingTasks.length} task khớp
@@ -2006,8 +2008,8 @@ export const ProjectManagementPage: React.FC = () => {
                                             fontWeight: 500,
                                             borderRadius: 'var(--radius-sm)',
                                             border: '1px solid var(--border-color)',
-                                            backgroundColor: member.tasks.length > 0 && member.tasks.every(t => selectedTaskIds.has(t.TaskID)) ? '#DBEAFE' : '#FFFFFF',
-                                            color: member.tasks.length > 0 && member.tasks.every(t => selectedTaskIds.has(t.TaskID)) ? '#1D4ED8' : 'var(--text-secondary)',
+                                            backgroundColor: member.tasks.length > 0 && member.tasks.every(t => selectedTaskIds.has(t.TaskID)) ? 'rgba(59, 130, 246, 0.2)' : 'var(--bg-card)',
+                                            color: member.tasks.length > 0 && member.tasks.every(t => selectedTaskIds.has(t.TaskID)) ? 'var(--color-primary, #60A5FA)' : 'var(--text-secondary)',
                                             cursor: 'pointer',
                                             display: 'flex',
                                             alignItems: 'center',
@@ -2028,9 +2030,9 @@ export const ProjectManagementPage: React.FC = () => {
                                             fontSize: '11px',
                                             fontWeight: 600,
                                             borderRadius: 'var(--radius-sm)',
-                                            border: '1px solid ' + (member.tasks.every(t => t.Done) ? '#A7F3D0' : 'var(--border-color)'),
-                                            backgroundColor: member.tasks.every(t => t.Done) ? '#ECFDF5' : '#FFFFFF',
-                                            color: member.tasks.every(t => t.Done) ? '#059669' : '#374151',
+                                            border: '1px solid ' + (member.tasks.every(t => t.Done) ? 'rgba(34, 197, 94, 0.4)' : 'var(--border-color)'),
+                                            backgroundColor: member.tasks.every(t => t.Done) ? 'rgba(34, 197, 94, 0.15)' : 'var(--bg-card)',
+                                            color: member.tasks.every(t => t.Done) ? '#22C55E' : 'var(--text-primary)',
                                             cursor: 'pointer',
                                             display: 'flex',
                                             alignItems: 'center',
@@ -2038,7 +2040,7 @@ export const ProjectManagementPage: React.FC = () => {
                                           }}
                                           title={member.tasks.every(t => t.Done) ? 'Đánh dấu chưa hoàn thành các task của thành viên' : 'Đánh dấu hoàn thành toàn bộ việc của thành viên này'}
                                         >
-                                          <CheckCircle2 size={12} color={member.tasks.every(t => t.Done) ? '#059669' : '#10B981'} />
+                                          <CheckCircle2 size={12} color={member.tasks.every(t => t.Done) ? '#22C55E' : '#10B981'} />
                                           <span>{member.tasks.every(t => t.Done) ? '✓ Đã xong hết' : `✓ Xong hết (${member.tasks.length})`}</span>
                                         </button>
                                       </>
@@ -2057,7 +2059,8 @@ export const ProjectManagementPage: React.FC = () => {
                                             fontSize: '12px',
                                             borderRadius: 'var(--radius-sm)',
                                             border: '1px solid var(--border-color)',
-                                            backgroundColor: '#FFFFFF',
+                                            backgroundColor: 'var(--bg-card)',
+                                            color: 'var(--text-primary)',
                                             cursor: 'pointer',
                                             display: 'flex',
                                             alignItems: 'center',
@@ -2076,7 +2079,7 @@ export const ProjectManagementPage: React.FC = () => {
                                             border: 'none',
                                             backgroundColor: 'transparent',
                                             cursor: 'pointer',
-                                            color: '#9CA3AF'
+                                            color: 'var(--text-muted)'
                                           }}
                                           title="Xóa thành viên"
                                         >
@@ -2108,11 +2111,11 @@ export const ProjectManagementPage: React.FC = () => {
                                               padding: '6px 8px',
                                               borderRadius: 'var(--radius-sm)',
                                               backgroundColor: selectedTaskIds.has(task.TaskID)
-                                                ? '#EFF6FF'
-                                                : (isTaskMatch ? '#FFFBEB' : (task.Done ? '#F9FAFB' : '#FFFFFF')),
+                                                ? 'rgba(59, 130, 246, 0.15)'
+                                                : (isTaskMatch ? 'rgba(234, 179, 8, 0.15)' : (task.Done ? 'rgba(255, 255, 255, 0.02)' : 'var(--bg-card)')),
                                               border: selectedTaskIds.has(task.TaskID)
-                                                ? '1px solid #93C5FD'
-                                                : (isTaskMatch ? '1px solid #FCD34D' : '1px solid #F3F4F6')
+                                                ? '1px solid rgba(59, 130, 246, 0.4)'
+                                                : (isTaskMatch ? '1px solid rgba(234, 179, 8, 0.4)' : '1px solid var(--border-color)')
                                             }}
                                           >
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
@@ -2126,7 +2129,7 @@ export const ProjectManagementPage: React.FC = () => {
                                                   width: '15px',
                                                   height: '15px',
                                                   cursor: 'pointer',
-                                                  accentColor: '#2563EB',
+                                                  accentColor: 'var(--color-primary, #2563EB)',
                                                   flexShrink: 0
                                                 }}
                                                 title="Chọn việc này để thao tác hàng loạt"
@@ -2139,7 +2142,7 @@ export const ProjectManagementPage: React.FC = () => {
                                                   gap: '8px',
                                                   cursor: 'pointer',
                                                   fontSize: '13px',
-                                                  color: task.Done ? '#6B7280' : 'var(--text-primary)',
+                                                  color: task.Done ? 'var(--text-muted)' : 'var(--text-primary)',
                                                   textDecoration: task.Done ? 'line-through' : 'none',
                                                   flex: 1
                                                 }}
@@ -2164,12 +2167,12 @@ export const ProjectManagementPage: React.FC = () => {
                                                       gap: '4px',
                                                       padding: '2px 8px',
                                                       borderRadius: '4px',
-                                                      backgroundColor: '#FEF9C3',
-                                                      color: '#854D0E',
+                                                      backgroundColor: 'rgba(234, 179, 8, 0.15)',
+                                                      color: '#FACC15',
                                                       fontSize: '11px',
                                                       fontWeight: 600,
                                                       textDecoration: 'none',
-                                                      border: '1px solid #FDE047'
+                                                      border: '1px solid rgba(234, 179, 8, 0.35)'
                                                     }}
                                                     title="Xem / Tải file đính kèm"
                                                   >
@@ -2205,9 +2208,9 @@ export const ProjectManagementPage: React.FC = () => {
                                                       fontSize: '11px',
                                                       fontWeight: 600,
                                                       borderRadius: '12px',
-                                                      border: task.ReviewStatus === 'ok' ? '1px solid #16A34A' : '1px solid #D1D5DB',
-                                                      backgroundColor: task.ReviewStatus === 'ok' ? '#DCFCE7' : '#FFFFFF',
-                                                      color: task.ReviewStatus === 'ok' ? '#15803D' : '#6B7280',
+                                                      border: task.ReviewStatus === 'ok' ? '1px solid #16A34A' : '1px solid var(--border-color)',
+                                                      backgroundColor: task.ReviewStatus === 'ok' ? 'rgba(34, 197, 94, 0.2)' : 'var(--bg-card)',
+                                                      color: task.ReviewStatus === 'ok' ? '#22C55E' : 'var(--text-secondary)',
                                                       cursor: 'pointer',
                                                       transition: 'all 0.15s ease'
                                                     }}
@@ -2217,7 +2220,7 @@ export const ProjectManagementPage: React.FC = () => {
                                                         : 'Bấm để đánh giá: Đạt (OK)'
                                                     }
                                                   >
-                                                    <CheckCircle2 size={12} color={task.ReviewStatus === 'ok' ? '#15803D' : '#9CA3AF'} />
+                                                    <CheckCircle2 size={12} color={task.ReviewStatus === 'ok' ? '#22C55E' : 'var(--text-muted)'} />
                                                     <span>OK</span>
                                                   </button>
 
@@ -2235,9 +2238,9 @@ export const ProjectManagementPage: React.FC = () => {
                                                       fontSize: '11px',
                                                       fontWeight: 600,
                                                       borderRadius: '12px',
-                                                      border: task.ReviewStatus === 'fail' ? '1px solid #DC2626' : '1px solid #D1D5DB',
-                                                      backgroundColor: task.ReviewStatus === 'fail' ? '#FEE2E2' : '#FFFFFF',
-                                                      color: task.ReviewStatus === 'fail' ? '#B91C1C' : '#6B7280',
+                                                      border: task.ReviewStatus === 'fail' ? '1px solid #DC2626' : '1px solid var(--border-color)',
+                                                      backgroundColor: task.ReviewStatus === 'fail' ? 'rgba(239, 68, 68, 0.2)' : 'var(--bg-card)',
+                                                      color: task.ReviewStatus === 'fail' ? '#EF4444' : 'var(--text-secondary)',
                                                       cursor: 'pointer',
                                                       transition: 'all 0.15s ease'
                                                     }}
@@ -2247,7 +2250,7 @@ export const ProjectManagementPage: React.FC = () => {
                                                         : 'Bấm để đánh giá: Không đạt (Fail)'
                                                     }
                                                   >
-                                                    <XCircle size={12} color={task.ReviewStatus === 'fail' ? '#B91C1C' : '#9CA3AF'} />
+                                                    <XCircle size={12} color={task.ReviewStatus === 'fail' ? '#EF4444' : 'var(--text-muted)'} />
                                                     <span>Fail</span>
                                                   </button>
 
@@ -2255,7 +2258,7 @@ export const ProjectManagementPage: React.FC = () => {
                                                     <span
                                                       style={{
                                                         fontSize: '11px',
-                                                        color: '#DC2626',
+                                                        color: '#EF4444',
                                                         fontStyle: 'italic',
                                                         maxWidth: '140px',
                                                         overflow: 'hidden',
@@ -2268,7 +2271,7 @@ export const ProjectManagementPage: React.FC = () => {
                                                     </span>
                                                   )}
                                                   {task.Done && !task.ReviewStatus && (
-                                                    <span style={{ fontSize: '11px', color: '#16A34A', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
+                                                    <span style={{ fontSize: '11px', color: '#22C55E', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
                                                       (Mặc định: Thành công)
                                                     </span>
                                                   )}
@@ -2284,9 +2287,9 @@ export const ProjectManagementPage: React.FC = () => {
                                                       fontSize: '11px',
                                                       fontWeight: 600,
                                                       borderRadius: '12px',
-                                                      border: task.ReviewStatus === 'fail' ? '1px solid #FCA5A5' : '1px solid #86EFAC',
-                                                      backgroundColor: task.ReviewStatus === 'fail' ? '#FEE2E2' : '#DCFCE7',
-                                                      color: task.ReviewStatus === 'fail' ? '#B91C1C' : '#15803D'
+                                                      border: task.ReviewStatus === 'fail' ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(34, 197, 94, 0.4)',
+                                                      backgroundColor: task.ReviewStatus === 'fail' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                                                      color: task.ReviewStatus === 'fail' ? '#EF4444' : '#22C55E'
                                                     }}
                                                     title={
                                                       task.ReviewStatus === 'fail'
@@ -2313,7 +2316,7 @@ export const ProjectManagementPage: React.FC = () => {
                                                     background: 'transparent',
                                                     border: 'none',
                                                     cursor: 'pointer',
-                                                    color: '#D1D5DB',
+                                                    color: 'var(--text-muted)',
                                                     padding: '2px'
                                                   }}
                                                   title="Xóa task"
@@ -2380,15 +2383,15 @@ export const ProjectManagementPage: React.FC = () => {
                   fontWeight: 600,
                   cursor: 'pointer',
                   border: qaProjectMode === 'existing' ? '2px solid var(--color-primary, #F5B800)' : '1px solid var(--border-color)',
-                  backgroundColor: qaProjectMode === 'existing' ? '#FFFBEB' : '#FFFFFF',
-                  color: qaProjectMode === 'existing' ? '#92400E' : 'var(--text-secondary)'
+                  backgroundColor: qaProjectMode === 'existing' ? 'rgba(245, 184, 0, 0.15)' : 'var(--bg-card)',
+                  color: qaProjectMode === 'existing' ? 'var(--color-primary, #F5B800)' : 'var(--text-secondary)'
                 }}
               >
                 <span>📁 Dự án đang có</span>
                 <span
                   style={{
-                    backgroundColor: qaProjectMode === 'existing' ? '#FDE68A' : '#F3F4F6',
-                    color: qaProjectMode === 'existing' ? '#92400E' : '#6B7280',
+                    backgroundColor: qaProjectMode === 'existing' ? 'rgba(245, 184, 0, 0.25)' : 'var(--bg-secondary)',
+                    color: qaProjectMode === 'existing' ? 'var(--color-primary, #F5B800)' : 'var(--text-muted)',
                     fontSize: '11px',
                     padding: '1px 6px',
                     borderRadius: '10px',
@@ -2414,8 +2417,8 @@ export const ProjectManagementPage: React.FC = () => {
                   fontWeight: 600,
                   cursor: 'pointer',
                   border: qaProjectMode === 'new' ? '2px solid var(--color-primary, #F5B800)' : '1px solid var(--border-color)',
-                  backgroundColor: qaProjectMode === 'new' ? '#FFFBEB' : '#FFFFFF',
-                  color: qaProjectMode === 'new' ? '#92400E' : 'var(--text-secondary)'
+                  backgroundColor: qaProjectMode === 'new' ? 'rgba(245, 184, 0, 0.15)' : 'var(--bg-card)',
+                  color: qaProjectMode === 'new' ? 'var(--color-primary, #F5B800)' : 'var(--text-secondary)'
                 }}
               >
                 <span>✨ Nhập tên dự án mới</span>
@@ -2444,7 +2447,8 @@ export const ProjectManagementPage: React.FC = () => {
                       borderRadius: 'var(--radius-md)',
                       border: '1px solid var(--border-color)',
                       boxSizing: 'border-box',
-                      backgroundColor: '#FAFAFA'
+                      backgroundColor: 'var(--bg-primary)',
+                      color: 'var(--text-primary)'
                     }}
                   />
                   {qaProjectSearch && (
@@ -2459,7 +2463,7 @@ export const ProjectManagementPage: React.FC = () => {
                         background: 'none',
                         border: 'none',
                         cursor: 'pointer',
-                        color: '#9CA3AF'
+                        color: 'var(--text-muted)'
                       }}
                     >
                       <X size={12} />
@@ -2474,7 +2478,7 @@ export const ProjectManagementPage: React.FC = () => {
                     overflowY: 'auto',
                     border: '1px solid var(--border-color)',
                     borderRadius: 'var(--radius-md)',
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: 'var(--bg-primary)',
                     padding: '4px'
                   }}
                 >
@@ -2497,8 +2501,8 @@ export const ProjectManagementPage: React.FC = () => {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            backgroundColor: isSelected ? '#FFFBEB' : 'transparent',
-                            border: isSelected ? '1px solid #FCD34D' : '1px solid transparent',
+                            backgroundColor: isSelected ? 'rgba(245, 184, 0, 0.15)' : 'transparent',
+                            border: isSelected ? '1px solid rgba(245, 184, 0, 0.4)' : '1px solid transparent',
                             transition: 'background-color 0.15s'
                           }}
                         >
@@ -2510,8 +2514,8 @@ export const ProjectManagementPage: React.FC = () => {
                                     fontFamily: 'monospace',
                                     fontSize: '11px',
                                     fontWeight: 700,
-                                    color: '#B45309',
-                                    backgroundColor: '#FEF3C7',
+                                    color: '#F59E0B',
+                                    backgroundColor: 'rgba(245, 158, 11, 0.15)',
                                     padding: '1px 5px',
                                     borderRadius: '3px'
                                   }}
@@ -2529,7 +2533,7 @@ export const ProjectManagementPage: React.FC = () => {
                               <span>✓ {p.done_tasks}/{p.total_tasks} task</span>
                             </div>
                           </div>
-                          {isSelected && <Check size={16} color="#D97706" style={{ flexShrink: 0, marginLeft: '8px' }} />}
+                          {isSelected && <Check size={16} color="#F5B800" style={{ flexShrink: 0, marginLeft: '8px' }} />}
                         </div>
                       );
                     })
@@ -2552,6 +2556,8 @@ export const ProjectManagementPage: React.FC = () => {
                   fontSize: '13px',
                   borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--color-primary, #F5B800)',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
                   boxSizing: 'border-box'
                 }}
               />
@@ -2570,7 +2576,7 @@ export const ProjectManagementPage: React.FC = () => {
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: 'var(--color-primary-dark, #B38600)',
+                  color: 'var(--color-primary, #F5B800)',
                   fontSize: '11px',
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -2594,6 +2600,8 @@ export const ProjectManagementPage: React.FC = () => {
                   fontSize: '13px',
                   borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
                   boxSizing: 'border-box'
                 }}
               />
@@ -2618,7 +2626,8 @@ export const ProjectManagementPage: React.FC = () => {
                       borderRadius: 'var(--radius-md)',
                       border: '1px solid var(--border-color)',
                       boxSizing: 'border-box',
-                      backgroundColor: '#FAFAFA'
+                      backgroundColor: 'var(--bg-primary)',
+                      color: 'var(--text-primary)'
                     }}
                   />
                   {qaMemberSearch && (
@@ -2633,7 +2642,7 @@ export const ProjectManagementPage: React.FC = () => {
                         background: 'none',
                         border: 'none',
                         cursor: 'pointer',
-                        color: '#9CA3AF'
+                        color: 'var(--text-muted)'
                       }}
                     >
                       <X size={12} />
@@ -2648,7 +2657,7 @@ export const ProjectManagementPage: React.FC = () => {
                     overflowY: 'auto',
                     border: '1px solid var(--border-color)',
                     borderRadius: 'var(--radius-md)',
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: 'var(--bg-primary)',
                     padding: '4px'
                   }}
                 >
@@ -2678,8 +2687,8 @@ export const ProjectManagementPage: React.FC = () => {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            backgroundColor: isSelected ? '#FFFBEB' : 'transparent',
-                            border: isSelected ? '1px solid #FCD34D' : '1px solid transparent',
+                            backgroundColor: isSelected ? 'rgba(245, 184, 0, 0.15)' : 'transparent',
+                            border: isSelected ? '1px solid rgba(245, 184, 0, 0.4)' : '1px solid transparent',
                             transition: 'background-color 0.15s'
                           }}
                         >
@@ -2689,8 +2698,8 @@ export const ProjectManagementPage: React.FC = () => {
                                 width: '24px',
                                 height: '24px',
                                 borderRadius: '50%',
-                                backgroundColor: isSelected ? '#F5B800' : '#E5E7EB',
-                                color: isSelected ? '#111827' : '#4B5563',
+                                backgroundColor: isSelected ? 'var(--color-primary, #F5B800)' : 'var(--bg-secondary)',
+                                color: isSelected ? '#111827' : 'var(--text-secondary)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
@@ -2703,14 +2712,14 @@ export const ProjectManagementPage: React.FC = () => {
                             <span style={{ fontSize: '13px', fontWeight: isSelected ? 700 : 500, color: 'var(--text-primary)' }}>
                               {m.full_name}
                             </span>
-                            <span style={{ fontSize: '11px', color: '#6B7280', fontFamily: 'monospace' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
                               @{m.username}
                             </span>
                             <span
                               style={{
                                 fontSize: '10px',
-                                backgroundColor: m.role_name === 'Ban Quản trị' ? '#FEF3C7' : '#E0E7FF',
-                                color: m.role_name === 'Ban Quản trị' ? '#92400E' : '#3730A3',
+                                backgroundColor: m.role_name === 'Ban Quản trị' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(99, 102, 241, 0.15)',
+                                color: m.role_name === 'Ban Quản trị' ? '#F59E0B' : '#818CF8',
                                 padding: '1px 5px',
                                 borderRadius: '4px',
                                 fontWeight: 600
@@ -2720,7 +2729,7 @@ export const ProjectManagementPage: React.FC = () => {
                             </span>
 
                           </div>
-                          {isSelected && <Check size={14} color="#D97706" />}
+                          {isSelected && <Check size={14} color="#F5B800" />}
                         </div>
                       );
                     })
@@ -2747,6 +2756,8 @@ export const ProjectManagementPage: React.FC = () => {
                 fontSize: '13px',
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
                 boxSizing: 'border-box',
                 resize: 'vertical'
               }}
@@ -2769,6 +2780,8 @@ export const ProjectManagementPage: React.FC = () => {
                 fontSize: '13px',
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
                 boxSizing: 'border-box'
               }}
             />
@@ -2789,7 +2802,7 @@ export const ProjectManagementPage: React.FC = () => {
                   padding: '10px 14px',
                   border: '1px dashed var(--border-color, #D1D5DB)',
                   borderRadius: 'var(--radius-md)',
-                  backgroundColor: '#FAFAFA',
+                  backgroundColor: 'var(--bg-primary)',
                   cursor: 'pointer',
                   fontSize: '13px',
                   color: 'var(--text-secondary)'
@@ -2815,16 +2828,16 @@ export const ProjectManagementPage: React.FC = () => {
                   justifyContent: 'space-between',
                   padding: '8px 12px',
                   borderRadius: 'var(--radius-md)',
-                  backgroundColor: '#FEF9C3',
-                  border: '1px solid #FDE047'
+                  backgroundColor: 'rgba(245, 184, 0, 0.15)',
+                  border: '1px solid rgba(245, 184, 0, 0.35)'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                  <Paperclip size={16} color="#854D0E" />
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#854D0E', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                  <Paperclip size={16} color="#F5B800" />
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                     {qaAttachmentFile.name}
                   </span>
-                  <span style={{ fontSize: '11px', color: '#A16207' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                     ({(qaAttachmentFile.size / 1024).toFixed(1)} KB)
                   </span>
                 </div>
@@ -2835,7 +2848,7 @@ export const ProjectManagementPage: React.FC = () => {
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
-                    color: '#854D0E',
+                    color: 'var(--text-muted)',
                     padding: '2px',
                     display: 'flex',
                     alignItems: 'center'
@@ -2882,6 +2895,8 @@ export const ProjectManagementPage: React.FC = () => {
                 fontSize: '13px',
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
                 boxSizing: 'border-box'
               }}
             />
@@ -2901,6 +2916,8 @@ export const ProjectManagementPage: React.FC = () => {
                 fontSize: '13px',
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
                 boxSizing: 'border-box'
               }}
             />
@@ -2939,6 +2956,8 @@ export const ProjectManagementPage: React.FC = () => {
                 fontSize: '13px',
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
                 boxSizing: 'border-box'
               }}
             />
@@ -2958,6 +2977,8 @@ export const ProjectManagementPage: React.FC = () => {
                 fontSize: '13px',
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
                 boxSizing: 'border-box'
               }}
             />
@@ -2990,7 +3011,7 @@ export const ProjectManagementPage: React.FC = () => {
               <div
                 style={{
                   padding: '10px 14px',
-                  backgroundColor: '#F8FAFC',
+                  backgroundColor: 'var(--bg-secondary)',
                   borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--border-color)',
                   display: 'flex',
@@ -2999,7 +3020,7 @@ export const ProjectManagementPage: React.FC = () => {
                   fontSize: '13px'
                 }}
               >
-                <Briefcase size={16} color="#B48200" />
+                <Briefcase size={16} color="var(--color-primary, #F5B800)" />
                 <span style={{ color: 'var(--text-muted)' }}>Dự án mục tiêu:</span>
                 <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                   {targetProj?.ProjectName || 'Dự án đã chọn'}
@@ -3019,9 +3040,9 @@ export const ProjectManagementPage: React.FC = () => {
                 borderRadius: 'var(--radius-md)',
                 fontSize: '12px',
                 fontWeight: 600,
-                border: !addMemberCustomMode ? '2px solid #F5B800' : '1px solid var(--border-color)',
-                backgroundColor: !addMemberCustomMode ? '#FFFBEB' : '#FFFFFF',
-                color: !addMemberCustomMode ? '#92400E' : 'var(--text-secondary)',
+                border: !addMemberCustomMode ? '2px solid var(--color-primary, #F5B800)' : '1px solid var(--border-color)',
+                backgroundColor: !addMemberCustomMode ? 'rgba(245, 184, 0, 0.15)' : 'var(--bg-card)',
+                color: !addMemberCustomMode ? 'var(--color-primary, #F5B800)' : 'var(--text-secondary)',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -3042,9 +3063,9 @@ export const ProjectManagementPage: React.FC = () => {
                 borderRadius: 'var(--radius-md)',
                 fontSize: '12px',
                 fontWeight: 600,
-                border: addMemberCustomMode ? '2px solid #F5B800' : '1px solid var(--border-color)',
-                backgroundColor: addMemberCustomMode ? '#FFFBEB' : '#FFFFFF',
-                color: addMemberCustomMode ? '#92400E' : 'var(--text-secondary)',
+                border: addMemberCustomMode ? '2px solid var(--color-primary, #F5B800)' : '1px solid var(--border-color)',
+                backgroundColor: addMemberCustomMode ? 'rgba(245, 184, 0, 0.15)' : 'var(--bg-card)',
+                color: addMemberCustomMode ? 'var(--color-primary, #F5B800)' : 'var(--text-secondary)',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -3079,6 +3100,8 @@ export const ProjectManagementPage: React.FC = () => {
                     fontSize: '13px',
                     borderRadius: 'var(--radius-md)',
                     border: '1px solid var(--border-color)',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
                     outline: 'none',
                     boxSizing: 'border-box'
                   }}
@@ -3095,7 +3118,7 @@ export const ProjectManagementPage: React.FC = () => {
                       background: 'none',
                       border: 'none',
                       cursor: 'pointer',
-                      color: '#9CA3AF',
+                      color: 'var(--text-muted)',
                       padding: 0
                     }}
                   >
@@ -3122,8 +3145,8 @@ export const ProjectManagementPage: React.FC = () => {
                       fontWeight: addMemberRoleFilter === tab.key ? 700 : 500,
                       border: '1px solid',
                       borderColor: addMemberRoleFilter === tab.key ? '#F5B800' : 'var(--border-color)',
-                      backgroundColor: addMemberRoleFilter === tab.key ? '#FEF3C7' : '#FFFFFF',
-                      color: addMemberRoleFilter === tab.key ? '#92400E' : 'var(--text-muted)',
+                      backgroundColor: addMemberRoleFilter === tab.key ? 'rgba(245, 184, 0, 0.18)' : 'var(--bg-card)',
+                      color: addMemberRoleFilter === tab.key ? 'var(--color-primary, #F5B800)' : 'var(--text-muted)',
                       cursor: 'pointer'
                     }}
                   >
@@ -3139,7 +3162,7 @@ export const ProjectManagementPage: React.FC = () => {
                   overflowY: 'auto',
                   border: '1px solid var(--border-color)',
                   borderRadius: 'var(--radius-md)',
-                  backgroundColor: '#FFFFFF',
+                  backgroundColor: 'var(--bg-primary)',
                   padding: '4px'
                 }}
               >
@@ -3192,12 +3215,12 @@ export const ProjectManagementPage: React.FC = () => {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          backgroundColor: isSelected ? '#FFFBEB' : 'transparent',
-                          border: isSelected ? '1px solid #FCD34D' : '1px solid transparent',
+                          backgroundColor: isSelected ? 'rgba(245, 184, 0, 0.15)' : 'transparent',
+                          border: isSelected ? '1px solid rgba(245, 184, 0, 0.4)' : '1px solid transparent',
                           transition: 'background-color 0.15s'
                         }}
                         onMouseEnter={e => {
-                          if (!isSelected) e.currentTarget.style.backgroundColor = '#F9FAFB';
+                          if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
                         }}
                         onMouseLeave={e => {
                           if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
@@ -3210,19 +3233,19 @@ export const ProjectManagementPage: React.FC = () => {
                               height: '28px',
                               borderRadius: '50%',
                               backgroundColor: isSelected
-                                ? '#F5B800'
+                                ? 'var(--color-primary, #F5B800)'
                                 : isApp
-                                ? '#EEF2FF'
+                                ? 'rgba(99, 102, 241, 0.18)'
                                 : isAdmin
-                                ? '#FEF3C7'
-                                : '#F3F4F6',
+                                ? 'rgba(245, 158, 11, 0.18)'
+                                : 'var(--bg-secondary)',
                               color: isSelected
                                 ? '#111827'
                                 : isApp
-                                ? '#3730A3'
+                                ? '#818CF8'
                                 : isAdmin
-                                ? '#92400E'
-                                : '#4B5563',
+                                ? '#F59E0B'
+                                : 'var(--text-secondary)',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
@@ -3243,19 +3266,19 @@ export const ProjectManagementPage: React.FC = () => {
                                   padding: '1px 6px',
                                   borderRadius: '4px',
                                   fontWeight: 600,
-                                  backgroundColor: isApp ? '#EEF2FF' : isAdmin ? '#FEF3C7' : '#F3F4F6',
-                                  color: isApp ? '#3730A3' : isAdmin ? '#92400E' : '#6B7280'
+                                  backgroundColor: isApp ? 'rgba(99, 102, 241, 0.18)' : isAdmin ? 'rgba(245, 158, 11, 0.18)' : 'var(--bg-secondary)',
+                                  color: isApp ? '#818CF8' : isAdmin ? '#F59E0B' : 'var(--text-muted)'
                                 }}
                               >
                                 {m.role_name || 'Thành viên'}
                               </span>
                             </div>
-                            <div style={{ fontSize: '11px', color: '#6B7280', fontFamily: 'monospace' }}>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
                               @{m.username}
                             </div>
                           </div>
                         </div>
-                        {isSelected && <Check size={16} color="#D97706" />}
+                        {isSelected && <Check size={16} color="#F5B800" />}
                       </div>
                     );
                   });
@@ -3268,17 +3291,17 @@ export const ProjectManagementPage: React.FC = () => {
                   style={{
                     marginTop: '8px',
                     padding: '6px 10px',
-                    backgroundColor: '#ECFDF5',
-                    border: '1px solid #A7F3D0',
+                    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                    border: '1px solid rgba(34, 197, 94, 0.35)',
                     borderRadius: 'var(--radius-sm)',
                     fontSize: '12px',
-                    color: '#065F46',
+                    color: '#22C55E',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px'
                   }}
                 >
-                  <Check size={14} color="#059669" />
+                  <Check size={14} color="#22C55E" />
                   <span>Đã chọn: <strong>{addMemberSelectedName}</strong></span>
                 </div>
               )}
@@ -3301,6 +3324,8 @@ export const ProjectManagementPage: React.FC = () => {
                   fontSize: '13px',
                   borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
                   boxSizing: 'border-box'
                 }}
               />
@@ -3353,6 +3378,8 @@ export const ProjectManagementPage: React.FC = () => {
                 fontSize: '13px',
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
                 boxSizing: 'border-box'
               }}
             />
@@ -3380,8 +3407,8 @@ export const ProjectManagementPage: React.FC = () => {
           <div
             style={{
               padding: '12px 14px',
-              backgroundColor: '#FFFBEB',
-              border: '1px solid #FDE68A',
+              backgroundColor: 'rgba(245, 184, 0, 0.12)',
+              border: '1px solid rgba(245, 184, 0, 0.35)',
               borderRadius: 'var(--radius-md)',
               display: 'flex',
               alignItems: 'center',
@@ -3390,12 +3417,12 @@ export const ProjectManagementPage: React.FC = () => {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <FileSpreadsheet size={20} color="#B45309" />
+              <FileSpreadsheet size={20} color="#F5B800" />
               <div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: '#92400E' }}>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-primary, #F5B800)' }}>
                   Chưa có file mẫu Excel chuẩn?
                 </div>
-                <div style={{ fontSize: '12px', color: '#B45309' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                   Tải mẫu Excel chuẩn hệ thống để điền thông tin dự án đúng cấu trúc
                 </div>
               </div>
@@ -3410,8 +3437,8 @@ export const ProjectManagementPage: React.FC = () => {
                 padding: '6px 12px',
                 fontSize: '12px',
                 fontWeight: 600,
-                color: '#FFFFFF',
-                backgroundColor: '#D97706',
+                color: '#111827',
+                backgroundColor: 'var(--color-primary, #F5B800)',
                 border: 'none',
                 borderRadius: 'var(--radius-md)',
                 cursor: 'pointer',
@@ -3434,11 +3461,11 @@ export const ProjectManagementPage: React.FC = () => {
                 borderRadius: 'var(--radius-md)',
                 padding: '24px',
                 textAlign: 'center',
-                backgroundColor: '#F9FAFB'
+                backgroundColor: 'var(--bg-secondary)'
               }}
             >
               <Upload size={32} color="#9CA3AF" style={{ marginBottom: '8px' }} />
-              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '8px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '8px', color: 'var(--text-primary)' }}>
                 Chọn file Excel định dạng .xlsx hoặc .xls
               </div>
               <input
@@ -3529,6 +3556,8 @@ export const ProjectManagementPage: React.FC = () => {
                 fontSize: '13px',
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
                 outline: 'none',
                 boxSizing: 'border-box'
               }}
@@ -3544,7 +3573,7 @@ export const ProjectManagementPage: React.FC = () => {
                   background: 'transparent',
                   border: 'none',
                   cursor: 'pointer',
-                  color: '#9CA3AF'
+                  color: 'var(--text-muted)'
                 }}
               >
                 <X size={14} />
@@ -3593,7 +3622,8 @@ export const ProjectManagementPage: React.FC = () => {
                         padding: '4px 10px',
                         borderRadius: 'var(--radius-sm)',
                         border: '1px solid var(--border-color)',
-                        backgroundColor: '#FFFFFF',
+                        backgroundColor: 'var(--bg-card)',
+                        color: 'var(--text-primary)',
                         fontSize: '12px',
                         fontWeight: 500,
                         cursor: 'pointer'
@@ -3621,7 +3651,7 @@ export const ProjectManagementPage: React.FC = () => {
                     )}
                   </div>
                   <span style={{ color: 'var(--text-muted)' }}>
-                    Đã chọn: <strong style={{ color: '#D97706' }}>{exportSelectedProjectIds.length}</strong> / {projects.length} dự án
+                    Đã chọn: <strong style={{ color: 'var(--color-primary, #F5B800)' }}>{exportSelectedProjectIds.length}</strong> / {projects.length} dự án
                   </span>
                 </div>
 
@@ -3632,7 +3662,7 @@ export const ProjectManagementPage: React.FC = () => {
                     overflowY: 'auto',
                     border: '1px solid var(--border-color)',
                     borderRadius: 'var(--radius-md)',
-                    backgroundColor: '#FAFAFA'
+                    backgroundColor: 'var(--bg-primary)'
                   }}
                 >
                   {filtered.length === 0 ? (
@@ -3651,7 +3681,7 @@ export const ProjectManagementPage: React.FC = () => {
                             gap: '10px',
                             padding: '10px 14px',
                             borderBottom: '1px solid var(--border-color)',
-                            backgroundColor: isChecked ? '#FEFCE8' : '#FFFFFF',
+                            backgroundColor: isChecked ? 'rgba(245, 184, 0, 0.15)' : 'var(--bg-card)',
                             cursor: 'pointer',
                             userSelect: 'none',
                             transition: 'background-color 0.15s ease'
@@ -3661,7 +3691,7 @@ export const ProjectManagementPage: React.FC = () => {
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => toggleProjectSelect(p.ProjectID)}
-                            style={{ accentColor: '#D97706', width: '16px', height: '16px', cursor: 'pointer' }}
+                            style={{ accentColor: 'var(--color-primary, #F5B800)', width: '16px', height: '16px', cursor: 'pointer' }}
                           />
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -3673,7 +3703,7 @@ export const ProjectManagementPage: React.FC = () => {
                                   style={{
                                     fontSize: '11px',
                                     color: 'var(--text-muted)',
-                                    backgroundColor: '#F3F4F6',
+                                    backgroundColor: 'var(--bg-secondary)',
                                     padding: '1px 6px',
                                     borderRadius: '4px'
                                   }}
@@ -3746,7 +3776,7 @@ export const ProjectManagementPage: React.FC = () => {
         <div
           style={{
             padding: '12px 14px',
-            backgroundColor: '#F9FAFB',
+            backgroundColor: 'var(--bg-secondary)',
             borderRadius: 'var(--radius-md)',
             border: '1px solid var(--border-color)',
             marginBottom: '16px',
@@ -3757,7 +3787,7 @@ export const ProjectManagementPage: React.FC = () => {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Filter size={15} color="#D97706" /> Bộ lọc nhật ký (Tối đa 200 dòng gần nhất)
+              <Filter size={15} color="var(--color-primary, #F5B800)" /> Bộ lọc nhật ký (Tối đa 200 dòng gần nhất)
             </span>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
               Đang hiển thị {activityLogs.length} dòng
@@ -3806,7 +3836,8 @@ export const ProjectManagementPage: React.FC = () => {
                     fontSize: '12px',
                     borderRadius: 'var(--radius-sm)',
                     border: '1px solid var(--border-color)',
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
                     boxSizing: 'border-box'
                   }}
                 />
@@ -3826,7 +3857,7 @@ export const ProjectManagementPage: React.FC = () => {
                       background: 'transparent',
                       border: 'none',
                       cursor: 'pointer',
-                      color: '#9CA3AF',
+                      color: 'var(--text-muted)',
                       padding: 0
                     }}
                   >
@@ -3844,7 +3875,7 @@ export const ProjectManagementPage: React.FC = () => {
                       background: 'transparent',
                       border: 'none',
                       cursor: 'pointer',
-                      color: '#9CA3AF',
+                      color: 'var(--text-muted)',
                       padding: 0
                     }}
                   >
@@ -3875,10 +3906,10 @@ export const ProjectManagementPage: React.FC = () => {
                       right: 0,
                       zIndex: 999,
                       marginTop: '3px',
-                      backgroundColor: '#FFFFFF',
+                      backgroundColor: 'var(--bg-card)',
                       border: '1px solid var(--border-color)',
                       borderRadius: 'var(--radius-md)',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
                       maxHeight: '220px',
                       overflowY: 'auto'
                     }}
@@ -3895,9 +3926,9 @@ export const ProjectManagementPage: React.FC = () => {
                         fontWeight: 600,
                         color: 'var(--text-muted)',
                         cursor: 'pointer',
-                        borderBottom: '1px solid #F3F4F6'
+                        borderBottom: '1px solid var(--border-color)'
                       }}
-                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#F9FAFB')}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover)')}
                       onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                     >
                       -- Tất cả dự án --
@@ -3936,14 +3967,14 @@ export const ProjectManagementPage: React.FC = () => {
                               padding: '8px 10px',
                               fontSize: '12px',
                               cursor: 'pointer',
-                              borderBottom: '1px solid #F3F4F6',
-                              backgroundColor: isSelected ? '#FEFCE8' : 'transparent',
+                              borderBottom: '1px solid var(--border-color)',
+                              backgroundColor: isSelected ? 'rgba(245, 184, 0, 0.15)' : 'transparent',
                               display: 'flex',
                               flexDirection: 'column',
                               gap: '2px'
                             }}
                             onMouseEnter={e => {
-                              if (!isSelected) e.currentTarget.style.backgroundColor = '#F9FAFB';
+                              if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
                             }}
                             onMouseLeave={e => {
                               if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
@@ -3991,7 +4022,8 @@ export const ProjectManagementPage: React.FC = () => {
                     fontSize: '12px',
                     borderRadius: 'var(--radius-sm)',
                     border: '1px solid var(--border-color)',
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
                     boxSizing: 'border-box'
                   }}
                 />
@@ -4010,7 +4042,7 @@ export const ProjectManagementPage: React.FC = () => {
                       background: 'transparent',
                       border: 'none',
                       cursor: 'pointer',
-                      color: '#9CA3AF',
+                      color: 'var(--text-muted)',
                       padding: 0
                     }}
                   >
@@ -4028,7 +4060,7 @@ export const ProjectManagementPage: React.FC = () => {
                       background: 'transparent',
                       border: 'none',
                       cursor: 'pointer',
-                      color: '#9CA3AF',
+                      color: 'var(--text-muted)',
                       padding: 0
                     }}
                   >
@@ -4059,10 +4091,10 @@ export const ProjectManagementPage: React.FC = () => {
                       right: 0,
                       zIndex: 999,
                       marginTop: '3px',
-                      backgroundColor: '#FFFFFF',
+                      backgroundColor: 'var(--bg-card)',
                       border: '1px solid var(--border-color)',
                       borderRadius: 'var(--radius-md)',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
                       maxHeight: '210px',
                       overflowY: 'auto'
                     }}
@@ -4072,9 +4104,9 @@ export const ProjectManagementPage: React.FC = () => {
                         padding: '6px 10px',
                         fontSize: '11px',
                         fontWeight: 600,
-                        color: '#92400E',
-                        backgroundColor: '#FFFBEB',
-                        borderBottom: '1px solid #FEF3C7'
+                        color: 'var(--color-primary, #F5B800)',
+                        backgroundColor: 'rgba(245, 184, 0, 0.15)',
+                        borderBottom: '1px solid rgba(245, 184, 0, 0.25)'
                       }}
                     >
                       Danh sách nhân sự (Team App & Ban Quản trị):
@@ -4090,9 +4122,9 @@ export const ProjectManagementPage: React.FC = () => {
                         fontSize: '12px',
                         color: 'var(--text-muted)',
                         cursor: 'pointer',
-                        borderBottom: '1px solid #F3F4F6'
+                        borderBottom: '1px solid var(--border-color)'
                       }}
-                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#F9FAFB')}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover)')}
                       onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                     >
                       -- Tất cả người thực hiện --
@@ -4122,11 +4154,11 @@ export const ProjectManagementPage: React.FC = () => {
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
-                            borderBottom: '1px solid #F3F4F6',
-                            backgroundColor: logsFilterActor === m.username ? '#FEFCE8' : 'transparent'
+                            borderBottom: '1px solid var(--border-color)',
+                            backgroundColor: logsFilterActor === m.username ? 'rgba(245, 184, 0, 0.15)' : 'transparent'
                           }}
                           onMouseEnter={e => {
-                            if (logsFilterActor !== m.username) e.currentTarget.style.backgroundColor = '#F9FAFB';
+                            if (logsFilterActor !== m.username) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
                           }}
                           onMouseLeave={e => {
                             if (logsFilterActor !== m.username) e.currentTarget.style.backgroundColor = 'transparent';
@@ -4142,8 +4174,8 @@ export const ProjectManagementPage: React.FC = () => {
                                   fontSize: '10px',
                                   padding: '1px 5px',
                                   borderRadius: '4px',
-                                  backgroundColor: m.role_name === 'Ban Quản trị' ? '#FEF3C7' : '#EEF2FF',
-                                  color: m.role_name === 'Ban Quản trị' ? '#92400E' : '#3730A3',
+                                  backgroundColor: m.role_name === 'Ban Quản trị' ? 'rgba(245, 158, 11, 0.18)' : 'rgba(99, 102, 241, 0.18)',
+                                  color: m.role_name === 'Ban Quản trị' ? '#F59E0B' : '#818CF8',
                                   fontWeight: 600
                                 }}
                               >
@@ -4177,12 +4209,12 @@ export const ProjectManagementPage: React.FC = () => {
                           display: 'flex',
                           justifyContent: 'space-between',
                           alignItems: 'center',
-                          borderBottom: '1px solid #F3F4F6'
+                          borderBottom: '1px solid var(--border-color)'
                         }}
-                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#F9FAFB')}
+                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover)')}
                         onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                       >
-                        <span style={{ fontWeight: 600, color: '#B45309' }}>Quản trị hệ thống</span>
+                        <span style={{ fontWeight: 600, color: 'var(--color-primary, #F5B800)' }}>Quản trị hệ thống</span>
                         <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>@{u}</span>
                       </div>
                     ))}
@@ -4206,7 +4238,8 @@ export const ProjectManagementPage: React.FC = () => {
                   fontSize: '12px',
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border-color)',
-                  backgroundColor: '#FFFFFF',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
                   boxSizing: 'border-box'
                 }}
               />
@@ -4227,7 +4260,8 @@ export const ProjectManagementPage: React.FC = () => {
                   fontSize: '12px',
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border-color)',
-                  backgroundColor: '#FFFFFF',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
                   boxSizing: 'border-box'
                 }}
               />
@@ -4243,7 +4277,7 @@ export const ProjectManagementPage: React.FC = () => {
                 fontSize: '12px',
                 borderRadius: 'var(--radius-sm)',
                 border: '1px solid var(--border-color)',
-                backgroundColor: '#FFFFFF',
+                backgroundColor: 'var(--bg-card)',
                 cursor: 'pointer',
                 color: 'var(--text-secondary)'
               }}
@@ -4260,8 +4294,8 @@ export const ProjectManagementPage: React.FC = () => {
                 fontWeight: 600,
                 borderRadius: 'var(--radius-sm)',
                 border: 'none',
-                backgroundColor: '#D97706',
-                color: '#FFFFFF',
+                backgroundColor: 'var(--color-primary, #F5B800)',
+                color: '#111827',
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -4294,7 +4328,7 @@ export const ProjectManagementPage: React.FC = () => {
                     padding: '10px 14px',
                     borderRadius: 'var(--radius-md)',
                     border: '1px solid var(--border-color)',
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: 'var(--bg-card)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '4px'
@@ -4311,8 +4345,8 @@ export const ProjectManagementPage: React.FC = () => {
                           fontWeight: 600,
                           padding: '2px 8px',
                           borderRadius: '12px',
-                          backgroundColor: '#FEF3C7',
-                          color: '#B45309'
+                          backgroundColor: 'rgba(245, 184, 0, 0.18)',
+                          color: '#F5B800'
                         }}
                       >
                         {log.ActionType}
@@ -4324,8 +4358,8 @@ export const ProjectManagementPage: React.FC = () => {
                             fontWeight: 500,
                             padding: '2px 8px',
                             borderRadius: '12px',
-                            backgroundColor: '#EFF6FF',
-                            color: '#1D4ED8'
+                            backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                            color: '#60A5FA'
                           }}
                         >
                           📁 {log.ProjectName}
@@ -4374,6 +4408,8 @@ export const ProjectManagementPage: React.FC = () => {
                   fontSize: '13px',
                   borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
                   outline: 'none',
                   boxSizing: 'border-box',
                   resize: 'vertical'
@@ -4392,9 +4428,9 @@ export const ProjectManagementPage: React.FC = () => {
                   style={{
                     padding: '8px 12px',
                     borderRadius: 'var(--radius-md)',
-                    border: '1px solid #D1D5DB',
-                    backgroundColor: '#F3F4F6',
-                    color: '#4B5563',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: 'var(--bg-secondary)',
+                    color: 'var(--text-secondary)',
                     fontSize: '12px',
                     fontWeight: 600,
                     cursor: 'pointer'

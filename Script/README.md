@@ -130,6 +130,30 @@ npm run dev
 
 ---
 
+### [2026-10-21] - Cải Tiến Toàn Diện & Chuẩn Hóa Giao Diện Dark Mode Cho Phân Hệ Quản Lý Dự Án (Project Management)
+- **Màn hình**: Quản Lý Dự Án (`ProjectManagementPage.tsx`, `ProjectDescriptionModal.tsx`).
+- **Hiện tượng & Phản ánh của người dùng**:
+  - Giao diện Dark Mode của Quản Lý Dự Án rất khó nhìn do còn tồn đọng hàng loạt khối màu trắng chói sáng bị hardcode cứng (Header card dự án nền trắng tinh, khối mở rộng thành viên có dải nền trắng toát lóa mắt `#F9FAFB`, ô mô tả dự án và file đính kèm nền trắng, các dòng thành viên và task lồng nhau khó đọc, các modal con QuickAssign, AddMember, Export, Activity Logs bị chói lóa tương tự).
+- **Nguyên nhân & Giải pháp xử lý triệt để**:
+  1. **Thay thế triệt để các mã màu cứng sáng bằng CSS Variables**:
+     - Thay toàn bộ các mã màu `#FFFFFF`, `#F9FAFB`, `#F8FAFC`, `#F3F4F6`, `#EFF6FF`, `#F0FDF4` bằng hệ thống biến màu giao diện chuẩn Golden Gate: `var(--bg-card)`, `var(--bg-secondary)`, `var(--bg-primary)`, `var(--bg-hover)`, `var(--border-color)`, `var(--text-primary)`, `var(--text-secondary)`, `var(--text-muted)`.
+     - Ứng dụng các mã màu trong suốt `rgba(255, 255, 255, ...)` và `rgba(59, 130, 246, ...)` để viền, thẻ và hiệu ứng tương tác thích ứng hoàn hảo trên cả 2 chế độ Sáng và Tối.
+  2. **Tối ưu chi tiết từng thành phần trên Màn hình Quản Lý Dự Án (`ProjectManagementPage.tsx`)**:
+     - *Thanh Tab Bộ Lọc Trạng Thái*: Nền `var(--bg-card)`, màu đếm badge `var(--color-primary-text)` trên nền `var(--color-primary-subtle)`.
+     - *Card Dự Án & Header Progress*: Header dự án chuyển sang `var(--bg-card)`, thanh tiến độ `var(--bg-primary)`, các nút "Tải Excel", "Mô Tả & File", "Xong tất cả việc", "+ Thành viên" dùng màu nền và viền tối ưu.
+     - *Accordion Container Thành Viên & Task*: Nền container mở rộng `var(--bg-secondary)`. Khung Mô Tả Dự Án chuyển sang nền `var(--bg-card)` với viền mềm `rgba(59, 130, 246, 0.35)`, ô nội dung mô tả nền `var(--bg-primary)` chữ `var(--text-primary)`, pill file đính kèm màu xám tối dịu mắt.
+     - *Thẻ Thành Viên & Danh Sách Task*: Card thành viên nền `var(--bg-card)`, viền `var(--border-color)`, hover `var(--bg-hover)`. Dòng task nền xen kẽ `var(--bg-card)` / `rgba(255,255,255,0.02)`, các nút Duyệt OK / Yêu cầu sửa / Đổi người dùng theme button mờ nhẹ sắc nét.
+     - *Đồng bộ toàn bộ các Modal tác vụ*: Modal Giao Việc Nhanh (Quick Assign), Modal Thêm/Sửa Dự Án, Modal Thêm Thành Viên (danh sách nhân sự Team App, avatar, badge), Modal Import Excel & Xuất Báo Cáo, Modal Nhật Ký Thao Tác (Activity Logs), Modal Đánh Giá Thất Bại đều chuyển 100% sang Dark Mode tương phản cao, êm mắt.
+  3. **Tối ưu Modal Chỉnh Sửa Mô Tả Dự Án (`ProjectDescriptionModal.tsx`)**:
+     - Header tóm tắt dự án chuyển sang `var(--bg-secondary)`.
+     - Vùng dán ảnh `Ctrl + V`: Chuyển từ nền trắng chói `#EFF6FF` sang nền trong suốt `rgba(59, 130, 246, 0.08)` với viền nét đứt `rgba(59, 130, 246, 0.45)`, chữ hướng dẫn `var(--color-primary, #60A5FA)`.
+     - Danh sách file đính kèm: Nền `var(--bg-primary)` viền `rgba(59, 130, 246, 0.25)`.
+- **Kiểm thử & Đóng gói Server**:
+  - Frontend Build: `cmd /c "npm run build"` tại `frontend/` $\rightarrow$ Exit code 0 (`✓ built in 4.69s`), bản build sạch sẽ nằm trong `frontend/dist/`.
+  - Backend Compile: `python -m compileall app` $\rightarrow$ Exit code 0, không có lỗi cú pháp.
+
+---
+
 ### [2026-10-20] - Mở Phân Quyền Nhóm Administrator Cho Super Admin, Áp Dụng Input Search Danh Sách > 10 Dòng & Nâng Cấp Direct LAN Fallback Cho Máy Không Có SQL
 - **Yêu cầu người dùng**:
   1. Dùng quyền Super Admin mà đang không phân quyền được nhóm Administrator (các checkbox bị khóa và nút lưu bị vô hiệu hóa).

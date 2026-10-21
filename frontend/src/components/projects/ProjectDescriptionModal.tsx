@@ -253,9 +253,9 @@ export const ProjectDescriptionModal: React.FC<ProjectDescriptionModalProps> = (
           <div
             style={{
               padding: '12px 16px',
-              backgroundColor: '#F8FAFC',
+              backgroundColor: 'var(--bg-secondary)',
               borderRadius: '8px',
-              border: '1px solid #E2E8F0',
+              border: '1px solid var(--border-color)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -264,16 +264,16 @@ export const ProjectDescriptionModal: React.FC<ProjectDescriptionModalProps> = (
             }}
           >
             <div>
-              <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
                 Dự Án Đang Thao Tác
               </div>
-              <div style={{ fontSize: '15px', fontWeight: 800, color: '#1E293B', marginTop: '2px' }}>
+              <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '2px' }}>
                 {project.ProjectName}
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               {project.Deadline && (
-                <span style={{ fontSize: '12px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Calendar size={13} /> Hạn: {project.Deadline}
                 </span>
               )}
@@ -283,8 +283,8 @@ export const ProjectDescriptionModal: React.FC<ProjectDescriptionModalProps> = (
                   fontWeight: 700,
                   padding: '3px 8px',
                   borderRadius: '12px',
-                  backgroundColor: project.Status === 'completed' ? '#DCFCE7' : '#FEF3C7',
-                  color: project.Status === 'completed' ? '#15803D' : '#B45309'
+                  backgroundColor: project.Status === 'completed' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(245, 184, 0, 0.18)',
+                  color: project.Status === 'completed' ? '#22C55E' : '#F5B800'
                 }}
               >
                 {project.Status === 'completed' ? 'Đã hoàn thành' : 'Đang thực hiện'}
@@ -295,7 +295,7 @@ export const ProjectDescriptionModal: React.FC<ProjectDescriptionModalProps> = (
           {/* 1. NỘI DUNG CHI TIẾT DIỄN GIẢI SỰ VỤ * */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <FileText size={15} color="#2563EB" />
+              <FileText size={15} color="var(--color-primary, #60A5FA)" />
               <span>Nội Dung Chi Tiết diễn giải Sự Vụ <span style={{ color: '#EF4444' }}>*</span></span>
             </label>
             <textarea
@@ -320,14 +320,14 @@ export const ProjectDescriptionModal: React.FC<ProjectDescriptionModalProps> = (
           {/* 2. DÁN HÌNH ẢNH TRỰC TIẾP (Ctrl + V) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <ClipboardPaste size={15} color="#2563EB" />
+              <ClipboardPaste size={15} color="var(--color-primary, #60A5FA)" />
               <span>Dán Hình Ảnh Trực Tiếp (Ctrl + V)</span>
             </label>
             <div
               tabIndex={0}
               style={{
-                border: '2px dashed #93C5FD',
-                backgroundColor: '#EFF6FF',
+                border: '2px dashed rgba(59, 130, 246, 0.45)',
+                backgroundColor: 'rgba(59, 130, 246, 0.08)',
                 borderRadius: 'var(--radius-md)',
                 padding: '14px',
                 textAlign: 'center',
@@ -336,11 +336,11 @@ export const ProjectDescriptionModal: React.FC<ProjectDescriptionModalProps> = (
                 transition: 'border-color 0.2s'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', color: '#1D4ED8', fontSize: '13px', fontWeight: 600 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', color: 'var(--color-primary, #60A5FA)', fontSize: '13px', fontWeight: 600 }}>
                 <ImageIcon size={18} />
                 <span>Chụp ảnh màn hình và bấm <strong>Ctrl + V</strong> vào đây để dán ảnh</span>
               </div>
-              <div style={{ fontSize: '11px', color: '#3B82F6', marginTop: '4px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
                 Hỗ trợ chụp từ Snipping Tool, PrintScreen, Zalo, Teams, Web...
               </div>
             </div>
@@ -525,8 +525,8 @@ export const ProjectDescriptionModal: React.FC<ProjectDescriptionModalProps> = (
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '7px 12px',
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
+                      backgroundColor: 'var(--bg-primary)',
+                      border: '1px solid var(--border-color)',
                       borderRadius: '6px',
                       fontSize: '12.5px'
                     }}
@@ -537,7 +537,7 @@ export const ProjectDescriptionModal: React.FC<ProjectDescriptionModalProps> = (
                         href={url}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ color: '#2563EB', fontWeight: 600, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        style={{ color: 'var(--color-primary, #60A5FA)', fontWeight: 600, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                       >
                         {getFileName(url)}
                       </a>
@@ -546,7 +546,7 @@ export const ProjectDescriptionModal: React.FC<ProjectDescriptionModalProps> = (
                       <a
                         href={url}
                         download
-                        style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none', fontSize: '11.5px' }}
+                        style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none', fontSize: '11.5px' }}
                       >
                         <Download size={13} /> Tải
                       </a>
@@ -571,18 +571,18 @@ export const ProjectDescriptionModal: React.FC<ProjectDescriptionModalProps> = (
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '7px 12px',
-                      backgroundColor: '#EFF6FF',
-                      border: '1px solid #BFDBFE',
+                      backgroundColor: 'rgba(59, 130, 246, 0.12)',
+                      border: '1px solid rgba(59, 130, 246, 0.35)',
                       borderRadius: '6px',
                       fontSize: '12.5px'
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
                       {getFileIcon(f.name)}
-                      <span style={{ fontWeight: 600, color: '#1E40AF', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {f.name}
                       </span>
-                      <span style={{ fontSize: '11px', color: '#64748B' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                         ({(f.size / 1024).toFixed(1)} KB)
                       </span>
                     </div>
