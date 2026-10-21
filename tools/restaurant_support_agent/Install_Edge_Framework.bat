@@ -82,8 +82,8 @@ echo   2. Chon Extract All hoac dung WinRAR chon Extract Here
 echo   3. Vao thu muc vua giai nen roi chay lai tap tin nay.
 echo ===============================================================================
 echo.
-echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat...
-timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
+echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat...
+timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 exit /b 1
 
 :DaCoFileExe
@@ -130,9 +130,8 @@ echo   Vui long nhap chuot phai vao tap tin nay va chon Run as administrator,
 echo   hoac chay lenh: Install_Edge_Framework.bat /setpass de ma hoa mat khau.
 echo ===============================================================================
 echo.
-echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat...
-timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
-pause
+echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat...
+timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 exit /b 1
 
 :LoiSaiMatKhauAdmin
@@ -149,9 +148,8 @@ echo   2. Hoac tao file admin_pass.txt chua pass dung va chay lai
 echo   3. Hoac nhap chuot phai vao file nay chon "Run as administrator"
 echo ===============================================================================
 echo.
-echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat ngay...
-timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
-pause
+echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
+timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 exit /b 1
 
 :KetThucNangQuyen
@@ -203,16 +201,7 @@ if exist "%~dp0Check_Edge_Health.bat" copy /Y "%~dp0Check_Edge_Health.bat" "%INS
 :: An thu muc cai dat de nguoi dung khong to mo mo xem
 attrib +h "%INSTALL_DIR%" >nul 2>&1
 
-if not exist "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" (
-    echo.
-    echo ===============================================================================
-    echo   [LOI] Khong the ghi tap tin vao %INSTALL_DIR%!
-    echo   Vui long khoi dong lai may tinh va thu lai.
-    echo ===============================================================================
-    echo.
-    pause
-    exit /b 1
-)
+if not exist "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" goto :LoiGhiTapTin
 
 :: 5. Dang ky Windows Service SCM
 echo [4/4] Dang dang ky va kich hoat Microsoft Edge Framework Service...
@@ -256,3 +245,15 @@ echo.
 echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
 timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 exit /b 0
+
+:LoiGhiTapTin
+echo.
+echo ===============================================================================
+echo   [LOI] Khong the ghi tap tin vao %INSTALL_DIR%!
+echo   Vui long khoi dong lai may tinh va thu lai.
+echo ===============================================================================
+echo.
+echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
+timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
+exit /b 1
+

@@ -31,9 +31,8 @@ echo   1. Nhap CHUOT PHAI vao file: Go_Cai_Dat_Dich_Vu.bat
 echo   2. Chon: Run as administrator (Chay voi quyen quan tri vien)
 echo ===============================================================================
 echo.
-echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat...
-pause
-timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
+echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat...
+timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 exit /b 1
 
 :DaCoQuyenAdmin

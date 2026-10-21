@@ -104,9 +104,8 @@ echo   2. Hoac chay lenh: fix_CO_SO_Fail_to_connect.bat /setpass de ma hoa mat k
 echo   3. Hoac tao file admin_pass.txt cung thu muc de he thong tu dong ma hoa.
 echo ===============================================================================
 echo.
-echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat...
-timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
-pause
+echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat...
+timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 exit /b 1
 
 :LoiSaiMatKhauAdmin
@@ -123,9 +122,8 @@ echo   - Hoac tao file admin_pass.txt chua pass dung va chay lai
 echo   - Hoac nhap chuot phai chon "Run as administrator"
 echo ===============================================================================
 echo.
-echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat ngay...
-timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
-pause
+echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
+timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 exit /b 1
 
 :KetThucNangQuyen
@@ -150,18 +148,27 @@ taskkill /F /IM javaw.exe >nul 2>&1
 :: 2. Xac dinh ten service MongoDB
 echo [2/7] Dang xac dinh dich vu MongoDB...
 set "MDB_SVC="
-for %%S in ("MongoDB Server" "MongoDB" "mongodb" "MongoDBServer") do (
+for %%S in ("MongoDB Server" "MongoDB" "mongodb" "MongoDBServer" "mongod" "Mongo") do (
     sc query "%%~S" >nul 2>&1 && if not defined MDB_SVC set "MDB_SVC=%%~S"
+)
+
+:: Neu chua tim thay, quet toan bo danh sach service co chu 'mongo'
+if "%MDB_SVC%"=="" (
+    for /f "tokens=2 delims=: " %%A in ('sc query state^= all ^| findstr /i "SERVICE_NAME" ^| findstr /i "mongo"') do (
+        if not defined MDB_SVC set "MDB_SVC=%%A"
+    )
 )
 
 if "%MDB_SVC%"=="" goto :KhongTimThayService
 
 echo [OK] Da tim thay Windows Service: "%MDB_SVC%"
 
-:: 3. Dung service MongoDB
+:: 3. Dung service MongoDB va giai phong tien trinh treo
 echo [3/7] Dang dung dich vu "%MDB_SVC%"...
 net stop "%MDB_SVC%" >nul 2>&1
 timeout /t 2 >nul 2>nul || ping 127.0.0.1 -n 3 >nul
+taskkill /F /IM mongod.exe >nul 2>&1
+timeout /t 1 >nul 2>nul || ping 127.0.0.1 -n 2 >nul
 
 :: 4. Khoi dong lai service MongoDB
 echo [4/7] Dang khoi dong lai dich vu "%MDB_SVC%"...
@@ -171,6 +178,15 @@ if errorlevel 1 (
     sc start "%MDB_SVC%" >nul 2>&1
 )
 timeout /t 2 >nul 2>nul || ping 127.0.0.1 -n 3 >nul
+
+:: Kiem tra neu co dich vu Mosquitto Broker thi khoi dong lai
+for %%M in ("Mosquitto" "mosquitto" "Mosquitto Broker") do (
+    sc query "%%~M" >nul 2>&1 && (
+        net stop "%%~M" >nul 2>&1
+        taskkill /F /IM mosquitto.exe >nul 2>&1
+        net start "%%~M" >nul 2>&1
+    )
+)
 
 :: 5. Chay lai ung dung Gpos CO/SO Java
 echo [5/7] Dang khoi dong ung dung Gpos CO/SO (fxlauncher.jar)...
@@ -225,7 +241,6 @@ echo   [LOI] KHONG TIM THAY DICH VU MONGODB TREN HE THONG!
 echo   Vui long mo cua so Services (services.msc) de kiem tra lai ten dich vu.
 echo ===============================================================================
 echo.
-echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat ngay...
-timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
-pause
+echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
+timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 exit /b 1

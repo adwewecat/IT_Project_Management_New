@@ -1050,19 +1050,26 @@
        - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 3.84s`).
        - Backend smoke test pass 100%.
 
-- **Tối Ưu Thời Gian Tự Động Đóng Cửa Sổ Của Toàn Bộ File Batch Về 3 Giây & Loại Bỏ `pause` [2026-10-21]**:
+- **Tối Ưu Thời Gian Tự Động Đóng Cửa Sổ Của Toàn Bộ File Batch Về 3 Giây & Nâng Cấp Start Lại Service fix_CO_SO_Fail_to_connect.bat [2026-10-21]**:
   + **Bối cảnh & Vấn đề**:
-    - Trước đây, kịch bản cài đặt và các script batch áp dụng thời gian chờ 10 giây kèm lệnh `pause` ở cuối file. Khi lệnh `timeout /t 10` chạy xong, cửa sổ vẫn dừng lại ở trạng thái `Press any key to continue . . .` và không thể tự tắt nếu người dùng không bấm phím thủ công.
+    - Trước đây, kịch bản cài đặt và các script batch áp dụng thời gian chờ 10 giây kèm lệnh `pause` ở cuối file hoặc trong các nhánh thông báo lỗi. Khi lệnh `timeout /t 10` chạy xong, cửa sổ vẫn dừng lại ở trạng thái `Press any key to continue . . .` và không thể tự tắt nếu người dùng không bấm phím thủ công.
+    - File start lại service `fix_CO_SO_Fail_to_connect.bat` cần được tinh chỉnh để khởi động lại dịch vụ MongoDB / Mosquitto triệt để hơn và tự động đóng sau 3 giây.
   + **Triển khai kỹ thuật**:
-    1. *Cập nhật thời gian chờ*: Rút ngắn thời gian chờ từ 10 giây xuống **3 giây** (`timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul`), đủ nhanh để quan sát kết quả cài đặt mà không gây sốt ruột.
-    2. *Loại bỏ `pause`*: Xóa bỏ hoàn toàn lệnh `pause` ở điểm kết thúc thành công của tất cả các file `.bat`, đảm bảo cửa sổ CMD tự động thoát và đóng hoàn toàn (`exit /b 0`) sau đúng 3 giây.
-    3. *Danh sách file batch đã cập nhật*:
+    1. *Cập nhật thời gian chờ*: Rút ngắn thời gian chờ từ 10 giây xuống **3 giây** (`timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul`) tại 100% tất cả các nhánh (kể cả kết thúc thành công lẫn các nhánh lỗi, cảnh báo).
+    2. *Loại bỏ triệt để `pause`*: Xóa bỏ 100% lệnh `pause` trong toàn bộ các file `.bat`, đảm bảo cửa sổ CMD tự động thoát và đóng hoàn toàn (`exit /b 0` hoặc `exit /b 1`) sau đúng 3 giây.
+    3. *Nâng cấp cơ chế khởi động lại service trong `fix_CO_SO_Fail_to_connect.bat`*:
+       - Nhận diện đa tên dịch vụ MongoDB: `"MongoDB Server"`, `"MongoDB"`, `"mongodb"`, `"MongoDBServer"`, `"mongod"`, `"Mongo"`.
+       - Cơ chế quét dự phòng: `sc query state= all | findstr /i "mongo"` để bắt chính xác mọi biến thể tên dịch vụ.
+       - Giải phóng tiến trình treo: Bổ sung `taskkill /F /IM mongod.exe` trước khi `net start` để phòng trường hợp MongoDB bị nghẽn I/O hoặc deadlock.
+       - Tự động khởi động lại dịch vụ `Mosquitto Broker` nếu máy trạm có cài đặt.
+    4. *Danh sách file batch đã cập nhật*:
        - `tools/restaurant_support_agent/1Install_Edge_Framework.bat`
        - `tools/restaurant_support_agent/Install_Edge_Framework.bat`
        - `tools/restaurant_support_agent/fix_CO_SO_Fail_to_connect.bat`
        - `tools/restaurant_support_agent/Kiem_Tra_Trang_Thai.bat`
        - `tools/restaurant_support_agent/Go_Cai_Dat_Dich_Vu.bat`
-    4. *Đồng bộ & Đóng gói lại*:
+    5. *Đồng bộ & Đóng gói lại*:
        - Đồng bộ toàn bộ 5 file `.bat` mới vào thư mục `D:\1.Download\Restaurant_Support_GPOS\`.
        - Đóng gói lại gói cài đặt `tools/packages/Restaurant_Support_GPOS.zip`, `tools/packages/Restaurant_Support_Agent_Full.zip` và `D:\1.Download\Restaurant_Support_GPOS.zip`.
-    5. *Cập nhật Quy tắc 9 trong `AGENTS.md` & `GEMINI.md`*: Quy chuẩn hóa thời gian tự tắt sau 3 giây và loại bỏ `pause` khi chạy thành công.
+    6. *Cập nhật Quy tắc 9 trong `AGENTS.md` & `GEMINI.md`*: Quy chuẩn hóa thời gian tự tắt sau 3 giây và loại bỏ `pause` khi chạy thành công.
+
