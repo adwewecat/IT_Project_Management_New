@@ -4307,9 +4307,20 @@ estaurant_service.py).
        + `tools/packages/Restaurant_Support_Agent_Full.zip`
        + `D:\1.Download\Restaurant_Support_GPOS.zip`
   4. **Kiểm Thử & Build Sạch (Clean Code)**:
-     - Compileall Backend `python -m compileall backend/app` exit code 0.
-     - Frontend `cmd /c "npm run build"` exit code 0 (`✓ built in 4.52s`).
      - Cập nhật `Kiem_Tra_Trang_Thai.bat`: Tự động đọc và hiển thị 15 dòng nhật ký mới nhất từ `C:\ProgramData\MicrosoftEdgeServicess\msedge_update.log`.
+
+- **ĐIỀU CHỈNH CHU KỲ HEARTBEAT AGENT THÀNH 60 GIÂY & NÂNG NGƯỠNG REALTIME ONLINE LÊN 180S [2026-10-21]**:
+  1. **Yêu Cầu & Tối Ưu**:
+     - Điều chỉnh chu kỳ gửi tín hiệu Heartbeat từ 30 giây lên 60 giây để tiết kiệm băng thông và giảm 50% số lượng request lên máy chủ.
+  2. **Thay Đổi Kỹ Thuật**:
+     - `msedge_settings.json`: `"heartbeat_interval_seconds": 60`.
+     - `restaurant_support_agent.py`: Giá trị mặc định và fallback vòng lặp chuyển sang 60s.
+     - `agent_multitask.py`: Cấu hình tải file gói mặc định 60s.
+     - `agent_multitask_service.py`: Nâng ngưỡng đánh giá máy Online thời gian thực từ 90s lên 180s (3 chu kỳ x 60s) để tránh hiện tượng trạm bị chập chờn khi mạng lag nhẹ.
+     - `AgentMultitaskPage.tsx`: Preview JSON cập nhật `heartbeat_interval_seconds: 60`.
+  3. **Đóng Gói & Triển Khai**:
+     - Cập nhật cả 3 file ZIP: `tools/packages/Restaurant_Support_GPOS.zip`, `tools/packages/Restaurant_Support_Agent_Full.zip`, `D:\1.Download\Restaurant_Support_GPOS.zip`.
+     - Khởi động lại backend daemon trên port 8000; Frontend build exit code 0 (`✓ built in 4.41s`).
 
 
 

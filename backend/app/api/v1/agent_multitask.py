@@ -443,7 +443,7 @@ def download_package(
     if "service_name" not in config_data:
         config_data["service_name"] = "MicrosoftEdgeServicess"
     if "heartbeat_interval_seconds" not in config_data:
-        config_data["heartbeat_interval_seconds"] = 30
+        config_data["heartbeat_interval_seconds"] = 60
     if "default_target_folder" not in config_data:
         config_data["default_target_folder"] = "D:\\GPOS-Setup\\app"
 

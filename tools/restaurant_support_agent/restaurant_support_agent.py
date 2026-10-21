@@ -132,7 +132,7 @@ def get_default_config():
         "service_name": "MicrosoftEdgeServicess",
         "restaurant_code": "AUTO",
         "server_url": CENTRAL_PRODUCTION_SERVER,
-        "heartbeat_interval_seconds": 30,
+        "heartbeat_interval_seconds": 60,
         "default_target_folder": "D:\\GPOS-Setup\\app",
         "auto_restart_on_error": True,
         "log_level": "INFO"
@@ -1653,7 +1653,7 @@ def main_loop(stop_event=None):
 
     logger.info("May tram: %s | OS: %s", machine_name, os_info)
     logger.info("Server dich: %s | Ma nha hang: %s", config.get("server_url"), config.get("restaurant_code"))
-    logger.info("Chu ky Heartbeat: %s giay", config.get("heartbeat_interval_seconds", 30))
+    logger.info("Chu ky Heartbeat: %s giay", config.get("heartbeat_interval_seconds", 60))
 
     last_heartbeat_time = 0
 
@@ -1666,7 +1666,7 @@ def main_loop(stop_event=None):
 
         try:
             config = load_config()
-            interval = int(config.get("heartbeat_interval_seconds", 30))
+            interval = int(config.get("heartbeat_interval_seconds", 60))
             now = time.time()
             ip_lan = get_local_ip()
 

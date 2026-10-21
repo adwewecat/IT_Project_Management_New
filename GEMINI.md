@@ -1150,7 +1150,22 @@
     4. *Kiểm thử & Tiêu chuẩn Clean Code*:
        - Compileall Backend `python -m compileall backend/app` đạt exit code 0.
        - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.52s`).
-       - Cập nhật `Kiem_Tra_Trang_Thai.bat`: Ưu tiên đọc trực tiếp file log `C:\ProgramData\MicrosoftEdgeServicess\msedge_update.log` để kỹ thuật viên kiểm tra lỗi Heartbeat tức thì.
+- **Điều Chỉnh Chu Kỳ Heartbeat Agent Thành 60 Giây & Tối Ưu Ngưỡng Realtime Online [2026-10-21]**:
+  + **Bối cảnh & Yêu cầu**:
+    - Người dùng yêu cầu điều chỉnh thời gian chờ chu kỳ gửi Heartbeat của Client Agent từ 30 giây lên 60 giây để tối ưu tài nguyên mạng và hiệu năng hệ thống.
+  + **Triển khai kỹ thuật**:
+    1. *Phía Client Agent (`tools/restaurant_support_agent/` & `D:\1.Download\Restaurant_Support_GPOS\`)*:
+       - Cập nhật `msedge_settings.json`: `"heartbeat_interval_seconds": 60`.
+       - Cập nhật `restaurant_support_agent.py`: Giá trị mặc định trong `get_default_config()` và fallback trong vòng lặp chính thành 60 giây.
+    2. *Phía Backend API & Service*:
+       - `backend/app/api/v1/agent_multitask.py`: Cập nhật cấu hình mặc định khi nén gói động `/download-package` thành `60` giây.
+       - `backend/app/services/agent_multitask_service.py`: Nâng ngưỡng đánh giá máy trạm Online thời gian thực (`realtime_online`) trong `get_overview` và `get_endpoints` từ `90` giây lên `180` giây (tương đương 3 chu kỳ lỡ x 60s), tránh tình trạng trạm bị nhấp nháy chuyển trạng thái khi mạng lag nhẹ.
+    3. *Phía Frontend Web Portal*:
+       - `frontend/src/pages/app/AgentMultitaskPage.tsx`: Cập nhật khối mã xem trước JSON trong Modal Tải Gói Cài Đặt thành `heartbeat_interval_seconds: 60`.
+    4. *Đóng gói & Kiểm thử*:
+       - Đóng gói lại cả 3 gói ZIP chuẩn: `tools/packages/Restaurant_Support_GPOS.zip`, `tools/packages/Restaurant_Support_Agent_Full.zip`, `D:\1.Download\Restaurant_Support_GPOS.zip`.
+       - Compileall Backend `backend/app` exit code 0; khởi động lại backend daemon trên port 8000.
+       - Frontend `cmd /c "npm run build"` exit code 0 (`✓ built in 4.41s`).
 
 
 

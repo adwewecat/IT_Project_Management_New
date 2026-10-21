@@ -4823,7 +4823,7 @@ export const AgentMultitaskPage: React.FC = () => {
     server_url: downloadServerUrl.trim() || 'http://172.16.8.25:8000',
     restaurant_code: downloadRestaurantCode.trim() || 'AUTO',
     service_name: config?.service_name || 'MicrosoftEdgeServicess',
-    heartbeat_interval_seconds: 30,
+    heartbeat_interval_seconds: 60,
     default_target_folder: 'D:\\GPOS-Setup\\app',
     log_file: 'msedge_update.log'
   },

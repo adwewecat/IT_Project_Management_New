@@ -261,9 +261,9 @@ class AgentMultitaskService:
         total = len(endpoints)
         installed = sum(1 for e in endpoints if e.is_installed)
         not_installed = total - installed
-        online = sum(1 for e in endpoints if e.last_heartbeat and (now - e.last_heartbeat).total_seconds() <= 90)
+        online = sum(1 for e in endpoints if e.last_heartbeat and (now - e.last_heartbeat).total_seconds() <= 180)
         offline = total - online
-        running = sum(1 for e in endpoints if e.last_heartbeat and (now - e.last_heartbeat).total_seconds() <= 90 and e.service_status == "RUNNING")
+        running = sum(1 for e in endpoints if e.last_heartbeat and (now - e.last_heartbeat).total_seconds() <= 180 and e.service_status == "RUNNING")
         stopped = total - running
 
         return AgentOverviewResponse(
@@ -314,8 +314,8 @@ class AgentMultitaskService:
         now = datetime.now()
         items = []
         for e in results:
-            # Đánh giá trạng thái Online theo thời gian thực (trong vòng 90s kể từ Heartbeat gần nhất)
-            realtime_online = bool(e.last_heartbeat and (now - e.last_heartbeat).total_seconds() <= 90)
+            # Đánh giá trạng thái Online theo thời gian thực (trong vòng 180s kể từ Heartbeat gần nhất, tương thích chu kỳ 60s)
+            realtime_online = bool(e.last_heartbeat and (now - e.last_heartbeat).total_seconds() <= 180)
             status_val = e.service_status if realtime_online else ("STOPPED" if e.service_status == "RUNNING" else e.service_status)
 
             # Lọc theo status nếu có
