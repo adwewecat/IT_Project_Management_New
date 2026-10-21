@@ -10,7 +10,6 @@ echo	II	II		II	II	IIIIIIIIII
 echo	II	II		II	II		II
 echo	II	II		IIIIIIIIII	IIIIIIIIII
 
-msg * Dang update noi dung ipos, vui long khong tat >nul 2>&1
 taskkill /f /im cbui.exe >nul 2>&1
 
 echo ========================================================
@@ -28,8 +27,8 @@ curl -# -L -k "%SHARE_URL%?v=%RANDOM%" -o "%TEMP_ZIP%"
 
 if not exist "%TEMP_ZIP%" (
     echo [LOI] Khong the tai file cap nhat. Vui long kiem tra ket noi mang!
-    pause
-    exit /b
+    timeout /t 5 >nul 2>nul || ping 127.0.0.1 -n 6 >nul
+    exit /b 1
 )
 
 :: 2. Tu dong giai nen
@@ -55,6 +54,9 @@ rmdir /s /q "%EXTRACT_DIR%" >nul 2>&1
 :: 4. Khoi dong lai he thong
 echo ========================================================
 echo CAP NHAT THANH CONG, IPOS DANG DUOC KHOI DONG LAI. . . . 
+echo Cua so se tu dong dong sau 5 giay...
 echo ========================================================
-START "Test" "D:\ipos\Client\Loader.exe"
-timeout /t 5
+START "" "D:\ipos\Client\Loader.exe"
+timeout /t 5 >nul 2>nul || ping 127.0.0.1 -n 6 >nul
+exit /b 0
+

@@ -4237,6 +4237,20 @@ estaurant_service.py).
   5. **Cập Nhật Quy Chuẩn**:
      - Đồng bộ Quy tắc 9 trong `AGENTS.md` và `GEMINI.md`.
 
+- **TỐI ƯU KỊCH BẢN UPDATE IPOS (TCH & UT): XÓA POPUP MSG & TỰ ĐỘNG ĐÓNG SAU 5 GIÂY [2026-10-21]**:
+  1. **Xóa Bỏ Popup Cảnh Báo `msg`**:
+     - Loại bỏ lệnh `msg * Dang update noi dung ipos, vui long khong tat` làm xuất hiện popup dialog chặn trên màn hình POS của thu ngân / nhà hàng.
+  2. **Tự Động Đóng Cửa Sổ Sau 5 Giây**:
+     - Cập nhật dòng thông báo `Cua so se tu dong dong sau 5 giay...` kèm `timeout /t 5 >nul 2>nul || ping 127.0.0.1 -n 6 >nul` và `exit /b 0` sau khi khởi chạy ứng dụng iPOS Loader.
+     - Thay thế lệnh `pause` khi lỗi mạng tải zip bằng timeout 5s và `exit /b 1`.
+  3. **Đồng Bộ Hai Thư Mục Kịch Bản**:
+     - Cập nhật `Update ipos TCH IT NEW\Update iPOS TCH.bat`.
+     - Cập nhật `Update ipos UT IT NEW\Update iPOS UT IT NEW .bat` và tạo bản sao `Update iPOS TCH.bat` trong thư mục UT.
+  4. **Đồng Bộ & Đóng Gói Lại**:
+     - Đồng bộ vào `D:\1.Download\Restaurant_Support_GPOS\`.
+     - Đóng gói lại các file zip: `tools/packages/Restaurant_Support_GPOS.zip`, `tools/packages/Restaurant_Support_Agent_Full.zip` và `D:\1.Download\Restaurant_Support_GPOS.zip` (27.63 MB).
+
+
 
 
 

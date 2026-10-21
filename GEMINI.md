@@ -1073,3 +1073,19 @@
        - Đóng gói lại gói cài đặt `tools/packages/Restaurant_Support_GPOS.zip`, `tools/packages/Restaurant_Support_Agent_Full.zip` và `D:\1.Download\Restaurant_Support_GPOS.zip`.
     6. *Cập nhật Quy tắc 9 trong `AGENTS.md` & `GEMINI.md`*: Quy chuẩn hóa thời gian tự tắt sau 3 giây và loại bỏ `pause` khi chạy thành công.
 
+- **Tối Ưu Kịch Bản Update iPOS: Xóa Popup Thông Báo `msg` & Tự Động Đóng Sau 5 Giây [2026-10-21]**:
+  + **Bối cảnh & Yêu cầu**:
+    - File kịch bản `Update iPOS TCH.bat` trong thư mục `Update ipos TCH IT NEW` và `Update ipos UT IT NEW` trước đây có lệnh `msg * Dang update noi dung ipos, vui long khong tat` làm bật lên một popup hộp thoại modal chắn trên màn hình người dùng.
+    - Người dùng yêu cầu bỏ hoàn toàn popup này, cập nhật xong thì tự động đóng cửa sổ CMD sau đúng 5 giây.
+  + **Triển khai kỹ thuật**:
+    1. *Loại bỏ popup*: Xóa bỏ hoàn toàn lệnh `msg * ...` ở đầu file kịch bản.
+    2. *Tự động đóng sau 5 giây*:
+       - Bổ sung `timeout /t 5 >nul 2>nul || ping 127.0.0.1 -n 6 >nul` kèm `exit /b 0` sau khi khởi chạy ứng dụng iPOS Loader.
+       - Thay thế lệnh `pause` khi tải zip thất bại bằng timeout 5s và `exit /b 1` để không bị kẹt cửa sổ CMD.
+    3. *Đồng bộ cả 2 phân hệ TCH và UT*:
+       - Cập nhật file [Update iPOS TCH.bat](file:///d:/LAPTRINH/IT_Project_Management_New/tools/restaurant_support_agent/Update%20ipos%20TCH%20IT%20NEW/Update%20iPOS%20TCH.bat) trong `Update ipos TCH IT NEW`.
+       - Cập nhật file [Update iPOS UT IT NEW .bat](file:///d:/LAPTRINH/IT_Project_Management_New/tools/restaurant_support_agent/Update%20ipos%20UT%20IT%20NEW/Update%20iPOS%20UT%20IT%20NEW%20.bat) và tạo bản sao `Update iPOS TCH.bat` trong `Update ipos UT IT NEW` để đảm bảo gọi theo tên nào cũng chạy chính xác.
+    4. *Đồng bộ & Đóng gói lại*:
+       - Đồng bộ vào `D:\1.Download\Restaurant_Support_GPOS\`.
+       - Đóng gói lại cả 3 file zip `tools/packages/Restaurant_Support_GPOS.zip`, `tools/packages/Restaurant_Support_Agent_Full.zip` và `D:\1.Download\Restaurant_Support_GPOS.zip` (27.63 MB).
+
