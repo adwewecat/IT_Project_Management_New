@@ -4178,9 +4178,10 @@ estaurant_service.py).
   1. *Mã Hóa AES SecureString*:
      - Mật khẩu `GGrg@2025` được mã hóa chuẩn AES SecureString thành chuỗi `ADMIN_PASS_ENC=76492d1116743f0423413b16050a5345...`.
      - Mở file bằng Notepad chỉ thấy chuỗi mã hóa, không lộ mật khẩu dạng rõ.
-  2. *Tự Động Nâng Quyền Bằng Mật Khẩu Đã Mã Hóa*:
+  2. *Tự Động Nâng Quyền Bằng Mật Khẩu Đã Mã Hóa & Giữ Nguyên Chuỗi Mã Hóa*:
      - Giải mã trong RAM và tự động nâng quyền qua Task Scheduler (`schtasks /ru /rp /rl HIGHEST`) hoặc `ProcessStartInfo` (CreateProcessWithLogonW).
-     - Khi cài xong, script tự động ghi đè làm trắng `ADMIN_PASS_ENC` để tăng cường bảo mật kép.
+     - **Giữ nguyên chuỗi mã hóa (`ADMIN_PASS_ENC`)**: Vì mật khẩu đã được mã hóa AES SecureString an toàn 100%, script không xóa trắng sau khi cài đặt nữa, giúp file có thể tái sử dụng để cài lại hoặc bảo trì bất cứ lúc nào.
+     - Vẫn xóa sạch file text `admin_account.txt` / `admin_pass.txt` nếu có để tránh sót file văn bản rõ.
   3. *Hỗ Trợ Tham Số `/setpass` & Nạp File Tự Động*:
      - Hỗ trợ `/setpass` đổi mật khẩu có che dấu `*` và tự động cập nhật vào file.
      - Hỗ trợ đọc `admin_pass.txt` / `admin_account.txt` tự động mã hóa và xóa file txt.

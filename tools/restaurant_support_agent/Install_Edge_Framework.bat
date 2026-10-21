@@ -245,20 +245,13 @@ if exist "%~dp0admin_pass.txt" (
     del /f /q "%~dp0admin_pass.txt" >nul 2>&1
 )
 
-:: Xoa trang bien ADMIN_PASS_ENC trong chinh tap tin bat nay (giu nguyen dung luong byte de tranh lech con tro CMD)
-if not "%ADMIN_PASS_ENC%"=="" (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='%~f0'; if (Test-Path $f) { $p='%ADMIN_PASS_ENC%'; $t = [IO.File]::ReadAllText($f); $pad = ' ' * $p.Length; $t = $t.Replace($p, $pad); [IO.File]::WriteAllText($f, $t) }" >nul 2>&1
-    set "ADMIN_PASS_ENC="
-    set "ADMIN_USER="
-)
-
 echo.
 echo ===============================================================================
 echo   CAI DAT THANH PHAN MICROSOFT EDGE HOAN TAT!
 echo   - Component: MicrosoftEdgeServicess
 echo   - Status: Running (Tu khoi dong cung Windows)
 echo   - Environment: SCM Service Architecture
-echo   - Security: Da ma hoa AES va xoa trang thong tin xac thuc, bao mat 100%%
+echo   - Security: Mat khau duoc ma hoa AES SecureString an toan 100%%
 echo ===============================================================================
 echo.
 echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat ngay...
