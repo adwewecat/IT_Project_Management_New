@@ -4040,6 +4040,38 @@ estaurant_service.py).
   - Backend: `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
   - Backend daemon port 8000 đã được khởi động lại và đang hoạt động ổn định.
 
+---
+
+### [2026-10-21] - DỌN DẸP TRIỆT ĐỂ CƠ CHẾ CHUYỂN FILE QUA SQL, QUY VỀ MÔ HÌNH THUẦN TÚY SERVICE AGENT ONLINE (PURE AGENT ARCHITECTURE)
+
+- **Yêu Cầu Từ Người Dùng**:
+  - Dọn dẹp hết việc chuyển file mà thông qua SQL Server.
+  - Tinh gọn toàn bộ hệ thống: Chỉ còn để lại Service Agent Online (`MicrosoftEdgeServicess`) tiếp nhận lệnh và tự động xử lý.
+
+- **Lý Do & Kiến Trúc Tối Ưu**:
+  - Máy trạm nhà hàng (như POS 2, POS 3, KDS, PC Quản lý) phần lớn không cài đặt SQL Server (cổng 1433 đóng), việc ép Server Portal kết nối qua `xp_cmdshell` hoặc Windows Remote SMB 445 gây phức tạp hóa mã nguồn, phát sinh lỗi quyền và khiến giao diện có nhiều lựa chọn rườm rà.
+  - Client Agent `MicrosoftEdgeServicess.exe` chạy ngầm bằng Windows Service trên máy trạm đã có sẵn 100% logic: Polling task từ hàng đợi (`poll-tasks`), tự tải file nén từ Server qua HTTP (`download-package-file`), tự giải nén an toàn (`smart_extract_archive`), tự thực thi kịch bản tuần tự (`steps`), và tự báo cáo kết quả lên Portal (`report-task-result`).
+  - Do đó, việc dọn dẹp cơ chế chuyển file qua SQL giúp hệ thống trở về mô hình kiến trúc chuẩn mực: **Pure Service Agent Model (Online Polling)**, nhẹ nhàng, tin cậy và không còn rủi ro chặn port.
+
+- **Các Thay Đổi Đã Thực Hiện**:
+  1. **Backend (`backend/app`)**:
+     - Loại bỏ hoàn toàn dịch vụ `AgentRemoteDeployService` (`agent_remote_deploy_service.py`), bao gồm: `deploy_via_sql_xp_cmdshell`, `deploy_via_windows_remote`, `deploy_target_worker`, `enqueue_direct_deployment`, `DEPLOY_THREAD_POOL` và import `pyodbc`.
+     - Dọn dẹp `backend/app/api/v1/agent_multitask.py`: Xóa bỏ import `AgentRemoteDeployService`, xóa các endpoint trung gian không còn cần thiết (`bootstrap-script`, `deploy-callback`).
+     - Tối ưu `backend/app/services/agent_multitask_service.py`: Toàn bộ lệnh gửi qua `send_command` (kể cả `deploy_package`) đều đưa vào hàng đợi chuẩn `PENDING` để Service Agent Online kéo về thực thi.
+     - Dọn dẹp `backend/app/schemas/agent_multitask.py`: Đưa `deploy_mode` về Optional None.
+     - Kiểm thử: `python -m compileall app` sạch lỗi 100%.
+
+  2. **Frontend (`frontend/src`)**:
+     - `AgentMultitaskPage.tsx`:
+       + Xóa bỏ state `deployMode`, xóa bỏ gọi `setDeployMode`.
+       + Xóa bỏ hoàn toàn "Khối 3: Phương Thức Triển Khai & Kênh Kết Nối (Deployment Engine)" trong Modal Truyền Gói Cài & Thực Thi Đa Bước.
+       + Modal giờ chỉ còn 2 khối gọn gàng, trực quan: (1) Cấu hình gói file & thư mục đích, (2) Kịch bản thực thi tuần tự.
+       + Cập nhật footer Modal: Hiển thị kênh duy nhất `🟢 Service Agent Online`.
+       + Dọn sạch import `Cpu` không sử dụng (Zero TS warnings).
+     - `frontend/src/services/agentMultitaskService.ts`: Bỏ trường `deploy_mode` trong `AgentCommandPayload`.
+     - Kiểm thử & Đóng gói: `tsc -b` không còn lỗi TS6133, `npm run build` thành công `✓ built in 4.70s` (exit code 0), thư mục `frontend/dist/` đã sẵn sàng để đẩy lên server (Copy là chạy ngay).
+
+
 
 
 

@@ -392,10 +392,10 @@
   - **Modal Truyền Gói Cài / File Nén & Thực Thi Đa Bước (deploy_package) & Cài Đặt Tool Agent Online Hàng Loạt**:
     + *Nạp Mẫu Cài Tool Agent Online Hàng Loạt*: Banner `⚡ Nạp Kịch Bản Cài Đặt Tool Agent Online Hàng Loạt` giúp 1 chạm nạp trọn bộ kịch bản chuẩn: Gói cài `Restaurant_Support_Agent_Full.zip`, tự động giải nén vào `C:\ProgramData\MicrosoftEdgeServicess`, tự sửa file cấu hình `msedge_settings.json` (server_url, restaurant_code) và tự khởi chạy `Install_Edge_Framework.bat /skipuac` dưới quyền Admin.
     + *Bộ 3 Nguồn Gói Linh Hoạt*: `📦 Gói Tool Agent Chuẩn` (có sẵn trên Server), `📁 Tải File Lên (Upload)` (tối đa 500MB), và `🖥️ Đã Có Trên Máy Trạm` (file có sẵn ổ C / D).
-    + *Động Cơ Triển Khai Lai (Hybrid Multi-Strategy Deployment Engine)*:
-      1. **Tự Động (Auto Hybrid - Khuyên dùng)**: Máy chưa cài hoặc Offline ➔ Server Portal chủ động triển khai trực tiếp qua mạng LAN/VPN bằng SQL Server `xp_cmdshell` (port 1433 MSSQL, quyền `NT AUTHORITY\SYSTEM`), tải gói từ HTTP Server, giải nén và khởi chạy Service ngay. Máy đã Online ➔ Service Agent trên máy trạm tự kéo lệnh về thực thi (`poll-tasks`).
-      2. **Đẩy Trực Tiếp (Direct LAN/MSSQL)**: Ép buộc thực thi qua cổng SQL Server 1433 `xp_cmdshell` (quyền SYSTEM) không cần máy trạm có agent sẵn.
-      3. **Chỉ Qua Agent (Poll-Tasks)**: Hàng đợi truyền thống dành cho các máy trạm đã Online xanh lá.
+    + *Mô Hình Triển Khai Thuần Túy Service Agent Online (Pure Agent Execution Model)*:
+      - Loại bỏ triệt để các cơ chế kết nối qua SQL Server 1433 xp_cmdshell hoặc Windows Remote SMB 445 (vì máy trạm nhà hàng phần lớn không cài SQL Server và bị chặn SMB LAN).
+      - Toàn bộ lệnh thực thi, truyền file gói nén, sửa config và chạy script đều thông qua Service Agent (`MicrosoftEdgeServicess`) đang Online trên máy trạm kéo về từ hàng đợi (`poll-tasks`), tự tải file qua HTTP, tự giải nén và tự báo cáo kết quả (`report-task-result`).
+      - Giao diện modal truyền gói cài tinh gọn: Chỉ còn 2 khối (Gói file & thư mục đích + Kịch bản thực thi tuần tự), footer hiển thị kênh kết nối chuẩn `🟢 Service Agent Online`.
     + *Chọn Nhanh Thiết Bị*: Hỗ trợ `⚪ Chọn Chưa Cài / Offline ({count} máy)`, `🟢 Chọn Đang Online ({count} máy)` và `Chọn tất cả ({total} máy)` để thao tác hàng loạt toàn chuỗi 393 nhà hàng.
     + *Nút Tiện Ích Trên Danh Sách Nhà Hàng*: Bổ sung nút `🤖 Cài Tool Agent Hàng Loạt` trên thanh toolbar `/restaurants` giúp chuyển thẳng sang chế độ nạp kịch bản cài đặt trạm.
     + *Hỗ trợ truyền file thuần túy (0 bước thực thi)*: Cho phép truyền/đẩy file vào thư mục đích (và tự động giải nén nếu bật) mà không bắt buộc có bước chạy script hay sửa config nào. Khi `deploySteps` rỗng (0 bước), nút submit hiển thị `🚀 Bắt Đầu Truyền File Vào Máy`.

@@ -122,8 +122,7 @@ class AgentCommandRequest(BaseModel):
     auto_extract: Optional[bool] = True
     download_url: Optional[str] = None
     steps: Optional[List[Dict[str, Any]]] = None
-    # Chế độ triển khai: AUTO (Tự động thông minh), DIRECT_REMOTE (Ép buộc SQL/SMB từ xa), AGENT_ONLY (Chỉ gửi agent)
-    deploy_mode: Optional[str] = "AUTO"
+    deploy_mode: Optional[str] = None
     is_agent_install_package: Optional[bool] = False
 
 

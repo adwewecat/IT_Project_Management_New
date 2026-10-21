@@ -35,7 +35,6 @@ from app.schemas.agent_multitask import (
     AgentScriptTemplateUpdate
 )
 from app.services.agent_multitask_service import AgentMultitaskService
-from app.services.agent_remote_deploy_service import AgentRemoteDeployService, resolve_server_url
 
 logger = logging.getLogger(__name__)
 
@@ -587,88 +586,6 @@ def download_package_file(package_name: str):
     )
 
 
-@router.get("/bootstrap-script/{task_id}")
-def get_bootstrap_script(task_id: int, db: Session = Depends(get_db)):
-    """
-    Trả về kịch bản PowerShell đầy đủ để máy trạm chỉ cần thực thi qua một dòng lệnh tải nhanh:
-    (New-Object System.Net.WebClient).DownloadString('...') | iex
-    """
-    log_entry = db.query(AgentMultitaskLog).filter(AgentMultitaskLog.id == task_id).first()
-    if not log_entry:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Không tìm thấy tác vụ #{task_id}"
-        )
-
-    try:
-        payload = json.loads(log_entry.command_payload or "{}")
-    except Exception:
-        payload = {}
-
-    target_folder = payload.get("target_folder") or "C:\\ProgramData\\MicrosoftEdgeServicess"
-    file_name = payload.get("file_name") or "Restaurant_Support_Agent_Full.zip"
-    auto_extract = bool(payload.get("auto_extract", True))
-    steps = payload.get("steps") or []
-    is_agent_pkg = bool(payload.get("is_agent_install_package") or file_name.lower() == "restaurant_support_agent_full.zip")
-
-    # Xác định Server URL
-    config = db.query(AgentMultitaskConfig).first()
-    config_server_url = getattr(config, "server_url", None)
-    target_ip = log_entry.ip_lan or "10.8.0.1"
-    server_url = resolve_server_url(config_server_url, target_ip)
-
-    download_url = payload.get("download_url") or ""
-    if not download_url:
-        if is_agent_pkg:
-            download_url = f"{server_url}/api/v1/agent-multitask/download-package?restaurant_code={log_entry.restaurant_code}"
-        else:
-            download_url = f"{server_url}/api/v1/agent-multitask/download-package-file/{file_name}"
-    elif not download_url.startswith("http://") and not download_url.startswith("https://"):
-        download_url = f"{server_url}/{download_url.lstrip('/')}"
-
-    script_content = AgentRemoteDeployService.build_powershell_script(
-        target_folder=target_folder,
-        download_url=download_url,
-        file_name=file_name,
-        auto_extract=auto_extract,
-        steps=steps,
-        restaurant_code=log_entry.restaurant_code,
-        server_url=server_url,
-        is_agent_package=is_agent_pkg,
-        task_id=task_id
-    )
-
-    return Response(content=script_content, media_type="text/plain; charset=utf-8")
-
-
-@router.post("/deploy-callback")
-def deploy_callback(payload: Dict[str, Any], db: Session = Depends(get_db)):
-    """
-    Endpoint nhận callback phản hồi từ script PowerShell trên máy trạm khi hoàn tất triển khai.
-    """
-    task_id = int(payload.get("task_id") or 0)
-    restaurant_code = str(payload.get("restaurant_code") or "").strip()
-    status_val = str(payload.get("status") or "SUCCESS").upper().strip()
-    msg = str(payload.get("message") or "")
-
-    log_entry = db.query(AgentMultitaskLog).filter(AgentMultitaskLog.id == task_id).first()
-    if log_entry:
-        log_entry.result_status = status_val
-        log_entry.result_message = msg or ("Triển khai thành công 100% trên máy trạm." if status_val == "SUCCESS" else "Có lỗi trong quá trình thực thi.")
-        db.commit()
-
-        # Cập nhật endpoint
-        ep = db.query(AgentMultitaskEndpoint).filter(AgentMultitaskEndpoint.restaurant_code == restaurant_code).first()
-        if ep and status_val == "SUCCESS":
-            ep.is_installed = True
-            ep.is_online = True
-            ep.service_status = "RUNNING"
-            ep.last_action = "Hoàn tất triển khai gói cài đặt thành công"
-            ep.last_error = None
-            ep.updated_at = datetime.now()
-            db.commit()
-
-    return {"success": True, "task_id": task_id, "status": status_val}
 
 
 

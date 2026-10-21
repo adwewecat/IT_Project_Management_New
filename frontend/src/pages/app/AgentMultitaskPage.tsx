@@ -29,8 +29,7 @@ import {
   Eye,
   Copy,
   Check,
-  FileText,
-  Cpu
+  FileText
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -97,7 +96,6 @@ export const AgentMultitaskPage: React.FC = () => {
   const [deployTargetFolder, setDeployTargetFolder] = useState<string>('C:\\ProgramData\\MicrosoftEdgeServicess');
   const [deployFileName, setDeployFileName] = useState<string>('Restaurant_Support_Agent_Full.zip');
   const [deployPackageSource, setDeployPackageSource] = useState<'AGENT_PACKAGE' | 'UPLOAD' | 'CLIENT_EXISTING'>('AGENT_PACKAGE');
-  const [deployMode, setDeployMode] = useState<'AUTO' | 'DIRECT_REMOTE' | 'AGENT_ONLY'>('AUTO');
   const [deployAutoExtract, setDeployAutoExtract] = useState<boolean>(true);
   const [deployUploadedBase64, setDeployUploadedBase64] = useState<string>('');
   const [deployUploadedFileName, setDeployUploadedFileName] = useState<string>('');
@@ -684,7 +682,6 @@ export const AgentMultitaskPage: React.FC = () => {
     setDeployFileName('Restaurant_Support_Agent_Full.zip');
     setDeployTargetFolder('C:\\ProgramData\\MicrosoftEdgeServicess');
     setDeployAutoExtract(true);
-    setDeployMode('AUTO');
     setUseAdminUser(true);
     setDeploySteps([
       {
@@ -871,7 +868,6 @@ export const AgentMultitaskPage: React.FC = () => {
         use_admin_user: useAdminUser,
         custom_admin_user: customAdminUser.trim() || undefined,
         custom_admin_pass: customAdminPass.trim() || undefined,
-        deploy_mode: action === 'deploy_package' ? deployMode : undefined,
         is_agent_install_package: action === 'deploy_package' ? (deployPackageSource === 'AGENT_PACKAGE') : (action === 'install_agent')
       });
 
@@ -3369,9 +3365,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 )}
                 <span style={{ color: 'var(--border-color)' }}>|</span>
                 <span>
-                  Kênh: <strong style={{ color: deployMode === 'AUTO' ? '#2563EB' : (deployMode === 'DIRECT_REMOTE' ? '#D97706' : '#059669') }}>
-                    {deployMode === 'AUTO' ? '⚡ Tự Động (Auto Hybrid)' : (deployMode === 'DIRECT_REMOTE' ? '🛡️ Đẩy Trực Tiếp (LAN / SQL)' : '🟢 Qua Agent Client')}
-                  </strong>
+                  Kênh: <strong style={{ color: '#059669' }}>🟢 Service Agent Online</strong>
                 </span>
                 <span style={{ color: 'var(--border-color)' }}>|</span>
                 <span>
@@ -4287,110 +4281,6 @@ export const AgentMultitaskPage: React.FC = () => {
                 })}
                 </div>
               )}
-            </div>
-
-            {/* Khối 3: Phương Thức Triển Khai & Kênh Kết Nối (Deployment Engine) */}
-            <div
-              style={{
-                backgroundColor: 'var(--bg-secondary)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '8px',
-                padding: '12px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px'
-              }}
-            >
-              <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Cpu size={15} color="#2563EB" />
-                <span>3. Phương Thức Triển Khai & Kênh Kết Nối (Deployment Engine)</span>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
-                {/* Lựa chọn AUTO */}
-                <div
-                  onClick={() => setDeployMode('AUTO')}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '6px',
-                    border: deployMode === 'AUTO' ? '2px solid #2563EB' : '1px solid var(--border-color)',
-                    backgroundColor: deployMode === 'AUTO' ? 'rgba(37, 99, 235, 0.08)' : 'var(--bg-primary)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 800, fontSize: '12px', color: deployMode === 'AUTO' ? '#2563EB' : 'var(--text-primary)' }}>
-                      ⚡ Tự Động (Auto Hybrid)
-                    </span>
-                    <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#DBEAFE', color: '#1E40AF', fontWeight: 700 }}>
-                      Khuyên Dùng
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-                    Trạm Online ➔ Agent tự kéo lệnh. Trạm chưa cài hoặc Offline ➔ Tự động đẩy qua mạng LAN/VPN: dùng SQL Server 1433 xp_cmdshell (máy có SQL) hoặc tự động fallback sang Windows Remote LAN (máy không cài SQL).
-                  </div>
-                </div>
-
-                {/* Lựa chọn DIRECT_REMOTE */}
-                <div
-                  onClick={() => setDeployMode('DIRECT_REMOTE')}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '6px',
-                    border: deployMode === 'DIRECT_REMOTE' ? '2px solid #D97706' : '1px solid var(--border-color)',
-                    backgroundColor: deployMode === 'DIRECT_REMOTE' ? 'rgba(217, 119, 6, 0.08)' : 'var(--bg-primary)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 800, fontSize: '12px', color: deployMode === 'DIRECT_REMOTE' ? '#D97706' : 'var(--text-primary)' }}>
-                      🛡️ Đẩy Trực Tiếp (Direct LAN)
-                    </span>
-                    <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#FEF3C7', color: '#92400E', fontWeight: 700 }}>
-                      Cài Máy Mới
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-                    Ép buộc Server kết nối trực tiếp đến IP máy trạm qua mạng LAN/VPN: Tự động dùng SQL Server 1433 (nếu có SQL) hoặc Windows Remote Schtasks/WMI (nếu máy không cài SQL) để tải file, cấu hình và khởi chạy Service ngay.
-                  </div>
-                </div>
-
-                {/* Lựa chọn AGENT_ONLY */}
-                <div
-                  onClick={() => setDeployMode('AGENT_ONLY')}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '6px',
-                    border: deployMode === 'AGENT_ONLY' ? '2px solid #059669' : '1px solid var(--border-color)',
-                    backgroundColor: deployMode === 'AGENT_ONLY' ? 'rgba(5, 150, 105, 0.08)' : 'var(--bg-primary)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 800, fontSize: '12px', color: deployMode === 'AGENT_ONLY' ? '#059669' : 'var(--text-primary)' }}>
-                      🟢 Chỉ Qua Agent (Poll-Tasks)
-                    </span>
-                    <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#D1FAE5', color: '#065F46', fontWeight: 700 }}>
-                      Máy Online
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-                    Đưa lệnh vào hàng đợi Server, chờ Service Agent trên máy trạm kết nối về lấy lệnh. (Chỉ áp dụng với máy đã cài đặt và đang Online).
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </Modal>

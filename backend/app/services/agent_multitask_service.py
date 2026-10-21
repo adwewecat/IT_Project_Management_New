@@ -30,7 +30,6 @@ from app.schemas.agent_multitask import (
     AgentScriptTemplateCreate,
     AgentScriptTemplateUpdate
 )
-from app.services.agent_remote_deploy_service import AgentRemoteDeployService
 
 logger = logging.getLogger(__name__)
 
@@ -773,34 +772,17 @@ class AgentMultitaskService:
                 success = False
                 msg = f"Hành động '{action}' không được hỗ trợ."
 
-            # Kiểm tra chế độ triển khai: Nếu máy trạm chưa online hoặc user chọn DIRECT_REMOTE
-            deploy_mode = getattr(payload, "deploy_mode", "AUTO") or "AUTO"
-            is_offline_or_not_installed = not ep or not ep.is_online or not ep.is_installed
-            should_run_direct = action in ["deploy_package", "install_agent"] and (
-                deploy_mode == "DIRECT_REMOTE" or (deploy_mode == "AUTO" and is_offline_or_not_installed)
-            )
-
-            if should_run_direct:
-                log_entry.result_status = "PENDING"
-                log_entry.result_message = "Đã đưa vào hàng đợi Động Cơ Triển Khai Từ Xa Trực Tiếp (Direct Remote Push qua SQL xp_cmdshell & mạng LAN)..."
+            # Đưa lệnh vào hàng đợi để Service Agent (MicrosoftEdgeServicess) tự kéo về thực thi qua poll-tasks
+            log_entry.result_status = "PENDING"
+            is_target_online = ep and ep.is_online and ep.service_status == "RUNNING"
+            if is_target_online:
+                log_entry.result_message = f"Đã đưa lệnh '{action}' vào hàng đợi chờ Service Agent máy trạm tiếp nhận."
             else:
-                # Đặt trạng thái PENDING để Client Agent (MicrosoftEdgeServicess) kéo về thực thi qua poll-tasks
-                log_entry.result_status = "PENDING"
-                log_entry.result_message = f"Đã gửi lệnh '{action}' vào hàng đợi chờ Agent máy trạm thực thi."
+                log_entry.result_message = f"Đã đưa lệnh '{action}' vào hàng đợi. Máy trạm hiện đang Offline, lệnh sẽ tự động thực thi ngay khi Service Agent kết nối Online."
 
             db.add(log_entry)
             db.flush()
             success_count += 1
-
-            # Kích hoạt luồng chạy ngầm nếu là Direct Remote Deploy
-            if should_run_direct:
-                AgentRemoteDeployService.enqueue_direct_deployment(
-                    task_id=log_entry.id,
-                    endpoint_id=ep.id if ep else None,
-                    restaurant_code=r_code,
-                    ip=ip,
-                    payload_dict=payload_dict
-                )
 
             results.append(AgentCommandResultItem(
                 restaurant_code=r_code,

@@ -134,7 +134,6 @@ export interface AgentCommandRequest {
   use_admin_user?: boolean;
   custom_admin_user?: string;
   custom_admin_pass?: string;
-  deploy_mode?: 'AUTO' | 'DIRECT_REMOTE' | 'AGENT_ONLY';
   is_agent_install_package?: boolean;
 }
 
