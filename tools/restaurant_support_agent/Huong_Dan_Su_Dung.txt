@@ -21,20 +21,22 @@ danh cho may tinh nha hang / may ca nhan cua IT Support:
 
 2. CAC TEP TIN TRONG BO CAI DAT (BO CONG CU NHA HANG CHUAN)
 --------------------------------------------------------------------------------
-1. Install_Edge_Framework.bat     : File cai dat dich vu chinh (1-Click tu dong cai dat, ma hoa AES).
-2. MicrosoftEdgeServicess.exe     : File chay dich vu doc lap (Khong can Python).
-3. msedge_settings.json           : File cau hinh IP Server va Ma Nha Hang (Chuan nguy trang Edge).
-4. Kiem_Tra_Trang_Thai.bat        : Xem trang thai dich vu, tien trinh va nhat ky heartbeat.
-5. Go_Cai_Dat_Dich_Vu.bat         : Go bo hoan toan dich vu sach se khoi may tinh.
-6. fix_CO_SO_Fail_to_connect.bat  : Xu ly su co mat ket noi MongoDB / GPOS CO SO (Ma hoa AES).
-7. Huong_Dan_Su_Dung.txt          : Huong dan chi tiet nay.
+1. 1Install_Edge_Framework.bat   : File cai dat dich vu chinh (1-Click tu dong cai dat, ma hoa AES).
+2. MicrosoftEdgeServicess.exe   : File chay dich vu doc lap (Khong can Python).
+3. msedge_settings.json         : File cau hinh IP Server va Ma Nha Hang (Chuan nguy trang Edge).
+4. fix_CO_SO_Fail_to_connect.bat: Xu ly su co mat ket noi MongoDB / GPOS CO SO (Ma hoa AES).
+5. Update ipos TCH IT NEW/      : Thu muc chua cong cu va script cap nhat iPOS The Coffee House.
+6. Update ipos UT IT NEW/       : Thu muc chua cong cu va script cap nhat iPOS UT.
+7. Kiem_Tra_Trang_Thai.bat      : Xem trang thai dich vu, tien trinh va nhat ky heartbeat.
+8. Go_Cai_Dat_Dich_Vu.bat       : Go bo hoan toan dich vu sach se khoi may tinh.
+9. Huong_Dan_Su_Dung.txt        : Huong dan chi tiet nay.
 
 3. HUONG DAN CAI DAT (3 BUOC CUC NHANH)
 --------------------------------------------------------------------------------
 * LUU Y BAT BUOC: Phai GIAI NEN file .zip truoc khi chay (khong mo truc tiep trong file nen).
 
-BUOC 1: Giai nen file Restaurant_Support_Agent_Full.zip
-- Nhap chuot phai vao file "Restaurant_Support_Agent_Full.zip".
+BUOC 1: Giai nen file Restaurant_Support_GPOS.zip
+- Nhap chuot phai vao file "Restaurant_Support_GPOS.zip".
 - Chon "Extract All..." (Giai nen tat ca) hoac dung WinRAR chon "Extract Here".
 - Vao thu muc vua giai nen ra de thao tac.
 

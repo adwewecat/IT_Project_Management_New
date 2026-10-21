@@ -1173,7 +1173,7 @@ def execute_task(config, task, ip_lan=None):
             os.makedirs(target_folder, exist_ok=True)
             logger.info("Trien khai goi vao thu muc: %s", target_folder)
 
-            file_name = (payload.get("file_name") or "Restaurant_Support_Agent_Full.zip").strip()
+            file_name = (payload.get("file_name") or "Restaurant_Support_GPOS.zip").strip()
             target_file_path = os.path.join(target_folder, file_name)
 
             file_base64 = payload.get("file_content_base64")

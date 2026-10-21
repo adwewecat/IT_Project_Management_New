@@ -1017,8 +1017,25 @@
     3. *Hỗ Trợ Menu Đổi/Mã Hóa Mật Khẩu Mới*:
        - Tham số `/setpass` / `/mahoa`: Cho phép nhập mật khẩu mới che dấu bằng `*` và tự động mã hóa cập nhật vào file.
        - Hỗ trợ nạp mật khẩu 1 lần qua `admin_pass.txt` / `admin_account.txt` (tự mã hóa và xóa file text ngay).
-    4. *Đồng bộ gói triển khai*:
-       - Cập nhật `D:\1.Download\Restaurant_Support_GPOS\1Install_Edge_Framework.bat`.
-       - Cập nhật `tools/restaurant_support_agent/Install_Edge_Framework.bat`.
-       - Cập nhật danh sách whitelist trong `agent_multitask.py` và nén lại gói chuẩn `tools/packages/Restaurant_Support_Agent_Full.zip`.
+- **Đổi Tên Gói Cài Thành `Restaurant_Support_GPOS.zip` & Tích Hợp 2 Thư Mục Update iPOS Cùng File Sửa Lỗi MongoDB [2026-10-21]**:
+  + **Bối cảnh & Yêu cầu**:
+    1. Đổi tên toàn diện file nén gói cài đặt dịch vụ Agent từ `Restaurant_Support_Agent_Full.zip` thành `Restaurant_Support_GPOS.zip`.
+    2. Bổ sung file sửa lỗi `fix_CO_SO_Fail_to_connect.bat` (đã mã hóa AES mật khẩu APP / GGrg@2025) vào trong bộ nén.
+    3. Bổ sung 2 thư mục nâng cấp iPOS:
+       - `Update ipos TCH IT NEW` (gồm `Update iPOS TCH.bat` và icon).
+       - `Update ipos UT IT NEW` (gồm `Update iPOS UT IT NEW .bat` và icon).
+  + **Triển khai kỹ thuật**:
+    1. *Backend*:
+       - Bổ sung tên 2 thư mục và các file mới (`1install_edge_framework.bat`, `iconarchive-plasticine-bee.ico`, `update ipos tch it new`, `update ipos ut it new`) vào `CLIENT_PACKAGE_WHITELIST`.
+       - Nâng cấp cơ chế đóng gói trong endpoint `/download-package` và `/download-package-file/{package_name}`: duyệt đệ quy các thư mục con trong whitelist bằng `os.walk`, giữ nguyên cấu trúc cây thư mục bên trong zip.
+       - Đổi tên file nén mặc định trả về thành `Restaurant_Support_GPOS.zip`, đồng thời vẫn hỗ trợ alias cũ `Restaurant_Support_Agent_Full.zip` để bảo đảm tương thích ngược 100%.
+    2. *Frontend*:
+       - Cập nhật `agentMultitaskService.ts` download filename thành `Restaurant_Support_GPOS.zip`.
+       - Cập nhật `AgentMultitaskPage.tsx`: các state `deployFileName`, template nạp cài đặt trọn gói, placeholder, hướng dẫn và thông báo tải file hiển thị chuẩn `Restaurant_Support_GPOS.zip`.
+    3. *Đồng bộ tài nguyên & Đóng gói*:
+       - Đồng bộ 2 thư mục và các file vào `tools/restaurant_support_agent/` và `D:\1.Download\Restaurant_Support_GPOS\`.
+       - Đóng gói file zip chuẩn `tools/packages/Restaurant_Support_GPOS.zip` (27.68 MB) và `D:\1.Download\Restaurant_Support_GPOS.zip`.
+    4. *Kiểm thử & Build*:
+       - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.21s`).
+       - Backend `compileall` sạch lỗi, Smoke Test `PASSED 100%`, tiến trình daemon backend khởi động thành công trên port 8000.
 

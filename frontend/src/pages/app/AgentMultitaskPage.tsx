@@ -94,7 +94,7 @@ export const AgentMultitaskPage: React.FC = () => {
 
   // ── FEATURE 2: TRUYỀN GÓI CÀI & THỰC THI ĐA BƯỚC (DEPLOY_PACKAGE) ──
   const [deployTargetFolder, setDeployTargetFolder] = useState<string>('C:\\ProgramData\\MicrosoftEdgeServicess');
-  const [deployFileName, setDeployFileName] = useState<string>('Restaurant_Support_Agent_Full.zip');
+  const [deployFileName, setDeployFileName] = useState<string>('Restaurant_Support_GPOS.zip');
   const [deployPackageSource, setDeployPackageSource] = useState<'AGENT_PACKAGE' | 'UPLOAD' | 'CLIENT_EXISTING'>('AGENT_PACKAGE');
   const [deployAutoExtract, setDeployAutoExtract] = useState<boolean>(true);
   const [deployUploadedBase64, setDeployUploadedBase64] = useState<string>('');
@@ -670,7 +670,7 @@ export const AgentMultitaskPage: React.FC = () => {
         step_number: nextNum,
         step_name: `Bước ${nextNum}: Dọn dẹp file tạm`,
         step_type: 'DELETE_FILE',
-        file_path: 'Restaurant_Support_Agent_Full.zip'
+        file_path: 'Restaurant_Support_GPOS.zip'
       };
     }
     setDeploySteps([...deploySteps, newStep]);
@@ -679,7 +679,7 @@ export const AgentMultitaskPage: React.FC = () => {
   // ── NẠP MẪU KỊCH BẢN CÀI ĐẶT TOOL AGENT ONLINE TOÀN CHUỖI ──
   const handleLoadAgentTemplate = () => {
     setDeployPackageSource('AGENT_PACKAGE');
-    setDeployFileName('Restaurant_Support_Agent_Full.zip');
+    setDeployFileName('Restaurant_Support_GPOS.zip');
     setDeployTargetFolder('C:\\ProgramData\\MicrosoftEdgeServicess');
     setDeployAutoExtract(true);
     setUseAdminUser(true);
@@ -853,7 +853,7 @@ export const AgentMultitaskPage: React.FC = () => {
           ? scriptFileName
           : (action === 'deploy_package'
               ? (deployPackageSource === 'AGENT_PACKAGE'
-                  ? 'Restaurant_Support_Agent_Full.zip'
+                  ? 'Restaurant_Support_GPOS.zip'
                   : (deployPackageSource === 'UPLOAD' ? deployUploadedFileName : deployFileName))
               : fileName),
         file_content_base64: action === 'deploy_package' ? (deployPackageSource === 'UPLOAD' ? deployUploadedBase64 : undefined) : fileContentDesc,
@@ -1078,7 +1078,7 @@ export const AgentMultitaskPage: React.FC = () => {
         server_url: downloadServerUrl.trim(),
         restaurant_code: downloadRestaurantCode.trim()
       });
-      showToast(`Đã tải xuống Restaurant_Support_Agent_Full.zip (Server: ${downloadServerUrl.trim()}) thành công!`, 'success');
+      showToast(`Đã tải xuống Restaurant_Support_GPOS.zip (Server: ${downloadServerUrl.trim()}) thành công!`, 'success');
       setIsDownloadModalOpen(false);
     } catch (err: any) {
       showToast('Lỗi khi tải bộ cài: ' + (err?.response?.data?.detail || err.message), 'error');
@@ -3446,7 +3446,7 @@ export const AgentMultitaskPage: React.FC = () => {
                     ⚡ Nạp Kịch Bản Cài Đặt Tool Agent Online Hàng Loạt
                   </div>
                   <div style={{ fontSize: '11.5px', color: '#B45309', marginTop: '2px' }}>
-                    Tự động thiết lập trọn gói: Gói cài <strong>Restaurant_Support_Agent_Full.zip</strong>, giải nén, ghi cấu hình Server URL & Mã NH, tự động chạy Service để các máy trạm <strong>ONLINE</strong> xanh lá ngay lập tức!
+                    Tự động thiết lập trọn gói: Gói cài <strong>Restaurant_Support_GPOS.zip</strong>, giải nén, ghi cấu hình Server URL & Mã NH, tự động chạy Service để các máy trạm <strong>ONLINE</strong> xanh lá ngay lập tức!
                   </div>
                 </div>
               </div>
@@ -3496,7 +3496,7 @@ export const AgentMultitaskPage: React.FC = () => {
                 <div
                   onClick={() => {
                     setDeployPackageSource('AGENT_PACKAGE');
-                    setDeployFileName('Restaurant_Support_Agent_Full.zip');
+                    setDeployFileName('Restaurant_Support_GPOS.zip');
                     if (deployTargetFolder === 'C:\\ABC') {
                       setDeployTargetFolder('C:\\ProgramData\\MicrosoftEdgeServicess');
                     }
@@ -3514,7 +3514,7 @@ export const AgentMultitaskPage: React.FC = () => {
                     📦 Gói Tool Agent Chuẩn
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    Có sẵn trên Server (Restaurant_Support_Agent_Full.zip)
+                    Có sẵn trên Server (Restaurant_Support_GPOS.zip)
                   </div>
                 </div>
 
@@ -3661,7 +3661,7 @@ export const AgentMultitaskPage: React.FC = () => {
                     value={deployPackageSource === 'UPLOAD' ? deployUploadedFileName : deployFileName}
                     onChange={(e) => setDeployFileName(e.target.value)}
                     disabled={deployPackageSource === 'UPLOAD'}
-                    placeholder="VD: Restaurant_Support_Agent_Full.zip"
+                    placeholder="VD: Restaurant_Support_GPOS.zip"
                     style={{
                       width: '100%',
                       padding: '7px 10px',
@@ -4262,7 +4262,7 @@ export const AgentMultitaskPage: React.FC = () => {
                             type="text"
                             value={step.file_path || ''}
                             onChange={(e) => handleUpdateDeployStep(idx, { file_path: e.target.value })}
-                            placeholder="Restaurant_Support_Agent_Full.zip"
+                            placeholder="Restaurant_Support_GPOS.zip"
                             style={{
                               width: '100%',
                               padding: '5px 8px',

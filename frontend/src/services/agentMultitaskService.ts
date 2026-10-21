@@ -235,7 +235,7 @@ export const agentMultitaskService = {
     const url = window.URL.createObjectURL(new Blob([res.data]));
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', 'Restaurant_Support_Agent_Full.zip');
+    link.setAttribute('download', 'Restaurant_Support_GPOS.zip');
     document.body.appendChild(link);
     link.click();
     link.remove();

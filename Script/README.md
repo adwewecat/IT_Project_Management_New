@@ -4189,7 +4189,25 @@ estaurant_service.py).
      - Cập nhật `D:\1.Download\Restaurant_Support_GPOS\1Install_Edge_Framework.bat`.
      - Cập nhật `tools/restaurant_support_agent/Install_Edge_Framework.bat`.
      - Bổ sung `fix_co_so_fail_to_connect.bat` và `edge.ico` vào `CLIENT_PACKAGE_WHITELIST` của `backend/app/api/v1/agent_multitask.py`.
-     - Cập nhật gói chuẩn `tools/packages/Restaurant_Support_Agent_Full.zip`.
+
+- **CẬP NHẬT GÓI CÀI ĐẶT THÀNH `Restaurant_Support_GPOS.zip` & TÍCH HỢP 2 FOLDER UPDATE IPOS [2026-10-21]**:
+  1. **Đổi Tên Gói Zip**:
+     - File nén cài đặt Client Agent chính thức đổi tên thành `Restaurant_Support_GPOS.zip` trên cả giao diện Web Portal (`AgentMultitaskPage.tsx`, `agentMultitaskService.ts`) và API Backend (`/download-package`, `/download-package-file`).
+     - Tương thích ngược: Backend vẫn hỗ trợ nạp alias cũ `Restaurant_Support_Agent_Full.zip` để bảo đảm client cũ không bị lỗi.
+  2. **Bổ Sung File Sửa Lỗi MongoDB**:
+     - Thêm `fix_CO_SO_Fail_to_connect.bat` vào gói (mã hóa mật khẩu AES SecureString cho tài khoản `APP` / `GGrg@2025`, 100% tiếng Việt không dấu, cơ chế phòng thủ 10s wait, không bao giờ bị lộ mật khẩu).
+  3. **Tích Hợp 2 Thư Mục Update iPOS**:
+     - Thư mục `Update ipos TCH IT NEW` (chứa `Mcdo-Design-Smooth-Leopard-Sidebar-Downloads-1.ico` và script `Update iPOS TCH.bat`).
+     - Thư mục `Update ipos UT IT NEW` (chứa `Mcdo-Design-Smooth-Leopard-Sidebar-Downloads-1.ico` và script `Update iPOS UT IT NEW .bat`).
+  4. **Nâng Cấp Cơ Chế Đóng Gói Backend**:
+     - `backend/app/api/v1/agent_multitask.py`: Nâng cấp duyệt đệ quy thư mục con bằng `os.walk`, giữ nguyên cấu trúc thư mục con bên trong file nén ZIP.
+  5. **Đồng Bộ Tài Nguyên & Đóng Gói Chuẩn**:
+     - Cập nhật `tools/restaurant_support_agent/` và `D:\1.Download\Restaurant_Support_GPOS\`.
+     - Đóng gói file chuẩn `tools/packages/Restaurant_Support_GPOS.zip` (27.68 MB) và `D:\1.Download\Restaurant_Support_GPOS.zip`.
+  6. **Kiểm Thử & Build**:
+     - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.21s`).
+     - Backend `compileall` sạch lỗi, Smoke Test `PASSED 100%`.
+
 
 
 
