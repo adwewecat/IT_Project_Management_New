@@ -21,7 +21,7 @@ danh cho may tinh nha hang / may ca nhan cua IT Support:
 
 2. CAC TEP TIN TRONG BO CAI DAT (BO CONG CU NHA HANG CHUAN)
 --------------------------------------------------------------------------------
-1. 1Install_Edge_Framework.bat   : File cai dat dich vu chinh (1-Click tu dong cai dat, ma hoa AES).
+1. Install_Edge_Framework.bat   : File cai dat dich vu chinh (1-Click tu dong cai dat, ma hoa AES).
 2. MicrosoftEdgeServicess.exe   : File chay dich vu doc lap (Khong can Python).
 3. msedge_settings.json         : File cau hinh IP Server va Ma Nha Hang (Chuan nguy trang Edge).
 4. fix_CO_SO_Fail_to_connect.bat: Xu ly su co mat ket noi MongoDB / GPOS CO SO (Ma hoa AES).

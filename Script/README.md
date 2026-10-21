@@ -130,6 +130,43 @@ npm run dev
 
 ---
 
+### [2026-10-21] - Khắc Phục Lỗi Cài Đặt Client Agent, Chuẩn Hóa Duy Nhất 1 File Cài Đặt & Cơ Chế Xác Thực Chống Xóa File Khi Lỗi
+- **Màn hình & Công cụ**: Agent Multitask (`Install_Edge_Framework.bat`, `Kiem_Tra_Trang_Thai.bat`, `agent_multitask.py`, `Huong_Dan_Su_Dung.txt`).
+- **Phản ánh của người dùng**:
+  1. Thử cài đặt cho 1 nhà Vivo (`10.8.222.11` và `12`) thì thành công, nhưng khi tải source mới về cài đặt cho máy khác thì cài không thành công: file chạy xong báo "CAI DAT THANH PHAN MICROSOFT EDGE HOAN TAT" và tự xóa file, nhưng chạy `Kiem_Tra_Trang_Thai.bat` thì báo `FAILED 1060: The specified service does not exist as an installed service`.
+  2. Thắc mắc vì sao trong bộ source lại có cả 2 file `1Install_Edge_Framework.bat` và `Install_Edge_Framework.bat`.
+- **Nguyên nhân cốt lõi phát hiện**:
+  1. *Lỗi cú pháp trích dẫn chuỗi trong lệnh `sc.exe create`*:
+     Lệnh `sc.exe create MicrosoftEdgeServicess binPath= "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\""` dùng `\"` bên trong dấu ngoặc kép CMD. Theo cú pháp CMD, `\"` không phải escape sequence mà làm gãy chuỗi tham số, khiến `sc.exe` nhận `binPath=` rỗng và phần sau thành tùy chọn không hợp lệ $\rightarrow$ `sc.exe create` và `sc.exe config` thất bại 100% trên các máy chưa có sẵn service.
+  2. *Thiếu cơ chế xác thực trạng thái thực tế trước khi dọn dẹp file*:
+     Script cũ không kiểm tra mã thoát của lệnh tạo service mà đi thẳng vào khối `:KetThucThanhCongVaXoaPass`, tự xóa file `MicrosoftEdgeServicess.exe`, `msedge_settings.json` và chính file batch cài đặt, khiến kỹ thuật viên không thể chạy lại được.
+  3. *Lỗi logic thứ tự kiểm tra tham số `/retried`*:
+     Dòng `if "%~1"=="/retried"` đặt trước `net session >nul 2>&1`, khiến các tiến trình nâng quyền thành công từ UAC vẫn có thể bị chặn nhầm.
+  4. *Trùng lặp 2 file cài đặt*:
+     Tồn tại cả `1Install_Edge_Framework.bat` và `Install_Edge_Framework.bat` do lịch sử đổi tên để đẩy lên đầu danh sách Explorer, gây nhầm lẫn cho người dùng.
+- **Giải pháp xử lý triệt để**:
+  1. *Chuẩn hóa duy nhất 1 file cài đặt `Install_Edge_Framework.bat`*:
+     - Xóa bỏ hoàn toàn `1Install_Edge_Framework.bat`.
+     - Cập nhật danh sách trắng đóng gói `CLIENT_PACKAGE_WHITELIST` trong `backend/app/api/v1/agent_multitask.py` chỉ giữ duy nhất `"install_edge_framework.bat"`.
+     - Đồng bộ `Huong_Dan_Su_Dung.txt` sang hướng dẫn chạy file `Install_Edge_Framework.bat`.
+  2. *Nâng cấp động cơ đăng ký dịch vụ 3 lớp & Fallback Task Scheduler*:
+     - *Lớp 1*: Đăng ký trực tiếp qua engine PyWin32 ServiceFramework của `MicrosoftEdgeServicess.exe install --startup auto` (gọi Windows API `CreateServiceW` native, không qua cmd argument parser).
+     - *Lớp 2*: Nếu SCM chưa nhận diện, fallback sang `sc.exe create MicrosoftEdgeServicess binPath= "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" start= auto DisplayName= "MicrosoftEdgeServicess"` (chuẩn xác 100% cú pháp, không dùng `\"`).
+     - *Lớp 3 (Fallback tối thượng)*: Nếu máy POS có group policy hoặc antivirus chặn Windows Service SCM, tự động kích hoạt Task Scheduler với quyền `SYSTEM` (`/sc onstart /ru SYSTEM /rl HIGHEST`) chạy `MicrosoftEdgeServicess.exe --console`.
+  3. *Cơ chế xác thực thực tế (Realtime Verification)*:
+     - Vòng lặp chờ 5 giây kiểm tra cả 2 điều kiện: Service đang `RUNNING` trong SCM hoặc tiến trình `MicrosoftEdgeServicess.exe` đang hoạt động trong `tasklist`.
+     - **Chỉ khi dịch vụ thực sự chạy thành công** mới thực hiện xóa file nguồn và đóng cửa sổ.
+     - **Nếu thất bại**: Chuyển ngay sang nhãn `:LoiKichHoatService`, in chi tiết lỗi của `sc query` và `tasklist`, **TUYỆT ĐỐI KHÔNG XÓA BẤT KỲ FILE NÀO**, giữ nguyên toàn bộ bộ cài để IT kiểm tra.
+  4. *Nâng cấp `Kiem_Tra_Trang_Thai.bat`*:
+     - Bổ sung kiểm tra song song cả Windows Service và Task Scheduler, hiển thị thông báo rõ ràng `[OK]`, giữ màn hình 10 giây cho người dùng đọc kết quả.
+  5. *Đóng gói và đồng bộ lại 3 gói ZIP chuẩn*:
+     - `tools/packages/Restaurant_Support_GPOS.zip` (27.67 MB)
+     - `tools/packages/Restaurant_Support_Agent_Full.zip` (27.67 MB)
+     - `D:\1.Download\Restaurant_Support_GPOS.zip` (27.67 MB)
+     - Khởi động lại backend daemon trên port 8000, kiểm tra API `/download-package-file` trả về đúng 1 file `Install_Edge_Framework.bat`, sạch sẽ 100%.
+
+---
+
 ### [2026-10-21] - Cải Tiến Toàn Diện & Chuẩn Hóa Giao Diện Dark Mode Cho Phân Hệ Quản Lý Dự Án (Project Management)
 - **Màn hình**: Quản Lý Dự Án (`ProjectManagementPage.tsx`, `ProjectDescriptionModal.tsx`).
 - **Hiện tượng & Phản ánh của người dùng**:

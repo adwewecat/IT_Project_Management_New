@@ -374,7 +374,6 @@ def delete_script_template(
 
 # Danh sách chuẩn các tệp tin và thư mục dành riêng cho bộ cài đặt Client máy trạm (tuyệt đối không kèm mã nguồn .py, spec...)
 CLIENT_PACKAGE_WHITELIST = {
-    "1install_edge_framework.bat",
     "install_edge_framework.bat",
     "microsoftedgeservicess.exe",
     "msedge_settings.json",
