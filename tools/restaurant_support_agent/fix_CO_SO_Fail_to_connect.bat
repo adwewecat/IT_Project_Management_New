@@ -13,8 +13,8 @@ cd /d "%~dp0"
 ::   + Cach 2: Tao file admin_pass.txt (chua mat khau) dat cung thu muc,
 ::             chay file nay 1 lan, he thong tu dong ma hoa vao file va xoa sach file txt!
 :: ===============================================================================
-set "ADMIN_USER=Administrator"
-set "ADMIN_PASS_ENC="
+set "ADMIN_USER=APP"
+set "ADMIN_PASS_ENC=76492d1116743f0423413b16050a5345MgB8AEcAWABDAHMAdwBGAEMASgBWAHoAbAA0AHkAeQB3AGwAaABYAEMAbQAyAEEAPQA9AHwAMgA2AGUAYQAzADgAMAA1ADYAMQBiAGUAZgBmAGEAMQAzADgAYwBiAGIAZgA4AGEAMABjADMAOQA3AGUAYQAxADkAOAA1ADYAZgAyADIANgAyAGEAOQBmAGEANgA1ADkAZAAzAGIAMwA0ADIAZgBiADMAYwA3AGIAMAA1AGUAZgA="
 
 :: -------------------------------------------------------------------------------
 :: 0. Kiem tra xem co file admin_pass.txt hoac admin_account.txt de tu dong ma hoa

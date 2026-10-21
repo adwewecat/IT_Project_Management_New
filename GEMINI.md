@@ -989,7 +989,7 @@
   + **Giải pháp kỹ thuật toàn diện**:
     1. *Mã Hóa Mật Khẩu Chuẩn AES SecureString*:
        - Sử dụng chuẩn `ConvertTo-SecureString` & `ConvertFrom-SecureString` kết hợp khóa AES bí mật 16-byte nhúng trong script.
-       - Chuỗi mật khẩu lưu trong file có định dạng ciphertext hexa/base64 (`set "ADMIN_PASS_ENC=76492d1116743f04..."`).
+       - Chuỗi mật khẩu lưu trong file có định dạng ciphertext hexa/base64 (`set "ADMIN_USER=APP"`, `set "ADMIN_PASS_ENC=76492d1116743f04..."` cho mật khẩu `GGrg@2025`).
        - Khi mở file bằng Notepad, mật khẩu hoàn toàn được bảo vệ, không thể đọc được bằng mắt thường.
     2. *Cơ Chế Tự Động Nâng Quyền (Elevated Privilege Execution)*:
        - Nếu máy đã chạy quyền Admin (`net session`) $\rightarrow$ Thực thi trực tiếp tốc độ cao.

@@ -4155,7 +4155,7 @@ estaurant_service.py).
 - **Chi tiết giải pháp kỹ thuật**:
   1. *Mã Hóa Mật Khẩu Chuẩn AES SecureString*:
      - Ứng dụng hàm `ConvertTo-SecureString` & `ConvertFrom-SecureString` kết hợp khóa AES 16-byte bí mật.
-     - Mật khẩu lưu dưới dạng chuỗi hexa/base64 ciphertext (`set "ADMIN_PASS_ENC=76492d1116743f04..."`).
+     - Mật khẩu lưu dưới dạng chuỗi hexa/base64 ciphertext (`set "ADMIN_USER=APP"`, `set "ADMIN_PASS_ENC=76492d1116743f04..."` cho mật khẩu `GGrg@2025`).
      - Khi mở file bằng Notepad, mật khẩu hoàn toàn được che giấu tuyệt đối.
   2. *Cơ Chế Tự Động Nâng Quyền (Elevated Privilege Execution)*:
      - Nếu tiến trình đã có quyền Admin (`net session`) $\rightarrow$ Thực thi trực tiếp.
