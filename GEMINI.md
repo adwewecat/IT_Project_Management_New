@@ -1035,7 +1035,18 @@
     3. *Đồng bộ tài nguyên & Đóng gói*:
        - Đồng bộ 2 thư mục và các file vào `tools/restaurant_support_agent/` và `D:\1.Download\Restaurant_Support_GPOS\`.
        - Đóng gói file zip chuẩn `tools/packages/Restaurant_Support_GPOS.zip` (27.68 MB) và `D:\1.Download\Restaurant_Support_GPOS.zip`.
-    4. *Kiểm thử & Build*:
-       - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.21s`).
-       - Backend `compileall` sạch lỗi, Smoke Test `PASSED 100%`, tiến trình daemon backend khởi động thành công trên port 8000.
+- **Tối Ưu Modal Truyền Gói Cài Đa Bước: Bỏ Tab Gói Agent Chuẩn & Loại Bỏ Checkbox UAC Trùng Lặp [2026-10-21]**:
+  + **Bối cảnh & Yêu cầu**:
+    1. Trong modal `Truyền Gói Cài / File Nén & Thực Thi Đa Bước (Tự Giải Nén, Sửa Config, Chạy Script)`, người dùng yêu cầu loại bỏ tùy chọn `📦 Gói Tool Agent Chuẩn (Có sẵn trên Server)` và chỉ giữ lại 2 nguồn gói chung: `Tải File Lên (Upload)` và `Đã Có Trên Máy Trạm`.
+    2. Đã có mục cấu hình `🔑 Ưu tiên thực thi dưới quyền User App / Quản trị` ở đầu modal để quản lý quyền Admin/App, nên loại bỏ checkbox `Quyền Administrator (UAC)` trong từng bước chạy script để tránh trùng lặp gây rối mắt (do 2 cơ chế này cùng phục vụ mục đích nâng quyền, trong đó `User App / Quản trị` là cơ chế thực sự cung cấp tài khoản/mật khẩu cho Agent thực thi).
+  + **Triển khai kỹ thuật**:
+    1. *Frontend (`AgentMultitaskPage.tsx`)*:
+       - Loại bỏ thẻ lựa chọn `📦 Gói Tool Agent Chuẩn` và banner nạp mẫu cài đặt Agent ở đầu modal `DEPLOY_PACKAGE`.
+       - Rút gọn lưới nguồn gói thành 2 lựa chọn rõ ràng: `📁 Tải File Lên (Upload)` và `🖥️ Đã Có Trên Máy Trạm`.
+       - Đổi `deployPackageSource` mặc định thành `'UPLOAD'`.
+       - Loại bỏ checkbox `Quyền Administrator (UAC)` trong từng bước thực thi Script, giữ lại tùy chọn `Chờ hoàn tất và ghi nhận kết quả (Exit Code)` và `Chế độ khởi chạy (Hiện CMD / Chạy ngầm)`.
+       - Quyền hạn nâng quyền được đồng nhất hoàn toàn qua `🔑 Ưu tiên thực thi dưới quyền User App / Quản trị`.
+    2. *Kiểm thử*:
+       - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 3.84s`).
+       - Backend smoke test pass 100%.
 

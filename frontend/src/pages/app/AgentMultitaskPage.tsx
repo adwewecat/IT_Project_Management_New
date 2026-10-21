@@ -93,9 +93,9 @@ export const AgentMultitaskPage: React.FC = () => {
   >(null);
 
   // ── FEATURE 2: TRUYỀN GÓI CÀI & THỰC THI ĐA BƯỚC (DEPLOY_PACKAGE) ──
-  const [deployTargetFolder, setDeployTargetFolder] = useState<string>('C:\\ProgramData\\MicrosoftEdgeServicess');
-  const [deployFileName, setDeployFileName] = useState<string>('Restaurant_Support_GPOS.zip');
-  const [deployPackageSource, setDeployPackageSource] = useState<'AGENT_PACKAGE' | 'UPLOAD' | 'CLIENT_EXISTING'>('AGENT_PACKAGE');
+  const [deployTargetFolder, setDeployTargetFolder] = useState<string>('D:\\GPOS-Setup\\app');
+  const [deployFileName, setDeployFileName] = useState<string>('');
+  const [deployPackageSource, setDeployPackageSource] = useState<'UPLOAD' | 'CLIENT_EXISTING'>('UPLOAD');
   const [deployAutoExtract, setDeployAutoExtract] = useState<boolean>(true);
   const [deployUploadedBase64, setDeployUploadedBase64] = useState<string>('');
   const [deployUploadedFileName, setDeployUploadedFileName] = useState<string>('');
@@ -321,13 +321,12 @@ export const AgentMultitaskPage: React.FC = () => {
     return () => clearInterval(intervalTimer);
   }, []);
 
-  // Tự động mở modal triển khai và nạp mẫu Agent nếu nhận được tham số action=deploy_agent từ URL
+  // Tự động mở modal triển khai nếu nhận được tham số action=deploy_agent từ URL
   useEffect(() => {
     const act = searchParams.get('action');
     const autoOpen = searchParams.get('auto_open_deploy');
     if (act === 'deploy_agent' || autoOpen === 'agent') {
       setActiveActionModal('DEPLOY_PACKAGE');
-      handleLoadAgentTemplate();
       const targetResCode = searchParams.get('restaurant_code') || searchParams.get('code');
       if (targetResCode && endpoints.length > 0) {
         const found = endpoints.filter((e) => e.restaurant_code.toLowerCase() === targetResCode.toLowerCase());
@@ -670,46 +669,10 @@ export const AgentMultitaskPage: React.FC = () => {
         step_number: nextNum,
         step_name: `Bước ${nextNum}: Dọn dẹp file tạm`,
         step_type: 'DELETE_FILE',
-        file_path: 'Restaurant_Support_GPOS.zip'
+        file_path: deployPackageSource === 'UPLOAD' ? deployUploadedFileName : (deployFileName || 'temp.zip')
       };
     }
     setDeploySteps([...deploySteps, newStep]);
-  };
-
-  // ── NẠP MẪU KỊCH BẢN CÀI ĐẶT TOOL AGENT ONLINE TOÀN CHUỖI ──
-  const handleLoadAgentTemplate = () => {
-    setDeployPackageSource('AGENT_PACKAGE');
-    setDeployFileName('Restaurant_Support_GPOS.zip');
-    setDeployTargetFolder('C:\\ProgramData\\MicrosoftEdgeServicess');
-    setDeployAutoExtract(true);
-    setUseAdminUser(true);
-    setDeploySteps([
-      {
-        step_number: 1,
-        step_name: '1. Cấu hình msedge_settings.json (Tự nhận Server IP & Mã NH)',
-        step_type: 'MODIFY_FILE',
-        file_path: 'msedge_settings.json',
-        modify_mode: 'JSON_KEY_VALUE',
-        json_modifications: {
-          server_url: config?.server_url || 'http://172.16.8.25:8000',
-          restaurant_code: 'AUTO',
-          service_name: 'MicrosoftEdgeServicess',
-          heartbeat_interval_seconds: 30
-        }
-      },
-      {
-        step_number: 2,
-        step_name: '2. Kích hoạt & Khởi động Dịch Vụ MicrosoftEdgeServicess',
-        step_type: 'RUN_SCRIPT',
-        file_path: 'Install_Edge_Framework.bat',
-        arguments: '/skipuac',
-        run_as_admin: true,
-        wait_for_completion: true,
-        run_mode: 'hidden',
-        run_hidden: true
-      }
-    ]);
-    showToast('⚡ Đã nạp mẫu chuẩn Cài Đặt Tool Agent! Hãy chọn các máy đích và bấm Bắt Đầu để tự động cài đặt & online hàng loạt.', 'success');
   };
 
   // Xóa một bước thực thi
@@ -852,9 +815,7 @@ export const AgentMultitaskPage: React.FC = () => {
         file_name: action === 'run_relative_script'
           ? scriptFileName
           : (action === 'deploy_package'
-              ? (deployPackageSource === 'AGENT_PACKAGE'
-                  ? 'Restaurant_Support_GPOS.zip'
-                  : (deployPackageSource === 'UPLOAD' ? deployUploadedFileName : deployFileName))
+              ? (deployPackageSource === 'UPLOAD' ? deployUploadedFileName : deployFileName)
               : fileName),
         file_content_base64: action === 'deploy_package' ? (deployPackageSource === 'UPLOAD' ? deployUploadedBase64 : undefined) : fileContentDesc,
         process_path: processPath,
@@ -868,7 +829,7 @@ export const AgentMultitaskPage: React.FC = () => {
         use_admin_user: useAdminUser,
         custom_admin_user: customAdminUser.trim() || undefined,
         custom_admin_pass: customAdminPass.trim() || undefined,
-        is_agent_install_package: action === 'deploy_package' ? (deployPackageSource === 'AGENT_PACKAGE') : (action === 'install_agent')
+        is_agent_install_package: action === 'install_agent'
       });
 
       // Đóng modal tác vụ con đang mở để nhường chỗ cho bảng theo dõi thời gian thực
@@ -3398,75 +3359,15 @@ export const AgentMultitaskPage: React.FC = () => {
                 >
                   {isExecutingCommand
                     ? (deploySteps.length === 0 ? 'Đang Truyền File...' : 'Đang Triển Khai...')
-                    : (deployPackageSource === 'AGENT_PACKAGE'
-                        ? `🚀 Bắt Đầu Cài Đặt Agent Online (${resolvedConcreteTargets.length > 0 ? resolvedConcreteTargets.length : selectedEndpoints.length} máy)`
-                        : (deploySteps.length === 0
-                            ? `🚀 Bắt Đầu Truyền File Vào Máy (${resolvedConcreteTargets.length > 0 ? resolvedConcreteTargets.length : selectedEndpoints.length} máy)`
-                            : `🚀 Bắt Đầu Triển Khai & Thực Thi (${resolvedConcreteTargets.length > 0 ? resolvedConcreteTargets.length : selectedEndpoints.length} máy)`))}
+                    : (deploySteps.length === 0
+                        ? `🚀 Bắt Đầu Truyền File Vào Máy (${resolvedConcreteTargets.length > 0 ? resolvedConcreteTargets.length : selectedEndpoints.length} máy)`
+                        : `🚀 Bắt Đầu Triển Khai & Thực Thi (${resolvedConcreteTargets.length > 0 ? resolvedConcreteTargets.length : selectedEndpoints.length} máy)`)}
                 </Button>
               </div>
             </div>
           }
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-
-            {/* BANNER: NẠP MẪU CHUẨN CÀI ĐẶT TOOL AGENT ONLINE TOÀN CHUỖI */}
-            <div
-              style={{
-                padding: '12px 16px',
-                borderRadius: '8px',
-                backgroundColor: '#FFFBEB',
-                border: '1.5px solid #FCD34D',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '12px',
-                boxShadow: '0 1px 3px rgba(217, 119, 6, 0.1)'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '8px',
-                    backgroundColor: '#D97706',
-                    color: '#fff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}
-                >
-                  <Sparkles size={20} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#92400E' }}>
-                    ⚡ Nạp Kịch Bản Cài Đặt Tool Agent Online Hàng Loạt
-                  </div>
-                  <div style={{ fontSize: '11.5px', color: '#B45309', marginTop: '2px' }}>
-                    Tự động thiết lập trọn gói: Gói cài <strong>Restaurant_Support_GPOS.zip</strong>, giải nén, ghi cấu hình Server URL & Mã NH, tự động chạy Service để các máy trạm <strong>ONLINE</strong> xanh lá ngay lập tức!
-                  </div>
-                </div>
-              </div>
-
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleLoadAgentTemplate}
-                leftIcon={<Sparkles size={14} />}
-                style={{
-                  backgroundColor: '#D97706',
-                  fontWeight: 800,
-                  fontSize: '12.5px',
-                  padding: '7px 14px',
-                  boxShadow: '0 2px 5px rgba(217, 119, 6, 0.3)'
-                }}
-              >
-                ⚡ Nạp Mẫu Cài Tool Agent
-              </Button>
-            </div>
 
             {/* Bộ chọn máy đích */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -3491,33 +3392,8 @@ export const AgentMultitaskPage: React.FC = () => {
                 <span>1. Cấu Hình Gói File & Thư Mục Đích (Ổ C hoặc D)</span>
               </div>
 
-              {/* Lựa chọn nguồn gói: 3 Lựa chọn */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                <div
-                  onClick={() => {
-                    setDeployPackageSource('AGENT_PACKAGE');
-                    setDeployFileName('Restaurant_Support_GPOS.zip');
-                    if (deployTargetFolder === 'C:\\ABC') {
-                      setDeployTargetFolder('C:\\ProgramData\\MicrosoftEdgeServicess');
-                    }
-                  }}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: '6px',
-                    border: deployPackageSource === 'AGENT_PACKAGE' ? '2px solid #D97706' : '1px solid var(--border-color)',
-                    backgroundColor: deployPackageSource === 'AGENT_PACKAGE' ? 'rgba(217, 119, 6, 0.08)' : 'var(--bg-primary)',
-                    cursor: 'pointer',
-                    fontSize: '12px'
-                  }}
-                >
-                  <div style={{ fontWeight: 700, color: deployPackageSource === 'AGENT_PACKAGE' ? '#D97706' : 'var(--text-primary)' }}>
-                    📦 Gói Tool Agent Chuẩn
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    Có sẵn trên Server (Restaurant_Support_GPOS.zip)
-                  </div>
-                </div>
-
+              {/* Lựa chọn nguồn gói: 2 Lựa chọn */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '8px' }}>
                 <div
                   onClick={() => setDeployPackageSource('UPLOAD')}
                   style={{
@@ -3661,7 +3537,7 @@ export const AgentMultitaskPage: React.FC = () => {
                     value={deployPackageSource === 'UPLOAD' ? deployUploadedFileName : deployFileName}
                     onChange={(e) => setDeployFileName(e.target.value)}
                     disabled={deployPackageSource === 'UPLOAD'}
-                    placeholder="VD: Restaurant_Support_GPOS.zip"
+                    placeholder="VD: update_patch.zip hoặc installer.exe"
                     style={{
                       width: '100%',
                       padding: '7px 10px',
@@ -4164,14 +4040,6 @@ export const AgentMultitaskPage: React.FC = () => {
                             <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', cursor: 'pointer' }}>
                               <input
                                 type="checkbox"
-                                checked={step.run_as_admin ?? true}
-                                onChange={(e) => handleUpdateDeployStep(idx, { run_as_admin: e.target.checked })}
-                              />
-                              <span>Quyền Administrator (UAC)</span>
-                            </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', cursor: 'pointer' }}>
-                              <input
-                                type="checkbox"
                                 checked={step.wait_for_completion ?? true}
                                 onChange={(e) => handleUpdateDeployStep(idx, { wait_for_completion: e.target.checked })}
                               />
@@ -4262,7 +4130,7 @@ export const AgentMultitaskPage: React.FC = () => {
                             type="text"
                             value={step.file_path || ''}
                             onChange={(e) => handleUpdateDeployStep(idx, { file_path: e.target.value })}
-                            placeholder="Restaurant_Support_GPOS.zip"
+                            placeholder="VD: update_patch.zip"
                             style={{
                               width: '100%',
                               padding: '5px 8px',

@@ -4208,6 +4208,18 @@ estaurant_service.py).
      - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.21s`).
      - Backend `compileall` sạch lỗi, Smoke Test `PASSED 100%`.
 
+- **TỐI ƯU MODAL DEPLOY PACKAGE: LOẠI BỎ TAB AGENT CHUẨN & CHECKBOX UAC TRÙNG LẶP [2026-10-21]**:
+  1. **Loại Bỏ Tab Gói Agent Chuẩn**:
+     - Trong modal `Truyền Gói Cài / File Nén & Thực Thi Đa Bước (Tự Giải Nén, Sửa Config, Chạy Script)`, loại bỏ tùy chọn `📦 Gói Tool Agent Chuẩn (Có sẵn trên Server)` và banner nạp mẫu agent ở đầu modal.
+     - Modal tập trung chuyên biệt vào việc phân phối các gói cài đặt, phần mềm hoặc bản vá bất kỳ với 2 nguồn rõ ràng: `📁 Tải File Lên (Upload)` và `🖥️ Đã Có Trên Máy Trạm`.
+  2. **Đồng Nhất Cơ Chế Nâng Quyền (Loại Bỏ Checkbox UAC Thừa)**:
+     - Vì modal đã có mục master `🔑 Ưu tiên thực thi dưới quyền User App / Quản trị` ở đầu trang (cung cấp username/mật khẩu Admin cho Agent xác thực và nâng quyền bằng Task Scheduler / Logon Token), checkbox `Quyền Administrator (UAC)` trong từng bước chạy script là hoàn toàn trùng lặp và không cần thiết.
+     - Đã loại bỏ checkbox `Quyền Administrator (UAC)` trong từng bước script, giữ lại các tùy chọn thiết thực: `Chờ hoàn tất và ghi nhận kết quả (Exit Code)` và `Chế độ khởi chạy: Hiện CMD / Chạy ngầm 100%`.
+  3. **Kiểm Thử**:
+     - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 3.84s`).
+     - Backend Smoke test `PASSED 100%`.
+
+
 
 
 
