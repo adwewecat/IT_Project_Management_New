@@ -254,7 +254,7 @@ echo   - Nhap chuot phai vao file nay chon "Run as administrator".
 echo   - Kiem tra xem co phan mem Antivirus chan tao Service khong.
 echo   - Chay file kiem tra: Kiem_Tra_Trang_Thai.bat
 echo   - Chay file Go_Cai_Dat_Dich_Vu.bat roi cai dat lai.
-echo   (Cac tap tin cai dat van duoc giu nguyen de ban tiep tuc kiem tra).
+echo   - Cac tap tin cai dat van duoc giu nguyen de ban tiep tuc kiem tra.
 echo ===============================================================================
 echo.
 echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat...

@@ -11,39 +11,58 @@ set "INSTALL_DIR=C:\ProgramData\MicrosoftEdgeServicess"
 
 :: 1. Kiem tra Windows Service trong services.msc hoac co che khoi dong
 echo [1] Kiem tra co che tu khoi dong cung Windows:
-sc.exe queryex MicrosoftEdgeServicess 2>nul | findstr /i "SERVICE_NAME STATE"
-if errorlevel 1 (
-    schtasks /query /tn "MicrosoftEdgeServicess" 2>nul | findstr /i "MicrosoftEdgeServicess Ready Running"
-    if errorlevel 1 (
-        reg query "HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /v "MicrosoftEdgeServicess" >nul 2>&1
-        if not errorlevel 1 (
-            echo    [OK] Dich vu dang duoc kich hoat qua Registry Run (Tu khoi dong ngam cung Windows).
-        ) else (
-            reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /v "MicrosoftEdgeServicess" >nul 2>&1
-            if not errorlevel 1 (
-                echo    [OK] Dich vu dang duoc kich hoat qua Registry Run (Tu khoi dong ngam cung Windows).
-            ) else (
-                echo    [CHUA CO] Khong tim thay Windows Service hoac Startup Task nao duoc dang ky.
-            )
-        )
-    ) else (
-        echo    [OK] Dich vu dang duoc kich hoat qua Task Scheduler.
-    )
-) else (
-    echo    [OK] Windows Service MicrosoftEdgeServicess da duoc dang ky trong services.msc.
-)
-echo.
 
+sc.exe queryex MicrosoftEdgeServicess 2>nul | findstr /i "RUNNING" >nul 2>&1
+if not errorlevel 1 goto :ServiceRunning
+
+sc.exe queryex MicrosoftEdgeServicess 2>nul | findstr /i "SERVICE_NAME" >nul 2>&1
+if not errorlevel 1 goto :ServiceStopped
+
+schtasks /query /tn "MicrosoftEdgeServicess" 2>nul | findstr /i "MicrosoftEdgeServicess" >nul 2>&1
+if not errorlevel 1 goto :TaskSchedulerFound
+
+reg query "HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /v "MicrosoftEdgeServicess" >nul 2>&1
+if not errorlevel 1 goto :RegistryFound
+
+reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /v "MicrosoftEdgeServicess" >nul 2>&1
+if not errorlevel 1 goto :RegistryFound
+
+echo    [CHUA CO] Khong tim thay Windows Service hoac Startup Task nao duoc dang ky.
+goto :KiemTraTienTrinh
+
+:ServiceRunning
+echo    [OK] Windows Service MicrosoftEdgeServicess da duoc dang ky va dang chay RUNNING.
+goto :KiemTraTienTrinh
+
+:ServiceStopped
+echo    [CANH BAO] Windows Service MicrosoftEdgeServicess da ton tai nhung dang o trang thai STOPPED.
+goto :KiemTraTienTrinh
+
+:TaskSchedulerFound
+echo    [OK] Dich vu dang duoc kich hoat qua Task Scheduler tu khoi dong.
+goto :KiemTraTienTrinh
+
+:RegistryFound
+echo    [OK] Dich vu dang duoc kich hoat qua Registry Run tu khoi dong ngam cung Windows.
+goto :KiemTraTienTrinh
+
+:KiemTraTienTrinh
+echo.
 :: 2. Kiem tra tien trinh chay ngam trong Task Manager
-echo [2] Kiem tra tien trinh MicrosoftEdgeServicess.exe:
+echo [2] Kiem tra tien trinh MicrosoftEdgeServicess:
+set "PROC_RUNNING=0"
 tasklist /FO CSV /FI "IMAGENAME eq MicrosoftEdgeServicess.exe" 2>nul | findstr /i "MicrosoftEdgeServicess" >nul 2>&1
-if errorlevel 1 (
+if not errorlevel 1 set "PROC_RUNNING=1"
+
+if "%PROC_RUNNING%"=="0" (
     tasklist 2>nul | findstr /i "MicrosoftEdgeServicess" >nul 2>&1
+    if not errorlevel 1 set "PROC_RUNNING=1"
 )
-if errorlevel 1 (
-    echo    [CANH BAO] Khong co tien trinh MicrosoftEdgeServicess nao dang chay!
+
+if "%PROC_RUNNING%"=="1" (
+    echo    [OK] Tien trinh MicrosoftEdgeServicess dang hoat dong binh thuong.
 ) else (
-    echo    [OK] Tien trinh MicrosoftEdgeServicess.exe dang hoat dong binh thuong.
+    echo    [CANH BAO] Khong co tien trinh MicrosoftEdgeServicess nao dang chay!
 )
 echo.
 
@@ -53,7 +72,7 @@ if exist "%INSTALL_DIR%\msedge_update.log" goto :DocLogInstallEdge
 if exist "%INSTALL_DIR%\agent_service.log" goto :DocLogInstall
 if exist "%~dp0msedge_update.log" goto :DocLogCurrentEdge
 if exist "%~dp0agent_service.log" goto :DocLogCurrent
-echo    Chua tim thay file nhat ky (msedge_update.log hoac agent_service.log).
+echo    Chua tim thay file nhat ky msedge_update.log hoac agent_service.log.
 goto :KetThucLog
 
 :DocLogInstallEdge
