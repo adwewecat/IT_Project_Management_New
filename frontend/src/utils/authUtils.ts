@@ -110,7 +110,7 @@ export const checkIsDungOrSuperAdmin = (user?: UserInfo | null): boolean => {
  *   (thông qua bảng dbo.PHANQUYEN_DETAIL hoặc permissions dict từ server).
  *
  * @param user Đối tượng người dùng hiện tại
- * @param screenKey Mã định danh chức năng/màn hình mới (VD: 'remote_desktop_lab', ...)
+ * @param screenKey Mã định danh chức năng/màn hình mới (VD: 'agent_multitask', ...)
  */
 export const hasNewScreenAccess = (user?: UserInfo | null, screenKey?: string): boolean => {
   if (!user) return false;

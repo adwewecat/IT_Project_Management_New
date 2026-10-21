@@ -937,6 +937,26 @@
     - Frontend `npm run build` exit code 0 (`✓ built in 4.28s`), `frontend/dist/` sạch sẽ.
     - Backend `compileall app` và Smoke Test 100% Passed. Đã khởi động lại Backend daemon mới trên port 8000.
 
+- **Xóa Bỏ Toàn Bộ Phân Hệ 'Thay Thế Remote', Làm Sạch Mã Nguồn & Tối Ưu Toàn Diện Mobile Responsive [2026-10-21]**:
+  + **Bối cảnh & Yêu cầu**: Gỡ bỏ triệt để toàn bộ phân hệ thử nghiệm "Thay Thế Remote" (Remote Desktop Lab & Remote Worker) ở cả Frontend, Backend và Tools theo yêu cầu người dùng; rà soát làm sạch code không sử dụng; tối ưu toàn bộ website tương thích mượt mà trên điện thoại di động (360px - 430px).
+  + **Triển khai**:
+    1. *Xóa Phân Hệ 'Thay Thế Remote'*:
+       - Frontend: Xóa `frontend/src/pages/remote/RemoteLabPage.tsx`, `frontend/src/pages/remote/`, `frontend/src/services/remoteLabService.ts`. Dọn dẹp `AppRoutes.tsx`, `Sidebar.tsx` (xóa `Monitor`, `canAccessRemoteLab`, menu Thay Thế Remote), `RolesPage.tsx` (xóa quyền `remote_desktop_lab`), `authUtils.ts`.
+       - Backend: Xóa `backend/app/api/v1/remote_lab.py`, `backend/app/services/remote_lab_service.py`. Gỡ router khỏi `backend/app/api/v1/router.py`. Xóa permission khỏi `role_service.py` và `auth_service.py`. Cập nhật `CLIENT_PACKAGE_WHITELIST` trong `agent_multitask.py` từ 7 file về 6 file chuẩn.
+       - Tools: Xóa `Chay_Thu_Nghiem_Remote_Lab.bat` và `remote_worker.py`. Cập nhật `MicrosoftEdgeServicess.spec` và `restaurant_support_agent.py` xóa bỏ toàn bộ cờ và logic `--remote-worker`. Cập nhật `Huong_Dan_Su_Dung.txt` chuẩn 6 file (100% tiếng Việt không dấu).
+    2. *Tối Ưu Mobile Responsive Toàn Diện (`frontend/src/styles/index.css`)*:
+       - Tự động chuyển container trang con bên trong `.app-main-content` sang cuộn dọc tự nhiên trên màn hình `<= 768px`, không bị ép 100vh cắt cụt bảng dữ liệu.
+       - Co giãn padding thẻ Card trên mobile (`padding: 12px 10px !important`).
+       - Tự động `flex-wrap: wrap !important; gap: 8px !important` cho các toolbar, filter bar, header actions.
+       - Tối ưu Toast Notifications trên mobile không bị tràn lề màn hình (`left: 8px !important; right: 8px !important; max-width: calc(100vw - 16px) !important`).
+       - Bọc bảo vệ mọi bảng dữ liệu cuộn ngang độc lập với cảm ứng quán tính (`-webkit-overflow-scrolling: touch`), giữ cố định tiêu đề cột `th` không bị ép co rúm chữ.
+       - Xử lý các dropdown, input có `minWidth` lớn tự thu nhỏ về `width: 100% !important; min-width: 0 !important` trên mobile.
+       - Tự động chuyển lưới Modal (`gridTemplateColumns`) sang 1 cột trên màn hình `<= 640px` để dễ bấm và đọc rõ nét.
+  + **Build & Kiểm thử**:
+    - Frontend `cmd /c "npm run build"` exit code 0 (`✓ built in 3.53s`), bundle JS sạch sẽ, `frontend/dist/` sẵn sàng triển khai.
+    - Backend `compileall app` và Smoke Test 100% Passed.
+    - Tool agent `py_compile` thành công 100%.
+
 
 
 

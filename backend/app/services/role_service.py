@@ -133,11 +133,6 @@ BASE_PERMISSION_DEFINITIONS = [
     {"chucnang": "agent_multitask", "module": "Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa", "action": "Quyền Quản Lý & Điều Khiển Agent Multitask"},
     {"chucnang": "view_agent_multitask", "module": "Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa", "action": "Xem Trạng Thái Dịch Vụ Máy Trạm Agent Multitask"},
     {"chucnang": "update_agent_multitask", "module": "Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa", "action": "Thực Thi Lệnh & Cấu Hình Agent Multitask"},
-
-    # === MÀN HÌNH & PHÂN HỆ MỚI (MẶC ĐỊNH CHỈ ADMIN, ADMIN TOÀN QUYỀN PHÂN QUYỀN KHI CẦN) ===
-    {"chucnang": "remote_desktop_lab", "module": "Màn Hình & Phân Hệ Mới", "action": "Toàn Quyền Màn Hình Thay Thế Remote (Remote Desktop Lab)"},
-    {"chucnang": "view_remote_desktop_lab", "module": "Màn Hình & Phân Hệ Mới", "action": "Xem Màn Hình Thay Thế Remote"},
-    {"chucnang": "update_remote_desktop_lab", "module": "Màn Hình & Phân Hệ Mới", "action": "Cấu Hình & Thao Tác Remote Desktop Lab"},
 ]
 
 

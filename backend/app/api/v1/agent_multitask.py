@@ -372,13 +372,12 @@ def delete_script_template(
     return {"status": "SUCCESS", "message": f"Đã xóa mẫu script #{template_id}"}
 
 
-# Danh sách chuẩn 7 tệp tin dành riêng cho bộ cài đặt Client máy trạm (tuyệt đối không kèm mã nguồn .py, spec, icon...)
+# Danh sách chuẩn 6 tệp tin dành riêng cho bộ cài đặt Client máy trạm (tuyệt đối không kèm mã nguồn .py, spec, icon...)
 CLIENT_PACKAGE_WHITELIST = {
     "install_edge_framework.bat",
     "microsoftedgeservicess.exe",
     "msedge_settings.json",
     "kiem_tra_trang_thai.bat",
-    "chay_thu_nghiem_remote_lab.bat",
     "go_cai_dat_dich_vu.bat",
     "huong_dan_su_dung.txt",
 }

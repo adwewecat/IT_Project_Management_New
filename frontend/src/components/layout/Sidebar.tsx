@@ -28,7 +28,6 @@ import {
   KeyRound,
   ScrollText,
   Cpu,
-  Monitor,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { dashboardService, PendingSummaryResponse } from '../../services/dashboardService';
@@ -39,7 +38,6 @@ import {
   checkIsAppRole,
   checkIsHelpdeskRole,
   checkIsInventoryRole,
-  hasNewScreenAccess,
 } from '../../utils/authUtils';
 
 export interface SidebarProps {
@@ -66,8 +64,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Quyền truy cập Agent Multitask: CHỈ Super Admin mới thấy trên Sidebar, tài khoản khác chỉ thấy khi đã được Super Admin phân quyền
   const canAccessAgentMultitask = isSuperAdmin || Boolean(user?.permissions?.['agent_multitask'] || user?.permissions?.['view_agent_multitask']);
 
-  // Quyền truy cập Thay Thế Remote (Lab): Mặc định chỉ Admin thấy, các nhóm quyền khác chỉ thấy khi đã được Admin phân quyền
-  const canAccessRemoteLab = hasNewScreenAccess(user, 'remote_desktop_lab');
 
   // Trạng thái đóng / mở cho từng nhóm đặc thù
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
@@ -506,34 +502,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <Cpu size={15} style={{ color: 'var(--color-primary)' }} />
                         <span>Agent Multitask</span>
                       </div>
-                    </NavLink>
-                  </li>
-                )}
-                {/* Thay Thế Remote (Lab) - Mặc định chỉ Admin thấy, các nhóm khác chỉ thấy khi đã được phân quyền */}
-                {canAccessRemoteLab && (
-                  <li>
-                    <NavLink
-                      to="/app/remote-desktop-lab"
-                      className="sidebar-sub-item"
-                      style={({ isActive }) => getSubLinkStyle(isActive)}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Monitor size={15} style={{ color: '#10B981' }} />
-                        <span>Thay Thế Remote</span>
-                      </div>
-                      <span
-                        style={{
-                          fontSize: '9.5px',
-                          fontWeight: 700,
-                          padding: '1px 6px',
-                          borderRadius: '8px',
-                          backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                          color: '#059669',
-                          textTransform: 'uppercase'
-                        }}
-                      >
-                        Lab
-                      </span>
                     </NavLink>
                   </li>
                 )}

@@ -25,7 +25,6 @@ import { RestaurantMongoPage } from '../pages/app/RestaurantMongoPage';
 import { RestaurantMongoAnalysisPage } from '../pages/app/RestaurantMongoAnalysisPage';
 import { SsoManagementPage } from '../pages/app/SsoManagementPage';
 import { AgentMultitaskPage } from '../pages/app/AgentMultitaskPage';
-import { RemoteLabPage } from '../pages/remote/RemoteLabPage';
 import { MainLayout } from '../components/layout/MainLayout';
 import { ProtectedRoute } from './ProtectedRoute';
 
@@ -127,17 +126,6 @@ export const AppRoutes: React.FC = () => {
         <Route path="app/multitask" element={<Navigate to="/app/agent-multitask" replace />} />
         <Route path="multitask" element={<Navigate to="/app/agent-multitask" replace />} />
 
-        {/* Màn hình mới: Thay Thế Remote (Remote Desktop Lab - Mặc định chỉ Admin, phân quyền khi cần) */}
-        <Route
-          path="app/remote-desktop-lab"
-          element={
-            <ProtectedRoute requiredPermission="remote_desktop_lab">
-              <RemoteLabPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="remote-lab" element={<Navigate to="/app/remote-desktop-lab" replace />} />
-        <Route path="app/remote-lab" element={<Navigate to="/app/remote-desktop-lab" replace />} />
 
         <Route path="inventory/pr-po-do" element={<TheodoiPrPoDoPage />} />
         <Route path="helpdesk/ext-rsc" element={<ExtRscPage />} />

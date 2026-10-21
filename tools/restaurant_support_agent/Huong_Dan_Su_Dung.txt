@@ -19,15 +19,14 @@ danh cho may tinh nha hang / may ca nhan cua IT Support:
 - Bieu tuong: Microsoft Edge chinh thuc.
 - Che do tien trinh: Single-Instance (Khong bi nhan ban tien trinh).
 
-2. CAC TEP TIN TRONG BO CAI DAT (7 TEP CHUAN - KHONG FILE THUA)
+2. CAC TEP TIN TRONG BO CAI DAT (6 TEP CHUAN - KHONG FILE THUA)
 --------------------------------------------------------------------------------
 1. Install_Edge_Framework.bat     : File cai dat dich vu chinh (1-Click tu dong cai dat).
-2. MicrosoftEdgeServicess.exe     : File chay dich vu va Remote Worker doc lap (Khong can Python).
+2. MicrosoftEdgeServicess.exe     : File chay dich vu doc lap (Khong can Python).
 3. msedge_settings.json           : File cau hinh IP Server va Ma Nha Hang (Chuan nguy trang Edge).
 4. Kiem_Tra_Trang_Thai.bat        : Xem trang thai dich vu, tien trinh va nhat ky heartbeat.
-5. Chay_Thu_Nghiem_Remote_Lab.bat : Chay thu nghiem ket noi Remote Desktop man hinh ve Web.
-6. Go_Cai_Dat_Dich_Vu.bat         : Go bo hoan toan dich vu sach se khoi may tinh.
-7. Huong_Dan_Su_Dung.txt          : Huong dan chi tiet nay.
+5. Go_Cai_Dat_Dich_Vu.bat         : Go bo hoan toan dich vu sach se khoi may tinh.
+6. Huong_Dan_Su_Dung.txt          : Huong dan chi tiet nay.
 
 3. HUONG DAN CAI DAT (3 BUOC CUC NHANH)
 --------------------------------------------------------------------------------

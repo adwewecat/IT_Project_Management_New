@@ -4071,6 +4071,54 @@ estaurant_service.py).
      - `frontend/src/services/agentMultitaskService.ts`: Bỏ trường `deploy_mode` trong `AgentCommandPayload`.
      - Kiểm thử & Đóng gói: `tsc -b` không còn lỗi TS6133, `npm run build` thành công `✓ built in 4.70s` (exit code 0), thư mục `frontend/dist/` đã sẵn sàng để đẩy lên server (Copy là chạy ngay).
 
+---
+
+### [2026-10-21] - XÓA BỎ TOÀN BỘ PHÂN HỆ 'THAY THẾ REMOTE', LÀM SẠCH MÃ NGUỒN & TỐI ƯU TOÀN DIỆN MOBILE RESPONSIVE
+
+- **Yêu Cầu & Bối Cảnh Nghiệp Vụ**:
+  - Người dùng yêu cầu: *"hãy xóa hết phần thay thế remote, những code không sài hãy xóa để làm sạch code, view lại hết toàn bộ web để có thể tương thích được với mobile"*.
+  - Mục tiêu:
+    1. Gỡ bỏ hoàn toàn phân hệ thử nghiệm "Thay Thế Remote" (Remote Desktop Lab & Remote Worker) cả ở Frontend, Backend và Tools, không để sót code rác hay file thừa.
+    2. Rà soát, dọn dẹp các biến/import thừa theo đúng nguyên tắc Clean Code và TS6133 zero warning.
+    3. Nâng cấp toàn diện bộ quy tắc CSS Mobile Responsive để toàn bộ ứng dụng web hiển thị mượt mà, trực quan, không bị vỡ layout trên các dòng điện thoại di động (360px - 430px).
+
+- **Các Công Việc Đã Thực Hiện Chi Tiết**:
+  1. **Xóa Bỏ Toàn Diện Phân Hệ 'Thay Thế Remote' (Remote Desktop Lab)**:
+     - **Frontend**:
+       + Xóa hoàn toàn file và thư mục: `frontend/src/pages/remote/RemoteLabPage.tsx` và `frontend/src/pages/remote/`.
+       + Xóa hoàn toàn service: `frontend/src/services/remoteLabService.ts`.
+       + Dọn sạch `frontend/src/routes/AppRoutes.tsx`: Xóa import `RemoteLabPage`, xóa các route `app/remote-desktop-lab`, alias `remote-lab` và `app/remote-lab`.
+       + Dọn sạch `frontend/src/components/layout/Sidebar.tsx`: Xóa import `Monitor`, xóa `hasNewScreenAccess`, xóa biến `canAccessRemoteLab` và xóa mục menu `Thay Thế Remote` (badge `Lab`).
+       + Dọn sạch `frontend/src/pages/admin/RolesPage.tsx`: Xóa quyền `remote_desktop_lab` trong từ điển `BASE_LABELS`.
+       + Dọn dẹp `frontend/src/utils/authUtils.ts`: Cập nhật chú thích chuẩn JSDoc.
+     - **Backend**:
+       + Xóa hoàn toàn API router: `backend/app/api/v1/remote_lab.py`.
+       + Xóa hoàn toàn service: `backend/app/services/remote_lab_service.py`.
+       + Dọn sạch `backend/app/api/v1/router.py`: Xóa import và mount `remote_lab_router`.
+       + Dọn sạch `backend/app/services/role_service.py`: Xóa các định nghĩa quyền `remote_desktop_lab`, `view_remote_desktop_lab`, `update_remote_desktop_lab`.
+       + Dọn sạch `backend/app/services/auth_service.py`: Xóa các quyền `remote_desktop_lab` trong danh mục `ALL_PERMISSIONS`.
+       + Dọn sạch `backend/app/api/v1/agent_multitask.py`: Cập nhật `CLIENT_PACKAGE_WHITELIST` từ 7 file về 6 file chuẩn, loại bỏ `chay_thu_nghiem_remote_lab.bat`.
+     - **Tools (Client Agent Support)**:
+       + Xóa file batch: `tools/restaurant_support_agent/Chay_Thu_Nghiem_Remote_Lab.bat`.
+       + Xóa file mã nguồn: `tools/restaurant_support_agent/remote_worker.py`.
+       + Dọn dẹp `tools/restaurant_support_agent/MicrosoftEdgeServicess.spec`: Xóa `datas=[('remote_worker.py', '.')]`, loại bỏ các import không cần thiết (`remote_worker`, `websockets`, `PIL`).
+       + Dọn dẹp `tools/restaurant_support_agent/restaurant_support_agent.py`: Xóa import `remote_worker`, xóa biến `CURRENT_REMOTE_WORKER_PROC`, xóa các nhánh hành động `start_remote_worker`, `stop_remote_worker`, xóa cờ CLI `--remote-worker`.
+       + Cập nhật `tools/restaurant_support_agent/Huong_Dan_Su_Dung.txt`: Cập nhật danh mục gói cài đặt chuẩn gồm 6 file thiết yếu (100% tiếng Việt không dấu, chuẩn OEM ASCII).
+
+  2. **Tối Ưu & Nâng Cấp Bộ Máy Mobile Responsive Toàn Diện (`frontend/src/styles/index.css`)**:
+     - Tự động chuyển mọi container trang con bên trong `.app-main-content` sang dạng cuộn dọc tự nhiên trên màn hình `<= 768px` (`min-height: calc(100vh - 56px)`, `height: auto !important`, `overflow-y: visible !important`, `overflow-x: hidden !important`), ngăn chặn triệt để hiện tượng bị ép cứng chiều cao 100vh gây cắt cụt bảng dữ liệu trên điện thoại.
+     - Tự động co giãn padding thẻ Card trên mobile (`padding: 12px 10px !important`, `border-radius: 10px !important`) giúp tiết kiệm tối đa không gian hiển thị dọc và ngang.
+     - Đảm bảo tất cả các thanh công cụ, toolbar, filter bars, action headers có thuộc tính `justify-content: space-between` đều tự động `flex-wrap: wrap !important` với khoảng cách `gap: 8px !important` khi ở trên màn hình nhỏ.
+     - Căn chỉnh Toast Notification (`zIndex: 9999`) trên mobile luôn nằm gọn trong khung nhìn (`left: 8px !important; right: 8px !important; max-width: calc(100vw - 16px) !important; box-sizing: border-box !important`), chữ tự ngắt dòng không bị tràn ra ngoài màn hình.
+     - Bọc bảo vệ toàn bộ bảng dữ liệu (`table`) trong container cuộn ngang cảm ứng mượt mà (`-webkit-overflow-scrolling: touch`), giữ cố định độ rộng tối thiểu của các cột tiêu đề `th` (`white-space: nowrap !important`) để chữ không bị co ép khó đọc.
+     - Xử lý các dropdown, ô tìm kiếm có `minWidth` lớn (260px - 320px) tự động chuyển về `min-width: 0 !important; width: 100% !important` trên mobile, ngăn chặn vỡ layout thanh tìm kiếm.
+     - Tự động chuyển các lưới thông tin trong Modal (`grid-template-columns`) thành 1 cột trên màn hình `<= 640px` để các thông tin chi tiết nhà hàng, cấu hình và nút sao chép hiển thị đầy đủ, dễ bấm bằng ngón tay cái.
+
+  3. **Kiểm Thử & Đóng Gói Triển Khai (Copy Là Chạy Ngay)**:
+     - Frontend: `cmd /c "npm run build"` tại thư mục `frontend/` hoàn thành xuất sắc với exit code 0 (`✓ built in 3.53s`), bundle JS đã giảm kích thước và toàn bộ bản build mới nhất kèm file `web.config` đã nằm sẵn trong `frontend/dist/`.
+     - Backend: `python -m compileall app` sạch lỗi 100%. Smoke Test `from app.main import app; print('>>> BACKEND PASSED 100%')` đạt 100% thành công.
+     - Tool Agent: `python -m py_compile restaurant_support_agent.py` đạt exit code 0 sạch sẽ.
+
 
 
 
