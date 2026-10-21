@@ -215,7 +215,6 @@ def apply_restaurant_search_filter(query, search_text: Optional[str]):
             Restaurant.address.collate("Latin1_General_CI_AI").like(u_term),
             Restaurant.region.collate("Latin1_General_CI_AI").like(u_term),
             Restaurant.brand.collate("Latin1_General_CI_AI").like(u_term),
-            Restaurant.timkiem.collate("Latin1_General_CI_AI").like(u_term),
             Restaurant.sdt_nh.collate("Latin1_General_CI_AI").like(u_term),
             Restaurant.email.collate("Latin1_General_CI_AI").like(u_term),
             Restaurant.ip.like(f"%{raw_term}%"),

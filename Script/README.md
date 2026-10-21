@@ -4260,6 +4260,22 @@ estaurant_service.py).
      - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.34s`, dist sạch kèm web.config).
      - Backend Smoke Test đạt `PASSED 100%`.
 
+- **SỬA LỖI TÌM KIẾM TRÙNG CHÉO TRANG DANH SÁCH NHÀ HÀNG & LỌC BỎ NHÀ HÀNG OFF / CHỮ "KHO" TRONG AGENT MULTITASK [2026-10-21]**:
+  1. **Khắc Phục Triệt Để Lỗi Tìm Kiếm Trùng Chéo Tên Nhà Hàng Khác**:
+     - *Nguyên nhân*: Cột `Restaurant.timkiem` trong CSDL chứa các chuỗi lịch sử như `"Chixmax Vivo City (shop in shop CP) sử dụng lại IP Gogi Tân Sơn Nhứt"` hay `"sử dụng lại IP Sumo Vincom Biên Hòa"`. Khi người dùng gõ `gogi` hoặc `sumo`, điều kiện tìm kiếm trên `timkiem` làm kết quả bị lẫn lộn các nhà hàng khác.
+     - *Giải pháp*: Loại bỏ `Restaurant.timkiem` khỏi `apply_restaurant_search_filter` trong `backend/app/services/restaurant_service.py`. Tìm kiếm chỉ so khớp trên các thuộc tính chuẩn xác của chính nhà hàng (`res`, `brand`, `sap`, `rk7`, `oracale`, `coscenter`, `ip`, `ip_wan`, `address`, `region`, `sdt_nh`, `email`).
+     - *Kết quả*: Tìm `gogi` trả về chính xác 121 nhà Gogi (không còn Chixmax); tìm `sumo` trả về chính xác 11 nhà Sumo (không còn Gogi hay Union District).
+  2. **Bỏ Qua Nhà Hàng OFF & Chữ "Kho" Trong Phân Hệ Agent Multitask**:
+     - *Backend (`agent_multitask_service.py`)*:
+       + Trong `sync_restaurants_to_endpoints`: Tự động quét và dọn dẹp các endpoint trong bảng `AGENT_MULTITASK_ENDPOINTS` có tên chứa chữ `Kho ` (đã xóa 9 kho như *Kho Việt Mỹ Thành, Kho Gia Phú, Kho Đông CK Bình Tân...*) hoặc liên kết tới nhà hàng có trạng thái `trangthai == 'OFF'`.
+       + Chỉ đồng bộ các nhà hàng `trangthai == 'ON'` và không có chữ `Kho ` trong tên.
+       + Bổ sung bộ lọc loại trừ trong `get_overview` và `get_endpoints`.
+     - *Frontend (`AgentMultitaskPage.tsx`)*: Bổ sung bộ lọc phòng vệ trong `filteredEndpoints` loại bỏ các endpoint có tên chứa hoặc bắt đầu bằng `Kho `.
+  3. **Kiểm Thử & Đồng Bộ**:
+     - Khởi động lại backend daemon trên port 8000, đồng bộ 384 endpoints sạch sẽ.
+     - Frontend `npm run build` đạt exit code 0 (`✓ built in 5.23s`).
+
+
 
 
 

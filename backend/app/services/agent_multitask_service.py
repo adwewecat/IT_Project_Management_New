@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, or_, not_
 
 from fastapi import HTTPException, status
 from app.models.agent_multitask import (
@@ -159,12 +159,49 @@ class AgentMultitaskService:
 
     @staticmethod
     def sync_restaurants_to_endpoints(db: Session) -> None:
-        """Đồng bộ danh sách nhà hàng đang hoạt động (ON) từ RESTAURANT sang AGENT_MULTITASK_ENDPOINTS."""
+        """
+        Đồng bộ danh sách nhà hàng đang hoạt động (ON) từ RESTAURANT sang AGENT_MULTITASK_ENDPOINTS.
+        - Bỏ qua các nhà hàng có trạng thái OFF.
+        - Bỏ qua các nhà hàng/kho có chữ 'Kho ' trong tên.
+        - Tự động dọn dẹp các endpoint đã tồn tại nhưng thuộc nhà hàng OFF hoặc có tên 'Kho '.
+        """
         try:
+            # 1. Tự động dọn dẹp các endpoint không hợp lệ trong AGENT_MULTITASK_ENDPOINTS:
+            # a) Các endpoint có chữ "Kho " trong tên
+            kho_endpoints = db.query(AgentMultitaskEndpoint).filter(
+                or_(
+                    AgentMultitaskEndpoint.restaurant_name.ilike("%Kho %"),
+                    AgentMultitaskEndpoint.restaurant_name.ilike("Kho %"),
+                    AgentMultitaskEndpoint.restaurant_name.ilike("% Kho %")
+                )
+            ).all()
+            for ep in kho_endpoints:
+                db.delete(ep)
+
+            # b) Các endpoint thuộc về nhà hàng có trạng thái OFF
+            off_restaurants = db.query(Restaurant).filter(Restaurant.trangthai == "OFF").all()
+            off_ids = {r.id for r in off_restaurants if r.id}
+            off_codes = {str(r.rk7 or r.sap or r.id).strip() for r in off_restaurants}
+
+            filter_conds = []
+            if off_ids:
+                filter_conds.append(AgentMultitaskEndpoint.restaurant_id.in_(list(off_ids)))
+            if off_codes:
+                filter_conds.append(AgentMultitaskEndpoint.restaurant_code.in_(list(off_codes)))
+
+            if filter_conds:
+                off_endpoints = db.query(AgentMultitaskEndpoint).filter(or_(*filter_conds)).all()
+                for ep in off_endpoints:
+                    db.delete(ep)
+
+            # 2. Lấy danh sách nhà hàng hợp lệ từ RESTAURANT (chỉ lấy trạng thái ON, không có chữ Kho)
             restaurants = db.query(Restaurant).filter(
                 Restaurant.trangthai == "ON",
                 Restaurant.ip.isnot(None),
-                Restaurant.ip != ""
+                Restaurant.ip != "",
+                not_(Restaurant.res.ilike("%Kho %")),
+                not_(Restaurant.res.ilike("Kho %")),
+                not_(Restaurant.res.ilike("% Kho %"))
             ).all()
 
             existing_codes = {
@@ -176,6 +213,11 @@ class AgentMultitaskService:
                 code = str(r.rk7 or r.sap or r.id).strip()
                 if not code:
                     continue
+
+                res_name = str(r.res or "").strip()
+                if "kho " in res_name.lower() or res_name.lower().startswith("kho"):
+                    continue
+
                 if code in existing_codes:
                     ep = existing_codes[code]
                     # Tuyệt đối không ghi đè ip_lan nếu máy trạm đã cài đặt hoặc đã nhận Heartbeat
@@ -211,7 +253,11 @@ class AgentMultitaskService:
         can_manage = AgentMultitaskService.check_user_permission(username, is_super_admin, db)
 
         now = datetime.now()
-        endpoints = db.query(AgentMultitaskEndpoint).all()
+        endpoints = db.query(AgentMultitaskEndpoint).filter(
+            not_(AgentMultitaskEndpoint.restaurant_name.ilike("%Kho %")),
+            not_(AgentMultitaskEndpoint.restaurant_name.ilike("Kho %")),
+            not_(AgentMultitaskEndpoint.restaurant_name.ilike("% Kho %"))
+        ).all()
         total = len(endpoints)
         installed = sum(1 for e in endpoints if e.is_installed)
         not_installed = total - installed
@@ -243,7 +289,11 @@ class AgentMultitaskService:
         """Lấy danh sách các nhà hàng kèm trạng thái service MicrosoftEdgeServicess."""
         AgentMultitaskService.sync_restaurants_to_endpoints(db)
 
-        query = db.query(AgentMultitaskEndpoint)
+        query = db.query(AgentMultitaskEndpoint).filter(
+            not_(AgentMultitaskEndpoint.restaurant_name.ilike("%Kho %")),
+            not_(AgentMultitaskEndpoint.restaurant_name.ilike("Kho %")),
+            not_(AgentMultitaskEndpoint.restaurant_name.ilike("% Kho %"))
+        )
 
         if installed_filter == "INSTALLED":
             query = query.filter(AgentMultitaskEndpoint.is_installed == True)

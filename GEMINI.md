@@ -1101,4 +1101,25 @@
        - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.34s`).
        - Backend Smoke Test đạt `PASSED 100%`.
 
+- **Sửa Lỗi Tìm Kiếm Trùng Chéo Danh Sách Nhà Hàng & Bỏ Qua Nhà Hàng OFF / Chữ "Kho" Trong Agent Multitask [2026-10-21]**:
+  + **Bối cảnh & Vấn đề**:
+    1. *Lỗi tìm kiếm*: Khi người dùng gõ từ khóa tìm kiếm như `gogi` thì kết quả lại trả về cả `Chixmax Vivo City`, hay khi tìm `sumo` lại ra cả `Gogi House EZY CENTER` và `UNION DISTRICT PIZZA & GRILL`.
+       - *Nguyên nhân*: Hàm tìm kiếm `apply_restaurant_search_filter` trước đây có tìm kiếm trên cột `Restaurant.timkiem`. Cột này trong DB chứa các ghi chú kỹ thuật lịch sử (như `"Chixmax Vivo City (shop in shop CP) sử dụng lại IP Gogi Tân Sơn Nhứt"`, `"sử dụng lại IP Sumo Vincom Biên Hòa"`), dẫn đến việc so khớp chuỗi chéo tên nhà hàng khác.
+    2. *Agent Multitask*: Người dùng yêu cầu phân hệ Agent Multitask bỏ qua các nhà hàng có trạng thái `OFF` và các nhà hàng/kho có chữ `"Kho "` trong tên để bảng thiết bị tinh gọn và đúng nghiệp vụ nhà hàng.
+  + **Triển khai kỹ thuật**:
+    1. *Sửa triệt để lỗi tìm kiếm (`backend/app/services/restaurant_service.py`)*:
+       - Loại bỏ điều kiện `Restaurant.timkiem.collate("Latin1_General_CI_AI").like(u_term)` khỏi `apply_restaurant_search_filter`.
+       - Tìm kiếm giờ đây chỉ so khớp chính xác trên các trường thực tế của nhà hàng: Tên nhà hàng (`res`), Thương hiệu (`brand`), Mã SAP (`sap`), Mã RK7 (`rk7`), Mã Oracle (`oracale`), Cost Center (`coscenter`), IP LAN (`ip`), IP WAN (`ip_wan`), Địa chỉ (`address`), Khu vực (`region`), SĐT (`sdt_nh`), Email (`email`).
+       - Kết quả kiểm thử: Tìm kiếm `gogi` ra đúng 121 nhà Gogi (không còn Chixmax); tìm kiếm `sumo` ra đúng 11 nhà Sumo (không còn Gogi hay Union District).
+    2. *Lọc bỏ nhà hàng OFF và "Kho " trong Agent Multitask*:
+       - *Backend (`agent_multitask_service.py`)*:
+         + Cập nhật `sync_restaurants_to_endpoints`: Tự động dọn dẹp các endpoint trong `AGENT_MULTITASK_ENDPOINTS` có tên chứa chữ `Kho ` (đã xóa sạch 9 kho như *Kho Việt Mỹ Thành, Kho Gia Phú, Kho Đông CK Bình Tân...*) hoặc liên kết tới nhà hàng có `trangthai == 'OFF'`.
+         + Khi đồng bộ nhà hàng mới, chỉ lấy các nhà hàng `trangthai == 'ON'` và không có chữ `Kho ` trong tên.
+         + Bổ sung bộ lọc an toàn trong `get_overview` và `get_endpoints` để không đếm hoặc trả về các trạm Kho/OFF.
+       - *Frontend (`AgentMultitaskPage.tsx`)*: Thêm bộ lọc phòng vệ trong `filteredEndpoints` bỏ qua các endpoint có tên bắt đầu hoặc chứa chữ `Kho `.
+    3. *Kiểm thử & Triển khai*:
+       - Khởi động lại backend daemon trên port 8000, nhận diện và đồng bộ 384 endpoints sạch sẽ.
+       - Frontend `npm run build` exit code 0 (`✓ built in 5.23s`).
+
+
 

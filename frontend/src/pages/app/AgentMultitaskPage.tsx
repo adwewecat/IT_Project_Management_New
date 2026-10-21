@@ -451,6 +451,12 @@ export const AgentMultitaskPage: React.FC = () => {
     const tokenSet = isMultiCode ? new Set(searchTokens) : null;
 
     return endpoints.filter((ep) => {
+      // Bỏ qua các nhà hàng/kho có chữ "Kho " trong tên
+      const resNameLower = (ep.restaurant_name || '').toLowerCase();
+      if (resNameLower.startsWith('kho ') || resNameLower.includes(' kho ') || resNameLower.includes('kho ')) {
+        return false;
+      }
+
       let matchSearch = true;
       if (searchTokens.length === 1) {
         const q = searchTokens[0];
