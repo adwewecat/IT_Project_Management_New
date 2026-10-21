@@ -14,48 +14,7 @@ cd /d "%~dp0"
 ::             chay file nay 1 lan, he thong tu dong ma hoa vao file va xoa sach file txt!
 :: ===============================================================================
 set "ADMIN_USER=APP"
-set "ADMIN_PASS_ENC=76492d1116743f0423413b16050a5345MgB8AEcAWABDAHMAdwBGAEMASgBWAHoAbAA0AHkAeQB3AGwAaABYAEMAbQAyAEEAPQA9AHwAMgA2AGUAYQAzADgAMAA1ADYAMQBiAGUAZgBmAGEAMQAzADgAYwBiAGIAZgA4AGEAMABjADMAOQA3AGUAYQAxADkAOAA1ADYAZgAyADIANgAyAGEAOQBmAGEANgA1ADkAZAAzAGIAMwA0ADIAZgBiADMAYwA3AGIAMAA1AGUAZgA="
-
-:: -------------------------------------------------------------------------------
-:: 0. Kiem tra xem co file admin_pass.txt hoac admin_account.txt de tu dong ma hoa
-:: -------------------------------------------------------------------------------
-if exist "%~dp0admin_account.txt" goto :TuDongMaHoaTuFileAccount
-if exist "%~dp0admin_pass.txt" goto :TuDongMaHoaTuFilePass
-goto :BoQuaMaHoaTuFile
-
-:TuDongMaHoaTuFileAccount
-echo [THIET LAP] Phat hien file admin_account.txt, dang tien hanh ma hoa mat khau...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='%~dp0admin_account.txt'; $bat='%~f0'; $lines=Get-Content -Path $f; if ($lines.Count -ge 1) { $u=$lines[0].Trim(); $p=''; if ($lines.Count -ge 2) { $p=$lines[1].Trim() }; if ($p) { $k=@(34,12,89,201,45,78,123,90,11,67,88,23,45,190,211,7); $sec=ConvertTo-SecureString $p -AsPlainText -Force; $enc=ConvertFrom-SecureString $sec -Key $k; $txt=[System.IO.File]::ReadAllText($bat); $txt=[System.Text.RegularExpressions.Regex]::Replace($txt, 'set \"ADMIN_USER=[^\"]*\"', \"set `\"ADMIN_USER=$u`\"\"); $txt=[System.Text.RegularExpressions.Regex]::Replace($txt, 'set \"ADMIN_PASS_ENC=[^\"]*\"', \"set `\"ADMIN_PASS_ENC=$enc`\"\"); [System.IO.File]::WriteAllText($bat, $txt); Write-Host '[OK] Da ma hoa va cap nhat User/Pass vao file script thanh cong!'; Remove-Item -Path $f -Force -ErrorAction SilentlyContinue; Start-Process -FilePath $bat -ArgumentList '%*'; exit 0 } }"
-exit /b 0
-
-:TuDongMaHoaTuFilePass
-echo [THIET LAP] Phat hien file admin_pass.txt, dang tien hanh ma hoa mat khau...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='%~dp0admin_pass.txt'; $bat='%~f0'; $p=(Get-Content -Path $f -Raw).Trim(); if ($p) { $k=@(34,12,89,201,45,78,123,90,11,67,88,23,45,190,211,7); $sec=ConvertTo-SecureString $p -AsPlainText -Force; $enc=ConvertFrom-SecureString $sec -Key $k; $txt=[System.IO.File]::ReadAllText($bat); $txt=[System.Text.RegularExpressions.Regex]::Replace($txt, 'set \"ADMIN_PASS_ENC=[^\"]*\"', \"set `\"ADMIN_PASS_ENC=$enc`\"\"); [System.IO.File]::WriteAllText($bat, $txt); Write-Host '[OK] Da ma hoa va cap nhat mat khau vao file script thanh cong!'; Remove-Item -Path $f -Force -ErrorAction SilentlyContinue; Start-Process -FilePath $bat -ArgumentList '%*'; exit 0 } }"
-exit /b 0
-
-:BoQuaMaHoaTuFile
-
-:: -------------------------------------------------------------------------------
-:: 1. Che do chay tham so /setpass hoac /mahoa de nhap mat khau truc tiep tu ban phim
-:: -------------------------------------------------------------------------------
-if "%~1"=="/setpass" goto :MenuMaHoaMatKhau
-if "%~1"=="/mahoa" goto :MenuMaHoaMatKhau
-if "%~1"=="/encrypt" goto :MenuMaHoaMatKhau
-goto :BatDauKiemTraQuyen
-
-:MenuMaHoaMatKhau
-cls
-echo ===============================================================================
-echo   CONG CU MA HOA MAT KHAU QUAN TRI VIEN (ADMINISTRATOR)
-echo   Mat khau sau khi ma hoa se duoc luu an toan vao file fix_CO_SO_Fail_to_connect.bat
-echo   Khi mo file bang Notepad, mat khau hoan toan duoc ma hoa AES (khong lo pass).
-echo ===============================================================================
-echo.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$u=Read-Host 'Nhap ten tai khoan Admin (de trong mac dinh la %ADMIN_USER%)'; if (-not $u) { $u='%ADMIN_USER%' }; Write-Host 'Nhap mat khau can ma hoa (ky tu se duoc che giau bang dau *): ' -NoNewline; $pwd=''; while($true){ $k=[System.Console]::ReadKey($true); if ($k.Key -eq [System.ConsoleKey]::Enter) { break } elseif ($k.Key -eq [System.ConsoleKey]::Backspace) { if ($pwd.Length -gt 0) { $pwd=$pwd.Substring(0, $pwd.Length-1); Write-Host \"`b `b\" -NoNewline } } elseif ($k.KeyChar -ge 32) { $pwd+=$k.KeyChar; Write-Host '*' -NoNewline } }; Write-Host ''; if ($pwd) { $k=@(34,12,89,201,45,78,123,90,11,67,88,23,45,190,211,7); $sec=ConvertTo-SecureString $pwd -AsPlainText -Force; $enc=ConvertFrom-SecureString $sec -Key $k; $bat='%~f0'; $txt=[System.IO.File]::ReadAllText($bat); $txt=[System.Text.RegularExpressions.Regex]::Replace($txt, 'set \"ADMIN_USER=[^\"]*\"', \"set `\"ADMIN_USER=$u`\"\"); $txt=[System.Text.RegularExpressions.Regex]::Replace($txt, 'set \"ADMIN_PASS_ENC=[^\"]*\"', \"set `\"ADMIN_PASS_ENC=$enc`\"\"); [System.IO.File]::WriteAllText($bat, $txt); Write-Host ''; Write-Host '[THANH CONG] Da ma hoa mat khau va luu truc tiep vao file script!' -ForegroundColor Green; Write-Host ('Tai khoan : ' + $u); Write-Host ('Chuoi ma hoa AES: ' + $enc.Substring(0, [Math]::Min(30, $enc.Length)) + '...') -ForegroundColor Yellow } else { Write-Host '[!] Mat khau trong, khong co thay doi.' -ForegroundColor Red }"
-echo.
-echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat...
-timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
-exit /b 0
+set "ADMIN_PASS=GGrg@2025"
 
 :: -------------------------------------------------------------------------------
 :: 2. Kiem tra quyen Administrator va tu dong nang quyen
@@ -70,6 +29,18 @@ echo   DANG KICH HOAT QUYEN QUAN TRI VIEN (WINDOWS UAC)...
 echo   Vui long chon [YES] (hoac Co) tren hop thoai Windows UAC de tiep tuc...
 echo ===============================================================================
 echo.
+
+:: Phuong an 1: Task Scheduler elevated bang tai khoan ADMIN_USER / ADMIN_PASS
+if not "%ADMIN_PASS%"=="" (
+    schtasks /delete /tn "TempFixCoSoAdmin" /f >nul 2>&1
+    schtasks /create /tn "TempFixCoSoAdmin" /tr "'%~f0' /elevated" /sc once /st 23:59 /ru "%ADMIN_USER%" /rp "%ADMIN_PASS%" /rl HIGHEST /f >nul 2>&1
+    if not errorlevel 1 (
+        schtasks /run /tn "TempFixCoSoAdmin" >nul 2>&1
+        timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
+        schtasks /delete /tn "TempFixCoSoAdmin" /f >nul 2>&1
+        exit /b 0
+    )
+)
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c \"\"%~f0\"\" /elevated' -Verb RunAs" >nul 2>&1
 if %errorlevel% equ 0 exit /b 0
