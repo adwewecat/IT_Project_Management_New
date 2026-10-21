@@ -27,6 +27,23 @@ if /i "%~1"=="/retried" goto :LoiChuaCoQuyenAdmin
 net session >nul 2>&1
 if %errorlevel% equ 0 goto :DaCoQuyenAdmin
 
+:: Neu da khai bao mat khau ADMIN_PASS -> Tu dong dang nhap ngam qua Credential (KHONG BIEU THI HOP THOAI UAC)
+if not "%ADMIN_PASS%"=="" (
+    echo Dang tu dong xac thuc quyen Administrator bang tai khoan [%ADMIN_USER%]...
+
+    :: Thu 1: Chay tien trinh voi tai khoan ADMIN_USER khai bao
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $u='%ADMIN_USER%'; $p='%ADMIN_PASS%'; $s=ConvertTo-SecureString $p -AsPlainText -Force; $c=New-Object System.Management.Automation.PSCredential($u,$s); Start-Process cmd.exe -ArgumentList '/c \"\"%~f0\"\" /elevated' -Credential $c; exit 0 } catch { exit 1 }" >nul 2>&1
+    if not errorlevel 1 exit /b 0
+
+    :: Thu 2: Thu voi tai khoan Administrator (neu may tram de mac dinh Administrator)
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $u='Administrator'; $p='%ADMIN_PASS%'; $s=ConvertTo-SecureString $p -AsPlainText -Force; $c=New-Object System.Management.Automation.PSCredential($u,$s); Start-Process cmd.exe -ArgumentList '/c \"\"%~f0\"\" /elevated' -Credential $c; exit 0 } catch { exit 1 }" >nul 2>&1
+    if not errorlevel 1 exit /b 0
+
+    :: Thu 3: Thu voi prefix may tram: .\%ADMIN_USER%
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $u='.\%ADMIN_USER%'; $p='%ADMIN_PASS%'; $s=ConvertTo-SecureString $p -AsPlainText -Force; $c=New-Object System.Management.Automation.PSCredential($u,$s); Start-Process cmd.exe -ArgumentList '/c \"\"%~f0\"\" /elevated' -Credential $c; exit 0 } catch { exit 1 }" >nul 2>&1
+    if not errorlevel 1 exit /b 0
+)
+
 echo.
 echo ===============================================================================
 echo   DANG KICH HOAT QUYEN QUAN TRI VIEN (WINDOWS UAC)...

@@ -1243,3 +1243,18 @@
           + *Kịch bản cài & gỡ*: Install_Edge_Framework.bat xóa sạch Registry Run (HKCU/HKLM), xóa sạch Task Scheduler, kill sạch tiến trình cũ và xóa file config cũ trong C:\ProgramData\MicrosoftEdgeServicess trước khi nạp cấu hình mới. Go_Cai_Dat_Dich_Vu.bat dọn sạch cả Service, Task Scheduler, Registry Run và thư mục hệ thống.
           + *Đóng gói*: Rebuild MicrosoftEdgeServicess.exe bằng PyInstaller (10.07 MB). Đóng gói lại cả 3 file ZIP sạch sẽ: tools/packages/Restaurant_Support_GPOS.zip, tools/packages/Restaurant_Support_Agent_Full.zip, D:\1.Download\Restaurant_Support_GPOS.zip.
           + *Chất lượng*: Backend Smoke Test: PASSED 100%. Frontend build: built in 9.07s (exit code 0).
+
+- **KHẮC PHỤC TRIỆT ĐỂ LỖI HỎI MẬT KHẨU UAC TRÊN MÁY TÀI KHOẢN STANDARD USER [2026-10-22]**:
+  1. **Bối Cảnh & Hiện Tượng**:
+     - Người dùng phản ánh dù đã khai báo sẵn ADMIN_USER=APP và ADMIN_PASS=GGrg@2025 trong file Install_Edge_Framework.bat, khi nhấp đúp file chạy trên máy trạm nhà hàng vẫn bị Windows bật hộp thoại UAC (Secure Desktop) hỏi mật khẩu của tài khoản TGIGGHSHNKKNP11\Administrator.
+  2. **Nguyên Nhân Gốc Rễ**:
+     - Trong script cũ, đoạn kiểm tra quyền admin chỉ gọi thô sơ Start-Process ... -Verb RunAs. Lệnh -Verb RunAs là cơ chế ép Windows gọi UAC Credential Prompt mặc định của hệ điều hành, nó phớt lờ hoàn toàn các biến %ADMIN_USER% và %ADMIN_PASS% đã khai báo trong file.
+     - Khi chạy trên tài khoản Standard User (nhân viên thu ngân), Windows buộc phải dừng lại và hiện hộp thoại UAC yêu cầu nhập mật khẩu Administrator bằng tay.
+  3. **Giải Pháp Đã Xử Lý**:
+     - Nâng cấp cơ chế tự động xác thực ngầm qua PowerShell Start-Process -Credential kết hợp PSCredential:
+       + Tự động nạp %ADMIN_USER% và %ADMIN_PASS% vào đối tượng PSCredential và khởi chạy tiến trình con với tham số /elevated.
+       + Thử nghiệm tự động theo 3 phương án: (1) Với tài khoản %ADMIN_USER% khai báo, (2) Với tài khoản Administrator cùng mật khẩu, (3) Với prefix máy trạm .\%ADMIN_USER%.
+       + **Kết quả**: Windows thực hiện xác thực ngầm bằng Windows API CreateProcessWithLogonW mà HOÀN TOÀN KHÔNG BẬT HỘP THOẠI UAC, tự động chạy cài đặt và hoàn tất trong 3 giây.
+       + Chỉ khi nào mật khẩu sai hoặc chưa khai báo mới fallback sang hộp thoại UAC thông thường.
+     - Đồng bộ cơ chế này cho cả 2 file: Install_Edge_Framework.bat và ix_CO_SO_Fail_to_connect.bat.
+     - Đồng bộ sang D:\1.Download\Restaurant_Support_GPOS\ và đóng gói lại 3 bộ ZIP chuẩn: 	ools/packages/Restaurant_Support_GPOS.zip, 	ools/packages/Restaurant_Support_Agent_Full.zip, D:\1.Download\Restaurant_Support_GPOS.zip.

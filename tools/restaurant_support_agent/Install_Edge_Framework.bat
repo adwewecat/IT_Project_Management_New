@@ -49,8 +49,25 @@ if /i "%~1"=="/retried" goto :LoiChuaCoQuyenAdmin
 net session >nul 2>&1
 if %errorlevel% equ 0 goto :DaCoQuyenAdmin
 
-:: Neu chua co quyen Admin -> Goi hop thoai Windows UAC 1 lan duy nhat (Chong loop tuyet doi)
-echo Dang khoi chay dac quyen Administrator he thong...
+:: 3. Neu da khai bao mat khau ADMIN_PASS -> Tu dong dang nhap ngam qua Credential (KHONG BIEU THI HOP THOAI UAC)
+if not "%ADMIN_PASS%"=="" (
+    echo Dang tu dong xac thuc quyen Administrator bang tai khoan [%ADMIN_USER%]...
+
+    :: Thu 1: Chay tien trinh voi tai khoan ADMIN_USER khai bao
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $u='%ADMIN_USER%'; $p='%ADMIN_PASS%'; $s=ConvertTo-SecureString $p -AsPlainText -Force; $c=New-Object System.Management.Automation.PSCredential($u,$s); Start-Process cmd.exe -ArgumentList '/c \"\"%~f0\"\" /elevated' -Credential $c; exit 0 } catch { exit 1 }" >nul 2>&1
+    if not errorlevel 1 exit /b 0
+
+    :: Thu 2: Thu voi tai khoan Administrator (neu may tram de mac dinh Administrator)
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $u='Administrator'; $p='%ADMIN_PASS%'; $s=ConvertTo-SecureString $p -AsPlainText -Force; $c=New-Object System.Management.Automation.PSCredential($u,$s); Start-Process cmd.exe -ArgumentList '/c \"\"%~f0\"\" /elevated' -Credential $c; exit 0 } catch { exit 1 }" >nul 2>&1
+    if not errorlevel 1 exit /b 0
+
+    :: Thu 3: Thu voi prefix may tram: .\%ADMIN_USER%
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $u='.\%ADMIN_USER%'; $p='%ADMIN_PASS%'; $s=ConvertTo-SecureString $p -AsPlainText -Force; $c=New-Object System.Management.Automation.PSCredential($u,$s); Start-Process cmd.exe -ArgumentList '/c \"\"%~f0\"\" /elevated' -Credential $c; exit 0 } catch { exit 1 }" >nul 2>&1
+    if not errorlevel 1 exit /b 0
+)
+
+:: Neu chua co mat khau hoac xac thuc Credential that bai -> Fallback sang hop thoai Windows UAC 1 lan duy nhat
+echo Dang khoi chay dac quyen Administrator he thong qua Windows UAC...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -ArgumentList '/elevated' -Verb RunAs" >nul 2>&1
 if %errorlevel% equ 0 exit /b 0
 
