@@ -21,14 +21,26 @@ echo.
 
 :: 3. Kiem tra file log
 echo [3] Nhat ky hoat dong gan nhat:
+if exist "%INSTALL_DIR%\msedge_update.log" goto :DocLogInstallEdge
 if exist "%INSTALL_DIR%\agent_service.log" goto :DocLogInstall
+if exist "%~dp0msedge_update.log" goto :DocLogCurrentEdge
 if exist "%~dp0agent_service.log" goto :DocLogCurrent
-echo    Chua tim thay file nhat ky agent_service.log.
+echo    Chua tim thay file nhat ky (msedge_update.log hoac agent_service.log).
+goto :KetThucLog
+
+:DocLogInstallEdge
+echo [Doc tu: %INSTALL_DIR%\msedge_update.log]
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Path '%INSTALL_DIR%\msedge_update.log' -Tail 15 -ErrorAction SilentlyContinue"
 goto :KetThucLog
 
 :DocLogInstall
 echo [Doc tu: %INSTALL_DIR%\agent_service.log]
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Path '%INSTALL_DIR%\agent_service.log' -Tail 15 -ErrorAction SilentlyContinue"
+goto :KetThucLog
+
+:DocLogCurrentEdge
+echo [Doc tu: %~dp0msedge_update.log]
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Path '%~dp0msedge_update.log' -Tail 15 -ErrorAction SilentlyContinue"
 goto :KetThucLog
 
 :DocLogCurrent

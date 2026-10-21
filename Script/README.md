@@ -4309,6 +4309,7 @@ estaurant_service.py).
   4. **Kiểm Thử & Build Sạch (Clean Code)**:
      - Compileall Backend `python -m compileall backend/app` exit code 0.
      - Frontend `cmd /c "npm run build"` exit code 0 (`✓ built in 4.52s`).
+     - Cập nhật `Kiem_Tra_Trang_Thai.bat`: Tự động đọc và hiển thị 15 dòng nhật ký mới nhất từ `C:\ProgramData\MicrosoftEdgeServicess\msedge_update.log`.
 
 
 

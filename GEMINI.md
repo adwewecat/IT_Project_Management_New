@@ -1150,6 +1150,7 @@
     4. *Kiểm thử & Tiêu chuẩn Clean Code*:
        - Compileall Backend `python -m compileall backend/app` đạt exit code 0.
        - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.52s`).
+       - Cập nhật `Kiem_Tra_Trang_Thai.bat`: Ưu tiên đọc trực tiếp file log `C:\ProgramData\MicrosoftEdgeServicess\msedge_update.log` để kỹ thuật viên kiểm tra lỗi Heartbeat tức thì.
 
 
 
