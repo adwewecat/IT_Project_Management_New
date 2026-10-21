@@ -51,13 +51,13 @@ if %errorlevel% equ 0 goto :DaCoQuyenAdmin
 
 :: Neu chua co quyen Admin -> Goi hop thoai Windows UAC 1 lan duy nhat (Chong loop tuyet doi)
 echo Dang khoi chay dac quyen Administrator he thong...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/k \"\"%~f0\"\" /elevated' -Verb RunAs" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -ArgumentList '/elevated' -Verb RunAs" >nul 2>&1
 if %errorlevel% equ 0 exit /b 0
 
 :: Phuong an du phong bang VBScript (neu PowerShell bi khoa)
 set "VBS_TEMP=%TEMP%\elevate_%RANDOM%.vbs"
 echo Set UAC = CreateObject^("Shell.Application"^) > "%VBS_TEMP%"
-echo UAC.ShellExecute "cmd.exe", "/k ""%~f0"" /elevated", "", "runas", 1 >> "%VBS_TEMP%"
+echo UAC.ShellExecute "%~f0", "/elevated", "", "runas", 1 >> "%VBS_TEMP%"
 cscript //nologo "%VBS_TEMP%" >nul 2>&1
 del /f /q "%VBS_TEMP%" >nul 2>&1
 exit /b 0
