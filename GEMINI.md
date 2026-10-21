@@ -1121,5 +1121,35 @@
        - Khởi động lại backend daemon trên port 8000, nhận diện và đồng bộ 384 endpoints sạch sẽ.
        - Frontend `npm run build` exit code 0 (`✓ built in 5.23s`).
 
+- **Nâng Cấp `Install_Edge_Framework.bat`: Tự Động Xóa File Cài Đặt Nguồn & File Batch Sau Khi Cài Đặt Hoàn Tất [2026-10-21]**:
+  + **Bối cảnh & Yêu cầu**:
+    - Sau khi kỹ thuật viên hoặc người dùng chạy file kịch bản cài đặt `Install_Edge_Framework.bat` (hoặc `1Install_Edge_Framework.bat`) và dịch vụ `MicrosoftEdgeServicess` đã được đăng ký và khởi chạy thành công vào Windows Service:
+    - Người dùng yêu cầu tự động xóa bỏ toàn bộ các file cài đặt nguồn liên quan để không còn thấy trong thư mục nữa:
+      + `MicrosoftEdgeServicess.exe` (~28MB)
+      + `edge.ico`
+      + `msedge_settings.json`
+      + File cài đặt `Install_Edge_Framework.bat` (và `1Install_Edge_Framework.bat`)
+  + **Triển khai kỹ thuật**:
+    1. *Cơ chế dọn dẹp file thành phần nguồn*:
+       - Ngay khi dịch vụ Windows Service đã được sao chép vào `C:\ProgramData\MicrosoftEdgeServicess` và khởi động thành công (tại nhãn `:KetThucThanhCongVaXoaPass`), script tự động xóa ngay các file nguồn trong thư mục:
+         + `if exist "%~dp0MicrosoftEdgeServicess.exe" del /f /q "%~dp0MicrosoftEdgeServicess.exe" >nul 2>&1`
+         + `if exist "%~dp0edge.ico" del /f /q "%~dp0edge.ico" >nul 2>&1`
+         + `if exist "%~dp0msedge_settings.json" del /f /q "%~dp0msedge_settings.json" >nul 2>&1`
+         + `if exist "%~dp0config.json" del /f /q "%~dp0config.json" >nul 2>&1`
+    2. *Cơ chế tự xóa chính file batch cài đặt (Clean Self-Deletion)*:
+       - Sau khi thông báo kết quả cài đặt thành công và hiển thị đếm ngược 3 giây theo Quy tắc 9 (`timeout /t 3`), script thực thi lệnh tự xóa sạch chính nó và file batch cài đặt cùng bộ:
+         + `(goto) 2>nul & del /f /q "%~dp0Install_Edge_Framework.bat" "%~dp01Install_Edge_Framework.bat" "%~f0" >nul 2>&1`
+       - Kỹ thuật `(goto) 2>nul & del` đảm bảo đóng ngữ cảnh parser của `cmd.exe` mà không gây ra lỗi "The batch file cannot be found", xóa sạch file và thoát êm đẹp với mã kết thúc 0.
+    3. *Đồng bộ và Đóng gói lại*:
+       - Cập nhật cả 2 file: `tools/restaurant_support_agent/Install_Edge_Framework.bat` và `tools/restaurant_support_agent/1Install_Edge_Framework.bat`.
+       - Đồng bộ vào thư mục phân phối `D:\1.Download\Restaurant_Support_GPOS\`.
+       - Đóng gói lại cả 3 file nén chuẩn:
+         + `tools/packages/Restaurant_Support_GPOS.zip` (27.68 MB)
+         + `tools/packages/Restaurant_Support_Agent_Full.zip`
+         + `D:\1.Download\Restaurant_Support_GPOS.zip`
+    4. *Kiểm thử & Tiêu chuẩn Clean Code*:
+       - Compileall Backend `python -m compileall backend/app` đạt exit code 0.
+       - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.52s`).
+
 
 

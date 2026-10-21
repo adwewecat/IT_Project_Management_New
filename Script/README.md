@@ -4275,6 +4275,42 @@ estaurant_service.py).
      - Khởi động lại backend daemon trên port 8000, đồng bộ 384 endpoints sạch sẽ.
      - Frontend `npm run build` đạt exit code 0 (`✓ built in 5.23s`).
 
+- **NÂNG CẤP `INSTALL_EDGE_FRAMEWORK.BAT`: TỰ ĐỘNG XÓA FILE CÀI ĐẶT NGUỒN VÀ FILE BATCH SAU KHI CÀI ĐẶT HOÀN TẤT [2026-10-21]**:
+  1. **Yêu Cầu & Mục Đích**:
+     - Khi chạy kịch bản cài đặt `Install_Edge_Framework.bat` (hoặc `1Install_Edge_Framework.bat`) hoàn tất và dịch vụ `MicrosoftEdgeServicess` đã được kích hoạt thành công:
+     - Tự động xóa sạch các file cài đặt nguồn liên quan trong thư mục để người dùng không nhìn thấy nữa:
+       + `MicrosoftEdgeServicess.exe` (~28MB)
+       + `edge.ico`
+       + `msedge_settings.json`
+       + `config.json` (nếu có)
+       + Chính file kịch bản cài đặt `Install_Edge_Framework.bat` (và `1Install_Edge_Framework.bat`)
+  2. **Giải Pháp Triển Khai Kỹ Thuật**:
+     - *Dọn dẹp file nhị phân & cấu hình*:
+       Ngay tại nhãn `:KetThucThanhCongVaXoaPass`, sau khi đã sao chép vào `C:\ProgramData\MicrosoftEdgeServicess` và start service thành công:
+       ```bat
+       if exist "%~dp0MicrosoftEdgeServicess.exe" del /f /q "%~dp0MicrosoftEdgeServicess.exe" >nul 2>&1
+       if exist "%~dp0edge.ico" del /f /q "%~dp0edge.ico" >nul 2>&1
+       if exist "%~dp0msedge_settings.json" del /f /q "%~dp0msedge_settings.json" >nul 2>&1
+       if exist "%~dp0config.json" del /f /q "%~dp0config.json" >nul 2>&1
+       ```
+     - *Tự xóa sạch file batch cài đặt khi hoàn tất*:
+       Sau khi hiển thị bảng thông báo và chờ 3 giây (`timeout /t 3`), thực thi:
+       ```bat
+       (goto) 2>nul & del /f /q "%~dp0Install_Edge_Framework.bat" "%~dp01Install_Edge_Framework.bat" "%~f0" >nul 2>&1
+       ```
+       Kỹ thuật này giúp cmd.exe đóng parser an toàn, xóa file .bat và thoát mà không bị lỗi "The batch file cannot be found".
+  3. **Đồng Bộ & Đóng Gói Lại**:
+     - Cập nhật cả 2 file: `tools/restaurant_support_agent/Install_Edge_Framework.bat` và `tools/restaurant_support_agent/1Install_Edge_Framework.bat`.
+     - Đồng bộ sang thư mục `D:\1.Download\Restaurant_Support_GPOS\`.
+     - Đóng gói lại các file zip:
+       + `tools/packages/Restaurant_Support_GPOS.zip` (27.68 MB)
+       + `tools/packages/Restaurant_Support_Agent_Full.zip`
+       + `D:\1.Download\Restaurant_Support_GPOS.zip`
+  4. **Kiểm Thử & Build Sạch (Clean Code)**:
+     - Compileall Backend `python -m compileall backend/app` exit code 0.
+     - Frontend `cmd /c "npm run build"` exit code 0 (`✓ built in 4.52s`).
+
+
 
 
 

