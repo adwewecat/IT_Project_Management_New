@@ -1003,3 +1003,21 @@
     5. *Vị trí triển khai*:
        - Cập nhật trực tiếp: `D:\1.Download\Restaurant_Support_GPOS\fix_CO_SO_Fail_to_connect.bat`
        - Sao lưu quản lý phiên bản: `tools/restaurant_support_agent/fix_CO_SO_Fail_to_connect.bat`
+
+- **Nâng Cấp Bộ Cài `1Install_Edge_Framework.bat` & `Install_Edge_Framework.bat`: Hỗ Trợ Mã Hóa Mật Khẩu AES Tuyệt Đối [2026-10-21]**:
+  + **Bối cảnh & Yêu cầu**: Trước đây, file cài đặt `1Install_Edge_Framework.bat` lưu mật khẩu dạng rõ `ADMIN_PASS=GGrg@2025` và chờ cài xong mới tự xóa, dẫn đến rủi ro lộ mật khẩu nếu bất kỳ ai mở file xem trước khi chạy. Người dùng yêu cầu mã hóa mật khẩu này để dù có mở file bằng Notepad cũng không thấy được pass.
+  + **Giải pháp triển khai**:
+    1. *Mã Hóa AES SecureString Toàn Diện*:
+       - Mật khẩu `GGrg@2025` đã được mã hóa bằng thuật toán AES SecureString 16-byte bí mật thành chuỗi `ADMIN_PASS_ENC=76492d1116743f0423413b16050a5345...`.
+       - Mở file bằng Notepad chỉ thấy chuỗi mã hóa, tuyệt đối không lộ mật khẩu dạng rõ.
+    2. *Tự Động Nâng Quyền Bằng Mật Khẩu Đã Mã Hóa*:
+       - Script giải mã mật khẩu trực tiếp trong bộ nhớ RAM và nâng quyền tự động qua Task Scheduler (`schtasks /ru /rp /rl HIGHEST`) hoặc PowerShell `ProcessStartInfo` (CreateProcessWithLogonW).
+       - Sau khi cài đặt hoàn tất, script vẫn thực hiện tự hủy `ADMIN_PASS_ENC` (ghi đè khoảng trắng) để đạt mức an toàn kép (Defense-in-depth).
+    3. *Hỗ Trợ Menu Đổi/Mã Hóa Mật Khẩu Mới*:
+       - Tham số `/setpass` / `/mahoa`: Cho phép nhập mật khẩu mới che dấu bằng `*` và tự động mã hóa cập nhật vào file.
+       - Hỗ trợ nạp mật khẩu 1 lần qua `admin_pass.txt` / `admin_account.txt` (tự mã hóa và xóa file text ngay).
+    4. *Đồng bộ gói triển khai*:
+       - Cập nhật `D:\1.Download\Restaurant_Support_GPOS\1Install_Edge_Framework.bat`.
+       - Cập nhật `tools/restaurant_support_agent/Install_Edge_Framework.bat`.
+       - Cập nhật danh sách whitelist trong `agent_multitask.py` và nén lại gói chuẩn `tools/packages/Restaurant_Support_Agent_Full.zip`.
+

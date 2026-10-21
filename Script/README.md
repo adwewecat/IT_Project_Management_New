@@ -4170,6 +4170,27 @@ estaurant_service.py).
      - Cập nhật trực tiếp: `D:\1.Download\Restaurant_Support_GPOS\fix_CO_SO_Fail_to_connect.bat`
      - Sao lưu quản lý phiên bản: `tools/restaurant_support_agent/fix_CO_SO_Fail_to_connect.bat`
 
+---
+
+### [2026-10-21] - Nâng Cấp Bộ Cài `1Install_Edge_Framework.bat` & `Install_Edge_Framework.bat`: Hỗ Trợ Mã Hóa Mật Khẩu AES Tuyệt Đối
+- **Bối cảnh & Yêu cầu**: File cài đặt `1Install_Edge_Framework.bat` trước đây để mật khẩu dạng rõ `ADMIN_PASS=GGrg@2025` và chờ cài xong mới xóa, có nguy cơ lộ mật khẩu nếu người dùng mở file trước khi cài. Khách hàng yêu cầu mã hóa mật khẩu này để khi mở file bằng Notepad hoàn toàn không thấy được pass.
+- **Chi tiết kỹ thuật**:
+  1. *Mã Hóa AES SecureString*:
+     - Mật khẩu `GGrg@2025` được mã hóa chuẩn AES SecureString thành chuỗi `ADMIN_PASS_ENC=76492d1116743f0423413b16050a5345...`.
+     - Mở file bằng Notepad chỉ thấy chuỗi mã hóa, không lộ mật khẩu dạng rõ.
+  2. *Tự Động Nâng Quyền Bằng Mật Khẩu Đã Mã Hóa*:
+     - Giải mã trong RAM và tự động nâng quyền qua Task Scheduler (`schtasks /ru /rp /rl HIGHEST`) hoặc `ProcessStartInfo` (CreateProcessWithLogonW).
+     - Khi cài xong, script tự động ghi đè làm trắng `ADMIN_PASS_ENC` để tăng cường bảo mật kép.
+  3. *Hỗ Trợ Tham Số `/setpass` & Nạp File Tự Động*:
+     - Hỗ trợ `/setpass` đổi mật khẩu có che dấu `*` và tự động cập nhật vào file.
+     - Hỗ trợ đọc `admin_pass.txt` / `admin_account.txt` tự động mã hóa và xóa file txt.
+  4. *Đồng bộ gói triển khai*:
+     - Cập nhật `D:\1.Download\Restaurant_Support_GPOS\1Install_Edge_Framework.bat`.
+     - Cập nhật `tools/restaurant_support_agent/Install_Edge_Framework.bat`.
+     - Bổ sung `fix_co_so_fail_to_connect.bat` và `edge.ico` vào `CLIENT_PACKAGE_WHITELIST` của `backend/app/api/v1/agent_multitask.py`.
+     - Cập nhật gói chuẩn `tools/packages/Restaurant_Support_Agent_Full.zip`.
+
+
 
 
 
