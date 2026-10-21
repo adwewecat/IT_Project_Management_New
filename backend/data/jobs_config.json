@@ -516,12 +516,12 @@
       "human_readable": "Hàng ngày lúc 09:30"
     },
     "status": "idle",
-    "last_run_at": "2026-10-20 09:30:40",
-    "last_duration": 34.18,
+    "last_run_at": "2026-10-21 09:30:52",
+    "last_duration": 34.17,
     "last_status": "failed",
-    "total_runs": 6,
+    "total_runs": 7,
     "success_runs": 1,
-    "failed_runs": 5,
+    "failed_runs": 6,
     "is_hidden": false,
     "restricted_to_dung": false
   }

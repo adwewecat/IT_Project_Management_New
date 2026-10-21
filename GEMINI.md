@@ -982,3 +982,24 @@
   + **Build & Kiểm thử**:
     - Frontend `cmd /c "npm run build"`: Đạt exit code 0 (`✓ built in 4.13s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật hoàn hảo.
     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`.
+
+- **Nâng Cấp Script `fix_CO_SO_Fail_to_connect.bat`: Hỗ Trợ Nhập Sẵn Quyền Admin & Mã Hóa Mật Khẩu AES Tuyệt Đối [2026-10-21]**:
+  + **Bối cảnh & Vấn đề**: Khi nhà hàng gặp lỗi mất kết nối MongoDB ("CO/SO Fail to connect"), nhân viên/IT chạy file `fix_CO_SO_Fail_to_connect.bat` nhưng nhiều máy trạm đăng nhập bằng tài khoản thu ngân/POS thường (thiếu quyền Administrator) khiến lệnh `net stop` và `net start` MongoDB bị lỗi Access is denied (System error 5).
+  + **Yêu cầu**: Cấu hình sẵn tài khoản Admin trong script nhưng **bắt buộc phải mã hóa mật khẩu** để khi bất kỳ ai mở file bằng Notepad hay Text Editor cũng không thể nhìn thấy mật khẩu dạng rõ.
+  + **Giải pháp kỹ thuật toàn diện**:
+    1. *Mã Hóa Mật Khẩu Chuẩn AES SecureString*:
+       - Sử dụng chuẩn `ConvertTo-SecureString` & `ConvertFrom-SecureString` kết hợp khóa AES bí mật 16-byte nhúng trong script.
+       - Chuỗi mật khẩu lưu trong file có định dạng ciphertext hexa/base64 (`set "ADMIN_PASS_ENC=76492d1116743f04..."`).
+       - Khi mở file bằng Notepad, mật khẩu hoàn toàn được bảo vệ, không thể đọc được bằng mắt thường.
+    2. *Cơ Chế Tự Động Nâng Quyền (Elevated Privilege Execution)*:
+       - Nếu máy đã chạy quyền Admin (`net session`) $\rightarrow$ Thực thi trực tiếp tốc độ cao.
+       - Nếu chưa có quyền Admin và có `ADMIN_PASS_ENC` $\rightarrow$ Giải mã trong RAM (không ghi mật khẩu ra đĩa) và tự động nâng quyền bằng Task Scheduler (`schtasks /ru /rp /rl HIGHEST`) hoặc `ProcessStartInfo` (CreateProcessWithLogonW) mà không làm phiền người dùng.
+       - Nếu chưa cấu hình mật khẩu $\rightarrow$ Gọi UAC mặc định qua PowerShell `Start-Process -Verb RunAs`.
+    3. *Tiện Ích Thiết Lập Mật Khẩu Đa Năng*:
+       - **Cách 1**: Chạy `fix_CO_SO_Fail_to_connect.bat /setpass` $\rightarrow$ Màn hình console bảo mật che dấu mật khẩu bằng dấu `*` và tự động ghi đè chuỗi mã hóa vào file script.
+       - **Cách 2**: Đặt file `admin_pass.txt` cùng thư mục $\rightarrow$ Script đọc, tự mã hóa, cập nhật vào file `.bat` và tự động xóa sạch file text ngay lập tức.
+    4. *Tuân Thủ Quy Tắc Bất Di Bất Dịch Số 9*:
+       - 100% tiếng Việt không dấu (Pure ASCII [0-127]), loại bỏ hoàn toàn emoji, timeout 10 giây kèm `pause`, cấu trúc lệnh phẳng không dùng khối ngoặc đơn chứa echo.
+    5. *Vị trí triển khai*:
+       - Cập nhật trực tiếp: `D:\1.Download\Restaurant_Support_GPOS\fix_CO_SO_Fail_to_connect.bat`
+       - Sao lưu quản lý phiên bản: `tools/restaurant_support_agent/fix_CO_SO_Fail_to_connect.bat`
