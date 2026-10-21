@@ -1089,3 +1089,16 @@
        - Đồng bộ vào `D:\1.Download\Restaurant_Support_GPOS\`.
        - Đóng gói lại cả 3 file zip `tools/packages/Restaurant_Support_GPOS.zip`, `tools/packages/Restaurant_Support_Agent_Full.zip` và `D:\1.Download\Restaurant_Support_GPOS.zip` (27.63 MB).
 
+- **Loại Bỏ Nút "🤖 Cài Tool Agent Hàng Loạt" Khỏi Màn Hình Danh Sách Nhà Hàng [2026-10-21]**:
+  + **Bối cảnh & Yêu cầu**:
+    - Người dùng yêu cầu loại bỏ nút bấm `🤖 Cài Tool Agent Hàng Loạt` trên thanh công cụ của trang Danh Sách Nhà Hàng (`/restaurants`).
+  + **Triển khai kỹ thuật**:
+    1. *Frontend (`RestaurantListPage.tsx`)*:
+       - Xóa bỏ nút bấm `🤖 Cài Tool Agent Hàng Loạt` khỏi toolbar trang danh sách nhà hàng.
+       - Dọn sạch import icon `Cpu` và biến kiểm tra quyền `canAccessAgentMultitask` (tuân thủ nghiêm ngặt quy định Zero warnings/errors TypeScript TS6133).
+       - Tính năng Agent Multitask vẫn hoạt động độc lập và tập trung trên phân hệ chuyên biệt tại menu Sidebar (`/app/agent-multitask`).
+    2. *Kiểm thử & Đóng gói*:
+       - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.34s`).
+       - Backend Smoke Test đạt `PASSED 100%`.
+
+

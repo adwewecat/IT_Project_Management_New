@@ -4250,6 +4250,17 @@ estaurant_service.py).
      - Đồng bộ vào `D:\1.Download\Restaurant_Support_GPOS\`.
      - Đóng gói lại các file zip: `tools/packages/Restaurant_Support_GPOS.zip`, `tools/packages/Restaurant_Support_Agent_Full.zip` và `D:\1.Download\Restaurant_Support_GPOS.zip` (27.63 MB).
 
+- **LOẠI BỎ NÚT "🤖 CÀI TOOL AGENT HÀNG LOẠT" KHỎI TRANG DANH SÁCH NHÀ HÀNG [2026-10-21]**:
+  1. **Loại Bỏ Nút Bấm Trên Toolbar**:
+     - Xóa bỏ nút bấm `🤖 Cài Tool Agent Hàng Loạt` khỏi thanh công cụ của trang `RestaurantListPage.tsx` theo yêu cầu người dùng.
+     - Dọn dẹp sạch sẽ import `Cpu` và biến kiểm tra quyền `canAccessAgentMultitask` (đảm bảo TypeScript Zero Warnings/Errors TS6133).
+  2. **Tập Trung Nghiệp Vụ Tại Phân Hệ Agent Multitask**:
+     - Toàn bộ tính năng triển khai, cài đặt gói tool agent và quản lý thiết bị được gom tập trung và truy cập thông qua Menu Sidebar (`/app/agent-multitask`).
+  3. **Kiểm Thử & Đóng Gói**:
+     - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.34s`, dist sạch kèm web.config).
+     - Backend Smoke Test đạt `PASSED 100%`.
+
+
 
 
 
