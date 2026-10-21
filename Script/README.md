@@ -4119,6 +4119,35 @@ estaurant_service.py).
      - Backend: `python -m compileall app` sạch lỗi 100%. Smoke Test `from app.main import app; print('>>> BACKEND PASSED 100%')` đạt 100% thành công.
      - Tool Agent: `python -m py_compile restaurant_support_agent.py` đạt exit code 0 sạch sẽ.
 
+---
+
+### [2026-10-21] - Dọn Dẹp Toàn Diện File Dư Thừa, Trùng Lặp & Tệp Rác Tại Root, Tools & Backend
+- **Bối cảnh & Yêu cầu**: Rà soát, thanh lọc và xóa bỏ triệt để các file nén trùng lặp dung lượng lớn (~140MB), các file batch dư thừa/đặt sai vị trí tại thư mục gốc, các tệp log chạy thử nghiệm tạm thời, file scratch và các file rác không cần thiết để cấu trúc dự án tinh gọn, sạch sẽ và tối ưu hiệu năng lưu trữ.
+- **Chi tiết các thành phần đã dọn dẹp**:
+  1. *Thư mục gốc (`Project Root`)*:
+     - `3CX_Hotline_Client_Agent.zip`: Tệp nén mồ côi dư thừa (đã có cơ chế tạo động in-memory qua API `hotline.py`).
+     - `agent_activity.log`: Nhật ký chạy thử nghiệm tạm thời của Agent Multitask.
+     - `start_production_5002.bat`: Bản sao trùng lặp 100% của `start_production_5001.bat`.
+     - `Cai_Dat_Tu_Dong_Schedule.bat` & `Chay_Outlook_Agent.bat`: Hai file batch bị đặt nhầm ra thư mục gốc (bản chuẩn đầy đủ kèm `Chay_Ngam.vbs` đã nằm đúng trong `tools/outlook_agent/`).
+  2. *Thư mục công cụ (`tools/`)*:
+     - `tools/3CX_Hotline_Client_Agent.rar` & `tools/3CX_Hotline_Client_Agent.zip`: Tệp nén cũ không còn dùng (mã nguồn chuẩn nằm trong `tools/3cx_hotline_agent/`).
+     - `tools/GPOS-Setup.rar` & `tools/KDS-GPOS-Setup.rar`: Tệp trùng lặp (~74MB) đã được di chuyển và quản lý tập trung bên trong `tools/packages/`.
+     - `tools/Restaurant_Support_Agent_Full.zip`: Tệp trùng lặp (~28MB) đã có bản chuẩn trong `tools/packages/`.
+     - `tools/Restaurant_Support_GPOS.zip` & `tools/packages/Restaurant_Support_GPOS.zip`: Tệp nén test tạm thời (~28MB x 2) cho nhà hàng 1011, không có trong luồng nghiệp vụ chính.
+     - *Bảo toàn các tệp thiết yếu*: `tools/3cx_hotline_userscript.user.js`, `tools/3cx_chrome_extension/`, `tools/3cx_hotline_agent/`, `tools/outlook_agent/`, `tools/packages/`, `tools/restaurant_support_agent/`.
+  3. *Thư mục Backend (`backend/`)*:
+     - `backend/@AutomationLog.txt`: File log lỗi UIAutomation tạm thời.
+     - `backend/database.db`: File SQLite rỗng 0 byte.
+     - `backend/find_version.py`: Script test tạm thời kiểm tra version MongoDB.
+     - `backend/scratch/` (kèm `test_stream.ps1`): Thư mục code nháp thử nghiệm.
+     - `backend/data/doanh_so_daily.png` & `backend/data/gprocess_debug.png`: Ảnh chụp màn hình debug tạm thời.
+  4. *Tối ưu mã nguồn tải gói (`backend/app/api/v1/agent_multitask.py`)*:
+     - Loại bỏ đoạn mã `shutil.copyfile` tự ý copy file gói vừa upload vào thư mục gốc `tools/`, đảm bảo các gói cài đặt tải lên luôn được lưu tập trung, ngăn nắp duy nhất trong `tools/packages/`.
+- **Kiểm thử & Đóng gói**:
+  - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.13s`), `frontend/dist/` (kèm `web.config`) cập nhật hoàn chỉnh.
+  - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`.
+
+
 
 
 

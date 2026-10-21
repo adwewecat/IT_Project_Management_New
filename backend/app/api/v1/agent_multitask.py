@@ -518,14 +518,6 @@ async def upload_package_file(
             detail=f"Không thể lưu file trên máy chủ: {str(e)}"
         )
 
-    # Đồng thời sao chép vào thư mục tools/ để tương thích ngược nếu cần
-    tools_path = os.path.join(project_root, "tools", clean_name)
-    try:
-        if os.path.abspath(target_path) != os.path.abspath(tools_path):
-            shutil.copyfile(target_path, tools_path)
-    except Exception as e_cp:
-        logger.debug("Sao chép file sang tools/ thất bại: %s", e_cp)
-
     file_size_mb = round(total_bytes / (1024 * 1024), 2)
     logger.info("Người dùng %s đã tải lên thành công file gói '%s' (%s MB)", current_user.username, clean_name, file_size_mb)
 
