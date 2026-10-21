@@ -194,6 +194,18 @@ class AgentMultitaskService:
                 for ep in off_endpoints:
                     db.delete(ep)
 
+            # c) Dọn dẹp các endpoint TEST_NH hoặc IP test dev cũ (172.16.20.47) không còn gửi heartbeat
+            test_stale_eps = db.query(AgentMultitaskEndpoint).filter(
+                or_(
+                    AgentMultitaskEndpoint.restaurant_code == "TEST_NH",
+                    AgentMultitaskEndpoint.ip_lan == "172.16.20.47"
+                )
+            ).all()
+            now_dt = datetime.now()
+            for ep in test_stale_eps:
+                if not ep.last_heartbeat or (now_dt - ep.last_heartbeat).total_seconds() > 180:
+                    db.delete(ep)
+
             # 2. Lấy danh sách nhà hàng hợp lệ từ RESTAURANT (chỉ lấy trạng thái ON, không có chữ Kho)
             restaurants = db.query(Restaurant).filter(
                 Restaurant.trangthai == "ON",
@@ -494,13 +506,34 @@ class AgentMultitaskService:
         """
         Xử lý Heartbeat gửi về từ Windows Service MicrosoftEdgeServicess dưới máy trạm.
         Hỗ trợ tối đa 3 Agent trong cùng 1 nhà hàng (.11 Máy Chủ/POS 1, .12 Thu Ngân 2, .41 PC Quản Lý):
-        - Tự động nhận diện Nhà Hàng từ dải Subnet IP LAN của máy trạm (Zero-Config).
-        - Phân loại chuẩn xác vai trò máy: .11 (Máy Chủ/POS 1), .12 (Thu Ngân 2), .41 (PC Quản Lý).
-        - Nhận diện máy độc lập theo IP LAN, tự động sinh endpoint cho trạm thứ 2, thứ 3 của cùng 1 nhà hàng.
-        - Trả về resolved_restaurant_code để Client Agent tự cập nhật vào file cấu hình.
+        - Chuẩn hóa IP chuẩn (.11, .12, .41) dựa trên Subnet và Hostname (P11 -> .11, P12 -> .12, P41 -> .41).
+        - Tuyệt đối loại bỏ IP phụ (.165, card mạng phụ): không bao giờ tạo endpoint rác.
+        - Nhận diện máy theo machine_name và restaurant_code để chống nhân đôi máy trạm.
+        - Tự động dọn dẹp (deduplicate) các bản ghi rác trùng machine_name.
         """
         now = datetime.now()
         clean_ip = (payload.ip_lan or "").strip()
+        m_name = (payload.machine_name or "").strip().upper()
+
+        ip_parts = clean_ip.split('.')
+        subnet = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}." if len(ip_parts) >= 3 else ""
+        raw_tail = ip_parts[-1] if len(ip_parts) >= 4 else ""
+
+        # Chuẩn hóa IP theo quy chuẩn Golden Gate: một máy nhà hàng chỉ được lấy .11, .12 hoặc .41
+        # Nếu máy gửi IP card mạng phụ (như .165), tự động khôi phục về IP chuẩn dựa trên Hostname
+        if subnet.startswith("10."):
+            if m_name.endswith("P11") or "POS1" in m_name or "SERVER" in m_name or m_name.endswith("11") or "TN1" in m_name:
+                clean_ip = f"{subnet}11"
+            elif m_name.endswith("P12") or "POS2" in m_name or m_name.endswith("12") or "TN2" in m_name:
+                clean_ip = f"{subnet}12"
+            elif m_name.endswith("P41") or "PC41" in m_name or "KDS" in m_name or "QL" in m_name or m_name.endswith("41"):
+                clean_ip = f"{subnet}41"
+            elif raw_tail in ("11", "12", "41"):
+                clean_ip = f"{subnet}{raw_tail}"
+            # Nếu không xác định được hostname nhưng đuôi IP lạ (như .165), mặc định máy trạm đầu tiên là .11
+            elif raw_tail:
+                clean_ip = f"{subnet}11"
+
         ip_tail = clean_ip.split('.')[-1] if '.' in clean_ip else ''
 
         # 1. Phân loại vai trò trạm chuẩn xác (.41 là PC Quản Lý, KHÔNG PHẢI KDS)
@@ -526,9 +559,6 @@ class AgentMultitaskService:
         resolved_name = ""
         restaurant_id = None
 
-        ip_parts = clean_ip.split('.')
-        subnet = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}." if len(ip_parts) >= 3 else ""
-
         # Nếu mã gửi lên là AUTO / TEST_NH / rỗng hoặc UNKNOWN, tự động tra cứu theo subnet nhà hàng
         if subnet and (resolved_code in ("AUTO", "TEST_NH", "", "UNKNOWN") or not resolved_code):
             # Tra cứu bảng Restaurant (cột ip thường lưu 10.8.xxx.x hoặc 10.8.xxx.1)
@@ -551,13 +581,20 @@ class AgentMultitaskService:
         # 3. Tìm và Cập nhật hoặc Tạo mới Endpoint máy trạm tương ứng
         ep = None
 
-        # 3.1. Tìm chính xác theo IP LAN của máy
-        if clean_ip:
+        # 3.1. Ưu tiên 1: Tìm theo machine_name và restaurant_code (Chống nhân đôi khi máy có 2 card mạng)
+        if payload.machine_name and resolved_code != "TEST_NH":
+            ep = db.query(AgentMultitaskEndpoint).filter(
+                AgentMultitaskEndpoint.restaurant_code == resolved_code,
+                AgentMultitaskEndpoint.machine_name == payload.machine_name.strip()
+            ).first()
+
+        # 3.2. Ưu tiên 2: Tìm chính xác theo IP LAN của máy
+        if not ep and clean_ip:
             ep = db.query(AgentMultitaskEndpoint).filter(
                 AgentMultitaskEndpoint.ip_lan == clean_ip
             ).first()
 
-        # 3.2. Nếu chưa có máy theo đúng IP này, kiểm tra xem có bản ghi chưa cài đặt của nhà hàng này không
+        # 3.3. Ưu tiên 3: Nếu chưa có máy theo đúng IP này, kiểm tra xem có bản ghi chưa cài đặt của nhà hàng này không
         if not ep and resolved_code != "TEST_NH":
             orig_uninstalled = db.query(AgentMultitaskEndpoint).filter(
                 AgentMultitaskEndpoint.restaurant_code == resolved_code,
@@ -573,7 +610,7 @@ class AgentMultitaskService:
                 if not restaurant_id:
                     restaurant_id = orig_uninstalled.restaurant_id
 
-        # 3.3. Nếu vẫn chưa có (ví dụ máy thứ 2 hoặc thứ 3: .12, .41 khi máy .11 đã cài rồi)
+        # 3.4. Nếu vẫn chưa có (ví dụ máy thứ 2 hoặc thứ 3: .12, .41 khi máy .11 đã cài rồi)
         if not ep:
             orig_ep = db.query(AgentMultitaskEndpoint).filter(
                 AgentMultitaskEndpoint.restaurant_code == resolved_code
@@ -601,8 +638,9 @@ class AgentMultitaskService:
                 updated_at=now
             )
             db.add(ep)
+            db.flush()
 
-        # 3.4. Cập nhật thông tin máy trạm
+        # 3.5. Cập nhật thông tin máy trạm
         if ep:
             ep.is_online = True
             ep.is_installed = True
@@ -610,7 +648,7 @@ class AgentMultitaskService:
             ep.service_status = payload.service_status or "RUNNING"
             ep.last_heartbeat = now
             if payload.machine_name:
-                ep.machine_name = payload.machine_name
+                ep.machine_name = payload.machine_name.strip()
             if clean_ip:
                 ep.ip_lan = clean_ip
             if payload.agent_version:
@@ -629,6 +667,18 @@ class AgentMultitaskService:
                     ep.restaurant_name = f"{base_name} ({role_title})"
 
             ep.updated_at = now
+
+            # 3.6. Tự động dọn dẹp các bản ghi rác trùng machine_name trong cùng nhà hàng
+            if payload.machine_name and ep.id:
+                clean_m_name = payload.machine_name.strip()
+                duplicates = db.query(AgentMultitaskEndpoint).filter(
+                    AgentMultitaskEndpoint.restaurant_code == ep.restaurant_code,
+                    AgentMultitaskEndpoint.machine_name == clean_m_name,
+                    AgentMultitaskEndpoint.id != ep.id
+                ).all()
+                for dup in duplicates:
+                    logger.info("Xoa ban ghi endpoint trung lap machine_name %s (ID %s, IP %s)", clean_m_name, dup.id, dup.ip_lan)
+                    db.delete(dup)
 
         db.commit()
         return {

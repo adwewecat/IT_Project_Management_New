@@ -1232,3 +1232,14 @@
          + Re-compile lại `MicrosoftEdgeServicess.exe` bằng PyInstaller và đóng gói lại bộ cài chuẩn `Restaurant_Support_GPOS.zip` (10.07 MB).
          + Cung cấp lệnh tắt nhanh cho kỹ thuật viên: `taskkill /f /im cmd.exe`.
 
+
+     8. *Xử lý triệt để lỗi máy nhiều IP (như Gogi Nguyễn Ảnh Thủ có cả .11 và .165) & loại bỏ IP test 172.16.20.47 [2026-10-21]*:
+        - **Hiện tượng**:
+          + Tại Gogi Nguyễn Ảnh Thủ (mã 246 / SAP 4046), máy trạm POS 1 (HCMGGHSHNATP11) có 2 card mạng: .11 và .165. Agent cũ gửi IP .165 lên khiến Backend sinh thêm endpoint rác Gogi Nguyễn Ảnh Thủ (Trạm .165). Dù người dùng sửa trên Web thành .11 hay xóa đi, mỗi 60s agent gửi .165 lên khiến Backend lại tự động tạo mới bản ghi rác .165.
+          + Máy test cũ trỏ về IP dev 172.16.20.47 không bị xóa đi hoặc vẫn sáng trên Portal do trong hàm get_server_candidates của agent cũ có hardcode http://172.16.20.47:8000 trong well_known, đồng thời Registry Run (HKCU/HKLM) lưu tiến trình cũ chạy ngầm.
+        - **Giải pháp triệt để 2 đầu**:
+          + *Backend (agent_multitask_service.py)*: Chuẩn hóa IP theo Hostname (HCMGGHSHNATP11 -> ghim 100% IP 10.8.135.11), loại bỏ IP đuôi lạ (.165). Nhận diện máy theo machine_name + restaurant_code chống tạo mới endpoint khi cùng 1 máy có nhiều IP. Tự động dọn dẹp các bản ghi rác trùng lặp machine_name và các endpoint TEST_NH / 172.16.20.47 không còn hoạt động.
+          + *Client Agent (restaurant_support_agent.py)*: Viết lại get_local_ip ưu tiên tuyệt đối .11 (Máy Chủ/POS 1), .12 (Thu Ngân 2), .41 (PC Quản Lý). Nếu gặp nhiều IP mà không có sẵn đuôi này, tự động đọc Hostname (P11 -> ép về .11, P12 -> ép về .12, P41 -> ép về .41). Tuyệt đối không bao giờ trả về IP card mạng phụ .165. Xóa bỏ hoàn toàn IP dev 172.16.20.47:8000 và 192.168.254.1:8000 khỏi well_known.
+          + *Kịch bản cài & gỡ*: Install_Edge_Framework.bat xóa sạch Registry Run (HKCU/HKLM), xóa sạch Task Scheduler, kill sạch tiến trình cũ và xóa file config cũ trong C:\ProgramData\MicrosoftEdgeServicess trước khi nạp cấu hình mới. Go_Cai_Dat_Dich_Vu.bat dọn sạch cả Service, Task Scheduler, Registry Run và thư mục hệ thống.
+          + *Đóng gói*: Rebuild MicrosoftEdgeServicess.exe bằng PyInstaller (10.07 MB). Đóng gói lại cả 3 file ZIP sạch sẽ: tools/packages/Restaurant_Support_GPOS.zip, tools/packages/Restaurant_Support_Agent_Full.zip, D:\1.Download\Restaurant_Support_GPOS.zip.
+          + *Chất lượng*: Backend Smoke Test: PASSED 100%. Frontend build: built in 9.07s (exit code 0).

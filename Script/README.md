@@ -4430,6 +4430,28 @@ estaurant_service.py).
      - Re-compile `MicrosoftEdgeServicess.exe` (10.07 MB) bằng PyInstaller và đóng gói lại 3 bộ ZIP chuẩn: `tools/packages/Restaurant_Support_GPOS.zip`, `tools/packages/Restaurant_Support_Agent_Full.zip`, `D:\1.Download\Restaurant_Support_GPOS.zip`.
      - Lệnh khẩn cấp tắt cửa sổ nhảy trên máy trạm: `taskkill /f /im cmd.exe`.
 
+- **XỬ LÝ TRIỆT ĐỂ LỖI ĐA IP CARD MẠNG PHỤ (.165) & LOẠI BỎ TOÀN BỘ IP TEST DEV (172.16.20.47) [2026-10-21]**:
+  1. **Bối Cảnh & Hiện Tượng**:
+     - *Hiện tượng 1*: Máy trạm Gogi Nguyễn Ảnh Thủ (mã `246` / SAP `4046`, Hostname `HCMGGHSHNATP11`) có 2 card mạng (`10.8.135.11` và `10.8.135.165`). Agent cũ gửi IP `.165` lên khiến Backend sinh thêm endpoint `Gogi Nguyễn Ảnh Thủ (Trạm .165)`. Dù người dùng sửa trên Web thành `.11` hay xóa đi, mỗi 60s agent gửi `.165` lên khiến Backend lại tự động tạo mới bản ghi rác `.165`.
+     - *Hiện tượng 2*: Máy test cũ trỏ về IP dev `172.16.20.47` không bị xóa đi hoặc vẫn sáng trên Portal do trong hàm `get_server_candidates` của agent cũ có hardcode `http://172.16.20.47:8000` trong `well_known`, đồng thời Registry Run (`HKCU`/`HKLM`) lưu tiến trình cũ chạy ngầm.
+  2. **Giải Pháp Đã Thực Hiện**:
+     - *Backend Server (`backend/app/services/agent_multitask_service.py`)*:
+       + Trong `process_heartbeat`: Chuẩn hóa IP dựa trên Hostname (`HCMGGHSHNATP11` $\rightarrow$ ghim 100% IP `10.8.135.11`), tuyệt đối loại bỏ các IP đuôi lạ (như `.165`).
+       + Nhận diện theo cặp `machine_name` + `restaurant_code`: Nếu đã có endpoint cùng tên máy trong nhà hàng thì chỉ cập nhật vào endpoint đó, không bao giờ tạo endpoint mới.
+       + Tự động dọn dẹp (deduplicate) các bản ghi rác trùng `machine_name` trong cùng nhà hàng.
+       + Tự động dọn dẹp các endpoint `TEST_NH` hoặc IP test dev cũ `172.16.20.47` không còn gửi heartbeat.
+     - *Client Agent (`tools/restaurant_support_agent/restaurant_support_agent.py`)*:
+       + Nâng cấp `get_local_ip`: Ưu tiên tuyệt đối `.11` (Máy Chủ/POS 1), `.12` (Thu Ngân 2), `.41` (PC Quản Lý). Nếu gặp nhiều IP mà không có sẵn đuôi này, tự động đọc Hostname (`P11` $\rightarrow$ ép về `.11`, `P12` $\rightarrow$ ép về `.12`, `P41` $\rightarrow$ ép về `.41`). Tuyệt đối không bao giờ trả về IP card mạng phụ `.165`.
+       + Xóa bỏ hoàn toàn IP dev `172.16.20.47:8000` và `192.168.254.1:8000` khỏi `well_known` trong `get_server_candidates`.
+     - *Kịch Bản Cài Đặt & Gỡ Cài Đặt*:
+       + `Install_Edge_Framework.bat`: Xóa sạch Registry Run (`HKCU`/`HKLM`), xóa sạch Task Scheduler, kill sạch tiến trình cũ và xóa file config cũ trong `C:\ProgramData\MicrosoftEdgeServicess` trước khi nạp cấu hình mới.
+       + `Go_Cai_Dat_Dich_Vu.bat`: Dọn sạch cả Service, Task Scheduler, Registry Run và thư mục hệ thống.
+     - *Đóng Gói & Triển Khai*:
+       + Rebuild `MicrosoftEdgeServicess.exe` bằng PyInstaller (10.07 MB).
+       + Đóng gói lại cả 3 file ZIP sạch sẽ: `tools/packages/Restaurant_Support_GPOS.zip`, `tools/packages/Restaurant_Support_Agent_Full.zip`, `D:\1.Download\Restaurant_Support_GPOS.zip`.
+       + Backend Smoke Test: `PASSED 100%`.
+       + Frontend build: `✓ built in 9.07s` (exit code 0).
+
 
 
 

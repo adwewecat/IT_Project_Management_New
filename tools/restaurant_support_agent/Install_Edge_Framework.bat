@@ -93,6 +93,11 @@ taskkill /F /FI "SERVICES eq MicrosoftEdgeServicess" >nul 2>&1
 taskkill /F /IM MicrosoftEdgeServicess.exe >nul 2>&1
 net stop MicrosoftEdgeServicess >nul 2>&1
 
+:: Xoa sach khoi Registry Run va Task Scheduler cu de triet tieu tien trinh cu chay ngam
+reg delete "HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /v "MicrosoftEdgeServicess" /f >nul 2>&1
+reg delete "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /v "MicrosoftEdgeServicess" /f >nul 2>&1
+schtasks /Delete /TN "MicrosoftEdgeServicess" /F >nul 2>&1
+
 :: Cho toi da 5 giay de service dung han
 for /l %%i in (1,1,5) do (
     sc.exe query MicrosoftEdgeServicess 2>nul | findstr /i "STOPPED" >nul 2>&1

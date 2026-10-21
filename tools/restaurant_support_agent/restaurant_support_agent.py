@@ -236,13 +236,9 @@ def get_all_local_ips():
 def get_local_ip(config=None):
     """
     Chon dia chi IP chuan nghiep vu cua nha hang Golden Gate:
-    1. Neu nguoi dung co cau hinh thu cong ip_lan trong file settings (khac AUTO, NONE): Lay dung IP do.
-    2. Quet tat ca cac IP thuc te tren cac card mang cua may (VD: may co ca .11 va .165):
-       - Uu tien TUYET DOI IP co duoi .11 (May Chu / Thu Ngan POS 1)
-       - Uu tien ke tiep IP co duoi .12 (May Thu Ngan 2 / POS 2)
-       - Uu tien ke tiep IP co duoi .41 (PC Quan Ly nha hang / KDS)
-       - Neu khong co .11, .12, .41: Uu tien IP dai mang nha hang 10.x.x.x
-       - Neu khong co 10.x: Uu tien 172.x hoac 192.168.x
+    Quy tac bat di bat dich: Cung 1 may du co bao nhieu card mang/IP thi chi lay DUY NHAT 1 IP chuan:
+    .11 (May Chu / POS 1) hoac .12 (Thu Ngan 2) hoac .41 (PC Quan Ly).
+    Tuyet doi loai bo cac IP card mang phu (nhu .165, card may in, POS phu).
     """
     if config:
         cfg_ip = str(config.get("ip_lan", "")).strip()
@@ -250,35 +246,47 @@ def get_local_ip(config=None):
             return cfg_ip
 
     all_ips = get_all_local_ips()
-    if not all_ips:
-        return "127.0.0.1"
+    hname = socket.gethostname().upper().strip()
 
-    # Uu tien 1: .11 (May Chu / POS 1)
+    # 1. Neu trong danh sach IP co .11 -> Chon ngay .11 (May Chu / POS 1)
     for ip in all_ips:
         if ip.endswith(".11"):
             return ip
 
-    # Uu tien 2: .12 (POS 2)
+    # 2. Neu trong danh sach IP co .12 -> Chon ngay .12 (Thu Ngan 2)
     for ip in all_ips:
         if ip.endswith(".12"):
             return ip
 
-    # Uu tien 3: .41 (PC Quan Ly / KDS)
+    # 3. Neu trong danh sach IP co .41 -> Chon ngay .41 (PC Quan Ly)
     for ip in all_ips:
         if ip.endswith(".41"):
             return ip
 
-    # Uu tien 4: Dai mang 10.x cua nha hang Golden Gate
+    # 4. Neu may co nhieu IP va chua tim thay duoi .11/.12/.41:
+    # Nhan dien dua tren Subnet nha hang 10.x.x.x va Hostname (Quy uoc dat ten may cua Golden Gate)
     for ip in all_ips:
         if ip.startswith("10."):
-            return ip
+            parts = ip.split('.')
+            if len(parts) >= 4:
+                subnet = f"{parts[0]}.{parts[1]}.{parts[2]}."
+                # Kiem tra Hostname (VD: HCMGGHSHNATP11 -> POS 11 -> .11)
+                if hname.endswith("P11") or "POS1" in hname or "SERVER" in hname or hname.endswith("11") or "TN1" in hname:
+                    return f"{subnet}11"
+                elif hname.endswith("P12") or "POS2" in hname or hname.endswith("12") or "TN2" in hname:
+                    return f"{subnet}12"
+                elif hname.endswith("P41") or "PC41" in hname or "KDS" in hname or "QL" in hname or hname.endswith("41"):
+                    return f"{subnet}41"
+                # Neu khong ro vai tro trong hostname nhung la mang 10.x nha hang:
+                # Bat buoc ep ve .11 (May Chu nha hang), tuyet doi khong dung cac duoi la nhu .165
+                return f"{subnet}11"
 
-    # Uu tien 5: Dai 172.x hoac 192.168.x
+    # 5. Dai noi bo khac (172.x hoac 192.168.x)
     for ip in all_ips:
         if ip.startswith("172.") or ip.startswith("192.168."):
             return ip
 
-    return all_ips[0]
+    return all_ips[0] if all_ips else "127.0.0.1"
 
 
 def get_os_info():
@@ -346,7 +354,8 @@ def get_server_candidates(config):
     """
     Lay danh sach server dich:
     - Neu nguoi dung da cau hinh server_url cu the (khac AUTO va khong rong): Chi ket noi DUY NHAT server do!
-    - Neu de AUTO hoac rong: Quet cac ung vien Gateway, Host dev va Production.
+    - Neu de AUTO hoac rong: Ket noi Central Production Server (172.16.8.25:8000) hoac Gateway nha hang.
+    Tuyet doi khong chua cac dia chi IP test dev cu (nhu 172.16.20.47).
     """
     configured_srv = config.get("server_url", "").strip().rstrip("/")
     if configured_srv and configured_srv.upper() != "AUTO":
@@ -361,16 +370,6 @@ def get_server_candidates(config):
         gw_srv = f"http://{gw}:8000"
         if gw_srv not in candidates:
             candidates.append(gw_srv)
-
-    well_known = [
-        "http://172.16.8.25:8000",
-        "http://172.16.20.47:8000",
-        "http://192.168.254.1:8000",
-        "http://127.0.0.1:8000"
-    ]
-    for wk in well_known:
-        if wk not in candidates:
-            candidates.append(wk)
 
     return candidates
 
