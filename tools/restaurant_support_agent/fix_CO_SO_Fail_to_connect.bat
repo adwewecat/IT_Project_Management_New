@@ -53,9 +53,8 @@ echo ===========================================================================
 echo.
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$u=Read-Host 'Nhap ten tai khoan Admin (de trong mac dinh la %ADMIN_USER%)'; if (-not $u) { $u='%ADMIN_USER%' }; Write-Host 'Nhap mat khau can ma hoa (ky tu se duoc che giau bang dau *): ' -NoNewline; $pwd=''; while($true){ $k=[System.Console]::ReadKey($true); if ($k.Key -eq [System.ConsoleKey]::Enter) { break } elseif ($k.Key -eq [System.ConsoleKey]::Backspace) { if ($pwd.Length -gt 0) { $pwd=$pwd.Substring(0, $pwd.Length-1); Write-Host \"`b `b\" -NoNewline } } elseif ($k.KeyChar -ge 32) { $pwd+=$k.KeyChar; Write-Host '*' -NoNewline } }; Write-Host ''; if ($pwd) { $k=@(34,12,89,201,45,78,123,90,11,67,88,23,45,190,211,7); $sec=ConvertTo-SecureString $pwd -AsPlainText -Force; $enc=ConvertFrom-SecureString $sec -Key $k; $bat='%~f0'; $txt=[System.IO.File]::ReadAllText($bat); $txt=[System.Text.RegularExpressions.Regex]::Replace($txt, 'set \"ADMIN_USER=[^\"]*\"', \"set `\"ADMIN_USER=$u`\"\"); $txt=[System.Text.RegularExpressions.Regex]::Replace($txt, 'set \"ADMIN_PASS_ENC=[^\"]*\"', \"set `\"ADMIN_PASS_ENC=$enc`\"\"); [System.IO.File]::WriteAllText($bat, $txt); Write-Host ''; Write-Host '[THANH CONG] Da ma hoa mat khau va luu truc tiep vao file script!' -ForegroundColor Green; Write-Host ('Tai khoan : ' + $u); Write-Host ('Chuoi ma hoa AES: ' + $enc.Substring(0, [Math]::Min(30, $enc.Length)) + '...') -ForegroundColor Yellow } else { Write-Host '[!] Mat khau trong, khong co thay doi.' -ForegroundColor Red }"
 echo.
-echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat...
-timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
-pause
+echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat...
+timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 exit /b 0
 
 :: -------------------------------------------------------------------------------
@@ -215,9 +214,8 @@ echo   HOAN TAT QUA TRINH XU LY LOI CO/SO FAIL TO CONNECT!
 echo   MongoDB da duoc khoi dong lai, cac ung dung GPOS dang nap vao bo nho.
 echo ===============================================================================
 echo.
-echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat ngay...
-timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
-pause
+echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
+timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 exit /b 0
 
 :KhongTimThayService

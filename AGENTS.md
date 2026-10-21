@@ -50,13 +50,13 @@
 >
 > 9. **Quy tắc Bất Di Bất Dịch Về File Kịch Bản Batch (.bat) & Console Executable/Script Trên Windows (100% Tiếng Việt Không Dấu, Không Chớp Tắt, Giữ Màn Hình Tối Thiểu 10 Giây)**:
 >    - **100% Tiếng Việt Không Dấu (Pure ASCII [0-127])**: Toàn bộ nội dung thông báo, `echo`, tiêu đề `title`, nhật ký ghi ra console / log file (như `agent_service.log`, `MicrosoftEdgeServicess.exe`, `Kiem_Tra_Trang_Thai.bat`...) **bắt buộc 100% phải dùng tiếng Việt không dấu**. Tuyệt đối không dùng tiếng Việt có dấu vì Windows CMD / PowerShell mặc định chạy trên bảng mã OEM (CP437/CP1252) sẽ bị lỗi font (mojibake: ô vuông, dấu chấm hỏi `?`, chữ biến dạng).
->    - **Tuyệt đối không để cửa sổ CMD chớp rồi tắt**: Mọi file `.bat` khi kết thúc (cả khi thành công lẫn khi gặp lỗi) **bắt buộc phải có thời gian chờ tối thiểu 10 giây hoặc để người dùng tự bấm phím tắt** trước khi đóng để lập trình viên/người dùng đọc được đầy đủ thông báo:
+>    - **Tuyệt đối không để cửa sổ CMD chớp rồi tắt**: Mọi file `.bat` khi hoàn tất thành công **tự động đóng sau 3 giây (đủ để đọc thông báo kết quả, tự tắt thật sự mà không cần bấm phím, hoặc bấm phím bất kỳ để thoát ngay lập tức)**:
 >      ```bat
->      echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat ngay...
->      timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
->      pause
+>      echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
+>      timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 >      exit /b 0
 >      ```
+>      *(Khi gặp lỗi nghiêm trọng, có thể thêm `pause` để người dùng đọc rõ chi tiết lỗi trước khi đóng).*
 >    - **Tuyệt đối không dùng khối ngoặc đơn `(...)` chứa văn bản `echo (...)`**: Trong cú pháp `cmd.exe`, dấu ngoặc đơn `(` hoặc `)` bên trong khối `if (...)` sẽ làm vỡ bộ phân tích cú pháp (`was unexpected at this time`) khiến CMD crash và tắt phụt ngay lập tức. Luôn dùng cấu trúc phẳng `if condition goto :Label`.
 >
 > 10. **Quy tắc Bất Di Bất Dịch Về Màn Hình & Chức Năng Mới (Mặc Định Chỉ Admin Mới Thấy, Admin Toàn Quyền Phân Quyền Khi Cần)**:

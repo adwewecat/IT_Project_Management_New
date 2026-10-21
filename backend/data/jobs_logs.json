@@ -1,5 +1,17 @@
 [
   {
+    "id": "e5ba1ed9",
+    "job_id": "job_sync_pim_requests",
+    "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",
+    "started_at": "2026-10-21 12:00:09",
+    "finished_at": "2026-10-21 12:00:09",
+    "duration_seconds": 25.65,
+    "status": "success",
+    "message": "Thành công lúc 12:00 (Quét: 13 | Mới: 5 | Cập nhật: 8)",
+    "details": "Tự động quét PIM theo lịch 3 khung giờ lúc 12:00:\n- Tổng quét: 13\n- Mới: 5\n- Cập nhật: 8",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
     "id": "c69e5ce0",
     "job_id": "job_review_missing_restaurant_info",
     "job_name": "Rà Soát Thông Tin Nhà Hàng Còn Thiếu",

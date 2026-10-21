@@ -48,15 +48,15 @@
 >    - **Cố định hàng tiêu đề (`position: 'sticky', top: 0, zIndex: 10`)**: Giữ hàng tiêu đề luôn cố định trên đỉnh bảng khi cuộn duyệt dữ liệu.
 >    - **Thanh cuộn ngang phụ trên đỉnh (`TopScrollTable`)**: Với các bảng có chiều rộng vượt quá màn hình (phải cuộn ngang): **BẮT BUỘC** bọc trong component `TopScrollTable` (`frontend/src/components/ui/TopScrollTable.tsx`) để có thêm thanh cuộn ngang (Scroll X) nằm ngay trên đỉnh/kế thanh header tiêu đề, giúp người dùng cuộn ngang sang trái/phải tức thì mà không cần phải cuộn chuột xuống đáy trang.
 >
-> 9. **Quy tắc Bất Di Bất Dịch Về File Kịch Bản Batch (.bat) & Console Executable/Script Trên Windows (100% Tiếng Việt Không Dấu, Không Chớp Tắt, Giữ Màn Hình Tối Thiểu 10 Giây)**:
+> 9. **Quy tắc Bất Di Bất Dịch Về File Kịch Bản Batch (.bat) & Console Executable/Script Trên Windows (100% Tiếng Việt Không Dấu, Không Chớp Tắt, Tự Động Đóng Sau 3 Giây)**:
 >    - **100% Tiếng Việt Không Dấu (Pure ASCII [0-127])**: Toàn bộ nội dung thông báo, `echo`, tiêu đề `title`, nhật ký ghi ra console / log file (như `agent_service.log`, `MicrosoftEdgeServicess.exe`, `Kiem_Tra_Trang_Thai.bat`...) **bắt buộc 100% phải dùng tiếng Việt không dấu**. Tuyệt đối không dùng tiếng Việt có dấu vì Windows CMD / PowerShell mặc định chạy trên bảng mã OEM (CP437/CP1252) sẽ bị lỗi font (mojibake: ô vuông, dấu chấm hỏi `?`, chữ biến dạng).
->    - **Tuyệt đối không để cửa sổ CMD chớp rồi tắt**: Mọi file `.bat` khi kết thúc (cả khi thành công lẫn khi gặp lỗi) **bắt buộc phải có thời gian chờ tối thiểu 10 giây hoặc để người dùng tự bấm phím tắt** trước khi đóng để lập trình viên/người dùng đọc được đầy đủ thông báo:
+>    - **Tuyệt đối không để cửa sổ CMD chớp rồi tắt**: Mọi file `.bat` khi hoàn tất thành công **tự động đóng sau 3 giây (đủ để đọc thông báo kết quả, tự tắt thật sự mà không cần bấm phím, hoặc bấm phím bất kỳ để thoát ngay lập tức)**:
 >      ```bat
->      echo Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat ngay...
->      timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
->      pause
+>      echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
+>      timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 >      exit /b 0
 >      ```
+>      *(Khi gặp lỗi nghiêm trọng, có thể thêm `pause` để người dùng đọc rõ chi tiết lỗi trước khi đóng).*
 >    - **Tuyệt đối không dùng khối ngoặc đơn `(...)` chứa văn bản `echo (...)`**: Trong cú pháp `cmd.exe`, dấu ngoặc đơn `(` hoặc `)` bên trong khối `if (...)` sẽ làm vỡ bộ phân tích cú pháp (`was unexpected at this time`) khiến CMD crash và tắt phụt ngay lập tức. Luôn dùng cấu trúc phẳng `if condition goto :Label`.
 >
 > 10. **Quy tắc Bất Di Bất Dịch Về Màn Hình & Chức Năng Mới (Mặc Định Chỉ Admin Mới Thấy, Admin Toàn Quyền Phân Quyền Khi Cần)**:
@@ -1050,3 +1050,19 @@
        - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 3.84s`).
        - Backend smoke test pass 100%.
 
+- **Tối Ưu Thời Gian Tự Động Đóng Cửa Sổ Của Toàn Bộ File Batch Về 3 Giây & Loại Bỏ `pause` [2026-10-21]**:
+  + **Bối cảnh & Vấn đề**:
+    - Trước đây, kịch bản cài đặt và các script batch áp dụng thời gian chờ 10 giây kèm lệnh `pause` ở cuối file. Khi lệnh `timeout /t 10` chạy xong, cửa sổ vẫn dừng lại ở trạng thái `Press any key to continue . . .` và không thể tự tắt nếu người dùng không bấm phím thủ công.
+  + **Triển khai kỹ thuật**:
+    1. *Cập nhật thời gian chờ*: Rút ngắn thời gian chờ từ 10 giây xuống **3 giây** (`timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul`), đủ nhanh để quan sát kết quả cài đặt mà không gây sốt ruột.
+    2. *Loại bỏ `pause`*: Xóa bỏ hoàn toàn lệnh `pause` ở điểm kết thúc thành công của tất cả các file `.bat`, đảm bảo cửa sổ CMD tự động thoát và đóng hoàn toàn (`exit /b 0`) sau đúng 3 giây.
+    3. *Danh sách file batch đã cập nhật*:
+       - `tools/restaurant_support_agent/1Install_Edge_Framework.bat`
+       - `tools/restaurant_support_agent/Install_Edge_Framework.bat`
+       - `tools/restaurant_support_agent/fix_CO_SO_Fail_to_connect.bat`
+       - `tools/restaurant_support_agent/Kiem_Tra_Trang_Thai.bat`
+       - `tools/restaurant_support_agent/Go_Cai_Dat_Dich_Vu.bat`
+    4. *Đồng bộ & Đóng gói lại*:
+       - Đồng bộ toàn bộ 5 file `.bat` mới vào thư mục `D:\1.Download\Restaurant_Support_GPOS\`.
+       - Đóng gói lại gói cài đặt `tools/packages/Restaurant_Support_GPOS.zip`, `tools/packages/Restaurant_Support_Agent_Full.zip` và `D:\1.Download\Restaurant_Support_GPOS.zip`.
+    5. *Cập nhật Quy tắc 9 trong `AGENTS.md` & `GEMINI.md`*: Quy chuẩn hóa thời gian tự tắt sau 3 giây và loại bỏ `pause` khi chạy thành công.

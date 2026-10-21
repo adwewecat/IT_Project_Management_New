@@ -4219,6 +4219,18 @@ estaurant_service.py).
      - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 3.84s`).
      - Backend Smoke test `PASSED 100%`.
 
+- **TỐI ƯU THỜI GIAN TỰ ĐỘNG ĐÓNG CỬA SỔ BATCH VỀ 3 GIÂY & LOẠI BỎ LỆNH PAUSE [2026-10-21]**:
+  1. **Rút Ngắn Thời Gian Tự Động Đóng Cửa Sổ**:
+     - Toàn bộ các file `.bat` cài đặt và tiện ích được chuyển thời gian chờ từ 10 giây xuống **3 giây** (`timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul`).
+  2. **Loại Bỏ Lệnh `pause` Ở Điểm Thoát**:
+     - Xóa bỏ triệt để lệnh `pause` sau `timeout`, khắc phục tình trạng cửa sổ CMD bị giữ lại vô thời hạn ở dòng `Press any key to continue . . .`.
+     - Giờ đây, sau khi cài đặt thành công, màn hình hiển thị kết quả đúng 3 giây và tự động đóng hoàn toàn, không yêu cầu người dùng phải gõ phím.
+  3. **Danh Sách File Batch Đã Đồng Bộ & Đóng Gói Lại**:
+     - Cập nhật 5 file: `1Install_Edge_Framework.bat`, `Install_Edge_Framework.bat`, `fix_CO_SO_Fail_to_connect.bat`, `Kiem_Tra_Trang_Thai.bat`, `Go_Cai_Dat_Dich_Vu.bat`.
+     - Đồng bộ vào `D:\1.Download\Restaurant_Support_GPOS\`.
+     - Đóng gói lại các file zip: `tools/packages/Restaurant_Support_GPOS.zip`, `tools/packages/Restaurant_Support_Agent_Full.zip` và `D:\1.Download\Restaurant_Support_GPOS.zip`.
+  4. **Cập Nhật Quy Chuẩn**:
+     - Đồng bộ Quy tắc 9 trong `AGENTS.md` và `GEMINI.md`.
 
 
 

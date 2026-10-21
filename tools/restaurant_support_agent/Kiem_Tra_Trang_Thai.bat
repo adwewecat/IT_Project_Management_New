@@ -40,9 +40,8 @@ goto :KetThucLog
 echo.
 echo ===============================================================================
 echo   Hoan tat kiem tra.
-echo   Cua so se tu dong dong sau 10 giay, hoac bam phim bat ky de thoat ngay...
+echo   Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
 echo ===============================================================================
 echo.
-timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
-pause
+timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 exit /b 0
