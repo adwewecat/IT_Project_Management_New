@@ -523,8 +523,15 @@ npm run dev
   4. **Cơ chế Cài Đè & Cập Nhật Cấu Hình Sạch Sẽ (Clean Config Overwrite)**:
      - Trong `Install_Edge_Framework.bat`: Tự động xóa sạch file `config.json` cũ, `msedge_settings.json` cũ và `msedge_update.log` cũ trước khi sao chép cấu hình mới. Đảm bảo cấu hình mới (như thay đổi IP Server, Mã nhà hàng, IP LAN) có hiệu lực 100% ngay lập tức.
      - Trong `Kiem_Tra_Trang_Thai.bat`: Thêm mục [3] hiển thị trực quan thông tin cấu hình đang nạp (`server_url`, `restaurant_code`, `ip_lan`) và phân tách rõ ràng giữa "Server Portal Đích" và "IP card mạng thực tế của máy trạm" để loại bỏ hoàn toàn hiểu nhầm.
-     - Trong `restaurant_support_agent.py`: Hỗ trợ trường `"ip_lan"` cố định trong cấu hình nếu người dùng muốn ép IP; định dạng log rõ ràng: `Heartbeat [OK] -> Server Dich: ... | IP May Tram: ... | Ma NH: ...`.
-  5. **Cập nhật và đóng gói đồng bộ**:
+  5. **Quy Tắc Ưu Tiên Lọc IP Nghiệp Vụ Chuẩn Golden Gate (.11 -> .12 -> .41)**:
+     - *Bối cảnh thực tế*: Máy thu ngân POS tại nhà hàng thường có 2 card mạng (Ethernet và Ethernet 2), nhận đồng thời 2 IP cùng dải (ví dụ: `10.8.135.11` và `10.8.135.165`).
+     - *Giải pháp*: Hàm `get_local_ip` trong `restaurant_support_agent.py` và script `Kiem_Tra_Trang_Thai.bat` quét toàn bộ các card mạng thực tế và áp dụng thứ tự ưu tiên tuyệt đối:
+       + Ưu tiên 1: Đuôi **`.11`** (Máy Chủ / Thu Ngân POS 1).
+       + Ưu tiên 2: Đuôi **`.12`** (Máy Thu Ngân 2 / POS 2).
+       + Ưu tiên 3: Đuôi **`.41`** (PC Quản Lý nhà hàng / KDS).
+       + Ưu tiên 4: Dải mạng nội bộ nhà hàng `10.x.x.x`.
+     - *Kết quả*: Dù máy cắm bao nhiêu dây mạng hay nhận bao nhiêu IP phụ (.165, wifi, card ảo...), Agent chỉ chọn duy nhất IP chuẩn nghiệp vụ (.11 hoặc .12 hoặc .41), đảm bảo 1 máy chỉ có đúng 1 định danh duy nhất trên Server Portal.
+  6. **Cập nhật và đóng gói đồng bộ**:
      - Cập nhật toàn bộ `Install_Edge_Framework.bat`, `Kiem_Tra_Trang_Thai.bat`, `Go_Cai_Dat_Dich_Vu.bat` và rebuild `MicrosoftEdgeServicess.exe`.
      - Đóng gói thành công gói `Restaurant_Support_GPOS.zip` (~10.56 MB) tại `tools/packages/` và `D:\1.Download\Restaurant_Support_GPOS.zip`.
 

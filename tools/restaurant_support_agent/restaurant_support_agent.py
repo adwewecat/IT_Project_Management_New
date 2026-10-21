@@ -189,20 +189,96 @@ def save_config(config_dict):
         return False
 
 
-def get_local_ip():
-    """Lay dia chi IP mang noi bo (LAN) cua may tram."""
+def get_all_local_ips():
+    """
+    Lay danh sach tat ca cac dia chi IPv4 hop le tren cac card mang cua may tram.
+    Loai bo loopback (127.x), APIPA (169.254.x).
+    """
+    ips = []
+    # 1. Thu qua lenh ipconfig cua Windows (Chinh xac va day du nhat tren may tram nha hang)
+    try:
+        res = subprocess.run("ipconfig", shell=True, capture_output=True, text=True, timeout=5)
+        for line in res.stdout.splitlines():
+            m = re.search(r'IPv4 Address[.\s]+:\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)', line, re.IGNORECASE)
+            if not m:
+                m = re.search(r'IP[a-zA-Z0-9\s\.\-]*:\s*([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)', line)
+            if m:
+                ip = m.group(1).strip()
+                if not ip.startswith("127.") and not ip.startswith("169.254.") and ip not in ips:
+                    ips.append(ip)
+    except Exception:
+        pass
+
+    # 2. Thu qua socket gethostbyname_ex
+    try:
+        host_ips = socket.gethostbyname_ex(socket.gethostname())[2]
+        for ip in host_ips:
+            if not ip.startswith("127.") and not ip.startswith("169.254.") and ip not in ips:
+                ips.append(ip)
+    except Exception:
+        pass
+
+    # 3. Thu qua socket UDP connect
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(2.0)
+        s.settimeout(1.5)
         s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
+        cip = s.getsockname()[0]
         s.close()
-        return ip
+        if cip and not cip.startswith("127.") and not cip.startswith("169.254.") and cip not in ips:
+            ips.append(cip)
     except Exception:
-        try:
-            return socket.gethostbyname(socket.gethostname())
-        except Exception:
-            return "127.0.0.1"
+        pass
+
+    return ips
+
+
+def get_local_ip(config=None):
+    """
+    Chon dia chi IP chuan nghiep vu cua nha hang Golden Gate:
+    1. Neu nguoi dung co cau hinh thu cong ip_lan trong file settings (khac AUTO, NONE): Lay dung IP do.
+    2. Quet tat ca cac IP thuc te tren cac card mang cua may (VD: may co ca .11 va .165):
+       - Uu tien TUYET DOI IP co duoi .11 (May Chu / Thu Ngan POS 1)
+       - Uu tien ke tiep IP co duoi .12 (May Thu Ngan 2 / POS 2)
+       - Uu tien ke tiep IP co duoi .41 (PC Quan Ly nha hang / KDS)
+       - Neu khong co .11, .12, .41: Uu tien IP dai mang nha hang 10.x.x.x
+       - Neu khong co 10.x: Uu tien 172.x hoac 192.168.x
+    """
+    if config:
+        cfg_ip = str(config.get("ip_lan", "")).strip()
+        if cfg_ip and cfg_ip.upper() not in ("AUTO", "DEFAULT", "NONE", ""):
+            return cfg_ip
+
+    all_ips = get_all_local_ips()
+    if not all_ips:
+        return "127.0.0.1"
+
+    # Uu tien 1: .11 (May Chu / POS 1)
+    for ip in all_ips:
+        if ip.endswith(".11"):
+            return ip
+
+    # Uu tien 2: .12 (POS 2)
+    for ip in all_ips:
+        if ip.endswith(".12"):
+            return ip
+
+    # Uu tien 3: .41 (PC Quan Ly / KDS)
+    for ip in all_ips:
+        if ip.endswith(".41"):
+            return ip
+
+    # Uu tien 4: Dai mang 10.x cua nha hang Golden Gate
+    for ip in all_ips:
+        if ip.startswith("10."):
+            return ip
+
+    # Uu tien 5: Dai 172.x hoac 192.168.x
+    for ip in all_ips:
+        if ip.startswith("172.") or ip.startswith("192.168."):
+            return ip
+
+    return all_ips[0]
 
 
 def get_os_info():
@@ -1670,11 +1746,7 @@ def main_loop(stop_event=None):
             config = load_config()
             interval = int(config.get("heartbeat_interval_seconds", 60))
             now = time.time()
-            cfg_ip = str(config.get("ip_lan", "")).strip()
-            if cfg_ip and cfg_ip.upper() not in ("AUTO", "DEFAULT", "NONE", ""):
-                ip_lan = cfg_ip
-            else:
-                ip_lan = get_local_ip()
+            ip_lan = get_local_ip(config)
 
             # 1. Gui Heartbeat dinh ky
             if now - last_heartbeat_time >= interval:

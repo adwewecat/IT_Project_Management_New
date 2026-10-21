@@ -90,7 +90,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$c = Get-Content '%~dp0m
 goto :KiemTraIPLocal
 
 :KiemTraIPLocal
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ips = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike '*Loopback*' -and $_.IPAddress -notlike '169.254*' }).IPAddress; Write-Host '   - IP card mang thuc te :' ($ips -join ', ')"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ips = @((Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike '*Loopback*' -and $_.IPAddress -notlike '169.254*' }).IPAddress); $best = ($ips | Where-Object { $_ -like '*.11' } | Select-Object -First 1); $role = 'May Chu / POS 1'; if (-not $best) { $best = ($ips | Where-Object { $_ -like '*.12' } | Select-Object -First 1); $role = 'Thu Ngan 2' }; if (-not $best) { $best = ($ips | Where-Object { $_ -like '*.41' } | Select-Object -First 1); $role = 'PC Quan Ly / KDS' }; if (-not $best) { $best = ($ips | Where-Object { $_ -like '10.*' } | Select-Object -First 1); $role = 'Mang Nha Hang 10.x' }; if (-not $best) { $best = ($ips | Select-Object -First 1); $role = 'IP Mac Dinh' }; Write-Host '   - IP uu tien nhan dien :' $best ('(' + $role + ')'); Write-Host '   - Tat ca IP may dang co:' ($ips -join ', ')"
 echo.
 
 :: 4. Kiem tra file log
