@@ -504,6 +504,23 @@ npm run dev
 - **Kiểm thử & Đóng gói**:
   - Backend: `python -m compileall app` và Smoke Test đạt 100% không lỗi.
   - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.89s`), bundle sạch sẽ trong `frontend/dist/`.
+
+### [2026-10-21] - Khắc Phục Triệt Để Sự Cố Cài Đặt Agent Dưới Nhà Hàng (Fix Lỗi Cắt Chuỗi Tasklist 25 Ký Tự, 4-Tier Resilience & VBScript Run Invisible)
+- **Hiện tượng & Nguyên nhân gốc rễ trên các máy trạm nhà hàng (như Gogi Nguyễn Ảnh Thủ - 4046/246)**:
+  1. *Lỗi cắt chuỗi 25 ký tự trên lệnh tasklist của Windows*: Mặc định cột Image Name của lệnh tasklist trong cmd chỉ có độ rộng đúng 25 ký tự. Tên file MicrosoftEdgeServicess.exe dài 26 ký tự nên bị Windows cắt cụt thành MicrosoftEdgeServicess.ex. Do đó lệnh findstr /i "MicrosoftEdgeServicess.exe" luôn thất bại 100%, dẫn đến thông báo lỗi giả mạo [CANH BAO] Khong co tien trinh MicrosoftEdgeServicess.exe nao dang chay hoặc INFO: No tasks are running which match the specified criteria dù tiến trình thực tế đã khởi chạy thành công.
+  2. *Quyền hạn trên máy POS nhà hàng*: Trên một số máy POS, user app là Standard User không có quyền tạo Windows Service trong SCM (báo lỗi [SC] FAILED 1060). Script cũ thiếu cơ chế khởi động ẩn tuyệt đối và ghi Registry Run khi không tạo được service.
+- **Giải pháp xử lý toàn diện (Multi-Tier Resilience & Fail-Proof)**:
+  1. **Sửa triệt để lệnh kiểm tra tiến trình**:
+     - Chuyển sang định dạng CSV không giới hạn độ rộng cột: `tasklist /FO CSV /FI "IMAGENAME eq MicrosoftEdgeServicess.exe"` và lọc từ khóa gốc `findstr /i "MicrosoftEdgeServicess"` để nhận diện chính xác 100% tiến trình đang chạy.
+  2. **Cơ chế dự phòng đa tầng 4 lớp (Multi-Tier Resilience)**:
+     - *Tier 1*: Windows Service SCM (services.msc) khởi động cùng Windows.
+     - *Tier 2*: Task Scheduler chạy quyền SYSTEM (`/sc onstart /ru SYSTEM /rl HIGHEST`).
+     - *Tier 3*: Task Scheduler chạy quyền User hiện tại khi đăng nhập (`/sc onlogon`).
+     - *Tier 4 (Tối thượng - Không thể thất bại)*: Ghi Registry Run Key (`HKCU` và `HKLM`) + Khởi chạy ngầm lập tức bằng VBScript `WScript.Shell.Run(..., 0, False)` hoàn toàn ẩn cửa sổ, không chớp tắt, bất kể máy có quyền Admin hay không.
+  3. **Cập nhật và đóng gói đồng bộ**:
+     - Cập nhật `Install_Edge_Framework.bat` và `Kiem_Tra_Trang_Thai.bat`.
+     - Đóng gói thành công gói `Restaurant_Support_GPOS.zip` (~10.5 MB) tại `tools/packages/` và `D:\1.Download\Restaurant_Support_GPOS.zip`.
+
 ### [2026-10-16] - Khắc Phục Triệt Để Sự Cố Start Service Error 1053, Error 1058 & Đổi Description Dịch Vụ
 - **Hiện tượng & Nguyên nhân gốc rễ**:
   1. *Lỗi Start Service Error 1053 / NET HELPMSG 2186 ("The service is not responding to the control function")*:

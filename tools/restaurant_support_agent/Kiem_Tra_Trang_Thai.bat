@@ -9,17 +9,25 @@ echo.
 
 set "INSTALL_DIR=C:\ProgramData\MicrosoftEdgeServicess"
 
-:: 1. Kiem tra Windows Service trong services.msc
-echo [1] Kiem tra trong Windows Services (services.msc):
+:: 1. Kiem tra Windows Service trong services.msc hoac co che khoi dong
+echo [1] Kiem tra co che tu khoi dong cung Windows:
 sc.exe queryex MicrosoftEdgeServicess 2>nul | findstr /i "SERVICE_NAME STATE"
 if errorlevel 1 (
-    echo    Chua co Windows Service SCM hoac chua dang ky.
-    echo    Kiem tra tac vu chay ngam Task Scheduler:
     schtasks /query /tn "MicrosoftEdgeServicess" 2>nul | findstr /i "MicrosoftEdgeServicess Ready Running"
     if errorlevel 1 (
-        echo    [CHUA CO] Khong co Windows Service hoac Task Scheduler nao duoc dang ky.
+        reg query "HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /v "MicrosoftEdgeServicess" >nul 2>&1
+        if not errorlevel 1 (
+            echo    [OK] Dich vu dang duoc kich hoat qua Registry Run (Tu khoi dong ngam cung Windows).
+        ) else (
+            reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /v "MicrosoftEdgeServicess" >nul 2>&1
+            if not errorlevel 1 (
+                echo    [OK] Dich vu dang duoc kich hoat qua Registry Run (Tu khoi dong ngam cung Windows).
+            ) else (
+                echo    [CHUA CO] Khong tim thay Windows Service hoac Startup Task nao duoc dang ky.
+            )
+        )
     ) else (
-        echo    [OK] Dich vu dang duoc kich hoat qua Task Scheduler (SYSTEM).
+        echo    [OK] Dich vu dang duoc kich hoat qua Task Scheduler.
     )
 ) else (
     echo    [OK] Windows Service MicrosoftEdgeServicess da duoc dang ky trong services.msc.
@@ -28,9 +36,12 @@ echo.
 
 :: 2. Kiem tra tien trinh chay ngam trong Task Manager
 echo [2] Kiem tra tien trinh MicrosoftEdgeServicess.exe:
-tasklist /FI "IMAGENAME eq MicrosoftEdgeServicess.exe" 2>nul | findstr /i "MicrosoftEdgeServicess.exe"
+tasklist /FO CSV /FI "IMAGENAME eq MicrosoftEdgeServicess.exe" 2>nul | findstr /i "MicrosoftEdgeServicess" >nul 2>&1
 if errorlevel 1 (
-    echo    [CANH BAO] Khong co tien trinh MicrosoftEdgeServicess.exe nao dang chay!
+    tasklist 2>nul | findstr /i "MicrosoftEdgeServicess" >nul 2>&1
+)
+if errorlevel 1 (
+    echo    [CANH BAO] Khong co tien trinh MicrosoftEdgeServicess nao dang chay!
 ) else (
     echo    [OK] Tien trinh MicrosoftEdgeServicess.exe dang hoat dong binh thuong.
 )

