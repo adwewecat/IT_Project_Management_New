@@ -4550,3 +4550,20 @@ estaurant_service.py).
   3. **Kiểm Thử & Đóng Gói Triển Khai (Copy Là Chạy Ngay)**:
      - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.70s`), bundle sạch sẽ, `frontend/dist/` (kèm `web.config`) sẵn sàng copy lên IIS.
      - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`. Đã khởi động lại Backend daemon mới trên port 8000.
+
+
+- **BỔ SUNG TÍNH NĂNG ĐỔI TÊN BỘ CHUẨN (PACKAGE RECIPES) & TỐI ƯU GIAO DIỆN MODAL AGENT MULTITASK [2026-10-22]**:
+  1. **Bối Cảnh & Yêu Cầu Người Dùng**:
+     - Người dùng phản ánh sau khi lưu Bộ Chuẩn gói cài đặt đa bước thì không đổi tên được, yêu cầu cho thêm tính năng Đổi Tên Bộ Chuẩn.
+     - Phát hiện giao diện Modal *Truyền Gói Cài / File Nén & Thực Thi Đa Bước*: khối "Thiết Bị Thực Thi" và "Ưu tiên thực thi dưới quyền User App / Quản trị" bị xuất hiện lặp lại 2 lần (ở trên và ở dưới Khối 0 Thư viện Bộ Chuẩn).
+  2. **Giải Pháp Kiến Trúc & Triển Khai**:
+     - *Tính năng Đổi Tên Bộ Chuẩn*:
+       + Bổ sung nút **`✏️ Đổi Tên`** trong thanh công cụ quản trị Khối 0 và nút text `Đổi tên` trực tiếp bên cạnh tên Bộ Chuẩn đang chọn.
+       + Mở Modal chuyên biệt **"✏️ Đổi Tên & Mô Tả Bộ Chuẩn Gói Cài"** cho phép nhập Tên Mới và Mô Tả Mới.
+       + Gọi API Backend `PUT /agent-multitask/package-templates/{template_id}` với payload `{ template_name, description }`. Backend kiểm tra trùng tên và không cho phép để trống tên.
+       + Phân quyền an toàn: Chỉ Super Admin hoặc tài khoản `dung.nguyenanh` (`canModifyPackageTemplate`) mới có quyền đổi tên Bộ Chuẩn.
+     - *Dọn dẹp giao diện Modal*:
+       + Loại bỏ khối chọn máy đích và Admin option bị lặp lại thừa sau Khối 0, giữ lại duy nhất 1 khối chuẩn xác ở đỉnh Modal.
+  3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+     - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.15s`), thư mục `frontend/dist/` sạch sẽ.
+     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`.

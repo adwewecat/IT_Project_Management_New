@@ -116,6 +116,10 @@ export const AgentMultitaskPage: React.FC = () => {
   const [savePackageName, setSavePackageName] = useState<string>('');
   const [savePackageDesc, setSavePackageDesc] = useState<string>('');
   const [isSavingPackageTemplate, setIsSavingPackageTemplate] = useState<boolean>(false);
+  const [isRenamePackageModalOpen, setIsRenamePackageModalOpen] = useState<boolean>(false);
+  const [renamePackageName, setRenamePackageName] = useState<string>('');
+  const [renamePackageDesc, setRenamePackageDesc] = useState<string>('');
+  const [isRenamingPackageTemplate, setIsRenamingPackageTemplate] = useState<boolean>(false);
   const [deletingPackageTemplateId, setDeletingPackageTemplateId] = useState<number | null>(null);
   const [stepUploadProgress, setStepUploadProgress] = useState<Record<number, number>>({});
   const [uploadingStepIdx, setUploadingStepIdx] = useState<number | null>(null);
@@ -760,6 +764,51 @@ export const AgentMultitaskPage: React.FC = () => {
       showToast('Lỗi cập nhật Bộ Chuẩn: ' + (err.response?.data?.detail || err.message), 'error');
     } finally {
       setIsSavingPackageTemplate(false);
+    }
+  };
+
+  // Mở modal đổi tên & mô tả bộ chuẩn (chỉ Super Admin hoặc dung.nguyenanh)
+  const handleOpenRenamePackageModal = () => {
+    if (!canModifyPackageTemplate) {
+      showToast('🔒 Chỉ Super Admin hoặc dung.nguyenanh mới có quyền đổi tên Bộ Chuẩn!', 'error');
+      return;
+    }
+    if (!selectedPackageTemplateId) {
+      showToast('Vui lòng chọn Bộ Chuẩn cần đổi tên!', 'info');
+      return;
+    }
+    const curr = packageTemplates.find((t) => t.id === selectedPackageTemplateId);
+    if (!curr) return;
+    setRenamePackageName(curr.template_name);
+    setRenamePackageDesc(curr.description || '');
+    setIsRenamePackageModalOpen(true);
+  };
+
+  // Xác nhận đổi tên & mô tả Bộ Chuẩn
+  const handleConfirmRenamePackage = async () => {
+    if (!canModifyPackageTemplate) {
+      showToast('🔒 Chỉ Super Admin hoặc dung.nguyenanh mới có quyền đổi tên Bộ Chuẩn!', 'error');
+      return;
+    }
+    if (!selectedPackageTemplateId) return;
+    const name = renamePackageName.trim();
+    if (!name) {
+      showToast('Tên Bộ Chuẩn không được để trống!', 'error');
+      return;
+    }
+    setIsRenamingPackageTemplate(true);
+    try {
+      await agentMultitaskService.updatePackageTemplate(selectedPackageTemplateId, {
+        template_name: name,
+        description: renamePackageDesc.trim() || undefined
+      });
+      showToast(`✓ Đã đổi tên Bộ Chuẩn thành '${name}' thành công!`, 'success');
+      setIsRenamePackageModalOpen(false);
+      await loadPackageTemplates();
+    } catch (err: any) {
+      showToast('Lỗi đổi tên Bộ Chuẩn: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setIsRenamingPackageTemplate(false);
     }
   };
 
@@ -3694,6 +3743,28 @@ export const AgentMultitaskPage: React.FC = () => {
                     💾 Lưu Bộ Chuẩn Mới
                   </Button>
 
+                  {/* Nút Đổi tên bộ chuẩn đang chọn */}
+                  {selectedPackageTemplateId && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleOpenRenamePackageModal}
+                      disabled={!canModifyPackageTemplate}
+                      leftIcon={<Edit size={12} />}
+                      style={{
+                        fontSize: '11.5px',
+                        padding: '4px 10px',
+                        color: '#1E40AF',
+                        borderColor: '#3B82F6',
+                        backgroundColor: canModifyPackageTemplate ? 'rgba(59, 130, 246, 0.08)' : '#F3F4F6',
+                        cursor: canModifyPackageTemplate ? 'pointer' : 'not-allowed'
+                      }}
+                      title={canModifyPackageTemplate ? 'Đổi tên và mô tả của Bộ Chuẩn này' : '🔒 Chỉ Super Admin hoặc dung.nguyenanh mới có quyền đổi tên'}
+                    >
+                      ✏️ Đổi Tên
+                    </Button>
+                  )}
+
                   {/* Nút Cập nhật bộ chuẩn đang chọn */}
                   {selectedPackageTemplateId && (
                     <Button
@@ -3740,22 +3811,43 @@ export const AgentMultitaskPage: React.FC = () => {
               {/* Thông tin bộ chuẩn đang được chọn */}
               {selectedPackageTemplateId && (
                 <div style={{ backgroundColor: 'var(--bg-primary)', padding: '8px 10px', borderRadius: '6px', border: '1px solid #BFDBFE', fontSize: '11.5px', color: '#1E40AF', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-                  <span>
-                    ✓ Đang chọn Bộ Chuẩn: <strong>{packageTemplates.find((t) => t.id === selectedPackageTemplateId)?.template_name}</strong>
-                    {' '}• Gồm <strong>{deploySteps.length}</strong> bước tuần tự
-                    {' '}• <strong>{deploySteps.filter((s) => s.file_name || s.storage_file_name).length}</strong> file đính kèm đã sẵn sàng trên máy chủ.
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span>
+                      ✓ Đang chọn Bộ Chuẩn: <strong>{packageTemplates.find((t) => t.id === selectedPackageTemplateId)?.template_name}</strong>
+                    </span>
+                    {canModifyPackageTemplate && (
+                      <button
+                        type="button"
+                        onClick={handleOpenRenamePackageModal}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#2563EB',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          fontSize: '11px',
+                          textDecoration: 'underline',
+                          padding: '0 4px',
+                          fontWeight: 600
+                        }}
+                        title="Bấm để đổi tên và mô tả Bộ Chuẩn này"
+                      >
+                        <Edit size={11} />
+                        Đổi tên
+                      </button>
+                    )}
+                    <span>
+                      {' '}• Gồm <strong>{deploySteps.length}</strong> bước tuần tự
+                      {' '}• <strong>{deploySteps.filter((s) => s.file_name || s.storage_file_name).length}</strong> file đính kèm đã sẵn sàng trên máy chủ.
+                    </span>
+                  </div>
                   <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                     Lần sau chỉ cần chọn Nhà Hàng và bấm "Bắt Đầu Triển Khai", không cần tải lại file!
                   </span>
                 </div>
               )}
-            </div>
-
-            {/* Bộ chọn máy đích & Admin Option */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {renderTargetDevicePicker()}
-              {renderAdminUserOption()}
             </div>
 
             {/* Khối 1: Cấu hình Thư Mục Đích Gốc Mặc Định */}
@@ -4749,6 +4841,84 @@ export const AgentMultitaskPage: React.FC = () => {
 
             <div style={{ backgroundColor: 'rgba(5, 150, 105, 0.08)', padding: '10px 12px', borderRadius: '6px', border: '1px solid #10B981', fontSize: '11.5px', color: '#065F46' }}>
               🔒 <strong>Quy định bảo mật:</strong> Sau khi lưu, chỉ Super Admin hoặc tài khoản <code>dung.nguyenanh</code> mới có quyền thay đổi file mã nguồn và cấu hình của bộ chuẩn này. Các kỹ thuật viên khác chỉ được quyền chọn bộ chuẩn và bấm triển khai tới nhà hàng.
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 5.8. MODAL: ĐỔI TÊN & MÔ TẢ BỘ CHUẨN GÓI CÀI (CHỈ SUPER ADMIN / DUNG.NGUYENANH) */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {isRenamePackageModalOpen && (
+        <Modal
+          isOpen={true}
+          onClose={() => setIsRenamePackageModalOpen(false)}
+          title="✏️ Đổi Tên & Mô Tả Bộ Chuẩn Gói Cài"
+          maxWidth="520px"
+          footer={
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', width: '100%' }}>
+              <Button variant="secondary" onClick={() => setIsRenamePackageModalOpen(false)}>
+                Hủy
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleConfirmRenamePackage}
+                disabled={isRenamingPackageTemplate || !renamePackageName.trim()}
+                leftIcon={<Check size={14} />}
+                style={{ backgroundColor: '#2563EB', fontWeight: 700 }}
+              >
+                {isRenamingPackageTemplate ? 'Đang Lưu...' : 'Xác Nhận Đổi Tên'}
+              </Button>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
+                Tên Bộ Chuẩn Gói Cài Mới *:
+              </label>
+              <input
+                type="text"
+                value={renamePackageName}
+                onChange={(e) => setRenamePackageName(e.target.value)}
+                placeholder="VD: Xử Lý Nhà Hàng Chạy Local..."
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  border: '1.5px solid #2563EB',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)'
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
+                Mô Tả Bộ Chuẩn (Tùy chọn):
+              </label>
+              <textarea
+                value={renamePackageDesc}
+                onChange={(e) => setRenamePackageDesc(e.target.value)}
+                placeholder="Ghi chú chi tiết mục đích của bộ chuẩn..."
+                rows={3}
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  fontSize: '12px',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)'
+                }}
+              />
+            </div>
+
+            <div style={{ backgroundColor: 'rgba(37, 99, 235, 0.08)', padding: '10px 12px', borderRadius: '6px', border: '1px solid #3B82F6', fontSize: '11.5px', color: '#1E40AF' }}>
+              🔒 <strong>Quy định bảo mật:</strong> Chỉ Super Admin hoặc tài khoản <code>dung.nguyenanh</code> mới có quyền đổi tên Bộ Chuẩn.
             </div>
           </div>
         </Modal>
