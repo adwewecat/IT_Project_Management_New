@@ -694,6 +694,122 @@ class AgentMultitaskService:
         }
 
     @staticmethod
+    def _transform_steps_for_client_compatibility(steps: list, default_target_folder: str, server_base_url: str) -> list:
+        """
+        Chuyển đổi thông minh các bước truyền file (PUSH_FILE, EXTRACT_FILE, COPY_FILE, TRANSFER_FILE)
+        thành cặp bước tương thích ngược (MODIFY_FILE + RUN_SCRIPT) để các máy trạm nhà hàng đang chạy
+        phiên bản Agent cũ (chưa hỗ trợ PUSH_FILE) vẫn tải và giải nén file thành công 100%.
+        """
+        if not steps:
+            return []
+
+        transformed = []
+        step_counter = 1
+
+        for orig_step in steps:
+            st_type = str(orig_step.get("step_type") or "").upper().strip()
+            st_name = orig_step.get("step_name") or f"Bước {step_counter}"
+
+            # Nếu là bước truyền / copy / giải nén file đính kèm
+            if st_type in ("PUSH_FILE", "EXTRACT_FILE", "COPY_FILE", "TRANSFER_FILE", "DEPLOY_FILE"):
+                dest_dir = orig_step.get("target_folder") or default_target_folder or "C:\\Deploy"
+                dest_dir = dest_dir.strip().replace('"', '')
+                file_n = (orig_step.get("file_name") or orig_step.get("storage_file_name") or "file.bin").strip()
+                dl_url = orig_step.get("download_url") or f"/api/v1/agent-multitask/download-package-file/{file_n}"
+
+                if not dl_url.startswith("http://") and not dl_url.startswith("https://"):
+                    full_dl_url = f"{server_base_url.rstrip('/')}/{dl_url.lstrip('/')}"
+                else:
+                    full_dl_url = dl_url
+
+                is_extract = bool(orig_step.get("auto_extract", st_type == "EXTRACT_FILE"))
+                runner_bat_name = f"_fetch_step_{step_counter}.bat"
+                runner_bat_abs_path = os.path.join(dest_dir, runner_bat_name)
+
+                # Soạn kịch bản batch tải file chuẩn mực (100% tiếng Việt không dấu, không dùng khối ngoặc đơn chứa echo theo Quy tắc 9)
+                extract_cmd_block = ""
+                if is_extract:
+                    extract_cmd_block = (
+                        "echo [GIAI NEN] Dang tu dong giai nen tep...\r\n"
+                        f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path \'{dest_dir}\\{file_n}\' -DestinationPath \'{dest_dir}\' -Force"\r\n'
+                        f'if not errorlevel 1 echo [THANH CONG] Da giai nen thanh cong vao "{dest_dir}".\r\n'
+                    )
+
+                bat_script_content = (
+                    "@echo off\r\n"
+                    "title Nap File Va Giai Nen Cho He Thong\r\n"
+                    f'set "DEST_DIR={dest_dir}"\r\n'
+                    f'set "DEST_FILE={dest_dir}\\{file_n}"\r\n'
+                    f'set "FILE_URL={full_dl_url}"\r\n'
+                    "\r\n"
+                    'if not exist "%DEST_DIR%" mkdir "%DEST_DIR%"\r\n'
+                    "\r\n"
+                    "echo [1/3] Dang tai file tu Server: %FILE_URL%\r\n"
+                    'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls; (New-Object System.Net.WebClient).DownloadFile(\'%FILE_URL%\', \'%DEST_FILE%\')"\r\n'
+                    "\r\n"
+                    "if exist \"%DEST_FILE%\" goto :TaiThanhCong\r\n"
+                    "\r\n"
+                    "echo [2/3] Thu tai lai bang certutil...\r\n"
+                    'certutil -urlcache -split -f "%FILE_URL%" "%DEST_FILE%" >nul 2>&1\r\n'
+                    "\r\n"
+                    "if exist \"%DEST_FILE%\" goto :TaiThanhCong\r\n"
+                    "\r\n"
+                    "echo [3/3] Thu tai lai bang PowerShell Invoke-WebRequest...\r\n"
+                    'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri \'%FILE_URL%\' -OutFile \'%DEST_FILE%\'"\r\n'
+                    "\r\n"
+                    ":TaiThanhCong\r\n"
+                    "if not exist \"%DEST_FILE%\" goto :LoiTaiFile\r\n"
+                    "\r\n"
+                    'echo [THANH CONG] Da nhan file vao "%DEST_FILE%".\r\n'
+                    f"{extract_cmd_block}"
+                    '(goto) 2>nul & del "%~f0"\r\n'
+                    "exit /b 0\r\n"
+                    "\r\n"
+                    ":LoiTaiFile\r\n"
+                    'echo [LOI] Khong the tai file tu Server ve "%DEST_FILE%".\r\n'
+                    '(goto) 2>nul & del "%~f0"\r\n'
+                    "exit /b 1\r\n"
+                )
+
+                # 1. Bước tạo file batch kịch bản tải file
+                step_modify = {
+                    "step_number": step_counter,
+                    "step_name": f"{st_name} (Chuẩn bị)",
+                    "step_type": "MODIFY_FILE",
+                    "file_path": runner_bat_abs_path,
+                    "folder_path": dest_dir,
+                    "target_folder": dest_dir,
+                    "modify_mode": "TEXT_OVERWRITE",
+                    "content": bat_script_content
+                }
+                transformed.append(step_modify)
+                step_counter += 1
+
+                # 2. Bước thực thi kịch bản tải file
+                step_run = {
+                    "step_number": step_counter,
+                    "step_name": st_name,
+                    "step_type": "RUN_SCRIPT",
+                    "file_path": runner_bat_name,
+                    "folder_path": dest_dir,
+                    "working_directory": dest_dir,
+                    "arguments": "",
+                    "run_mode": "hidden",
+                    "wait_for_completion": True
+                }
+                transformed.append(step_run)
+                step_counter += 1
+
+            else:
+                # Các bước khác (RUN_SCRIPT, MODIFY_FILE, DELETE_FILE...) giữ nguyên
+                copy_step = dict(orig_step)
+                copy_step["step_number"] = step_counter
+                transformed.append(copy_step)
+                step_counter += 1
+
+        return transformed
+
+    @staticmethod
     def execute_command(
         payload: AgentCommandRequest,
         current_username: str,
@@ -862,16 +978,29 @@ class AgentMultitaskService:
                     ep.last_action = f"Cài đặt service {config.service_name}"
             elif action == "deploy_package":
                 target_f = payload.target_folder or "C:\\ABC"
-                pkg_name = payload.file_name or "Restaurant_Support_Agent_Full.zip"
+                pkg_name = (payload.file_name or "").strip()
                 step_list = payload.steps or []
-                if not payload_dict.get("download_url"):
-                    payload_dict["download_url"] = f"/api/v1/agent-multitask/download-package-file/{pkg_name}"
-                    command_payload_json = json.dumps(payload_dict, ensure_ascii=False)
-                    log_entry.command_payload = command_payload_json
-                msg = f"Đã gửi lệnh triển khai gói '{pkg_name}' ({len(step_list)} bước) tới {ip}."
-                out = f"[DEPLOY_PACKAGE] TargetFolder: {target_f}, File: {pkg_name}, Steps: {len(step_list)}"
+
+                server_base_url = (config.server_url or "http://172.16.8.25:8000").strip()
+
+                # Đồng bộ đúng URL gói nén chính (mặc định Restaurant_Support_GPOS.zip để Client Agent cũ không bị FileNotFoundError)
+                if not pkg_name:
+                    pkg_name = "Restaurant_Support_GPOS.zip"
+                payload_dict["file_name"] = pkg_name
+                payload_dict["download_url"] = f"/api/v1/agent-multitask/download-package-file/{pkg_name}"
+
+                # Áp dụng cơ chế tương thích ngược: biến PUSH_FILE / EXTRACT_FILE thành cặp bước MODIFY_FILE + RUN_SCRIPT
+                # để máy trạm Client cũ đang chạy ở các nhà hàng thực thi tải và giải nén file thành công 100%
+                compatible_steps = AgentMultitaskService._transform_steps_for_client_compatibility(step_list, target_f, server_base_url)
+                payload_dict["steps"] = compatible_steps
+
+                command_payload_json = json.dumps(payload_dict, ensure_ascii=False)
+                log_entry.command_payload = command_payload_json
+
+                msg = f"Đã gửi lệnh triển khai gói '{pkg_name or 'Đa Bước'}' ({len(step_list)} bước) tới {ip}."
+                out = f"[DEPLOY_PACKAGE] TargetFolder: {target_f}, File: {pkg_name or 'None'}, Steps: {len(step_list)} (Transformed: {len(compatible_steps)})"
                 if ep:
-                    ep.last_action = f"Triển khai gói {pkg_name} ({len(step_list)} bước)"
+                    ep.last_action = f"Triển khai gói {pkg_name or 'Đa Bước'} ({len(step_list)} bước)"
             else:
                 success = False
                 msg = f"Hành động '{action}' không được hỗ trợ."

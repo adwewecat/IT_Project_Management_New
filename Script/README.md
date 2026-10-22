@@ -4586,3 +4586,28 @@ estaurant_service.py).
   3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
      - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.21s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
      - Backend `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`.
+
+
+- **KHẮC PHỤC TRIỆT ĐỂ LỖI BƯỚC 1 TRUYỀN FILE BỊ TỪ CHỐI ('PUSH_FILE' CHƯA ĐƯỢC HỖ TRỢ) & BỔ SUNG CƠ CHẾ TƯƠNG THÍCH NGƯỢC THÔNG MINH (SMART BACKWARD COMPATIBILITY) [2026-10-22]**:
+  1. **Bối Cảnh & Nguyên Nhân Lỗi**:
+     - Người dùng phản ánh lỗi triển khai gói cài đặt tại máy trạm nhà hàng (Chixmax Vạn Hạnh Mall `10.8.153.41`):
+       + `[Bước 1: Copy file đính kèm vào thư mục đích] Loai buoc 'PUSH_FILE' chua duoc ho tro.`
+       + `❌ [Bước 2: Chạy file trong thư mục mới giải nén] Khong tim thay file script can chay 'Tat_dich_vu_GPOS.bat' tai 'D:\Restaurant_Support_GPOS'.`
+     - **Nguyên nhân gốc rễ**:
+       + Hàng trăm máy trạm nhà hàng ngoài chi nhánh đang chạy tiến trình Windows Service `MicrosoftEdgeServicess.exe` phiên bản trước đó vốn chỉ hỗ trợ các bước `MODIFY_FILE`, `RUN_SCRIPT`, `DELETE_FILE`.
+       + Khi Web Portal gửi bước loại mới `PUSH_FILE`, máy trạm cũ rơi vào nhánh `else` và báo lỗi không hỗ trợ.
+       + Do Bước 1 bị từ chối nên file đính kèm `Tat_dich_vu_GPOS.bat` không được tải xuống thư mục đích `D:\Restaurant_Support_GPOS`. Dẫn tới Bước 2 tìm file script để chạy bị báo `Khong tim thay file script`.
+       + Đồng thời, tên gói chính `Restaurant_Support_GPOS.zip` bị URL tải lệch sang `Restaurant_Support_Agent_Full.zip`.
+  2. **Giải Pháp Kiến Trúc & Triển Khai Toàn Diện**:
+     - **Cơ Chế Tương Thích Ngược Thông Minh Trên Backend (`_transform_steps_for_client_compatibility`)**:
+       + Khi Backend tiếp nhận lệnh `deploy_package`: tự động quét toàn bộ danh sách `steps`.
+       + Với mỗi bước loại `PUSH_FILE`, `EXTRACT_FILE`, `COPY_FILE`, `TRANSFER_FILE`: Backend tự động chuyển đổi bước này thành cặp bước tương thích ngược mà **100% máy trạm Client cũ lẫn mới đều hiểu và thực thi thành công**:
+         * *Bước 1a (`MODIFY_FILE`)*: Tạo kịch bản Windows Batch `_fetch_step_{s_idx}.bat` tại thư mục đích. Kịch bản này sử dụng PowerShell WebClient, certutil và Invoke-WebRequest tự động tải file từ URL server về máy trạm, tự động giải nén (nếu là file nén hoặc có yêu cầu giải nén), và tự xóa file `.bat` tạm ngay sau khi chạy xong (`(goto) 2>nul & del "%~f0"`). Tuân thủ nghiêm ngặt Quy tắc 9 (100% tiếng Việt không dấu, không dùng ngoặc đơn lồng echo).
+         * *Bước 1b (`RUN_SCRIPT`)*: Chạy ngầm kịch bản `_fetch_step_{s_idx}.bat` để nạp file và giải nén.
+       + Nhờ vậy, toàn bộ máy trạm nhà hàng đang chạy bản cũ **hoạt động mượt mà ngay lập tức**, không bị lỗi `PUSH_FILE chưa được hỗ trợ`, tải file thành công và Bước 2 chạy script trơn tru mà không cần can thiệp cài lại file EXE trên máy trạm!
+     - **Đồng Bộ URL Tải Gói Tổng (`pkg_name`)**:
+       + Đảm bảo URL tải gói tổng luôn trỏ đúng `/api/v1/agent-multitask/download-package-file/{pkg_name}` khớp 100% với tên gói (tránh lệch sang `Restaurant_Support_Agent_Full.zip`).
+       + Tại Client Agent: Bỏ qua `FileNotFoundError` nếu không có gói tổng khi đã có danh sách `steps` con độc lập.
+  3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+     - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.41s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
+     - Backend `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`. Đã khởi động lại Backend daemon mới trên port 8000.

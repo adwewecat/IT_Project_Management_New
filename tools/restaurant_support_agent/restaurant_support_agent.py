@@ -1307,13 +1307,13 @@ def execute_task(config, task, ip_lan=None):
                 if alt_f and os.path.isfile(alt_f):
                     target_file_path = alt_f
                     log_pipeline.append(f"[Tim File] Su dung file co san tai: {target_file_path}")
-                else:
+                elif not steps:
                     raise FileNotFoundError(f"Khong the tim thay hoac tai file '{file_name}' vao '{target_folder}'.")
 
             # 3. Tu dong giai nen neu la file nen (ZIP, RAR, 7Z, TAR, GZ, TGZ, CAB, ISO...)
             auto_extract = payload.get("auto_extract", True)
             ARCHIVE_EXTS = (".zip", ".rar", ".7z", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".cab", ".iso")
-            if auto_extract and target_file_path.lower().endswith(ARCHIVE_EXTS):
+            if os.path.isfile(target_file_path) and auto_extract and target_file_path.lower().endswith(ARCHIVE_EXTS):
                 logger.info("Bat dau giai nen thong minh: %s vao %s", target_file_path, target_folder)
                 ok_extract, method_used, count_items, err_extract = smart_extract_archive(target_file_path, target_folder)
                 if ok_extract:
