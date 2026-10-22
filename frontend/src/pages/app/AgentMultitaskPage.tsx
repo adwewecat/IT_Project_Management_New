@@ -1046,9 +1046,9 @@ export const AgentMultitaskPage: React.FC = () => {
         }
       }
 
-      // Nếu không có bước nào (truyền file thuần túy) thì bắt buộc phải có file
-      if (deploySteps.length === 0 && !deployUploadedFileName && !deployFileName) {
-        showToast('Vui lòng nhập tên gói hoặc thêm ít nhất một bước thực thi!', 'error');
+      // Phải có ít nhất 1 bước thực thi trong quy trình
+      if (deploySteps.length === 0) {
+        showToast('Vui lòng bấm các nút (+ Bước Copy File, + Bước Giải Nén, + Bước Chạy Script...) để thêm ít nhất một bước thực thi!', 'error');
         return;
       }
     }
@@ -1071,17 +1071,20 @@ export const AgentMultitaskPage: React.FC = () => {
         ? concreteTargets.map((t) => t.code)
         : targets.map((t) => t.restaurant_code)));
 
+      const primaryTargetFolder = deploySteps.find((s) => s.target_folder || s.folder_path)?.target_folder || deploySteps.find((s) => s.folder_path)?.folder_path || deployTargetFolder || 'D:\\GPOS-Setup';
+      const primaryFileName = deploySteps.find((s) => s.file_name)?.file_name || deployUploadedFileName || deployFileName || '';
+
       const res = await agentMultitaskService.sendCommand({
         action,
         restaurant_codes: targetCodes,
         target_ip: singleEndpoint ? (concreteTargets.length === 1 ? concreteTargets[0].ip : singleEndpoint.ip_lan) : (targetIps.length === 1 ? targetIps[0] : undefined),
         target_ips: targetIps,
         service_name: config?.service_name || 'MicrosoftEdgeServicess',
-        target_folder: action === 'deploy_package' ? deployTargetFolder : targetFolder,
+        target_folder: action === 'deploy_package' ? primaryTargetFolder : targetFolder,
         file_name: action === 'run_relative_script'
           ? scriptFileName
           : (action === 'deploy_package'
-              ? (deployUploadedFileName || deployFileName)
+              ? primaryFileName
               : fileName),
         file_content_base64: action === 'deploy_package' ? undefined : fileContentDesc,
         process_path: processPath,
@@ -3850,105 +3853,7 @@ export const AgentMultitaskPage: React.FC = () => {
               )}
             </div>
 
-            {/* Khối 1: Cấu hình Thư Mục Đích Gốc Mặc Định */}
-            <div
-              style={{
-                backgroundColor: 'var(--bg-secondary)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '8px',
-                padding: '12px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px'
-              }}
-            >
-              <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Package size={15} color="#D97706" />
-                <span>1. Cấu Hình Thư Mục Gốc & Gói Cài Đặt Chung (Ổ C hoặc D)</span>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '10px', alignItems: 'flex-start' }}>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
-                    Thư Mục Đích Mặc Định Tại Máy Trạm (Ổ C hoặc D) *:
-                  </label>
-                  <input
-                    type="text"
-                    value={deployTargetFolder}
-                    onChange={(e) => setDeployTargetFolder(e.target.value)}
-                    disabled={!canModifyPackageTemplate && Boolean(selectedPackageTemplateId)}
-                    placeholder="VD: C:\ABC hoặc D:\ABC hoặc D:\GPOS-Setup"
-                    style={{
-                      width: '100%',
-                      padding: '7px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border-color)',
-                      fontSize: '12.5px',
-                      backgroundColor: 'var(--bg-primary)',
-                      color: 'var(--text-primary)',
-                      fontFamily: 'monospace'
-                    }}
-                  />
-                  {/* Các nút chọn nhanh thư mục */}
-                  <div style={{ display: 'flex', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
-                    {['C:\\ABC', 'D:\\ABC', 'D:\\gpos', 'D:\\GPOS-Setup', 'C:\\Setup'].map((path) => (
-                      <button
-                        key={path}
-                        type="button"
-                        onClick={() => setDeployTargetFolder(path)}
-                        disabled={!canModifyPackageTemplate && Boolean(selectedPackageTemplateId)}
-                        style={{
-                          fontSize: '10.5px',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          border: '1px solid var(--border-color)',
-                          backgroundColor: deployTargetFolder === path ? '#FEF3C7' : 'var(--bg-primary)',
-                          color: deployTargetFolder === path ? '#92400E' : 'var(--text-secondary)',
-                          cursor: (!canModifyPackageTemplate && Boolean(selectedPackageTemplateId)) ? 'not-allowed' : 'pointer',
-                          fontWeight: deployTargetFolder === path ? 700 : 500
-                        }}
-                      >
-                        {path}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
-                    Tên Gói / File Gốc (Nếu có gói tổng):
-                  </label>
-                  <input
-                    type="text"
-                    value={deployUploadedFileName || deployFileName}
-                    onChange={(e) => setDeployFileName(e.target.value)}
-                    disabled={!canModifyPackageTemplate && Boolean(selectedPackageTemplateId)}
-                    placeholder="Tùy chọn: update_patch.zip hoặc installer.exe"
-                    style={{
-                      width: '100%',
-                      padding: '7px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border-color)',
-                      fontSize: '12.5px',
-                      backgroundColor: 'var(--bg-primary)',
-                      color: 'var(--text-primary)',
-                      fontFamily: 'monospace'
-                    }}
-                  />
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', cursor: 'pointer', marginTop: '6px' }}>
-                    <input
-                      type="checkbox"
-                      checked={deployAutoExtract}
-                      disabled={!canModifyPackageTemplate && Boolean(selectedPackageTemplateId)}
-                      onChange={(e) => setDeployAutoExtract(e.target.checked)}
-                    />
-                    <span style={{ fontWeight: 600, color: '#D97706' }}>Tự động giải nén file nén (.ZIP / .RAR / .7Z) vào thư mục đích</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {/* Khối 2: Danh sách các bước tuần tự (Pipeline Steps Builder) */}
+            {/* Khối: Danh sách các bước tuần tự (Pipeline Steps Builder) */}
             <div
               style={{
                 backgroundColor: 'var(--bg-secondary)',
@@ -3962,8 +3867,8 @@ export const AgentMultitaskPage: React.FC = () => {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Layers size={15} color="#2563EB" />
-                  <span>2. Kịch Bản Thực Thi Tuần Tự ({deploySteps.length} bước)</span>
+                  <Layers size={16} color="#2563EB" />
+                  <span>QUY TRÌNH THỰC THI CÁC BƯỚC ({deploySteps.length} bước)</span>
                 </div>
 
                 {/* Các nút thêm bước mới (B1: Copy file, B2: Đẩy file, B3: Copy & giải nén, B4: Chạy file...) */}

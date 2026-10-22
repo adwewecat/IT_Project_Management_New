@@ -1332,3 +1332,22 @@
   3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
      - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.15s`), thư mục `frontend/dist/` sạch sẽ.
      - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`.
+
+
+- **LOẠI BỎ KHỐI CẤU HÌNH GÓI CỐ ĐỊNH & CHUYỂN TOÀN BỘ SANG MÔ HÌNH BƯỚC LINH HOẠT TRONG AGENT MULTITASK [2026-10-22]**:
+  1. **Bối Cảnh & Yêu Cầu Người Dùng**:
+     - Người dùng phản ánh khối "1. Cấu Hình Thư Mục Gốc & Gói Cài Đặt Chung (Ổ C hoặc D)" ở đầu modal là dòng cố định mặc định không xóa được.
+     - Yêu cầu loại bỏ hoàn toàn khối này, chuyển toàn bộ sang mô hình linh hoạt: "cần bước nào thì thêm bước đó", từng bước đều có thể cấu hình thư mục đích riêng, tải file đính kèm riêng và có nút xóa thùng rác để tự do xóa bất kỳ lúc nào.
+  2. **Giải Pháp Triển Khai**:
+     - *Loại bỏ Khối 1 cố định*: Xóa bỏ hoàn toàn khối nhập thư mục gốc mặc định và tên gói tổng trên giao diện Modal `DEPLOY_PACKAGE`.
+     - *Nâng cấp quy trình linh hoạt*:
+       + Tiêu đề đổi thành `QUY TRÌNH THỰC THI CÁC BƯỚC ({deploySteps.length} bước)`.
+       + Cần bước nào thêm bước đó: `+ Bước Copy File` (vào thư mục bất kỳ), `+ Bước Giải Nén` (vào D:\gpos...), `+ Bước Sửa Config`, `+ Bước Chạy File / Script`, `+ Bước Xóa File`.
+       + Mỗi bước đều có thể xóa bỏ độc lập bằng nút thùng rác đỏ `Trash2`.
+       + Nếu chưa có bước nào: hiển thị giao diện hướng dẫn trực quan bấm các nút trên để thêm bước.
+     - *Tự động phân giải tham số thực thi (`handleSendCommand`)*:
+       + Kiểm tra an toàn: nếu chưa thêm bước nào thì nhắc nhở người dùng thêm ít nhất 1 bước.
+       + Tự động lấy thư mục đích chính từ bước đầu tiên có cấu hình thư mục để truyền tới Agent thực thi.
+  3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+     - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.21s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
+     - Backend `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`.
