@@ -33,7 +33,9 @@ import {
   Lock,
   Unlock,
   UploadCloud,
-  CheckCircle2
+  CheckCircle2,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -123,6 +125,7 @@ export const AgentMultitaskPage: React.FC = () => {
   const [deletingPackageTemplateId, setDeletingPackageTemplateId] = useState<number | null>(null);
   const [stepUploadProgress, setStepUploadProgress] = useState<Record<number, number>>({});
   const [uploadingStepIdx, setUploadingStepIdx] = useState<number | null>(null);
+  const [openInsertMenuIndex, setOpenInsertMenuIndex] = useState<number | null>(null);
 
 
   // ── LỰA CHỌN MÁY TRẠM ĐÍCH CỤ THỂ TRONG DẢI IP NHÀ HÀNG (.x) ──
@@ -913,11 +916,259 @@ export const AgentMultitaskPage: React.FC = () => {
       showToast('🔒 Chỉ Super Admin hoặc dung.nguyenanh mới có quyền xóa bước trong quy trình!', 'error');
       return;
     }
-    const updated = deploySteps.filter((_, idx) => idx !== index).map((s, idx) => ({
-      ...s,
-      step_number: idx + 1
-    }));
+    const updated = deploySteps.filter((_, idx) => idx !== index).map((s, idx) => {
+      const stepNum = idx + 1;
+      const stepNameStr = s.step_name || '';
+      const isDefaultName = !stepNameStr || /^Bước \d+:/i.test(stepNameStr.trim());
+      const updatedName = isDefaultName
+        ? (stepNameStr ? stepNameStr.replace(/^Bước \d+:/i, `Bước ${stepNum}:`) : `Bước ${stepNum}`)
+        : stepNameStr;
+      return {
+        ...s,
+        step_number: stepNum,
+        step_name: updatedName
+      };
+    });
     setDeploySteps(updated);
+    setOpenInsertMenuIndex(null);
+  };
+
+  // Đổi loại bước cho một bước đã có (VD từ DELETE_FILE sang PUSH_FILE hoặc ngược lại)
+  const handleChangeStepType = (
+    stepIndex: number,
+    newType: 'PUSH_FILE' | 'EXTRACT_FILE' | 'MODIFY_FILE' | 'RUN_SCRIPT' | 'DELETE_FILE'
+  ) => {
+    if (!canModifyPackageTemplate) {
+      showToast('🔒 Chỉ Super Admin hoặc dung.nguyenanh mới có quyền chỉnh sửa bước trong quy trình!', 'error');
+      return;
+    }
+    setDeploySteps((prev) => {
+      const copy = [...prev];
+      const curr = copy[stepIndex];
+      if (!curr) return prev;
+
+      // Giữ lại các cấu hình hợp lý từ bước hiện tại
+      const retainedTargetFolder = curr.target_folder || curr.folder_path || 'D:\\Restaurant_Support_GPOS';
+      const retainedFileName = curr.file_name || curr.storage_file_name || '';
+      const stepNum = stepIndex + 1;
+
+      // Tự động gợi ý tên bước mới nếu tên cũ đang theo format mặc định "Bước X: ..."
+      const isDefaultName = !curr.step_name || /^Bước \d+:/i.test(curr.step_name.trim());
+
+      let updatedStep: DeployStepItem;
+
+      if (newType === 'PUSH_FILE') {
+        updatedStep = {
+          ...curr,
+          step_number: stepNum,
+          step_type: 'PUSH_FILE',
+          step_name: isDefaultName ? `Bước ${stepNum}: Copy file đính kèm vào thư mục đích` : curr.step_name,
+          target_folder: retainedTargetFolder,
+          file_name: retainedFileName,
+          storage_file_name: curr.storage_file_name || retainedFileName,
+          download_url: curr.download_url || '',
+          file_size_mb: curr.file_size_mb || 0,
+          auto_extract: false,
+          is_uploaded: Boolean(curr.download_url)
+        };
+      } else if (newType === 'EXTRACT_FILE') {
+        updatedStep = {
+          ...curr,
+          step_number: stepNum,
+          step_type: 'EXTRACT_FILE',
+          step_name: isDefaultName ? `Bước ${stepNum}: Copy file nén & giải nén vào thư mục` : curr.step_name,
+          target_folder: retainedTargetFolder,
+          file_name: retainedFileName,
+          storage_file_name: curr.storage_file_name || retainedFileName,
+          download_url: curr.download_url || '',
+          file_size_mb: curr.file_size_mb || 0,
+          auto_extract: true,
+          is_uploaded: Boolean(curr.download_url)
+        };
+      } else if (newType === 'MODIFY_FILE') {
+        updatedStep = {
+          ...curr,
+          step_number: stepNum,
+          step_type: 'MODIFY_FILE',
+          step_name: isDefaultName ? `Bước ${stepNum}: Chỉnh sửa file config` : curr.step_name,
+          target_folder: retainedTargetFolder,
+          file_path: curr.file_path || 'config.json',
+          modify_mode: curr.modify_mode || 'JSON_KEY_VALUE',
+          json_modifications: curr.json_modifications || { note: 'Cap nhat bo sung' }
+        };
+      } else if (newType === 'RUN_SCRIPT') {
+        const defaultScript = (retainedFileName && /\.(bat|cmd|ps1|exe)$/i.test(retainedFileName)) ? retainedFileName : 'Tat_dich_vu_GPOS.bat';
+        updatedStep = {
+          ...curr,
+          step_number: stepNum,
+          step_type: 'RUN_SCRIPT',
+          step_name: isDefaultName ? `Bước ${stepNum}: Chạy file trong thư mục` : curr.step_name,
+          file_path: curr.file_path || defaultScript,
+          folder_path: retainedTargetFolder,
+          working_directory: retainedTargetFolder,
+          arguments: curr.arguments || '',
+          run_as_admin: curr.run_as_admin ?? true,
+          wait_for_completion: curr.wait_for_completion ?? true,
+          run_mode: curr.run_mode || 'interactive',
+          run_hidden: curr.run_hidden ?? false
+        };
+      } else {
+        // DELETE_FILE
+        updatedStep = {
+          ...curr,
+          step_number: stepNum,
+          step_type: 'DELETE_FILE',
+          step_name: isDefaultName ? `Bước ${stepNum}: Dọn dẹp file tạm` : curr.step_name,
+          file_path: curr.file_path || (retainedFileName || 'temp.zip'),
+          target_folder: retainedTargetFolder
+        };
+      }
+
+      copy[stepIndex] = updatedStep;
+      return copy;
+    });
+
+    const typeLabels: Record<string, string> = {
+      PUSH_FILE: '📁 Copy File Đính Kèm',
+      EXTRACT_FILE: '📦 File Nén & Tự Giải Nén',
+      MODIFY_FILE: '📝 Sửa File Config',
+      RUN_SCRIPT: '⚡ Chạy File / Script',
+      DELETE_FILE: '🗑️ Xóa File / Thư Mục'
+    };
+    showToast(`✓ Đã chuyển đổi Bước ${stepIndex + 1} sang: ${typeLabels[newType]}`, 'success');
+  };
+
+  // Chèn một bước mới vào vị trí bất kỳ (ví dụ giữa bước 3 và bước 4)
+  const handleInsertDeployStep = (
+    insertIndex: number,
+    type: 'PUSH_FILE' | 'EXTRACT_FILE' | 'MODIFY_FILE' | 'RUN_SCRIPT' | 'DELETE_FILE'
+  ) => {
+    if (!canModifyPackageTemplate) {
+      showToast('🔒 Chỉ Super Admin hoặc dung.nguyenanh mới có quyền chèn bước trong quy trình!', 'error');
+      return;
+    }
+
+    const prevStep = deploySteps[insertIndex - 1];
+    const inheritedFolder = prevStep?.target_folder || prevStep?.folder_path || 'D:\\Restaurant_Support_GPOS';
+
+    let newStep: DeployStepItem;
+    const tempNum = insertIndex + 1;
+
+    if (type === 'PUSH_FILE') {
+      newStep = {
+        step_number: tempNum,
+        step_name: `Bước ${tempNum}: Copy file đính kèm vào thư mục đích`,
+        step_type: 'PUSH_FILE',
+        target_folder: inheritedFolder,
+        file_name: '',
+        storage_file_name: '',
+        file_size_mb: 0,
+        download_url: '',
+        auto_extract: false,
+        is_uploaded: false
+      };
+    } else if (type === 'EXTRACT_FILE') {
+      newStep = {
+        step_number: tempNum,
+        step_name: `Bước ${tempNum}: Copy file nén & giải nén vào thư mục`,
+        step_type: 'EXTRACT_FILE',
+        target_folder: inheritedFolder,
+        file_name: '',
+        storage_file_name: '',
+        file_size_mb: 0,
+        download_url: '',
+        auto_extract: true,
+        is_uploaded: false
+      };
+    } else if (type === 'MODIFY_FILE') {
+      newStep = {
+        step_number: tempNum,
+        step_name: `Bước ${tempNum}: Chỉnh sửa file config`,
+        step_type: 'MODIFY_FILE',
+        target_folder: inheritedFolder,
+        file_path: 'config.json',
+        modify_mode: 'JSON_KEY_VALUE',
+        json_modifications: {
+          note: 'Cap nhat bo sung'
+        }
+      };
+    } else if (type === 'RUN_SCRIPT') {
+      newStep = {
+        step_number: tempNum,
+        step_name: `Bước ${tempNum}: Chạy file trong thư mục`,
+        step_type: 'RUN_SCRIPT',
+        file_path: 'Tat_dich_vu_GPOS.bat',
+        folder_path: inheritedFolder,
+        working_directory: inheritedFolder,
+        arguments: '',
+        run_as_admin: true,
+        wait_for_completion: true,
+        run_mode: 'interactive',
+        run_hidden: false
+      };
+    } else {
+      newStep = {
+        step_number: tempNum,
+        step_name: `Bước ${tempNum}: Dọn dẹp file tạm`,
+        step_type: 'DELETE_FILE',
+        file_path: 'temp.zip',
+        target_folder: inheritedFolder
+      };
+    }
+
+    const copy = [...deploySteps];
+    copy.splice(insertIndex, 0, newStep);
+
+    // Tự động đánh lại số thứ tự từ 1 đến N và cập nhật tên bước mặc định
+    const renumbered = copy.map((s, idx) => {
+      const stepNum = idx + 1;
+      const stepNameStr = s.step_name || '';
+      const isDefaultName = !stepNameStr || /^Bước \d+:/i.test(stepNameStr.trim());
+      const updatedName = isDefaultName
+        ? (stepNameStr ? stepNameStr.replace(/^Bước \d+:/i, `Bước ${stepNum}:`) : `Bước ${stepNum}`)
+        : stepNameStr;
+      return {
+        ...s,
+        step_number: stepNum,
+        step_name: updatedName
+      };
+    });
+
+    setDeploySteps(renumbered);
+    setOpenInsertMenuIndex(null); // Đóng popover chèn bước
+    showToast(`✓ Đã chèn bước mới vào vị trí Bước ${insertIndex + 1}!`, 'success');
+  };
+
+  // Di chuyển thứ tự bước lên hoặc xuống
+  const handleMoveDeployStep = (fromIndex: number, direction: 'UP' | 'DOWN') => {
+    if (!canModifyPackageTemplate) {
+      showToast('🔒 Chỉ Super Admin hoặc dung.nguyenanh mới có quyền thay đổi thứ tự bước!', 'error');
+      return;
+    }
+    const toIndex = direction === 'UP' ? fromIndex - 1 : fromIndex + 1;
+    if (toIndex < 0 || toIndex >= deploySteps.length) return;
+
+    const copy = [...deploySteps];
+    const [moved] = copy.splice(fromIndex, 1);
+    copy.splice(toIndex, 0, moved);
+
+    // Đánh lại số thứ tự và cập nhật tên bước mặc định
+    const renumbered = copy.map((s, idx) => {
+      const stepNum = idx + 1;
+      const stepNameStr = s.step_name || '';
+      const isDefaultName = !stepNameStr || /^Bước \d+:/i.test(stepNameStr.trim());
+      const updatedName = isDefaultName
+        ? (stepNameStr ? stepNameStr.replace(/^Bước \d+:/i, `Bước ${stepNum}:`) : `Bước ${stepNum}`)
+        : stepNameStr;
+      return {
+        ...s,
+        step_number: stepNum,
+        step_name: updatedName
+      };
+    });
+
+    setDeploySteps(renumbered);
+    showToast(`✓ Đã chuyển bước sang vị trí Bước ${toIndex + 1}!`, 'success');
   };
 
   // Cập nhật trường của một bước
@@ -3967,18 +4218,18 @@ export const AgentMultitaskPage: React.FC = () => {
                     const uploadProgressVal = stepUploadProgress[idx] || 0;
 
                     return (
-                      <div
-                        key={idx}
-                        style={{
-                          backgroundColor: 'var(--bg-primary)',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: '6px',
-                          padding: '12px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '8px'
-                        }}
-                      >
+                      <React.Fragment key={`deploy_step_item_${idx}`}>
+                        <div
+                          style={{
+                            backgroundColor: 'var(--bg-primary)',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '6px',
+                            padding: '12px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px'
+                          }}
+                        >
                         {/* Tiêu đề bước */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
@@ -4018,12 +4269,18 @@ export const AgentMultitaskPage: React.FC = () => {
                           </div>
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span
+                            {/* Dropdown cho phép chọn lại loại bước (Đổi từ Xóa file sang Copy file, Giải nén, Chạy script...) */}
+                            <select
+                              value={step.step_type === 'COPY_FILE' ? 'PUSH_FILE' : (step.step_type === 'RUN_COMMAND' ? 'RUN_SCRIPT' : step.step_type)}
+                              disabled={!canModifyPackageTemplate && Boolean(selectedPackageTemplateId)}
+                              onChange={(e) => handleChangeStepType(idx, e.target.value as any)}
+                              title="Bấm để đổi sang loại bước khác"
                               style={{
-                                fontSize: '10.5px',
+                                fontSize: '11px',
                                 fontWeight: 800,
-                                padding: '2px 8px',
+                                padding: '2px 6px',
                                 borderRadius: '4px',
+                                border: `1.5px solid ${isPush ? '#F59E0B' : (isExtract ? '#8B5CF6' : (isModify ? '#10B981' : (isScript ? '#3B82F6' : '#EF4444')))}`,
                                 backgroundColor: isPush
                                   ? '#FEF3C7'
                                   : (isExtract
@@ -4037,11 +4294,63 @@ export const AgentMultitaskPage: React.FC = () => {
                                       ? '#5B21B6'
                                       : (isModify
                                           ? '#065F46'
-                                          : (isScript ? '#1E40AF' : '#991B1B')))
+                                          : (isScript ? '#1E40AF' : '#991B1B'))),
+                                cursor: (!canModifyPackageTemplate && Boolean(selectedPackageTemplateId)) ? 'not-allowed' : 'pointer',
+                                outline: 'none'
                               }}
                             >
-                              {isPush ? '📁 COPY FILE' : (isExtract ? '📦 GIẢI NÉN' : (isModify ? '📝 SỬA CONFIG' : (isScript ? '⚡ CHẠY SCRIPT' : '🗑️ XÓA FILE')))}
-                            </span>
+                              <option value="PUSH_FILE">📁 Copy File Đính Kèm</option>
+                              <option value="EXTRACT_FILE">📦 File Nén & Tự Giải Nén</option>
+                              <option value="MODIFY_FILE">📝 Sửa File Config</option>
+                              <option value="RUN_SCRIPT">⚡ Chạy File / Script</option>
+                              <option value="DELETE_FILE">🗑️ Xóa File / Thư Mục</option>
+                            </select>
+
+                            {/* Nút di chuyển thứ tự bước Lên / Xuống (↑ / ↓) */}
+                            {canModifyPackageTemplate && (
+                              <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                                <button
+                                  type="button"
+                                  title={idx === 0 ? 'Đây là bước đầu tiên' : `Di chuyển Bước ${idx + 1} lên trước (↑)`}
+                                  disabled={idx === 0}
+                                  onClick={() => handleMoveDeployStep(idx, 'UP')}
+                                  style={{
+                                    border: '1px solid var(--border-color)',
+                                    backgroundColor: idx === 0 ? 'transparent' : 'var(--bg-secondary)',
+                                    color: idx === 0 ? '#94A3B8' : 'var(--text-primary)',
+                                    cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                                    padding: '2px 5px',
+                                    borderRadius: '3px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    opacity: idx === 0 ? 0.35 : 1
+                                  }}
+                                >
+                                  <ArrowUp size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  title={idx === deploySteps.length - 1 ? 'Đây là bước cuối cùng' : `Di chuyển Bước ${idx + 1} xuống sau (↓)`}
+                                  disabled={idx === deploySteps.length - 1}
+                                  onClick={() => handleMoveDeployStep(idx, 'DOWN')}
+                                  style={{
+                                    border: '1px solid var(--border-color)',
+                                    backgroundColor: idx === deploySteps.length - 1 ? 'transparent' : 'var(--bg-secondary)',
+                                    color: idx === deploySteps.length - 1 ? '#94A3B8' : 'var(--text-primary)',
+                                    cursor: idx === deploySteps.length - 1 ? 'not-allowed' : 'pointer',
+                                    padding: '2px 5px',
+                                    borderRadius: '3px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    opacity: idx === deploySteps.length - 1 ? 0.35 : 1
+                                  }}
+                                >
+                                  <ArrowDown size={12} />
+                                </button>
+                              </div>
+                            )}
 
                             {canModifyPackageTemplate && (
                               <button
@@ -4660,7 +4969,152 @@ export const AgentMultitaskPage: React.FC = () => {
                           </div>
                         )}
                       </div>
-                    );
+
+                      {/* Thanh chèn thêm bước ở giữa các bước (VD: chèn giữa bước 3 và bước 4) */}
+                      {canModifyPackageTemplate && idx < deploySteps.length - 1 && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            margin: '3px 0',
+                            position: 'relative'
+                          }}
+                        >
+                          <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-color)', opacity: 0.5 }} />
+
+                          <div style={{ position: 'relative' }}>
+                            <button
+                              type="button"
+                              onClick={() => setOpenInsertMenuIndex(openInsertMenuIndex === idx + 1 ? null : idx + 1)}
+                              style={{
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                padding: '2px 10px',
+                                borderRadius: '12px',
+                                border: openInsertMenuIndex === idx + 1 ? '1.5px solid #2563EB' : '1px dashed var(--border-color)',
+                                backgroundColor: openInsertMenuIndex === idx + 1 ? '#EFF6FF' : 'var(--bg-secondary)',
+                                color: openInsertMenuIndex === idx + 1 ? '#2563EB' : 'var(--text-secondary)',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                boxShadow: openInsertMenuIndex === idx + 1 ? '0 0 0 2px rgba(37,99,235,0.15)' : 'none'
+                              }}
+                            >
+                              <Plus size={12} /> Chèn bước giữa Bước {idx + 1} và Bước {idx + 2}
+                            </button>
+
+                            {/* Menu popover chọn loại bước cần chèn */}
+                            {openInsertMenuIndex === idx + 1 && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  top: '100%',
+                                  left: '50%',
+                                  transform: 'translateX(-50%)',
+                                  zIndex: 50,
+                                  marginTop: '4px',
+                                  backgroundColor: 'var(--bg-primary)',
+                                  border: '1px solid var(--border-color)',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                                  padding: '8px',
+                                  display: 'flex',
+                                  gap: '6px',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => handleInsertDeployStep(idx + 1, 'PUSH_FILE')}
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #F59E0B',
+                                    backgroundColor: '#FEF3C7',
+                                    color: '#92400E',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  📁 + Copy File
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleInsertDeployStep(idx + 1, 'EXTRACT_FILE')}
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #8B5CF6',
+                                    backgroundColor: '#EDE9FE',
+                                    color: '#5B21B6',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  📦 + Giải Nén
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleInsertDeployStep(idx + 1, 'MODIFY_FILE')}
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #10B981',
+                                    backgroundColor: '#ECFDF5',
+                                    color: '#065F46',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  📝 + Sửa Config
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleInsertDeployStep(idx + 1, 'RUN_SCRIPT')}
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #3B82F6',
+                                    backgroundColor: '#EFF6FF',
+                                    color: '#1E40AF',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  ⚡ + Chạy Script
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleInsertDeployStep(idx + 1, 'DELETE_FILE')}
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #EF4444',
+                                    backgroundColor: '#FEF2F2',
+                                    color: '#991B1B',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  🗑️ + Xóa File
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-color)', opacity: 0.5 }} />
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
                   })}
                 </div>
               )}

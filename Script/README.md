@@ -4611,3 +4611,25 @@ estaurant_service.py).
   3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
      - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.41s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
      - Backend `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`. Đã khởi động lại Backend daemon mới trên port 8000.
+
+
+- **BỔ SUNG TÍNH NĂNG CHỌN LẠI LOẠI BƯỚC, CHÈN BƯỚC VÀO GIỮA VÀ DI CHUYỂN THỨ TỰ BƯỚC TRONG AGENT MULTITASK [2026-10-22]**:
+  1. **Bối Cảnh & Yêu Cầu Người Dùng**:
+     - Người dùng phản ánh:
+       + Khi đã chọn một bước (ví dụ: Bước 3 đang là "Xóa file"), nếu muốn đổi thành "Upload/Copy file" thì không đổi được mà phải xóa đi tạo lại rất mất công.
+       + Khi muốn chèn thêm một bước vào giữa Bước 3 và Bước 4 thì hệ thống không hỗ trợ, chỉ thêm được vào cuối quy trình.
+  2. **Giải Pháp Kiến Trúc & Triển Khai Toàn Diện (`AgentMultitaskPage.tsx`)**:
+     - **Chuyển Đổi Loại Bước Tức Thì (In-Place Step Type Switching)**:
+       + Thay thế huy hiệu (badge) loại bước tĩnh tại góc phải tiêu đề mỗi bước bằng một dropdown `<select>` chọn loại bước trực quan với màu sắc nhận diện đặc trưng (Vàng: Copy File, Tím: Giải Nén, Xanh lá: Sửa Config, Xanh dương: Chạy Script, Đỏ: Xóa File).
+       + Hàm `handleChangeStepType(stepIndex, newType)`: Chuyển đổi linh hoạt giữa 5 loại bước (`PUSH_FILE`, `EXTRACT_FILE`, `MODIFY_FILE`, `RUN_SCRIPT`, `DELETE_FILE`), giữ lại đường dẫn thư mục đích (`target_folder`) và các thiết lập phù hợp, cập nhật tự động tiêu đề mặc định của bước theo số thứ tự hiện tại.
+     - **Chèn Thêm Bước Vào Giữa Bất Kỳ Hai Bước Nào (In-Between Step Inserter)**:
+       + Giữa mỗi cặp bước (giữa Bước 1 và 2, Bước 2 và 3, Bước 3 và 4...) có thêm một thanh phân cách tinh tế với nút **`+ Chèn bước giữa Bước X và Bước Y`**.
+       + Khi bấm vào, mở một popover nhỏ gọn hiển thị đầy đủ 5 loại bước để lựa chọn (`📁 + Copy File`, `📦 + Giải Nén`, `📝 + Sửa Config`, `⚡ + Chạy Script`, `🗑️ + Xóa File`).
+       + Hàm `handleInsertDeployStep(insertIndex, type)`: Chèn một bước mới chuẩn xác vào vị trí mong muốn, tự động đánh lại số thứ tự `step_number` từ 1..N và đồng bộ số thứ tự trong tiêu đề bước mặc định `Bước X: ...`.
+     - **Di Chuyển Đảo Thứ Tự Bước Linh Hoạt (Reorder Steps UP / DOWN)**:
+       + Bổ sung 2 nút mũi tên **`↑` (Lên)** và **`↓` (Xuống)** bên cạnh nút thùng rác xóa của mỗi bước.
+       + Tự động làm mờ (disable) nút `↑` ở bước đầu tiên và nút `↓` ở bước cuối cùng.
+       + Hàm `handleMoveDeployStep(fromIndex, direction)`: Hoán đổi vị trí của bước với bước liền kề, tự động cập nhật lại toàn bộ số thứ tự và tiêu đề hiển thị chuẩn mực.
+  3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 5.00s`), toàn bộ bundle sạch sẽ trong `frontend/dist/` (kèm `web.config`).
+     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`.
