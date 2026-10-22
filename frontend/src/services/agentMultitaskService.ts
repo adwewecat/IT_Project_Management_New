@@ -91,9 +91,18 @@ export interface AgentOverviewResponse {
 export interface DeployStepItem {
   step_number?: number;
   step_name?: string;
-  step_type: 'MODIFY_FILE' | 'RUN_SCRIPT' | 'RUN_COMMAND' | 'DELETE_FILE' | string;
+  step_type: 'PUSH_FILE' | 'COPY_FILE' | 'EXTRACT_FILE' | 'MODIFY_FILE' | 'RUN_SCRIPT' | 'RUN_COMMAND' | 'DELETE_FILE' | string;
   file_path?: string;
   relative_path?: string;
+  // Cấu hình file đính kèm riêng cho từng bước
+  target_folder?: string;
+  file_name?: string;
+  storage_file_name?: string;
+  file_size_mb?: number;
+  download_url?: string;
+  file_content_base64?: string;
+  auto_extract?: boolean;
+  is_uploaded?: boolean;
   // Cho Modify file
   modify_mode?: 'JSON_KEY_VALUE' | 'TEXT_REPLACE' | 'TEXT_OVERWRITE' | 'TEXT_APPEND' | string;
   json_modifications?: Record<string, any>;
@@ -263,10 +272,31 @@ export const agentMultitaskService = {
     return res.data;
   },
 
+  // ── QUẢN LÝ BỘ CHUẨN GÓI CÀI & THỰC THI ĐA BƯỚC (PACKAGE TEMPLATES) ──
+  getPackageTemplates: async (): Promise<AgentPackageTemplateItem[]> => {
+    const res = await api.get('/agent-multitask/package-templates');
+    return res.data;
+  },
+
+  createPackageTemplate: async (payload: AgentPackageTemplateCreate): Promise<AgentPackageTemplateItem> => {
+    const res = await api.post('/agent-multitask/package-templates', payload);
+    return res.data;
+  },
+
+  updatePackageTemplate: async (id: number, payload: AgentPackageTemplateUpdate): Promise<AgentPackageTemplateItem> => {
+    const res = await api.put(`/agent-multitask/package-templates/${id}`, payload);
+    return res.data;
+  },
+
+  deletePackageTemplate: async (id: number): Promise<{ status: string; message: string }> => {
+    const res = await api.delete(`/agent-multitask/package-templates/${id}`);
+    return res.data;
+  },
+
   uploadPackageFile: async (
     file: File,
     onProgress?: (progress: { percent: number; loaded: number; total: number }) => void
-  ): Promise<{ success: boolean; file_name: string; file_size: number; file_size_mb: number; message: string }> => {
+  ): Promise<{ success: boolean; file_name: string; storage_file_name?: string; download_url?: string; file_size: number; file_size_mb: number; message: string }> => {
     const formData = new FormData();
     formData.append('file', file);
     const res = await api.post('/agent-multitask/upload-package', formData, {
@@ -315,4 +345,37 @@ export interface AgentScriptTemplateUpdate {
   run_as_admin?: boolean;
   description?: string;
 }
+
+export interface AgentPackageTemplateItem {
+  id: number;
+  template_name: string;
+  description?: string;
+  target_folder?: string;
+  package_file_name?: string;
+  auto_extract: boolean;
+  steps: DeployStepItem[];
+  created_by?: string;
+  created_at?: string;
+  updated_by?: string;
+  updated_at?: string;
+}
+
+export interface AgentPackageTemplateCreate {
+  template_name: string;
+  description?: string;
+  target_folder?: string;
+  package_file_name?: string;
+  auto_extract?: boolean;
+  steps: DeployStepItem[];
+}
+
+export interface AgentPackageTemplateUpdate {
+  template_name?: string;
+  description?: string;
+  target_folder?: string;
+  package_file_name?: string;
+  auto_extract?: boolean;
+  steps?: DeployStepItem[];
+}
+
 

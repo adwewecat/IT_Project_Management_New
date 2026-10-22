@@ -202,3 +202,39 @@ class AgentScriptTemplateUpdate(BaseModel):
     run_as_admin: Optional[bool] = None
     description: Optional[str] = None
 
+
+class AgentPackageTemplateItem(BaseModel):
+    id: int
+    template_name: str
+    description: Optional[str] = None
+    target_folder: Optional[str] = "D:\\GPOS-Setup\\app"
+    package_file_name: Optional[str] = None
+    auto_extract: bool = True
+    steps: List[Dict[str, Any]] = Field(default_factory=list)
+    created_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_by: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AgentPackageTemplateCreate(BaseModel):
+    template_name: str
+    description: Optional[str] = None
+    target_folder: Optional[str] = "D:\\GPOS-Setup\\app"
+    package_file_name: Optional[str] = None
+    auto_extract: Optional[bool] = True
+    steps: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class AgentPackageTemplateUpdate(BaseModel):
+    template_name: Optional[str] = None
+    description: Optional[str] = None
+    target_folder: Optional[str] = None
+    package_file_name: Optional[str] = None
+    auto_extract: Optional[bool] = None
+    steps: Optional[List[Dict[str, Any]]] = None
+
+

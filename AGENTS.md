@@ -799,3 +799,45 @@
 
 
 
+
+
+- **NÂNG CẤP TRUYỀN GÓI CÀI ĐA BƯỚC: HỖ TRỢ ĐÍNH KÈM FILE TỪNG BƯỚC & LƯU BỘ CHUẨN (PACKAGE RECIPES) [2026-10-22]**:
+  1. **Bối Cảnh & Yêu Cầu Người Dùng**:
+     - Tại popup *Các Tính Năng Quản Trị & Hỗ Trợ Từ Xa* -> *Truyền Gói Cài / File Nén & Thực Thi Đa Bước (Tự Giải Nén, Sửa Config, Chạy Script)*:
+     - Cần hỗ trợ quy trình triển khai đa bước trong đó từng bước (B1, B2, B3...) đều có thể đính kèm file riêng:
+       + VD: B1 đính kèm file A1 copy vào thư mục `C:\abc` (hoặc thư mục bất kỳ).
+       + B2 đính kèm file A2 đẩy vào thư mục `D:\BDD`.
+       + B3 đính kèm file nén A3 copy và tự giải nén vào đường dẫn `D:\gpos`.
+       + B4 chạy file script trong thư mục mới giải nén.
+     - Toàn bộ file đính kèm của từng bước và danh sách các bước đều được **LƯU LẠI VĨNH VIỄN TRÊN MÁY CHỦ để làm "BỘ CHUẨN" (Package Recipe / Template)** kèm theo Tên Bộ Chuẩn để tái sử dụng.
+     - Lần sau triển khai tới nhà hàng chỉ cần: (1) Chọn nhà hàng cần chạy, (2) Chọn Bộ Chuẩn từ dropdown, hệ thống tự động giữ nguyên các file cũ sẵn sàng trên server mà không cần upload lại.
+     - **Phân quyền bảo mật khắt khe**: Chỉ `Super Admin` hoặc tài khoản `dung.nguyenanh` mới có quyền thay đổi file mã nguồn / đính kèm file mới, thêm/sửa/xóa bước hoặc tạo mới/cập nhật/xóa bộ chuẩn. Người dùng/kỹ thuật viên khác chỉ được quyền chọn bộ chuẩn đã lưu và bấm "Bắt Đầu Thực Thi" tới máy trạm nhà hàng.
+  2. **Giải Pháp Kiến Trúc & Triển Khai Kỹ Thuật**:
+     - *Cơ Sở Dữ Liệu SQL Server (`dbo.AGENT_MULTITASK_PACKAGE_TEMPLATES`)*:
+       + Tạo bảng mới lưu trữ các bộ chuẩn gói cài: `id (PK, IDENTITY)`, `template_name (NVARCHAR(255))`, `description (NVARCHAR(MAX))`, `target_folder (NVARCHAR(500))`, `package_file_name (NVARCHAR(255))`, `auto_extract (BIT)`, `steps_json (NVARCHAR(MAX))`, `created_by`, `created_at`, `updated_by`, `updated_at`.
+       + Cập nhật khởi tạo bảng phòng vệ trong `lifespan` (`backend/app/main.py`) và bổ sung DDL chuẩn vào `Script/Full_SCRIPT_SQL_TABLE.sql`.
+     - *Backend Models, Schemas, Service & API*:
+       + Model: `AgentMultitaskPackageTemplate` trong `backend/app/models/agent_multitask.py`.
+       + Schemas: `AgentPackageTemplateItem`, `AgentPackageTemplateCreate`, `AgentPackageTemplateUpdate` trong `backend/app/schemas/agent_multitask.py`.
+       + Service: Thêm CRUD `get_package_templates`, `create_package_template`, `update_package_template`, `delete_package_template` trong `backend/app/services/agent_multitask_service.py`.
+       + Endpoints: `GET/POST /agent-multitask/package-templates`, `PUT/DELETE /agent-multitask/package-templates/{template_id}` trong `backend/app/api/v1/agent_multitask.py` (POST, PUT, DELETE được bảo vệ bằng `is_super_admin(current_user)`).
+       + Cập nhật API `/upload-package`: Lưu trữ file vào `tools/packages/`, trả về `download_url`, `storage_file_name` và `file_size_mb`.
+     - *Client Agent Engine (`restaurant_support_agent.py`)*:
+       + Nâng cấp động cơ `deploy_package`: hỗ trợ các kiểu bước `PUSH_FILE`, `COPY_FILE`, `TRANSFER_FILE`, `EXTRACT_FILE`.
+       + Tự động tải file đính kèm của từng bước từ máy chủ về thư mục đích tương ứng (`step.target_folder` hoặc `target_folder` gốc).
+       + Tự động kích hoạt cơ chế giải nén thông minh `smart_extract_archive` nếu là bước giải nén hoặc file có đuôi `.zip`, `.rar`, `.7z`.
+     - *Frontend Portal Web (`AgentMultitaskPage.tsx` & `agentMultitaskService.ts`)*:
+       + Mở rộng kiểu dữ liệu `DeployStepItem`: `target_folder`, `file_name`, `storage_file_name`, `download_url`, `file_size_mb`, `auto_extract`, `is_uploaded`.
+       + Tích hợp thư viện Bộ Chuẩn: Dropdown chọn bộ chuẩn đã lưu, hiển thị số bước và số file đính kèm sẵn sàng trên server.
+       + Modal "Lưu Bộ Chuẩn Mới", nút "Cập Nhật Bộ Chuẩn" và nút "Xóa Bộ Chuẩn".
+       + Tải file đính kèm độc lập cho từng bước (`handleStepFileUpload`), có thanh tiến trình upload `%` realtime, tự động lưu tên file và URL tải về.
+       + Hỗ trợ các loại bước phong phú:
+         1. 📁 Truyền file đính kèm vào thư mục đích (`PUSH_FILE`).
+         2. 🗜️ Truyền & Tự động giải nén file nén (`EXTRACT_FILE`).
+         3. ✏️ Chỉnh sửa file cấu hình JSON/Config (`MODIFY_FILE`).
+         4. 🚀 Khởi chạy file Script / Batch / EXE (`RUN_SCRIPT`) với tùy chọn Hiện cửa sổ CMD / Chạy ngầm 100%.
+         5. 🗑️ Xóa file / Thư mục tạm (`DELETE_FILE`).
+       + Kiểm soát phân quyền bằng `checkIsDungOrSuperAdmin(user)`: User thông thường vẫn chọn được bộ chuẩn và chọn nhà hàng để triển khai, nhưng các nút tải lên file mới, sửa bước, lưu đè bộ chuẩn bị vô hiệu hóa kèm thông báo rõ ràng.
+  3. **Kiểm Thử & Đóng Gói Triển Khai (Copy Là Chạy Ngay)**:
+     - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.70s`), bundle sạch sẽ, `frontend/dist/` (kèm `web.config`) sẵn sàng copy lên IIS.
+     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`. Đã khởi động lại Backend daemon mới trên port 8000.

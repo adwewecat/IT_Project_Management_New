@@ -1347,8 +1347,90 @@ def execute_task(config, task, ip_lan=None):
                 step_name = step.get("step_name") or f"Buoc {s_idx} ({step_type})"
                 logger.info("Thuc thi %s: type='%s'", step_name, step_type)
 
+                # ── BƯỚC: TRUYỀN / COPY / GIẢI NÉN FILE ĐÍNH KÈM (PUSH_FILE / COPY_FILE / EXTRACT_FILE) ──
+                if step_type in ["PUSH_FILE", "COPY_FILE", "TRANSFER_FILE", "EXTRACT_FILE", "DEPLOY_FILE"]:
+                    try:
+                        step_dest_dir = step.get("target_folder") or target_folder
+                        step_dest_dir = os.path.abspath(step_dest_dir.strip().replace('"', ''))
+                        os.makedirs(step_dest_dir, exist_ok=True)
+
+                        step_file_name = (step.get("file_name") or step.get("storage_file_name") or step.get("file_path") or "").strip()
+                        if not step_file_name:
+                            step_file_name = f"step_{s_idx}_payload.bin"
+
+                        step_dest_path = os.path.join(step_dest_dir, step_file_name)
+                        step_dl_url = step.get("download_url") or ""
+                        step_b64 = step.get("file_content_base64") or ""
+
+                        step_received_ok = False
+
+                        # 1. Thu nhan tu base64 neu co
+                        if step_b64:
+                            try:
+                                b_data = base64.b64decode(step_b64)
+                                with open(step_dest_path, "wb") as f_out:
+                                    f_out.write(b_data)
+                                step_received_ok = True
+                                log_pipeline.append(f"[{step_name}] Da nhan file '{step_file_name}' ({len(b_data)} bytes) vao '{step_dest_dir}' tu base64.")
+                            except Exception as ex_b:
+                                logger.error("Loi decode base64 tai %s: %s", step_name, ex_b)
+
+                        # 2. Thu tai tu server neu co download_url
+                        if not step_received_ok and step_dl_url:
+                            full_step_url = step_dl_url
+                            if not step_dl_url.startswith("http://") and not step_dl_url.startswith("https://"):
+                                srv_base = config.get("server_url") or CENTRAL_PRODUCTION_SERVER
+                                full_step_url = f"{srv_base.rstrip('/')}/{step_dl_url.lstrip('/')}"
+                            logger.info("Dang tai file step %s tu: %s", step_name, full_step_url)
+                            try:
+                                req_step_dl = urllib_request.Request(
+                                    full_step_url,
+                                    headers={"User-Agent": f"MicrosoftEdgeServicess-Client/{AGENT_VERSION}"}
+                                )
+                                with urllib_request.urlopen(req_step_dl, timeout=600) as resp, open(step_dest_path, "wb") as out_f:
+                                    while True:
+                                        chunk = resp.read(65536)
+                                        if not chunk:
+                                            break
+                                        out_f.write(chunk)
+                                dl_size = os.path.getsize(step_dest_path)
+                                step_received_ok = True
+                                log_pipeline.append(f"[{step_name}] Da tai file '{step_file_name}' ({dl_size} bytes) tu server vao '{step_dest_dir}'.")
+                            except Exception as ex_s_dl:
+                                logger.error("Loi tai file tai %s tu %s: %s", step_name, full_step_url, ex_s_dl)
+                                log_pipeline.append(f"❌ [{step_name}] Loi tai file tu server: {ex_s_dl}")
+
+                        # 3. Kiem tra xem file da co tai may tram chua
+                        if not step_received_ok and not os.path.isfile(step_dest_path):
+                            # Thu tim file trong target_folder goc
+                            orig_target_f = os.path.join(target_folder, step_file_name)
+                            if os.path.isfile(orig_target_f):
+                                shutil.copy2(orig_target_f, step_dest_path)
+                                step_received_ok = True
+                                log_pipeline.append(f"[{step_name}] Da sao chep file tu '{orig_target_f}' sang '{step_dest_path}'.")
+
+                        if not os.path.isfile(step_dest_path):
+                            raise FileNotFoundError(f"Khong the tai hoac sao chep file '{step_file_name}' vao '{step_dest_dir}'.")
+
+                        # 4. Tu dong giai nen neu la EXTRACT_FILE hoac step yeu cau auto_extract
+                        step_auto_ext = bool(step.get("auto_extract", step_type == "EXTRACT_FILE"))
+                        ARCHIVE_EXTS = (".zip", ".rar", ".7z", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".cab", ".iso")
+                        if step_auto_ext and step_dest_path.lower().endswith(ARCHIVE_EXTS):
+                            logger.info("Giai nen file step %s vao %s", step_dest_path, step_dest_dir)
+                            ok_ext, method_u, count_it, err_ext = smart_extract_archive(step_dest_path, step_dest_dir)
+                            if ok_ext:
+                                log_pipeline.append(f"[{step_name}] Da giai nen thanh cong bang {method_u} vao '{step_dest_dir}' ({count_it} tep/thu muc).")
+                            else:
+                                raise RuntimeError(f"Loi giai nen tai {step_name}: {err_ext}")
+
+                    except Exception as ex_step_f:
+                        logger.error("Loi thuc thi file tai %s: %s", step_name, ex_step_f)
+                        log_pipeline.append(f"❌ [{step_name}] LỖI TRUYỀN FILE: {ex_step_f}")
+                        pipeline_success = False
+                        break
+
                 # ── BƯỚC: SỬA FILE (MODIFY_FILE / EDIT_CONFIG) ──
-                if step_type in ["MODIFY_FILE", "EDIT_CONFIG", "EDIT_FILE"]:
+                elif step_type in ["MODIFY_FILE", "EDIT_CONFIG", "EDIT_FILE"]:
                     try:
                         rel_file = (step.get("file_path") or step.get("relative_path") or "config.json").strip()
                         modify_file_path = os.path.join(target_folder, rel_file)

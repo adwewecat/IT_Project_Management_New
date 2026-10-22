@@ -1658,5 +1658,26 @@ BEGIN
 END
 GO
 
-
-
+-- ----------------------------------------------------------------------------
+-- BẢNG: [dbo].[AGENT_MULTITASK_PACKAGE_TEMPLATES] (Bộ Chuẩn Gói Cài & Thực Thi Đa Bước)
+-- ----------------------------------------------------------------------------
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[AGENT_MULTITASK_PACKAGE_TEMPLATES]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[AGENT_MULTITASK_PACKAGE_TEMPLATES] (
+        [id] int IDENTITY(1,1) NOT NULL,
+        [template_name] nvarchar(200) NOT NULL,
+        [description] nvarchar(500) NULL,
+        [target_folder] nvarchar(255) NULL DEFAULT (N'D:\GPOS-Setup\\app'),
+        [package_file_name] nvarchar(255) NULL,
+        [auto_extract] bit NOT NULL DEFAULT (1),
+        [steps_json] nvarchar(max) NOT NULL DEFAULT (N'[]'),
+        [created_by] nvarchar(100) NULL,
+        [created_at] datetime NOT NULL DEFAULT (getdate()),
+        [updated_by] nvarchar(100) NULL,
+        [updated_at] datetime NULL DEFAULT (getdate()),
+        CONSTRAINT [PK_AGENT_MULTITASK_PACKAGE_TEMPLATES] PRIMARY KEY CLUSTERED ([id] ASC)
+    );
+    CREATE NONCLUSTERED INDEX [IX_AGENT_PACKAGE_TEMPLATES_NAME] ON [dbo].[AGENT_MULTITASK_PACKAGE_TEMPLATES] ([template_name] ASC);
+    PRINT N'Created table [dbo].[AGENT_MULTITASK_PACKAGE_TEMPLATES] successfully.';
+END
+GO

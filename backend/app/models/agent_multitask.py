@@ -93,3 +93,27 @@ class AgentMultitaskScriptTemplate(Base):
     created_by: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class AgentMultitaskPackageTemplate(Base):
+    """
+    Bảng lưu Bộ Chuẩn Gói Cài & Thực Thi Đa Bước (Deployment Package Presets / Recipes).
+    Lưu trữ cấu hình toàn diện: Tên bộ chuẩn, mô tả, thư mục gốc mặc định, và toàn bộ các bước tuần tự (steps_json).
+    Mỗi bước có thể đính kèm file riêng (đã lưu trữ trên server), thư mục đích, tự động giải nén, sửa config, chạy script...
+    Chỉ Super Admin hoặc dung.nguyenanh mới có quyền thay đổi file mã nguồn và cấu hình bộ chuẩn.
+    """
+    __tablename__ = "AGENT_MULTITASK_PACKAGE_TEMPLATES"
+    __table_args__ = {"schema": "dbo"}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    template_name: Mapped[str] = mapped_column(Unicode(200), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Unicode(500), nullable=True)
+    target_folder: Mapped[Optional[str]] = mapped_column(Unicode(255), default="D:\\GPOS-Setup\\app", nullable=True)
+    package_file_name: Mapped[Optional[str]] = mapped_column(Unicode(255), nullable=True)
+    auto_extract: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    steps_json: Mapped[str] = mapped_column(UnicodeText, default="[]", nullable=False)
+    created_by: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+    updated_by: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+

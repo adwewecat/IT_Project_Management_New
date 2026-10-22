@@ -51,7 +51,13 @@ async def lifespan(app: FastAPI):
         from app.models.standard_app_param import StandardAppParam
         from app.models.scheduled_param_job import ScheduledParamPushJob
         from app.models.violation import StaffLeaveLog, StaffLeaveType
-        from app.models.agent_multitask import AgentMultitaskConfig, AgentMultitaskEndpoint, AgentMultitaskLog, AgentMultitaskScriptTemplate
+        from app.models.agent_multitask import (
+            AgentMultitaskConfig,
+            AgentMultitaskEndpoint,
+            AgentMultitaskLog,
+            AgentMultitaskScriptTemplate,
+            AgentMultitaskPackageTemplate
+        )
         from sqlalchemy import text
         Base.metadata.create_all(engine, tables=[
             OvernightDeviceLog.__table__,
@@ -65,6 +71,7 @@ async def lifespan(app: FastAPI):
             AgentMultitaskEndpoint.__table__,
             AgentMultitaskLog.__table__,
             AgentMultitaskScriptTemplate.__table__,
+            AgentMultitaskPackageTemplate.__table__,
         ], checkfirst=True)
 
         # Tự động nạp mẫu kịch bản mặc định nếu bảng trống
@@ -81,8 +88,29 @@ async def lifespan(app: FastAPI):
                     """))
                     _tc.commit()
                     logger.info("Đã tự động khởi tạo các mẫu kịch bản script mặc định trong AGENT_MULTITASK_SCRIPT_TEMPLATES.")
+
+                # Kiểm tra phòng vệ bảng AGENT_MULTITASK_PACKAGE_TEMPLATES
+                _tc.execute(text("""
+                    IF OBJECT_ID('dbo.AGENT_MULTITASK_PACKAGE_TEMPLATES', 'U') IS NULL
+                    BEGIN
+                        CREATE TABLE dbo.AGENT_MULTITASK_PACKAGE_TEMPLATES (
+                            id INT IDENTITY(1,1) PRIMARY KEY,
+                            template_name NVARCHAR(200) NOT NULL,
+                            description NVARCHAR(500) NULL,
+                            target_folder NVARCHAR(255) NULL DEFAULT 'D:\\GPOS-Setup\\app',
+                            package_file_name NVARCHAR(255) NULL,
+                            auto_extract BIT NOT NULL DEFAULT 1,
+                            steps_json NVARCHAR(MAX) NOT NULL DEFAULT '[]',
+                            created_by NVARCHAR(100) NULL,
+                            created_at DATETIME NOT NULL DEFAULT GETDATE(),
+                            updated_by NVARCHAR(100) NULL,
+                            updated_at DATETIME NULL DEFAULT GETDATE()
+                        );
+                    END
+                """))
+                _tc.commit()
         except Exception as _ex_tmpl:
-            logger.warning("Lỗi tự động seed mẫu script: %s", _ex_tmpl)
+            logger.warning("Lỗi tự động seed mẫu script hoặc tạo bảng package templates: %s", _ex_tmpl)
         # Đảm bảo các cột cần thiết tồn tại trong MEMO, SOFTWARE_VERSIONS và GHINHAN_SAIPHAM
         with engine.connect() as _c:
             try:

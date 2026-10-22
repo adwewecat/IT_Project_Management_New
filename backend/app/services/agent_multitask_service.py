@@ -11,7 +11,8 @@ from app.models.agent_multitask import (
     AgentMultitaskConfig,
     AgentMultitaskEndpoint,
     AgentMultitaskLog,
-    AgentMultitaskScriptTemplate
+    AgentMultitaskScriptTemplate,
+    AgentMultitaskPackageTemplate
 )
 from app.models.restaurant import Restaurant
 from app.schemas.agent_multitask import (
@@ -28,7 +29,10 @@ from app.schemas.agent_multitask import (
     AgentLogItem,
     AgentScriptTemplateItem,
     AgentScriptTemplateCreate,
-    AgentScriptTemplateUpdate
+    AgentScriptTemplateUpdate,
+    AgentPackageTemplateItem,
+    AgentPackageTemplateCreate,
+    AgentPackageTemplateUpdate
 )
 
 logger = logging.getLogger(__name__)
@@ -1143,4 +1147,174 @@ class AgentMultitaskService:
         db.commit()
         logger.info("Đã xóa mẫu script ID #%s (%s)", template_id, tmpl.template_name)
         return True
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # CÁC PHƯƠNG THỨC QUẢN LÝ BỘ CHUẨN GÓI CÀI & THỰC THI ĐA BƯỚC (PACKAGE TEMPLATES)
+    # ──────────────────────────────────────────────────────────────────────────
+    @staticmethod
+    def get_package_templates(db: Session) -> List[AgentPackageTemplateItem]:
+        """Lấy danh sách toàn bộ các bộ chuẩn gói cài & thực thi đa bước."""
+        rows = db.query(AgentMultitaskPackageTemplate).order_by(AgentMultitaskPackageTemplate.id.asc()).all()
+        result: List[AgentPackageTemplateItem] = []
+        for r in rows:
+            steps_list = []
+            try:
+                if r.steps_json:
+                    steps_list = json.loads(r.steps_json)
+            except Exception:
+                steps_list = []
+            result.append(AgentPackageTemplateItem(
+                id=r.id,
+                template_name=r.template_name,
+                description=r.description,
+                target_folder=r.target_folder,
+                package_file_name=r.package_file_name,
+                auto_extract=r.auto_extract,
+                steps=steps_list,
+                created_by=r.created_by,
+                created_at=r.created_at,
+                updated_by=r.updated_by,
+                updated_at=r.updated_at
+            ))
+        return result
+
+    @staticmethod
+    def create_package_template(
+        payload: AgentPackageTemplateCreate,
+        username: str,
+        db: Session
+    ) -> AgentPackageTemplateItem:
+        """Tạo mới một bộ chuẩn gói cài đặt đa bước kèm file đính kèm."""
+        template_name = payload.template_name.strip()
+        if not template_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tên bộ chuẩn gói cài không được để trống!"
+            )
+
+        existing = db.query(AgentMultitaskPackageTemplate).filter(
+            AgentMultitaskPackageTemplate.template_name == template_name
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Bộ chuẩn có tên '{template_name}' đã tồn tại! Vui lòng chọn tên khác hoặc cập nhật bộ chuẩn hiện có."
+            )
+
+        steps_json = json.dumps(payload.steps or [], ensure_ascii=False)
+        new_row = AgentMultitaskPackageTemplate(
+            template_name=template_name,
+            description=(payload.description or "").strip() or None,
+            target_folder=(payload.target_folder or "D:\\GPOS-Setup\\app").strip(),
+            package_file_name=(payload.package_file_name or "").strip() or None,
+            auto_extract=bool(payload.auto_extract if payload.auto_extract is not None else True),
+            steps_json=steps_json,
+            created_by=username or "system",
+            created_at=datetime.now(),
+            updated_by=username or "system",
+            updated_at=datetime.now()
+        )
+        db.add(new_row)
+        db.commit()
+        db.refresh(new_row)
+        logger.info("Người dùng %s đã tạo Bộ Chuẩn Gói Cài mới: #%s (%s)", username, new_row.id, template_name)
+
+        return AgentPackageTemplateItem(
+            id=new_row.id,
+            template_name=new_row.template_name,
+            description=new_row.description,
+            target_folder=new_row.target_folder,
+            package_file_name=new_row.package_file_name,
+            auto_extract=new_row.auto_extract,
+            steps=payload.steps or [],
+            created_by=new_row.created_by,
+            created_at=new_row.created_at,
+            updated_by=new_row.updated_by,
+            updated_at=new_row.updated_at
+        )
+
+    @staticmethod
+    def update_package_template(
+        template_id: int,
+        payload: AgentPackageTemplateUpdate,
+        username: str,
+        db: Session
+    ) -> AgentPackageTemplateItem:
+        """Cập nhật cấu hình, các bước hoặc thay thế file nguồn của bộ chuẩn."""
+        row = db.query(AgentMultitaskPackageTemplate).filter(AgentMultitaskPackageTemplate.id == template_id).first()
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy bộ chuẩn ID #{template_id}"
+            )
+
+        if payload.template_name is not None:
+            name = payload.template_name.strip()
+            if not name:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tên bộ chuẩn không được để trống!")
+            dup = db.query(AgentMultitaskPackageTemplate).filter(
+                AgentMultitaskPackageTemplate.template_name == name,
+                AgentMultitaskPackageTemplate.id != template_id
+            ).first()
+            if dup:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Tên bộ chuẩn '{name}' đã được sử dụng!")
+            row.template_name = name
+
+        if payload.description is not None:
+            row.description = payload.description.strip() or None
+
+        if payload.target_folder is not None:
+            row.target_folder = payload.target_folder.strip()
+
+        if payload.package_file_name is not None:
+            row.package_file_name = payload.package_file_name.strip() or None
+
+        if payload.auto_extract is not None:
+            row.auto_extract = bool(payload.auto_extract)
+
+        if payload.steps is not None:
+            row.steps_json = json.dumps(payload.steps, ensure_ascii=False)
+
+        row.updated_by = username or "system"
+        row.updated_at = datetime.now()
+        db.commit()
+        db.refresh(row)
+        logger.info("Người dùng %s đã cập nhật Bộ Chuẩn Gói Cài ID #%s (%s)", username, template_id, row.template_name)
+
+        steps_list = []
+        try:
+            if row.steps_json:
+                steps_list = json.loads(row.steps_json)
+        except Exception:
+            steps_list = []
+
+        return AgentPackageTemplateItem(
+            id=row.id,
+            template_name=row.template_name,
+            description=row.description,
+            target_folder=row.target_folder,
+            package_file_name=row.package_file_name,
+            auto_extract=row.auto_extract,
+            steps=steps_list,
+            created_by=row.created_by,
+            created_at=row.created_at,
+            updated_by=row.updated_by,
+            updated_at=row.updated_at
+        )
+
+    @staticmethod
+    def delete_package_template(template_id: int, username: str, db: Session) -> bool:
+        """Xóa một bộ chuẩn gói cài."""
+        row = db.query(AgentMultitaskPackageTemplate).filter(AgentMultitaskPackageTemplate.id == template_id).first()
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy bộ chuẩn ID #{template_id}"
+            )
+        name = row.template_name
+        db.delete(row)
+        db.commit()
+        logger.info("Người dùng %s đã xóa Bộ Chuẩn Gói Cài ID #%s (%s)", username, template_id, name)
+        return True
+
 

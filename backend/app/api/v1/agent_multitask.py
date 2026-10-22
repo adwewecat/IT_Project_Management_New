@@ -32,7 +32,10 @@ from app.schemas.agent_multitask import (
     AgentLogItem,
     AgentScriptTemplateItem,
     AgentScriptTemplateCreate,
-    AgentScriptTemplateUpdate
+    AgentScriptTemplateUpdate,
+    AgentPackageTemplateItem,
+    AgentPackageTemplateCreate,
+    AgentPackageTemplateUpdate
 )
 from app.services.agent_multitask_service import AgentMultitaskService
 
@@ -372,6 +375,91 @@ def delete_script_template(
     return {"status": "SUCCESS", "message": f"Đã xóa mẫu script #{template_id}"}
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# ENDPOINTS QUẢN LÝ BỘ CHUẨN GÓI CÀI & THỰC THI ĐA BƯỚC (PACKAGE TEMPLATES)
+# ──────────────────────────────────────────────────────────────────────────
+@router.get("/package-templates", response_model=List[AgentPackageTemplateItem])
+def get_package_templates(
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """Lấy danh sách các bộ chuẩn gói cài đặt đa bước đã lưu trong hệ thống."""
+    return AgentMultitaskService.get_package_templates(db=db)
+
+
+@router.post("/package-templates", response_model=AgentPackageTemplateItem)
+def create_package_template(
+    payload: AgentPackageTemplateCreate,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """
+    Tạo mới một bộ chuẩn gói cài đặt và kịch bản thực thi đa bước kèm file đính kèm.
+    CHỈ DÀNH CHO SUPER ADMIN HOẶC user dung.nguyenanh!
+    """
+    if not is_super_admin(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ Super Admin hoặc người dùng dung.nguyenanh mới có quyền tạo mới hoặc thay đổi bộ chuẩn gói cài."
+        )
+
+    return AgentMultitaskService.create_package_template(
+        payload=payload,
+        username=current_user.username or "system",
+        db=db
+    )
+
+
+@router.put("/package-templates/{template_id}", response_model=AgentPackageTemplateItem)
+def update_package_template(
+    template_id: int,
+    payload: AgentPackageTemplateUpdate,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """
+    Cập nhật cấu hình, thay đổi các bước hoặc thay thế file mã nguồn của bộ chuẩn.
+    CHỈ DÀNH CHO SUPER ADMIN HOẶC user dung.nguyenanh!
+    """
+    if not is_super_admin(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ Super Admin hoặc người dùng dung.nguyenanh mới có quyền thay đổi file mã nguồn và cấu hình bộ chuẩn."
+        )
+
+    return AgentMultitaskService.update_package_template(
+        template_id=template_id,
+        payload=payload,
+        username=current_user.username or "system",
+        db=db
+    )
+
+
+@router.delete("/package-templates/{template_id}")
+def delete_package_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """
+    Xóa một bộ chuẩn gói cài.
+    CHỈ DÀNH CHO SUPER ADMIN HOẶC user dung.nguyenanh!
+    """
+    if not is_super_admin(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ Super Admin hoặc người dùng dung.nguyenanh mới có quyền xóa bộ chuẩn gói cài."
+        )
+
+    AgentMultitaskService.delete_package_template(
+        template_id=template_id,
+        username=current_user.username or "system",
+        db=db
+    )
+    return {"status": "SUCCESS", "message": f"Đã xóa bộ chuẩn gói cài #{template_id}"}
+
+
+
 # Danh sách chuẩn các tệp tin và thư mục dành riêng cho bộ cài đặt Client máy trạm (tuyệt đối không kèm mã nguồn .py, spec...)
 CLIENT_PACKAGE_WHITELIST = {
     "install_edge_framework.bat",
@@ -536,6 +624,8 @@ async def upload_package_file(
     return {
         "success": True,
         "file_name": clean_name,
+        "storage_file_name": clean_name,
+        "download_url": f"/api/v1/agent-multitask/download-package-file/{clean_name}",
         "file_size": total_bytes,
         "file_size_mb": file_size_mb,
         "message": f"Tải lên thành công file '{clean_name}' ({file_size_mb} MB) sẵn sàng triển khai!"
