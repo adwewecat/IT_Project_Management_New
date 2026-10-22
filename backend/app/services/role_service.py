@@ -409,7 +409,11 @@ def update_role_permissions(
     ).all()
     existing_map = {d.chucnang: d for d in existing_details}
 
+    agent_multi_active = None
     for item in data.permissions:
+        if item.chucnang in ["agent_multitask", "view_agent_multitask"]:
+            agent_multi_active = item.active
+
         if item.chucnang in existing_map:
             existing_map[item.chucnang].active = item.active
         else:
@@ -419,6 +423,14 @@ def update_role_permissions(
                 active=item.active
             )
             db.add(new_perm)
+
+    # Đảm bảo cả agent_multitask và view_agent_multitask luôn đồng bộ tuyệt đối với nhau trong DB
+    if agent_multi_active is not None:
+        for extra_key in ["agent_multitask", "view_agent_multitask"]:
+            if extra_key in existing_map:
+                existing_map[extra_key].active = agent_multi_active
+            else:
+                db.add(PermissionDetail(id_quyen=str(role_id), chucnang=extra_key, active=agent_multi_active))
 
     log_content = f"Update_Permissions: Quyền={role.tenquyen} (id={role_id})"
     log_admin_action(db, "Admin_quyenmo_rong", "Update_Permissions", actor, log_content)

@@ -114,15 +114,30 @@ export const checkIsDungOrSuperAdmin = (user?: UserInfo | null): boolean => {
  */
 export const hasNewScreenAccess = (user?: UserInfo | null, screenKey?: string): boolean => {
   if (!user) return false;
-  // Super Admin hoặc Admin luôn có toàn quyền truy cập mặc định
-  if (checkIsAdmin(user) || checkIsSuperAdmin(user)) return true;
+  // Super Admin luôn có toàn quyền truy cập mặc định
+  if (checkIsSuperAdmin(user)) return true;
   if (!screenKey) return false;
 
   const cleanKey = screenKey.trim().toLowerCase();
   const perms = user.permissions || {};
+
+  // Riêng Agent Multitask (phân hệ điều khiển máy trạm từ xa nhạy cảm):
+  // Admin thường KHÔNG tự động bypass mà bắt buộc phải có cờ phân quyền trong DB ma trận hoặc allowed_users
+  if (cleanKey === 'agent_multitask') {
+    return Boolean(
+      perms['agent_multitask'] ||
+      perms['view_agent_multitask'] ||
+      perms['update_agent_multitask']
+    );
+  }
+
+  // Các màn hình mới thông thường khác: Admin có toàn quyền truy cập mặc định
+  if (checkIsAdmin(user)) return true;
+
   return Boolean(
     perms[cleanKey] ||
     perms[`view_${cleanKey}`] ||
     perms[`access_${cleanKey}`]
   );
 };
+

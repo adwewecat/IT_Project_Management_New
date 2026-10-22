@@ -1256,5 +1256,20 @@
        + Thử nghiệm tự động theo 3 phương án: (1) Với tài khoản %ADMIN_USER% khai báo, (2) Với tài khoản Administrator cùng mật khẩu, (3) Với prefix máy trạm .\%ADMIN_USER%.
        + **Kết quả**: Windows thực hiện xác thực ngầm bằng Windows API CreateProcessWithLogonW mà HOÀN TOÀN KHÔNG BẬT HỘP THOẠI UAC, tự động chạy cài đặt và hoàn tất trong 3 giây.
        + Chỉ khi nào mật khẩu sai hoặc chưa khai báo mới fallback sang hộp thoại UAC thông thường.
-     - Đồng bộ cơ chế này cho cả 2 file: Install_Edge_Framework.bat và ix_CO_SO_Fail_to_connect.bat.
-     - Đồng bộ sang D:\1.Download\Restaurant_Support_GPOS\ và đóng gói lại 3 bộ ZIP chuẩn: 	ools/packages/Restaurant_Support_GPOS.zip, 	ools/packages/Restaurant_Support_Agent_Full.zip, D:\1.Download\Restaurant_Support_GPOS.zip.
+     - Đồng bộ cơ chế này cho cả 2 file: Install_Edge_Framework.bat và fix_CO_SO_Fail_to_connect.bat.
+     - Đồng bộ sang D:\1.Download\Restaurant_Support_GPOS\ và đóng gói lại 3 bộ ZIP chuẩn: tools/packages/Restaurant_Support_GPOS.zip, tools/packages/Restaurant_Support_Agent_Full.zip, D:\1.Download\Restaurant_Support_GPOS.zip.
+
+- **KHẮC PHỤC TRIỆT ĐỂ LỖI PHÂN QUYỀN AGENT MULTITASK & TÀI KHOẢN ADMIN [2026-10-22]**:
+  1. **Bối Cảnh & Hiện Tượng**:
+     - Đã phân quyền nhóm bỏ quyền xem "Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa" (agent_multitask), nhưng khi đăng nhập tài khoản `test` vào hệ thống vẫn nhìn thấy menu "Agent Multitask" trên Sidebar và truy cập, sử dụng được bình thường.
+  2. **Nguyên Nhân Gốc Rễ**:
+     - *Nguyên nhân nghiệp vụ (Lệch nhóm quyền khi kiểm thử)*: Admin đang cấu hình trên nhóm **IT Application (Mã #2)** (đã bỏ tích Xem/Sửa cho `agent_multitask`), nhưng tài khoản `test` khi đăng nhập lại mang vai trò **Quản trị viên (Admin) / Administrator (Mã #1)**. Do đó tài khoản `test` lấy cấu hình của nhóm Administrator chứ không chạy theo nhóm IT Application.
+     - *Nguyên nhân kỹ thuật (Lỗi logic trong Frontend & Backend)*:
+       + *Lỗi 1 (Frontend `RolesPage.tsx`)*: Trong hệ thống có 2 mã quyền song song là `agent_multitask` và `view_agent_multitask`. Khi gom nhóm hiển thị, `view_agent_multitask` ghi đè lên `row.viewPerm`. Khi bỏ tích "Xem", hàm chỉ tắt cờ `view_agent_multitask`, bỏ quên mã quyền chính `agent_multitask` vẫn giữ `active: True` trong DB `dbo.PHANQUYEN_DETAIL`.
+       + *Lỗi 2 (Route Guard `hasNewScreenAccess` trong `authUtils.ts`)*: Hàm có điều kiện `if (checkIsAdmin(user) || checkIsSuperAdmin(user)) return true;`. Bất kỳ tài khoản nào mang vai trò Admin đều tự động bypass kiểm tra quyền, dẫn đến việc dù phân quyền có tắt thì Admin vẫn vào được màn hình `/app/agent-multitask`.
+       + *Lỗi 3 (Backend `agent_multitask_service.py`)*: Hàm `check_user_permission` kiểm tra `PermissionDetail.chucnang.in_(["agent_multitask", "view_agent_multitask"])`. Do `agent_multitask` chưa bị tắt ở DB (do Lỗi 1), backend vẫn cấp quyền cho phép gọi API.
+  3. **Giải Pháp Đã Xử Lý Triệt Để**:
+     - *Frontend (`RolesPage.tsx`)*: Tự động đồng bộ cả 2 mã `agent_multitask` và `view_agent_multitask` khi bật/tắt (kể cả thao tác đơn lẻ hay hàng loạt).
+     - *Route Guard (`authUtils.ts`)*: Super Admin bảo toàn toàn quyền. Nhưng riêng với phân hệ nhạy cảm `agent_multitask`, Admin thường không tự động bypass mà bắt buộc phải có cờ phân quyền được cấp trong ma trận hoặc `allowed_users`.
+     - *Backend (`role_service.py`)*: Khi lưu ma trận vào DB, tự động đồng bộ cả 2 mã `agent_multitask` và `view_agent_multitask` trong `dbo.PHANQUYEN_DETAIL`.
+     - *Kiểm thử & Đóng gói*: Frontend build sạch sẽ `✓ built in 8.59s`, Backend compile & Smoke Test `PASSED 100%`.

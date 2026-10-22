@@ -332,7 +332,7 @@ export const RolesPage: React.FC = () => {
     }
   };
 
-  // Toggle single permission checkbox (with support for syncing insertPerm alongside updatePerm)
+  // Toggle single permission checkbox (with support for syncing insertPerm alongside updatePerm, and agent_multitask / view_agent_multitask)
   const handleTogglePermission = (chucnang?: string, extraChucnang?: string) => {
     if (!chucnang || isRoleLocked) return;
     setPermissions((prev) => {
@@ -340,6 +340,13 @@ export const RolesPage: React.FC = () => {
       const nextActive = target ? !target.active : true;
       return prev.map((p) => {
         if (p.chucnang === chucnang || (extraChucnang && p.chucnang === extraChucnang)) {
+          return { ...p, active: nextActive };
+        }
+        // Đảm bảo đồng bộ tuyệt đối 2 mã quyền agent_multitask và view_agent_multitask
+        if (
+          (chucnang === 'agent_multitask' || chucnang === 'view_agent_multitask') &&
+          (p.chucnang === 'agent_multitask' || p.chucnang === 'view_agent_multitask')
+        ) {
           return { ...p, active: nextActive };
         }
         return p;
@@ -354,6 +361,9 @@ export const RolesPage: React.FC = () => {
       prev.map((p) => {
         if (p.module_group === moduleGroup) {
           if (p.chucnang.startsWith(`${type}_`)) {
+            return { ...p, active: makeActive };
+          }
+          if (type === 'view' && (p.chucnang === 'agent_multitask' || p.chucnang === 'view_agent_multitask')) {
             return { ...p, active: makeActive };
           }
           if (type === 'update' && p.chucnang.startsWith('insert_')) {
@@ -372,7 +382,12 @@ export const RolesPage: React.FC = () => {
       filteredFeatureRows.flatMap((row) => {
         const keys: string[] = [];
         if (type === 'all' || type === 'view') {
-          if (row.viewPerm) keys.push(row.viewPerm.chucnang);
+          if (row.viewPerm) {
+            keys.push(row.viewPerm.chucnang);
+            if (row.baseKey === 'agent_multitask') {
+              keys.push('agent_multitask', 'view_agent_multitask');
+            }
+          }
         }
         if (type === 'all' || type === 'update') {
           if (row.updatePerm) keys.push(row.updatePerm.chucnang);
