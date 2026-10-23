@@ -877,3 +877,15 @@
   3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
      - Frontend `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.21s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
      - Backend `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`.
+
+- **NÂNG CẤP TÍNH NĂNG CÔNG VIỆC CÁ NHÂN: DÁN NHANH CTRL+V CLIPBOARD & ĐÍNH KÈM TỆP ĐA ĐỊNH DẠNG [2026-10-23]**:
+  1. **Yêu cầu & Mục đích**:
+     - Tại màn hình **Tổng Quan Hệ Thống** (/dashboard), tab **Công Việc Cá Nhân (dung.nguyenanh & Admin)**:
+       + Cho phép dán nhanh ảnh/tệp từ Clipboard trực tiếp bằng tổ hợp phím Ctrl+V vào ô nhập nội dung hoặc modal chỉnh sửa.
+       + Mở rộng hỗ trợ tải lên và đính kèm mọi loại tệp tin khác nhau (Excel, Word, PDF, file nén ZIP/RAR, tài liệu văn bản...).
+  2. **Giải pháp Kiến trúc & Kỹ thuật đã triển khai**:
+     - **Backend (backend/app/api/v1/personal_tasks.py)**: Bổ sung endpoint POST /api/v1/personal-tasks/upload hỗ trợ tệp đa định dạng, lưu trữ an toàn uploads/personal_tasks/, cập nhật DB cột files và images.
+     - **Frontend Component UI (PersonalTaskManager.tsx)**: Bắt sự kiện onPaste Ctrl+V trên Quick Add và Modal Edit, nút đính kèm mọi tệp tin, hiển thị badge chip định dạng tệp có icon màu sắc và nút Download/Mở tab mới.
+  3. **Kiểm thử & Đóng gói (Copy Là Chạy Ngay)**:
+     - Frontend: cmd /c "npm run build" đạt exit code 0, thư mục frontend/dist/ (kèm web.config) cập nhật mới sạch sẽ.
+     - Backend: python -m compileall app sạch lỗi 100%, Smoke Test PASSED 100%, Backend daemon reload port 8000.

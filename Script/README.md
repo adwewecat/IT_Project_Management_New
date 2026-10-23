@@ -4775,3 +4775,29 @@ estaurant_service.py).
   3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
      - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`.
      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.14s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
+
+
+- **NÂNG CẤP TÍNH NĂNG CÔNG VIỆC CÁ NHÂN: DÁN NHANH CTRL+V CLIPBOARD & ĐÍNH KÈM TỆP ĐA ĐỊNH DẠNG [2026-10-23]**:
+  1. **Yêu cầu & Mục đích**:
+     - Tại màn hình **Tổng Quan Hệ Thống** (`/dashboard`), tab **Công Việc Cá Nhân (dung.nguyenanh & Admin)**:
+       + Cho phép dán nhanh ảnh/tệp từ Clipboard trực tiếp bằng tổ hợp phím `Ctrl+V` vào ô nhập nội dung hoặc modal chỉnh sửa.
+       + Mở rộng hỗ trợ tải lên và đính kèm mọi loại tệp tin khác nhau (không chỉ là ảnh, mà bao gồm cả Excel `.xlsx`/`.xls`/`.csv`, Word `.docx`, PDF `.pdf`, file nén `.zip`/`.rar`/`.7z`, tài liệu văn bản...).
+  2. **Giải pháp Kiến trúc & Kỹ thuật đã triển khai**:
+     - **Backend (`backend/app/api/v1/personal_tasks.py`)**:
+       + Bổ sung endpoint `POST /api/v1/personal-tasks/upload` nhận multipart `files: List[UploadFile]`.
+       + Tự động lưu trữ tệp tin vào thư mục tĩnh an toàn `uploads/personal_tasks/` với tên tệp chuẩn hóa (timestamp + UUID) tránh trùng lặp.
+       + Phân loại tự động tệp: nhận diện ảnh (`is_image`) và đuôi mở rộng (`ext`), lưu trữ kích thước tệp (`size`), trả về cấu trúc `{ urls: string[], files: [{ url, name, size, is_image, ext }] }`.
+       + Cơ sở dữ liệu SQL Server: Cột `[files] NVARCHAR(MAX)` lưu danh sách JSON các file đính kèm kèm theo cột `[images] NVARCHAR(MAX)`.
+     - **Frontend Service & Types (`personalTaskService.ts`, `personalTask.ts`)**:
+       + Khai báo kiểu `TaskFileAttachment` và `UploadFilesResult` tương thích kép (vừa là mảng URL để tương thích ngược các modal khác, vừa có thuộc tính `.files` và `.urls` để truy cập thông tin tệp chi tiết).
+     - **Frontend Component UI (`PersonalTaskManager.tsx`)**:
+       + **Bắt sự kiện dán nhanh `Ctrl+V` (Clipboard Paste)**: Xử lý `e.clipboardData.items`. Tự động nhận diện ảnh chụp màn hình từ clipboard và đặt tên có mốc thời gian (ví dụ: `Ảnh_pasted_14h05p12s.png`) cùng các tệp tin đính kèm.
+       + **Thanh thêm nhanh (Quick Add Bar)**: Nút "Đính Kèm File / Ảnh" nhận mọi định dạng tệp tin. Hiển thị danh sách badge chip kèm icon phân loại theo định dạng (Excel xanh lá, PDF đỏ, Word xanh dương, ZIP cam...), dung lượng KB/MB và nút gỡ bỏ `(X)`.
+       + **Hiển thị danh sách công việc**:
+         * Ảnh đính kèm: Thumbnail vuông 48x48px sắc nét, bo góc, click mở Lightbox xem ảnh kích thước đầy đủ.
+         * Tệp tài liệu đính kèm: Thẻ badge gọn gàng với icon đại diện định dạng, tên tệp, dung lượng và nút tải xuống `(Download)`, mở tệp trong tab mới an toàn.
+       + **Modal Chỉnh Sửa Công Việc (`isEditModalOpen`)**: Hỗ trợ dán `Ctrl+V` ảnh/tệp trực tiếp vào ô textarea, nút chọn thêm file từ máy tính, xem và xóa riêng từng ảnh/file cũ hoặc mới thêm.
+  3. **Kiểm thử & Đóng gói (Copy Là Chạy Ngay)**:
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.64s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
+     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`, Backend daemon reload port 8000.
+

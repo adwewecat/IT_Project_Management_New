@@ -16,11 +16,103 @@ import {
   RotateCcw,
   X,
   Key,
+  Paperclip,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Archive,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
-import { PersonalTaskItem } from '../../types/personalTask';
+import { PersonalTaskItem, TaskFileAttachment } from '../../types/personalTask';
 import { personalTaskService } from '../../services/personalTaskService';
+
+// Định dạng dung lượng tệp tin (KB, MB)
+const formatFileSize = (bytes?: number): string => {
+  if (!bytes || bytes <= 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+// Kiểm tra xem URL hoặc tên file có phải là hình ảnh không
+const isImageUrl = (url: string, name?: string): boolean => {
+  const check = (name || url).toLowerCase();
+  return /\.(png|jpe?g|webp|gif|bmp|svg)(\?.*)?$/i.test(check) || check.startsWith('data:image/');
+};
+
+// Hiển thị icon tương ứng với định dạng tệp (Excel, Word, PDF, ZIP, ...)
+const renderFileIcon = (filename: string, size = 14) => {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  if (['xls', 'xlsx', 'csv'].includes(ext)) {
+    return <FileSpreadsheet size={size} color="#059669" />;
+  }
+  if (['pdf'].includes(ext)) {
+    return <FileText size={size} color="#DC2626" />;
+  }
+  if (['doc', 'docx'].includes(ext)) {
+    return <FileText size={size} color="#2563EB" />;
+  }
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
+    return <Archive size={size} color="#D97706" />;
+  }
+  return <Paperclip size={size} color="#64748B" />;
+};
+
+// Phân tách tệp đính kèm và hình ảnh từ task
+const parseTaskAttachments = (task: PersonalTaskItem): { images: string[]; files: TaskFileAttachment[] } => {
+  const images: string[] = [];
+  const files: TaskFileAttachment[] = [];
+
+  // 1. Bóc tách images
+  if (task.images) {
+    try {
+      const parsed = JSON.parse(task.images);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((img) => {
+          if (typeof img === 'string') images.push(img);
+          else if (img?.url) images.push(img.url);
+        });
+      } else if (typeof parsed === 'string') {
+        images.push(parsed);
+      }
+    } catch {
+      images.push(task.images);
+    }
+  }
+
+  // 2. Bóc tách files
+  if (task.files) {
+    try {
+      const parsed = JSON.parse(task.files);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((f) => {
+          if (typeof f === 'string') {
+            const fileName = f.split('/').pop() || 'Tệp đính kèm';
+            if (isImageUrl(f, fileName) && !images.includes(f)) {
+              images.push(f);
+            } else if (!isImageUrl(f, fileName)) {
+              files.push({ url: f, name: fileName });
+            }
+          } else if (f && typeof f === 'object' && f.url) {
+            if (f.is_image || isImageUrl(f.url, f.name)) {
+              if (!images.includes(f.url)) images.push(f.url);
+            } else {
+              files.push(f);
+            }
+          }
+        });
+      }
+    } catch {
+      const fileName = task.files.split('/').pop() || 'Tệp đính kèm';
+      if (!isImageUrl(task.files, fileName)) {
+        files.push({ url: task.files, name: fileName });
+      }
+    }
+  }
+
+  return { images, files };
+};
 
 export const PersonalTaskManager: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
@@ -31,9 +123,9 @@ export const PersonalTaskManager: React.FC = () => {
   const [totalCompleted, setTotalCompleted] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // Quick single add state
+  // Quick single add state (hỗ trợ cả ảnh và mọi loại file đính kèm, dán nhanh Ctrl+V)
   const [newContent, setNewContent] = useState('');
-  const [newImages, setNewImages] = useState<File[]>([]);
+  const [newAttachments, setNewAttachments] = useState<File[]>([]);
   const [isAdding, setIsAdding] = useState(false);
 
   // Completed filters
@@ -44,7 +136,11 @@ export const PersonalTaskManager: React.FC = () => {
   // Edit modal
   const [editingTask, setEditingTask] = useState<PersonalTaskItem | null>(null);
   const [editContent, setEditContent] = useState('');
+  const [editExistingImages, setEditExistingImages] = useState<string[]>([]);
+  const [editExistingFiles, setEditExistingFiles] = useState<TaskFileAttachment[]>([]);
+  const [editNewAttachments, setEditNewAttachments] = useState<File[]>([]);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Batch / AI Modal
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
@@ -98,17 +194,33 @@ export const PersonalTaskManager: React.FC = () => {
     setIsAdding(true);
     try {
       let imagePaths: string[] = [];
-      if (newImages.length > 0) {
-        imagePaths = await personalTaskService.uploadFiles(newImages);
+      let fileObjects: TaskFileAttachment[] = [];
+
+      if (newAttachments.length > 0) {
+        const uploadRes = await personalTaskService.uploadFiles(newAttachments);
+        if (uploadRes.files && uploadRes.files.length > 0) {
+          uploadRes.files.forEach((f: TaskFileAttachment) => {
+            if (f.is_image) {
+              imagePaths.push(f.url);
+            }
+            fileObjects.push(f);
+          });
+        } else if (uploadRes.urls && uploadRes.urls.length > 0) {
+          uploadRes.urls.forEach((u: string) => {
+            if (isImageUrl(u)) imagePaths.push(u);
+            else fileObjects.push({ url: u, name: u.split('/').pop() || 'Tệp đính kèm' });
+          });
+        }
       }
 
       await personalTaskService.createTask({
         noi_dung: newContent.trim(),
         images: imagePaths.length > 0 ? JSON.stringify(imagePaths) : undefined,
+        files: fileObjects.length > 0 ? JSON.stringify(fileObjects) : undefined,
       });
 
       setNewContent('');
-      setNewImages([]);
+      setNewAttachments([]);
       loadTasks();
     } catch (err) {
       console.error(err);
@@ -118,18 +230,34 @@ export const PersonalTaskManager: React.FC = () => {
     }
   };
 
-  // Quick Paste image on quick add input
+  // Quick Paste image & files on quick add input (Ctrl + V)
   const handleQuickAddPaste = (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
     if (!items) return;
+    const pastedFiles: File[] = [];
+
     for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
-        const file = items[i].getAsFile();
+      const item = items[i];
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
         if (file) {
-          setNewImages((prev) => [...prev, file]);
-          e.preventDefault();
-          break;
+          let namedFile = file;
+          // Tự động đặt tên cho ảnh paste từ clipboard có timestamp
+          if (file.type.startsWith('image/') && (file.name === 'image.png' || !file.name)) {
+            const now = new Date();
+            const timeStr = `${now.getHours()}h${now.getMinutes()}p${now.getSeconds()}s`;
+            namedFile = new File([file], `Ảnh_pasted_${timeStr}.png`, { type: file.type });
+          }
+          pastedFiles.push(namedFile);
         }
+      }
+    }
+
+    if (pastedFiles.length > 0) {
+      setNewAttachments((prev) => [...prev, ...pastedFiles]);
+      const textData = e.clipboardData.getData('text');
+      if (!textData) {
+        e.preventDefault();
       }
     }
   };
@@ -161,20 +289,80 @@ export const PersonalTaskManager: React.FC = () => {
   const handleOpenEdit = (task: PersonalTaskItem) => {
     setEditingTask(task);
     setEditContent(task.noi_dung);
+    const { images, files } = parseTaskAttachments(task);
+    setEditExistingImages(images);
+    setEditExistingFiles(files);
+    setEditNewAttachments([]);
     setIsEditModalOpen(true);
+  };
+
+  // Paste image & files in Edit Modal (Ctrl + V)
+  const handleEditPaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const pastedFiles: File[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file) {
+          let namedFile = file;
+          if (file.type.startsWith('image/') && (file.name === 'image.png' || !file.name)) {
+            const now = new Date();
+            const timeStr = `${now.getHours()}h${now.getMinutes()}p${now.getSeconds()}s`;
+            namedFile = new File([file], `Ảnh_pasted_${timeStr}.png`, { type: file.type });
+          }
+          pastedFiles.push(namedFile);
+        }
+      }
+    }
+
+    if (pastedFiles.length > 0) {
+      setEditNewAttachments((prev) => [...prev, ...pastedFiles]);
+      const textData = e.clipboardData.getData('text');
+      if (!textData) {
+        e.preventDefault();
+      }
+    }
   };
 
   const handleSaveEdit = async () => {
     if (!editingTask || !editContent.trim()) return;
+    setIsSavingEdit(true);
     try {
+      let finalImages = [...editExistingImages];
+      let finalFiles = [...editExistingFiles];
+
+      if (editNewAttachments.length > 0) {
+        const uploadRes = await personalTaskService.uploadFiles(editNewAttachments);
+        if (uploadRes.files && uploadRes.files.length > 0) {
+          uploadRes.files.forEach((f: TaskFileAttachment) => {
+            if (f.is_image) {
+              finalImages.push(f.url);
+            }
+            finalFiles.push(f);
+          });
+        } else if (uploadRes.urls && uploadRes.urls.length > 0) {
+          uploadRes.urls.forEach((u: string) => {
+            if (isImageUrl(u)) finalImages.push(u);
+            else finalFiles.push({ url: u, name: u.split('/').pop() || 'Tệp đính kèm' });
+          });
+        }
+      }
+
       await personalTaskService.updateTask(editingTask.id, {
         noi_dung: editContent.trim(),
+        images: finalImages.length > 0 ? JSON.stringify(finalImages) : '',
+        files: finalFiles.length > 0 ? JSON.stringify(finalFiles) : '',
       });
       setIsEditModalOpen(false);
       loadTasks();
     } catch (err) {
       console.error(err);
       alert('Cập nhật thất bại!');
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -406,98 +594,161 @@ export const PersonalTaskManager: React.FC = () => {
         onPaste={handleQuickAddPaste}
         style={{
           display: 'flex',
+          flexDirection: 'column',
           gap: '10px',
-          alignItems: 'center',
           backgroundColor: 'var(--bg-primary, #FFFFFF)',
           padding: '12px 16px',
           borderRadius: 'var(--radius-lg, 8px)',
           border: '1px solid var(--border-color, #E5E7EB)',
+          boxShadow: 'var(--shadow-sm)',
         }}
       >
-        <div style={{ flex: 1, position: 'relative' }}>
-          <input
-            type="text"
-            value={newContent}
-            onChange={(e) => setNewContent(e.target.value)}
-            placeholder="Gõ nội dung công việc cần làm... (Có thể dán trực tiếp ảnh Ctrl + V hoặc nhấn Enter để thêm)"
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <div style={{ flex: 1, position: 'relative' }}>
+            <input
+              type="text"
+              value={newContent}
+              onChange={(e) => setNewContent(e.target.value)}
+              placeholder="Gõ nội dung công việc... (Có thể Ctrl+V dán nhanh ảnh chụp, hoặc bấm nút đính kèm tệp Excel, Word, PDF, ZIP...)"
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: 'var(--radius-md, 6px)',
+                border: '1px solid var(--border-color-dark, #D1D5DB)',
+                fontSize: '13px',
+                outline: 'none',
+                backgroundColor: 'var(--bg-primary, #FFFFFF)',
+                color: 'var(--text-primary)',
+              }}
+            />
+          </div>
+
+          {/* Nút Đính Kèm Tệp / Ảnh Đa Định Dạng */}
+          <label
             style={{
-              width: '100%',
-              padding: '10px 14px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 12px',
               borderRadius: 'var(--radius-md, 6px)',
-              border: '1px solid var(--border-color-dark, #D1D5DB)',
+              border: '1px solid var(--border-color, #CBD5E1)',
+              backgroundColor: 'var(--bg-secondary, #F8F9FA)',
+              color: 'var(--text-secondary)',
               fontSize: '13px',
-              outline: 'none',
-              backgroundColor: 'var(--bg-primary, #FFFFFF)',
-              color: 'var(--text-primary)',
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s ease',
             }}
-          />
+            title="Đính kèm tệp tài liệu (Excel, Word, PDF, ZIP...) hoặc hình ảnh (hỗ trợ cả dán Ctrl+V trực tiếp)"
+          >
+            <Paperclip size={15} color="var(--color-primary-hover, #DDA600)" />
+            <span>Đính Kèm File / Ảnh</span>
+            <input
+              type="file"
+              multiple
+              onChange={(e) => {
+                if (e.target.files) {
+                  setNewAttachments((prev) => [...prev, ...Array.from(e.target.files!)]);
+                  e.target.value = '';
+                }
+              }}
+              style={{ display: 'none' }}
+            />
+          </label>
+
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={isAdding || !newContent.trim()}
+            leftIcon={<Plus size={15} />}
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            {isAdding ? 'Đang thêm...' : 'Thêm Việc'}
+          </Button>
         </div>
 
-        {/* Selected image badge */}
-        {newImages.length > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              backgroundColor: 'var(--color-primary-subtle, #FFFBEA)',
-              border: '1px solid var(--color-primary, #F5B800)',
-              padding: '6px 10px',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: 600,
-            }}
-          >
-            <ImageIcon size={14} style={{ color: 'var(--color-primary-hover, #DDA600)' }} />
-            <span>{newImages.length} ảnh</span>
+        {/* Danh sách tệp / ảnh đã chọn hoặc paste từ clipboard */}
+        {newAttachments.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', paddingTop: '4px' }}>
+            <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+              Đã đính kèm ({newAttachments.length}):
+            </span>
+            {newAttachments.map((file, idx) => {
+              const isImg = file.type.startsWith('image/');
+              return (
+                <div
+                  key={idx}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: isImg ? '#FFFBEA' : '#F1F5F9',
+                    border: isImg ? '1px solid #FCD34D' : '1px solid #CBD5E1',
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    color: isImg ? '#92400E' : '#334155',
+                    maxWidth: '260px',
+                  }}
+                >
+                  {isImg ? (
+                    <ImageIcon size={14} color="#D97706" />
+                  ) : (
+                    renderFileIcon(file.name, 14)
+                  )}
+                  <span
+                    style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      maxWidth: '140px',
+                      fontWeight: 600,
+                    }}
+                    title={file.name}
+                  >
+                    {file.name}
+                  </span>
+                  <span style={{ fontSize: '10.5px', opacity: 0.75 }}>
+                    ({formatFileSize(file.size)})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setNewAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      cursor: 'pointer',
+                      padding: '0 2px',
+                      color: 'var(--color-error, #DC2626)',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    title="Xóa tệp này"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              );
+            })}
             <button
               type="button"
-              onClick={() => setNewImages([])}
-              style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '0 2px' }}
+              onClick={() => setNewAttachments([])}
+              style={{
+                border: 'none',
+                background: 'none',
+                color: 'var(--color-error, #DC2626)',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                padding: '2px 4px',
+              }}
             >
-              <X size={12} />
+              Xóa tất cả ({newAttachments.length})
             </button>
           </div>
         )}
-
-        <label
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '9px 12px',
-            borderRadius: 'var(--radius-md, 6px)',
-            border: '1px solid var(--border-color, #CBD5E1)',
-            backgroundColor: 'var(--bg-secondary, #F8F9FA)',
-            color: 'var(--text-secondary)',
-            fontSize: '13px',
-            cursor: 'pointer',
-          }}
-          title="Đính kèm ảnh hoặc dán Ctrl+V trực tiếp"
-        >
-          <ImageIcon size={15} />
-          <span>Ảnh</span>
-          <input
-            type="file"
-            multiple
-            accept="image/*"
-            onChange={(e) => {
-              if (e.target.files) {
-                setNewImages((prev) => [...prev, ...Array.from(e.target.files!)]);
-              }
-            }}
-            style={{ display: 'none' }}
-          />
-        </label>
-
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={isAdding || !newContent.trim()}
-          leftIcon={<Plus size={15} />}
-        >
-          {isAdding ? 'Đang thêm...' : 'Thêm Việc'}
-        </Button>
       </form>
 
       {/* Completed Filter Bar (Shown only in Completed Tab) */}
@@ -625,14 +876,7 @@ export const PersonalTaskManager: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {tasks.map((task, index) => {
               const isCompleted = task.trang_thai === 'COMPLETED';
-              let taskImages: string[] = [];
-              if (task.images) {
-                try {
-                  taskImages = JSON.parse(task.images);
-                } catch {
-                  taskImages = [task.images];
-                }
-              }
+              const { images: taskImages, files: taskFiles } = parseTaskAttachments(task);
 
               return (
                 <div
@@ -668,7 +912,7 @@ export const PersonalTaskManager: React.FC = () => {
                   </button>
 
                   {/* Task Content & Meta */}
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <div
                       style={{
                         fontSize: '13px',
@@ -684,22 +928,79 @@ export const PersonalTaskManager: React.FC = () => {
 
                     {/* Images thumbnail */}
                     {taskImages.length > 0 && (
-                      <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
                         {taskImages.map((imgUrl, imgIdx) => (
                           <div
                             key={imgIdx}
                             onClick={() => setPreviewImage(imgUrl)}
+                            title="Bấm để xem phóng to ảnh"
                             style={{
-                              width: '44px',
-                              height: '44px',
-                              borderRadius: '4px',
+                              width: '48px',
+                              height: '48px',
+                              borderRadius: '6px',
                               overflow: 'hidden',
                               border: '1px solid var(--border-color, #CBD5E1)',
                               cursor: 'pointer',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                              transition: 'transform 0.15s ease',
                             }}
+                            onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.05)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                           >
                             <img src={imgUrl} alt="attachment" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Non-image Files attachment list */}
+                    {taskFiles.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
+                        {taskFiles.map((fileObj, fIdx) => (
+                          <a
+                            key={fIdx}
+                            href={fileObj.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download={fileObj.name}
+                            title={`Tải xuống / Mở: ${fileObj.name}`}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              color: 'var(--text-primary, #1E293B)',
+                              backgroundColor: 'var(--bg-secondary, #F1F5F9)',
+                              border: '1px solid var(--border-color, #CBD5E1)',
+                              textDecoration: 'none',
+                              maxWidth: '260px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              transition: 'all 0.15s ease',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#E2E8F0';
+                              e.currentTarget.style.borderColor = '#94A3B8';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'var(--bg-secondary, #F1F5F9)';
+                              e.currentTarget.style.borderColor = 'var(--border-color, #CBD5E1)';
+                            }}
+                          >
+                            {renderFileIcon(fileObj.name, 14)}
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
+                              {fileObj.name}
+                            </span>
+                            {fileObj.size && (
+                              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                                ({formatFileSize(fileObj.size)})
+                              </span>
+                            )}
+                            <Download size={11} style={{ color: 'var(--text-muted)', flexShrink: 0, marginLeft: '2px' }} />
+                          </a>
                         ))}
                       </div>
                     )}
@@ -1040,35 +1341,226 @@ export const PersonalTaskManager: React.FC = () => {
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         title="Chỉnh Sửa Công Việc"
-        maxWidth="500px"
+        maxWidth="600px"
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', width: '100%' }}>
-            <Button variant="secondary" onClick={() => setIsEditModalOpen(false)}>
+            <Button variant="secondary" onClick={() => setIsEditModalOpen(false)} disabled={isSavingEdit}>
               Hủy
             </Button>
-            <Button variant="primary" onClick={handleSaveEdit}>
-              Lưu Thay Đổi
+            <Button variant="primary" onClick={handleSaveEdit} disabled={isSavingEdit || !editContent.trim()}>
+              {isSavingEdit ? 'Đang Lưu...' : 'Lưu Thay Đổi'}
             </Button>
           </div>
         }
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-            Nội dung công việc:
-          </label>
-          <textarea
-            rows={4}
-            value={editContent}
-            onChange={(e) => setEditContent(e.target.value)}
-            style={{
-              padding: '10px 12px',
-              borderRadius: '6px',
-              border: '1px solid var(--border-color, #CBD5E1)',
-              fontSize: '13px',
-              lineHeight: 1.5,
-              resize: 'vertical',
-            }}
-          />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                Nội dung công việc:
+              </label>
+              <span style={{ fontSize: '11px', color: 'var(--color-primary, #0284C7)', fontWeight: 500 }}>
+                💡 Nhấn Ctrl+V để dán ảnh hoặc tệp từ Clipboard
+              </span>
+            </div>
+            <textarea
+              rows={4}
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              onPaste={handleEditPaste}
+              placeholder="Nhập nội dung công việc (hoặc dán Ctrl+V ảnh / tệp)..."
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '10px 12px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color, #CBD5E1)',
+                fontSize: '13px',
+                lineHeight: 1.5,
+                resize: 'vertical',
+              }}
+            />
+          </div>
+
+          {/* Existing Attachments */}
+          {(editExistingImages.length > 0 || editExistingFiles.length > 0) && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                Tệp & Ảnh hiện có:
+              </label>
+
+              {/* Existing Images */}
+              {editExistingImages.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {editExistingImages.map((imgUrl, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        position: 'relative',
+                        width: '54px',
+                        height: '54px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color, #CBD5E1)',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <img
+                        src={imgUrl}
+                        alt="attachment"
+                        onClick={() => setPreviewImage(imgUrl)}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
+                        title="Bấm để phóng to"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setEditExistingImages((prev) => prev.filter((_, i) => i !== idx))}
+                        title="Xóa ảnh này"
+                        style={{
+                          position: 'absolute',
+                          top: '2px',
+                          right: '2px',
+                          backgroundColor: 'rgba(220, 38, 38, 0.9)',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          borderRadius: '50%',
+                          width: '16px',
+                          height: '16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          padding: 0,
+                        }}
+                      >
+                        <X size={10} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Existing Files */}
+              {editExistingFiles.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {editExistingFiles.map((fileObj, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        backgroundColor: 'var(--bg-secondary, #F1F5F9)',
+                        border: '1px solid var(--border-color, #CBD5E1)',
+                      }}
+                    >
+                      {renderFileIcon(fileObj.name, 13)}
+                      <span style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {fileObj.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setEditExistingFiles((prev) => prev.filter((_, i) => i !== idx))}
+                        title="Xóa tệp này"
+                        style={{
+                          border: 'none',
+                          background: 'none',
+                          color: 'var(--color-error, #DC2626)',
+                          cursor: 'pointer',
+                          padding: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* New Attachments to be uploaded */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                Đính kèm thêm tệp / ảnh mới:
+              </label>
+
+              <label
+                htmlFor="edit-modal-attachment"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '4px 10px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--border-color, #CBD5E1)',
+                  backgroundColor: 'var(--bg-primary, #FFFFFF)',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                <Paperclip size={13} />
+                <span>Chọn từ máy tính</span>
+              </label>
+              <input
+                id="edit-modal-attachment"
+                type="file"
+                multiple
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  if (e.target.files) {
+                    setEditNewAttachments((prev) => [...prev, ...Array.from(e.target.files!)]);
+                  }
+                  e.target.value = '';
+                }}
+              />
+            </div>
+
+            {/* List of newly selected attachments */}
+            {editNewAttachments.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+                {editNewAttachments.map((f, idx) => {
+                  const isImg = f.type.startsWith('image/');
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        backgroundColor: '#EFF6FF',
+                        border: '1px solid #BFDBFE',
+                        color: '#1E40AF',
+                      }}
+                    >
+                      {isImg ? <ImageIcon size={12} color="#2563EB" /> : renderFileIcon(f.name, 12)}
+                      <span style={{ maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {f.name}
+                      </span>
+                      <span style={{ fontSize: '10px', color: '#6B7280' }}>({formatFileSize(f.size)})</span>
+                      <button
+                        type="button"
+                        onClick={() => setEditNewAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                        style={{ border: 'none', background: 'none', color: '#DC2626', cursor: 'pointer', padding: 0 }}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </Modal>
 

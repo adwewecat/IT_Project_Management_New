@@ -1,5 +1,8 @@
-from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import os
+import uuid
+import re
+from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -16,6 +19,9 @@ from app.schemas.personal_task import (
 from app.services import personal_task_service
 
 router = APIRouter(prefix="/personal-tasks", tags=["Công Việc Cá Nhân"])
+
+UPLOAD_PERSONAL_TASKS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../uploads/personal_tasks"))
+os.makedirs(UPLOAD_PERSONAL_TASKS_DIR, exist_ok=True)
 
 
 def require_dung_or_superadmin(current_user: UserInfo = Depends(get_current_user)) -> UserInfo:
@@ -91,6 +97,43 @@ def extract_tasks_ai(
 ):
     """Chuyển đổi hình ảnh hoặc 1 list văn bản thành từng dòng công việc riêng biệt (sử dụng A.I Key hoặc thuật toán bóc tách)."""
     return personal_task_service.extract_tasks_from_text_or_ai(payload)
+
+
+@router.post("/upload")
+async def upload_personal_task_files(
+    files: List[UploadFile] = File(...),
+    current_user: UserInfo = Depends(require_dung_or_superadmin),
+):
+    """
+    Tải lên tệp đính kèm hoặc hình ảnh dán từ clipboard cho công việc cá nhân.
+    Hỗ trợ mọi loại tệp: ảnh (png, jpg, webp, gif), tài liệu (pdf, docx, xlsx, txt), nén (zip, rar)...
+    """
+    uploaded_files: List[Dict[str, Any]] = []
+    for file in files:
+        original_name = file.filename or "file"
+        ext = os.path.splitext(original_name)[1].lower()
+        unique_name = f"{uuid.uuid4().hex[:10]}_{original_name}"
+        # Chuẩn hóa tên file an toàn cho đường dẫn
+        safe_name = re.sub(r'[^\w\.-]', '_', unique_name)
+        target_path = os.path.join(UPLOAD_PERSONAL_TASKS_DIR, safe_name)
+        content = await file.read()
+        with open(target_path, "wb") as f:
+            f.write(content)
+
+        file_url = f"/uploads/personal_tasks/{safe_name}"
+        is_image = ext in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg")
+        uploaded_files.append({
+            "url": file_url,
+            "name": original_name,
+            "size": len(content),
+            "is_image": is_image,
+            "ext": ext
+        })
+
+    return {
+        "urls": [f["url"] for f in uploaded_files],
+        "files": uploaded_files
+    }
 
 
 @router.put("/{task_id}", response_model=PersonalTaskItem)

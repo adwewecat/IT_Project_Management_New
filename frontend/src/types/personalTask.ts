@@ -1,3 +1,16 @@
+export interface TaskFileAttachment {
+  url: string;
+  name: string;
+  size?: number;
+  is_image?: boolean;
+  ext?: string;
+}
+
+export type UploadFilesResult = string[] & {
+  urls: string[];
+  files: TaskFileAttachment[];
+};
+
 export interface PersonalTaskItem {
   id: number;
   username: string;

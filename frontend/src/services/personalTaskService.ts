@@ -5,6 +5,8 @@ import {
   PersonalTaskUpdatePayload,
   PersonalTaskListResponse,
   AITaskExtractRequest,
+  TaskFileAttachment,
+  UploadFilesResult,
 } from '../types/personalTask';
 
 export const personalTaskService = {
@@ -63,13 +65,23 @@ export const personalTaskService = {
     return response.data;
   },
 
-  // Upload hình ảnh đính kèm
-  async uploadFiles(files: File[]): Promise<string[]> {
+  // Upload hình ảnh và tệp đính kèm đa định dạng (hỗ trợ cả lặp mảng url và truy cập chi tiết .files)
+  async uploadFiles(files: File[]): Promise<UploadFilesResult> {
     const formData = new FormData();
     files.forEach((file) => formData.append('files', file));
-    const response = await apiClient.post<{ urls: string[] }>('/incidents/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const response = await apiClient.post<{ urls: string[]; files: TaskFileAttachment[] }>(
+      '/personal-tasks/upload',
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }
+    );
+    const urls = response.data?.urls || [];
+    const fileList = response.data?.files || [];
+    const result = Object.assign([...urls], {
+      urls,
+      files: fileList,
     });
-    return response.data.urls;
+    return result as unknown as UploadFilesResult;
   },
 };
