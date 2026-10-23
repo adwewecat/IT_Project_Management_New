@@ -128,6 +128,29 @@ npm run dev
      + Modal/Popup co giãn full-width (`max-height: 94vh`, `margin: 8px`), chân trang có `flex-wrap: wrap`.
      + Tuyệt đối không hard-code `min-width > 360px` gây tràn viewport.
 
+### [2026-10-23] - Nâng Cấp Tính Năng "⚡ Đồng Nhất Nhóm Bếp Theo Quầy" (Tác Vụ 4 KDS): Tự Động Gỡ Bỏ Món Không Có Nhóm Bếp, Quầy Bếp (ACCOUNT) & Máy In Khỏi KDS (CONFIG_COOKING)
+- **Bối cảnh & Yêu cầu người dùng**:
+  + Tại màn hình **Phân Tích MongoDB Nhà Hàng**, tác vụ **4. Check / xử lý KDS**, mục **Các Tính Năng Quản Trị KDS**:
+  + Tính năng **⚡ Đồng Nhất Nhóm Bếp Theo Quầy**:
+  + Với các món **không có Nhóm Bếp, Quầy Bếp (ACCOUNT) và Máy In** (trên bảng dữ liệu hiển thị `Nhóm Bếp: — | Quầy Bếp: Chưa gán quầy | Máy In: Chưa gán máy in` - ví dụ món `33060 - Burger Gà Xù sốt ngậy`), yêu cầu **TỰ ĐỘNG GỠ MÓN KHỎI KDS LUÔN** (xóa khỏi `CONFIG_COOKING`), thay vì chỉ làm trống nhóm bếp để lại rác trên bảng KDS.
+  + **Mục đích nghiệp vụ**: Các món này không có quầy chế biến, không có máy in (thường là Vé Buffet, Đồ uống lon, Bia, Khăn lạnh hoặc món nạp thừa từ GPOS). Nếu để lại trong `CONFIG_COOKING`, khi khách order và thu ngân in bill đóng bàn sẽ bị GPOS báo lỗi tính phạt trễ oan do không trạm bếp nào nhận chế biến.
+- **Chi tiết kỹ thuật & Giải pháp**:
+  1. **Backend Service (`backend/app/services/mongodb_service.py`)**:
+     - Trong hàm `sync_kds_groups_by_quays`:
+       + Helper `is_empty_or_junk_kds_group(grp)`: Kiểm tra nhóm bếp rỗng (`None`, `""`, `{"code": "", "name": ""}`, `—`) hoặc là nhóm rác mặc định của GPOS khi nạp menu (`"ALL"`, `"TAT CA"`, `"DEFAULT"`, `"Bếp Nóng & Nướng"`, `"BEP NONG VA NUONG"`...).
+       + Khi quét qua toàn bộ tài liệu trong `CONFIG_COOKING`:
+         * Nếu món không có `placeIds` hợp lệ (`not valid_int_pids`) và có nhóm bếp rỗng/rác $\rightarrow$ Thỏa mãn 100% điều kiện "Không có Nhóm Bếp + Không có Quầy Bếp (ACCOUNT) + Không có Máy In".
+         * Hệ thống tự động gom vào danh sách `unassigned_empty_doc_ids` và thực hiện `delete_many` xóa triệt để khỏi `CONFIG_COOKING`.
+         * Ghi nhận số lượng món đã gỡ vào `deleted_count` và trích xuất mẫu danh sách món bị gỡ vào `AuditLog`.
+       + Cập nhật thông báo trả về `msg` hiển thị rõ ràng số món đã đồng nhất nhóm và số món rác đã được tự động gỡ bỏ khỏi KDS.
+  2. **Schema & API (`backend/app/schemas/mongodb.py`, `backend/app/api/v1/mongodb.py`)**:
+     - Bổ sung `deleted_count: Optional[int] = 0` vào schema `KdsSyncGroupsByQuaysResponse`.
+     - Cập nhật docstring endpoint `/kds-sync-groups-by-quays`.
+  3. **Frontend Web Portal (`RestaurantMongoAnalysisPage.tsx`, `mongoService.ts`)**:
+     - Cập nhật interface `KdsSyncGroupsByQuaysResponse` bổ sung `deleted_count?: number`.
+     - Cập nhật popup hộp thoại xác nhận `window.confirm` giải thích rõ: *- TỰ ĐỘNG GỠ BỎ KHỎI KDS các món không có Nhóm Bếp, Quầy Bếp (ACCOUNT) và Máy In (Vé Buffet, Nước ngọt lon, Khăn lạnh...) để tránh lỗi phạt trễ oan khi đóng bàn.*
+     - Cập nhật tooltip/mô tả tính năng trong Modal "Các Tính Năng Quản Trị KDS" để người dùng dễ dàng nắm bắt.
+
 ---
 
 ### [2026-10-23] - Bổ Sung Tính Năng "Print Management (Giám Sát Máy In & Hàng Đợi In Máy Trạm KDS/POS)" Tại Màn Hình Phân Tích MongoDB Nhà Hàng

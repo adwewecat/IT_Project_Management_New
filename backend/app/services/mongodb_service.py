@@ -2860,19 +2860,49 @@ class MongoDBService:
             modified_count += assigned_count
 
             # 2. Xử lý các món không thuộc danh sách quầy chuẩn:
-            # - Món THỰC SỰ không có placeIds (rỗng [] hoặc [0]): làm trống nhóm bếp
             # - Món có placeIds mồ côi (quầy bị xóa dưới NH): BẢO LƯU NGUYÊN VẸN nhóm bếp cũ để tránh mất cấu hình!
-            unassigned_doc_ids = []
+            # - Món KHÔNG CÓ Nhóm Bếp, Quầy Bếp (ACCOUNT) và Máy In (hoặc chỉ mang nhóm rác GPOS ALL / Bếp Nóng & Nướng):
+            #   TỰ ĐỘNG GỠ BỎ KHỎI KDS (xóa khỏi CONFIG_COOKING) để tránh lỗi phạt trễ oan khi thu ngân đóng bàn!
+            unassigned_empty_doc_ids = []   # Món không có nhóm bếp/quầy/máy in -> Gỡ khỏi KDS
+            unassigned_custom_doc_ids = []  # Món không có quầy nhưng có tên nhóm custom -> làm trống nhóm
             preserved_count = 0
             orphan_assigned_count = 0
 
-            for doc in cook_col.find({}, {"_id": 1, "placeIds": 1, "groupTypeKds": 1}):
+            def is_empty_or_junk_kds_group(grp: Any) -> bool:
+                """Kiểm tra nhóm bếp có phải rỗng hoặc là nhóm rác mặc định của GPOS khi nạp menu hay không"""
+                if grp is None:
+                    return True
+                if isinstance(grp, dict):
+                    c = str(grp.get("code") or "").strip()
+                    n = str(grp.get("name") or "").strip()
+                    if not c and not n:
+                        return True
+                    val = n or c
+                else:
+                    val = str(grp).strip()
+                if not val or val in ("—", "-", "0"):
+                    return True
+                # Chuẩn hóa loại bỏ dấu tiếng Việt và ký tự đặc biệt
+                s = val.replace("đ", "d").replace("Đ", "D")
+                s = unicodedata.normalize('NFKD', s)
+                s = "".join(ch for ch in s if not unicodedata.combining(ch)).upper()
+                s = s.replace("&", "VA").replace("+", "VA")
+                s = re.sub(r'[^A-Z0-9]+', '', s)
+                junk_tokens = {"", "ALL", "TATCA", "DEFAULT", "BEPNONGVANUONG", "BEPNONGNUONG"}
+                return s in junk_tokens
+
+            for doc in cook_col.find({}, {"_id": 1, "menuItemCode": 1, "menuItemName": 1, "placeIds": 1, "groupTypeKds": 1}):
                 raw_pids = doc.get("placeIds")
                 valid_int_pids = [int(p) for p in (raw_pids or []) if str(p).isdigit() and int(p) > 0]
 
-                # Nếu món THỰC SỰ không có bất kỳ placeIds hợp lệ nào
+                # Nếu món THỰC SỰ không có bất kỳ placeIds hợp lệ nào (Chưa gán quầy & Chưa gán máy in)
                 if not valid_int_pids:
-                    unassigned_doc_ids.append(doc["_id"])
+                    old_grp = doc.get("groupTypeKds")
+                    if is_empty_or_junk_kds_group(old_grp):
+                        # Không có Nhóm Bếp (hoặc nhóm rác GPOS) + Không có Quầy Bếp + Không có Máy In
+                        unassigned_empty_doc_ids.append(doc["_id"])
+                    else:
+                        unassigned_custom_doc_ids.append(doc["_id"])
                     continue
 
                 # Nếu món có placeIds nhưng không nằm trong quầy chuẩn đã khai báo (quầy mồ côi)
@@ -2896,27 +2926,51 @@ class MongoDBService:
                         )
                         orphan_assigned_count += 1
 
+            # 2.1. Tự động GỠ BỎ (XÓA) khỏi CONFIG_COOKING các món không có Nhóm Bếp, Quầy Bếp, Máy In
+            deleted_count = 0
+            deleted_samples: List[str] = []
+            if unassigned_empty_doc_ids:
+                # Lấy mẫu thông tin món bị gỡ để lưu vết AuditLog
+                sample_docs = list(cook_col.find(
+                    {"_id": {"$in": unassigned_empty_doc_ids[:10]}},
+                    {"menuItemCode": 1, "menuItemName": 1}
+                ))
+                deleted_samples = [
+                    f"{d.get('menuItemCode')} ({d.get('menuItemName')})"
+                    for d in sample_docs
+                ]
+                res_delete = cook_col.delete_many({"_id": {"$in": unassigned_empty_doc_ids}})
+                deleted_count = res_delete.deleted_count
+
+            # 2.2. Làm trống nhóm bếp cho các món không có quầy nhưng mang nhóm custom (nếu có)
             empty_grp_obj = {
                 "id": 0,
                 "code": "",
                 "name": ""
             }
             empty_count = 0
-            if unassigned_doc_ids:
+            if unassigned_custom_doc_ids:
                 res_empty = cook_col.update_many(
-                    {"_id": {"$in": unassigned_doc_ids}},
+                    {"_id": {"$in": unassigned_custom_doc_ids}},
                     {"$set": {"groupTypeKds": empty_grp_obj}}
                 )
                 empty_count = res_empty.modified_count
                 modified_count += empty_count
 
-            msg = (
-                f"Đã đồng nhất Nhóm Bếp theo Quầy Bếp thành công: "
-                f"cập nhật {assigned_count} món theo quầy chuẩn, "
-                f"làm trống nhóm cho {empty_count} món chưa gán quầy."
-            )
+            msg_parts = [
+                f"Đã đồng nhất Nhóm Bếp theo Quầy Bếp thành công: cập nhật {assigned_count} món theo quầy chuẩn."
+            ]
+            if deleted_count > 0:
+                msg_parts.append(
+                    f"Đã tự động gỡ bỏ {deleted_count} món không có Nhóm Bếp, Quầy Bếp (ACCOUNT) và Máy In khỏi KDS (CONFIG_COOKING)."
+                )
+            if empty_count > 0:
+                msg_parts.append(f"Làm trống nhóm cho {empty_count} món chưa gán quầy.")
             if preserved_count > 0 or orphan_assigned_count > 0:
-                msg += f" (Đã bảo lưu an toàn {preserved_count + orphan_assigned_count} món thuộc quầy mồ côi chưa khai báo dưới NH)."
+                msg_parts.append(
+                    f"(Đã bảo lưu an toàn {preserved_count + orphan_assigned_count} món thuộc quầy mồ côi chưa khai báo dưới NH)."
+                )
+            msg = " ".join(msg_parts)
 
             if db:
                 try:
@@ -2924,11 +2978,18 @@ class MongoDBService:
                         USER_ACTION=current_user.username,
                         ACTION_TYPE="SYNC_KDS_GROUPS_BY_QUAYS",
                         TARGET_OBJECT="CONFIG_COOKING",
-                        DESCRIPTION=f"Đồng nhất Nhóm Bếp theo Quầy Bếp ({assigned_count} món gán quầy dạng 'Quay_Thit', làm trống {empty_count} món chưa gán quầy) trên {payload.host}:{payload.port}",
+                        DESCRIPTION=(
+                            f"Đồng nhất Nhóm Bếp theo Quầy Bếp ({assigned_count} món gán quầy dạng 'Quay_Thit', "
+                            f"tự động gỡ bỏ {deleted_count} món không có nhóm bếp/quầy/máy in khỏi KDS) "
+                            f"trên {payload.host}:{payload.port}"
+                        ),
                         DETAILS=json.dumps({
                             "host": payload.host,
                             "assigned_count": assigned_count,
+                            "deleted_count": deleted_count,
+                            "deleted_samples": deleted_samples,
                             "empty_count": empty_count,
+                            "preserved_count": preserved_count,
                             "total_modified": modified_count
                         }),
                         DATE_ACTION=datetime.datetime.now(),
@@ -2941,6 +3002,7 @@ class MongoDBService:
             return KdsSyncGroupsByQuaysResponse(
                 success=True,
                 modified_count=modified_count,
+                deleted_count=deleted_count,
                 message=msg
             )
         finally:

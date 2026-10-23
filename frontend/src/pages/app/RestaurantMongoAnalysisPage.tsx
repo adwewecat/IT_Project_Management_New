@@ -1523,7 +1523,8 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
       '⚡ ĐỒNG NHẤT NHÓM BẾP THEO QUẦY BẾP (1 CHẠM)\n\n' +
       'Hệ thống sẽ tự động quét tất cả món trong CONFIG_COOKING:\n' +
       '- Món thuộc quầy nào sẽ được cập nhật nhóm bếp (groupTypeKds) theo tên quầy đó.\n' +
-      '- Xóa bỏ hoàn toàn tình trạng nhóm rác "Bếp Nóng & Nướng" hoặc "ALL" không đúng thực tế.\n\n' +
+      '- Xóa bỏ hoàn toàn tình trạng nhóm rác "Bếp Nóng & Nướng" hoặc "ALL" không đúng thực tế.\n' +
+      '- TỰ ĐỘNG GỠ BỎ KHỎI KDS các món không có Nhóm Bếp, Quầy Bếp (ACCOUNT) và Máy In (Vé Buffet, Nước ngọt lon, Khăn lạnh...) để tránh lỗi phạt trễ oan khi đóng bàn.\n\n' +
       'Bạn có chắc chắn muốn thực hiện ngay?'
     );
     if (!confirmSync) return;
@@ -8422,7 +8423,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                   ⚡ Đồng Nhất Nhóm Bếp Theo Quầy
                 </div>
                 <div style={{ fontSize: '11px', color: '#047857', lineHeight: '1.4' }}>
-                  Tự động đồng bộ Nhóm Bếp (groupTypeKds) của toàn bộ món ăn theo đúng Tên Quầy Bếp, xóa nhóm rác 'ALL / Bếp Nóng &amp; Nướng'.
+                  Tự động đồng bộ Nhóm Bếp (groupTypeKds) theo Quầy Bếp, xóa nhóm rác 'ALL / Bếp Nóng &amp; Nướng', đồng thời tự động gỡ bỏ khỏi KDS các món không có Nhóm Bếp, Quầy Bếp và Máy In.
                 </div>
               </div>
             </button>

@@ -627,6 +627,7 @@ class KdsSyncGroupsByQuaysResponse(BaseModel):
     success: bool
     modified_count: int
     message: str
+    deleted_count: Optional[int] = 0
 
 
 class KdsUpdateDishGroupRequest(BaseModel):

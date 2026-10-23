@@ -1510,6 +1510,7 @@ export interface KdsPlaceCreateResponse {
 export interface KdsSyncGroupsByQuaysResponse {
   success: boolean;
   modified_count: number;
+  deleted_count?: number;
   message: string;
 }
 

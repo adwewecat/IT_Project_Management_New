@@ -1171,6 +1171,7 @@ def sync_kds_groups_by_quays(
     """
     Đồng nhất Nhóm Bếp (groupTypeKds) theo Quầy Bếp (places) cho toàn bộ món ăn trong CONFIG_COOKING.
     Món thuộc quầy nào sẽ có nhóm bếp mang tên và mã quầy đó, xóa bỏ hoàn toàn tình trạng nhóm 'ALL' hoặc 'Bếp Nóng & Nướng' sai lệch.
+    Đồng thời tự động gỡ bỏ khỏi KDS (CONFIG_COOKING) các món không có Nhóm Bếp, Quầy Bếp (ACCOUNT) và Máy In.
     """
     try:
         return MongoDBService.sync_kds_groups_by_quays(
