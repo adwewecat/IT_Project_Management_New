@@ -130,6 +130,46 @@ npm run dev
 
 ---
 
+### [2026-10-23] - Chuẩn Hóa Bộ Param Chuẩn (Phân Tích MongoDB Nhà Hàng) & Bổ Sung Đính Kèm Ảnh Setup (Paste Ctrl+V / Phóng To Kiểu MEMO) Cho Quản Lý Yêu Cầu PIM
+- **Yêu cầu người dùng**:
+  1. *Màn hình: Phân Tích MongoDB Nhà Hàng -> Tác vụ 9. Xử Lý Param (Bảng APP_PARAM)*:
+     - ⭐ Bộ Param Chuẩn: Tên Tham Số (Mô Tả Tiếng Việt) phải giống nhau (chuẩn hóa), chỉ có cột "Ghi chú" mới là note mô tả nghiệp vụ (trước đây bị lộn xộn: chỗ thì tên lấy nguyên mã tiếng Anh `FUNC_SHOW_NOTE`, mô tả tiếng Việt lại nằm ở cột Ghi chú; chỗ thì tên là `Hiển thị KDS Bếp` còn cột Ghi chú lại ghi ngược thành `SHOW_KDS`).
+     - ⭐ Quản Lý & Áp Dụng Bộ Param Chuẩn Dùng Chung: Thêm nút bút để có thể cập nhật lại thông tin ở từng dòng param nếu cần (chỉ phân quyền Admin mới được chỉnh sửa).
+  2. *Màn hình Quản Lý Yêu Cầu PIM (`/pim-management`)*:
+     - Khi hoàn thành yêu cầu PIM, bổ sung phần đính kèm hình ảnh chụp file Excel món setup.
+     - Thêm 1 bước chèn giữa bước 3 ("3. Gửi Mail Thông Báo Nhà Hàng") và bước 4 ("4. Người Phụ Trách Thực Hiện") để copy rồi nhấn `Ctrl+V` (paste clipboard) hoặc đính kèm tải ảnh lên (hỗ trợ 1 hoặc nhiều ảnh).
+     - Bấm vào hình ảnh có thể mở xem phóng to sắc nét tương tự kiểu MEMO.
+- **Chi tiết kỹ thuật & Khắc phục**:
+  1. **Chuẩn Hóa Bộ Param Chuẩn (`MongoDbParamManagementTask.tsx`, `RestaurantMongoPage.tsx`, `mongodb_service.py`, `mongodb.py`)**:
+     - *Từ điển chuẩn hóa tiếng Việt `KNOWN_PARAM_NAMES`*: Mở rộng đầy đủ các tham số chuỗi nhà hàng (`SHOW_KDS`, `FUNC_SHOW_NOTE`, `FUNC_SHOW_PAYMENT_QR_ORDER`, `FUNC_SHOW_UPDATE_ROLE`, `ROLE_SETUP_SHOW_HIDE_ITEM`, `FUNC_SHOW_TOTAL_MONEY`, `FUNC_SHOW_VOUCHER`, `FW_SUBMIT_FOR_LESS_THAN_THREE_GUEST`, `FW_SUBMIT_FOR_ROUND_DEFAULT`, `HOT_TIP`, `ALLOW_HIDE_ITEM_GROUP`...).
+     - *Helper `normalize_param_name_and_note` (Backend) & `getStandardParamDisplay` (Frontend)*:
+       + Tên Tham Số (Mô Tả Tiếng Việt): Luôn hiển thị tên tiếng Việt có ý nghĩa, không để trùng thô với mã param.
+       + Ghi Chú: Chỉ lưu note bổ sung hướng dẫn nghiệp vụ. Nếu note trùng mã param hoặc trùng tên thì tự động làm sạch thành `—`, tuyệt đối không để note hiển thị lại Mã Param (như lỗi `SHOW_KDS` trong ghi chú).
+     - *Bảo vệ phân quyền Admin 100%*:
+       + Bổ sung nút Bút Sửa rõ ràng (`<Edit2 size={12} /> Sửa`) và nút Xóa ở từng dòng trong Modal Quản Lý Bộ Param Chuẩn.
+       + Chỉ tài khoản có quyền Quản trị viên (`isAdmin`) mới nhìn thấy và thao tác được nút Bút Sửa / Thêm Param / Xóa Param / Lưu từ nhà vào chuẩn. Người dùng nhóm khác hiển thị nhãn `🔒 Chỉ Admin`.
+       + Backend API: Bảo vệ các endpoint `create_standard_app_param`, `update_standard_app_param`, `delete_standard_app_param`, `save_standard_params_from_restaurant`, `save_single_standard_param` bằng `Depends(require_admin)`.
+     - *Đồng bộ CSDL SQL Server*: Chạy script cập nhật trực tiếp bảng `STANDARD_APP_PARAMS` chuẩn hóa toàn bộ các bản ghi đang lưu trữ trong hệ thống.
+  2. **Đính Kèm Ảnh Setup Món PIM (Paste Clipboard Ctrl+V & Lightbox Kiểu MEMO) (`PimPage.tsx`, `pimService.ts`, `pim.py`, `pim_service.py`)**:
+     - *Cơ sở dữ liệu & Model Backend*:
+       + Thêm cột `hinh_anh_setup NVARCHAR(MAX) NULL` vào bảng `PIM` trong SQL Server.
+       + Cập nhật model `PIMRequest` (`backend/app/models/pim.py`), schemas `PIMRequestBase`, `PIMStatusUpdate` (`backend/app/schemas/pim.py`).
+       + Cập nhật `backend/app/main.py` lifespan tự động kiểm tra và thêm cột phòng vệ khi server khởi động; cập nhật master DDL trong `Script/Full_SCRIPT_SQL_TABLE.sql`.
+       + Thêm endpoint `POST /api/v1/pim/upload-setup-images` trong `backend/app/api/v1/pim.py` lưu file an toàn vào `uploads/pim/images/`, trả về danh sách URL.
+     - *Giao diện Modal Cập Nhật Trạng Thái PIM*:
+       + Chèn bước mới giữa bước 3 và bước Người phụ trách: `4. Hình Ảnh Chụp File Excel Món Setup (Đính Kèm Hoặc Paste Ctrl+V)` (đánh lại số thứ tự bước kế tiếp thành 5).
+       + Vùng Dropzone/Pastezone: Lắng nghe sự kiện `onPaste` (hỗ trợ copy ảnh chụp màn hình snipping tool rồi nhấn `Ctrl + V` tự động upload ngay) và nút tải file từ máy (`input type="file" multiple accept="image/*"`).
+       + Lưới thumbnails: Hiển thị danh sách ảnh đã đính kèm, nút X đỏ để gỡ ảnh, click vào ảnh mở Modal Xem Phóng To Hình Ảnh.
+     - *Modal Phóng To Hình Ảnh (kiểu MEMO)*:
+       + Modal xem ảnh toàn màn hình chất lượng cao (`maxWidth="90vw"`, `maxHeight="78vh"`), có nút "Mở tab mới", nút "Đóng" và hỗ trợ đóng bằng phím `Escape`.
+     - *Nút Xem Nhanh Ngoài Danh Sách*:
+       + Cả ở Tab "PIM Chưa Hoàn Thành" và "PIM Đã Hoàn Thành": Nếu yêu cầu có đính kèm ảnh setup, hiển thị badge/nút tím `📷 Ảnh setup (N)` dưới cột mô tả. Người dùng bấm trực tiếp vào badge này để mở ngay popup phóng to ảnh kiểm tra mà không cần mở form sửa.
+  3. **Kiểm thử & Đóng gói Server (Tuân thủ triệt để 7 Nguyên tắc cốt lõi)**:
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.48s`), tạo mới bản build trong `frontend/dist/` (kèm `web.config` rewrite IIS).
+     - Backend: `python -m compileall app` sạch lỗi, Smoke Test `>>> BACKEND SMOKE TEST PASSED 100%`.
+
+---
+
 ### [2026-10-21] - Khắc Phục Lỗi Cài Đặt Client Agent, Chuẩn Hóa Duy Nhất 1 File Cài Đặt & Cơ Chế Xác Thực Chống Xóa File Khi Lỗi
 - **Màn hình & Công cụ**: Agent Multitask (`Install_Edge_Framework.bat`, `Kiem_Tra_Trang_Thai.bat`, `agent_multitask.py`, `Huong_Dan_Su_Dung.txt`).
 - **Phản ánh của người dùng**:

@@ -32,7 +32,8 @@ import { checkIsAdmin } from '../../utils/authUtils';
 import {
   getParamDisplayName,
   getParamCategory,
-  getParamPriority
+  getParamPriority,
+  getStandardParamDisplay
 } from './RestaurantMongoPage';
 
 interface MongoDbParamManagementTaskProps {
@@ -2032,100 +2033,122 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                           );
                         }
 
-                        return filtered.map((std, idx) => (
-                          <tr
-                            key={std.param_code}
-                            style={{ borderBottom: '1px solid var(--border-color)' }}
-                            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-secondary)')}
-                            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                          >
-                            <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '11.5px' }}>
-                              {idx + 1}
-                            </td>
-                            <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontWeight: 700, color: '#1D4ED8' }}>
-                              {std.param_code}
-                            </td>
-                            <td style={{ padding: '8px 12px', fontWeight: 500 }}>
-                              {std.param_name}
-                            </td>
-                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                              <span
-                                style={{
-                                  fontSize: '11px',
-                                  fontWeight: 600,
-                                  padding: '2px 7px',
-                                  borderRadius: '4px',
-                                  backgroundColor: std.param_type === 'FUNCTION' ? '#EDE9FE' : '#DBEAFE',
-                                  color: std.param_type === 'FUNCTION' ? '#6D28D9' : '#1D4ED8'
-                                }}
-                              >
-                                {std.param_type}
-                              </span>
-                            </td>
-                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                              <span
-                                style={{
-                                  fontSize: '11px',
-                                  fontWeight: 700,
-                                  padding: '2px 8px',
-                                  borderRadius: '10px',
-                                  backgroundColor: std.status === 1 ? '#D1FAE5' : '#FEE2E2',
-                                  color: std.status === 1 ? '#065F46' : '#991B1B'
-                                }}
-                              >
-                                {std.status === 1 ? 'Bật (1)' : 'Tắt (0)'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: '12px' }}>
-                              {std.param_value || '—'}
-                            </td>
-                            <td style={{ padding: '8px 12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                              {std.note || '—'}
-                            </td>
-                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                              <div style={{ display: 'inline-flex', gap: '4px' }}>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingStdParam(std);
-                                    setStdFormCode(std.param_code);
-                                    setStdFormName(std.param_name || '');
-                                    setStdFormType(std.param_type === 'CONFIG' ? 'CONFIG' : 'FUNCTION');
-                                    setStdFormStatus(std.status);
-                                    setStdFormValue(std.param_value || '');
-                                    setStdFormNote(std.note || '');
-                                  }}
-                                  title="Chỉnh sửa tham số chuẩn"
+                        return filtered.map((std, idx) => {
+                          const { displayName, displayNote } = getStandardParamDisplay(std);
+                          return (
+                            <tr
+                              key={std.param_code}
+                              style={{ borderBottom: '1px solid var(--border-color)' }}
+                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-secondary)')}
+                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                            >
+                              <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '11.5px' }}>
+                                {idx + 1}
+                              </td>
+                              <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontWeight: 700, color: '#1D4ED8' }}>
+                                {std.param_code}
+                              </td>
+                              <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                {displayName}
+                              </td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                <span
                                   style={{
-                                    padding: '4px 6px',
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    padding: '2px 7px',
                                     borderRadius: '4px',
-                                    border: '1px solid var(--border-color)',
-                                    backgroundColor: 'var(--bg-primary)',
-                                    cursor: 'pointer',
-                                    color: 'var(--text-primary)'
+                                    backgroundColor: std.param_type === 'FUNCTION' ? '#EDE9FE' : '#DBEAFE',
+                                    color: std.param_type === 'FUNCTION' ? '#6D28D9' : '#1D4ED8'
                                   }}
                                 >
-                                  <Edit2 size={13} />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setDeletingStdParam(std)}
-                                  title="Xóa tham số chuẩn"
+                                  {std.param_type}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                <span
                                   style={{
-                                    padding: '4px 6px',
-                                    borderRadius: '4px',
-                                    border: '1px solid #FECACA',
-                                    backgroundColor: '#FEF2F2',
-                                    cursor: 'pointer',
-                                    color: '#DC2626'
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    padding: '2px 8px',
+                                    borderRadius: '10px',
+                                    backgroundColor: std.status === 1 ? '#D1FAE5' : '#FEE2E2',
+                                    color: std.status === 1 ? '#065F46' : '#991B1B'
                                   }}
                                 >
-                                  <Trash2 size={13} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ));
+                                  {std.status === 1 ? 'Bật (1)' : 'Tắt (0)'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: '12px' }}>
+                                {std.param_value || '—'}
+                              </td>
+                              <td style={{ padding: '8px 12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                {displayNote}
+                              </td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                {isAdmin ? (
+                                  <div style={{ display: 'inline-flex', gap: '5px', alignItems: 'center' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingStdParam(std);
+                                        setStdFormCode(std.param_code);
+                                        setStdFormName(displayName !== std.param_code ? displayName : (std.param_name || ''));
+                                        setStdFormType(std.param_type === 'CONFIG' ? 'CONFIG' : 'FUNCTION');
+                                        setStdFormStatus(std.status);
+                                        setStdFormValue(std.param_value || '');
+                                        setStdFormNote(displayNote !== '—' ? displayNote : (std.note || ''));
+                                      }}
+                                      title="Chỉnh sửa thông tin tham số chuẩn này (Chỉ Admin)"
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        padding: '4px 8px',
+                                        borderRadius: '4px',
+                                        border: '1px solid #93C5FD',
+                                        backgroundColor: '#EFF6FF',
+                                        cursor: 'pointer',
+                                        color: '#1D4ED8',
+                                        fontSize: '11.5px',
+                                        fontWeight: 600
+                                      }}
+                                    >
+                                      <Edit2 size={12} />
+                                      <span>Sửa</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeletingStdParam(std)}
+                                      title="Xóa tham số chuẩn (Chỉ Admin)"
+                                      style={{
+                                        padding: '4px 6px',
+                                        borderRadius: '4px',
+                                        border: '1px solid #FECACA',
+                                        backgroundColor: '#FEF2F2',
+                                        cursor: 'pointer',
+                                        color: '#DC2626'
+                                      }}
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span
+                                    style={{
+                                      fontSize: '11px',
+                                      color: 'var(--text-muted)',
+                                      fontStyle: 'italic'
+                                    }}
+                                    title="Chỉ Quản trị viên (Admin) mới có quyền chỉnh sửa bộ param chuẩn"
+                                  >
+                                    🔒 Chỉ Admin
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        });
                       })()}
                     </tbody>
                   </table>

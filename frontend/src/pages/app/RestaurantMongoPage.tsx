@@ -167,6 +167,66 @@ export const KNOWN_APP_PARAMS: Record<string, KnownParamMeta> = {
     category: 'KDS / Bếp',
     priority: 2,
   },
+  FUNC_SHOW_NOTE: {
+    paramName: 'Hiển thị ghi chú trên CD',
+    defaultNote: 'Cấu hình hiển thị ghi chú món ăn trên màn hình khách hàng (Customer Display)',
+    category: 'Giao Diện & Tablet',
+    priority: 1,
+  },
+  FUNC_SHOW_PAYMENT_QR_ORDER: {
+    paramName: 'Thanh toán QR Order',
+    defaultNote: 'Cho phép hiển thị phương thức thanh toán QR Order trên máy khách',
+    category: 'QR Order & CO',
+    priority: 1,
+  },
+  FUNC_SHOW_UPDATE_ROLE: {
+    paramName: 'Phân quyền vai trò User',
+    defaultNote: 'User được phép phân quyền theo vai trò: Nhận booking, thanh toán, gửi nhân viên, cập nhật tipping',
+    category: 'Bảo Mật & Phân Quyền',
+    priority: 1,
+  },
+  ROLE_SETUP_SHOW_HIDE_ITEM: {
+    paramName: 'Quyền Ẩn / Hiện món',
+    defaultNote: 'Cấu hình User được phép Ẩn hoặc Hiện món ăn trên order',
+    category: 'Bảo Mật & Phân Quyền',
+    priority: 1,
+  },
+  FUNC_SHOW_TOTAL_MONEY: {
+    paramName: 'Hiển thị tổng tiền',
+    defaultNote: 'Hiển thị tổng số tiền trên màn hình order',
+    category: 'Thu Ngân & Hóa Đơn',
+    priority: 2,
+  },
+  FUNC_SHOW_VOUCHER: {
+    paramName: 'Hiển thị Voucher ưu đãi',
+    defaultNote: 'Hiển thị áp dụng Voucher / Mã giảm giá trên order',
+    category: 'Thu Ngân & Hóa Đơn',
+    priority: 2,
+  },
+  FW_SUBMIT_FOR_LESS_THAN_THREE_GUEST: {
+    paramName: 'Gửi món dưới 3 khách',
+    defaultNote: 'Cấu hình lượt gọi món khi bàn có dưới 3 khách',
+    category: 'Vận Hành & Đặt Bàn',
+    priority: 2,
+  },
+  FW_SUBMIT_FOR_ROUND_DEFAULT: {
+    paramName: 'Lượt gọi món mặc định',
+    defaultNote: 'Các lượt gọi cách nhau bằng dấu *, ví dụ cấu hình 3 lượt gọi lần lượt tối đa là 3,2,1',
+    category: 'Vận Hành & Đặt Bàn',
+    priority: 2,
+  },
+  HOT_TIP: {
+    paramName: 'Số tiền Tip gợi ý',
+    defaultNote: 'Số tiền gợi ý tipping cho nhân viên phục vụ',
+    category: 'Thu Ngân & Hóa Đơn',
+    priority: 2,
+  },
+  ALLOW_HIDE_ITEM_GROUP: {
+    paramName: 'Quyền thấy món đang hiện',
+    defaultNote: 'Cấu hình User có thể thấy được các món đang hiện trên giao diện',
+    category: 'Bảo Mật & Phân Quyền',
+    priority: 2,
+  },
 };
 
 export const getParamDisplayName = (param: AppParamItem): string => {
@@ -177,7 +237,36 @@ export const getParamDisplayName = (param: AppParamItem): string => {
   if (known) {
     return known.paramName;
   }
+  if (param.note && param.note.trim() && param.note.trim() !== param.paramCode) {
+    return param.note.trim();
+  }
   return param.paramCode;
+};
+
+export const getStandardParamDisplay = (std: { param_code: string; param_name?: string; note?: string }) => {
+  const pCode = (std.param_code || '').trim().toUpperCase();
+  const rawName = (std.param_name || '').trim();
+  const rawNote = (std.note || '').trim();
+
+  let displayName = pCode;
+  const known = KNOWN_APP_PARAMS[pCode];
+
+  if (known) {
+    displayName = known.paramName;
+  } else if (rawName && rawName.toUpperCase() !== pCode) {
+    displayName = rawName;
+  } else if (rawNote && rawNote.toUpperCase() !== pCode) {
+    displayName = rawNote;
+  }
+
+  let displayNote = '—';
+  if (rawNote && rawNote.toUpperCase() !== pCode && rawNote !== displayName) {
+    displayNote = rawNote;
+  } else if (known?.defaultNote) {
+    displayNote = known.defaultNote;
+  }
+
+  return { displayName, displayNote };
 };
 
 export const getParamCategory = (paramCode: string): string => {

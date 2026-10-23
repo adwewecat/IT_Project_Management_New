@@ -1099,6 +1099,10 @@ def update_request_status(
             req.gui_mail = new_gm
             log_actions.append(f"Đổi gửi mail thông báo NH từ '{old_gm}' sang '{new_gm}'")
 
+    if status_update.hinh_anh_setup is not None:
+        req.hinh_anh_setup = status_update.hinh_anh_setup.strip()
+        log_actions.append("Cập nhật hình ảnh chụp file excel món setup")
+
     if log_actions:
         req.user_update = current_username
         req.thoi_gian_update = now

@@ -140,6 +140,11 @@ async def lifespan(app: FastAPI):
                 _c.execute(text("ALTER TABLE MEMO ADD noidung_mail NVARCHAR(MAX) NULL"))
                 _c.commit()
                 logger.info("Đã tự động bổ sung cột noidung_mail vào bảng MEMO.")
+            _pim_ha = _c.execute(text("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='PIM' AND COLUMN_NAME='hinh_anh_setup'")).fetchone()
+            if not _pim_ha:
+                _c.execute(text("ALTER TABLE dbo.PIM ADD hinh_anh_setup NVARCHAR(MAX) NULL"))
+                _c.commit()
+                logger.info("Đã tự động bổ sung cột hinh_anh_setup vào bảng PIM.")
             _col_ha = _c.execute(text("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='SOFTWARE_VERSIONS' AND COLUMN_NAME='hinh_anh'")).fetchone()
             if not _col_ha:
                 _c.execute(text("ALTER TABLE dbo.SOFTWARE_VERSIONS ADD hinh_anh NVARCHAR(MAX) NULL"))

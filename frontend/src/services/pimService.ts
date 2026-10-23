@@ -39,12 +39,22 @@ export const pimService = {
     return res.data;
   },
 
-  // Cập nhật trạng thái thực hiện, SO hoặc Gửi mail
+  // Cập nhật trạng thái thực hiện, SO, Gửi mail và hình ảnh setup
   async updateRequestStatus(
     pimId: number,
-    data: { trang_thai_thuc_hien?: string; so?: string; gui_mail?: string }
+    data: { trang_thai_thuc_hien?: string; so?: string; gui_mail?: string; hinh_anh_setup?: string }
   ): Promise<PIMRequest> {
     const res = await apiClient.put<PIMRequest>(`/pim/${pimId}/status`, data);
+    return res.data;
+  },
+
+  // Tải lên hình ảnh chụp file excel món setup (tải file hoặc paste Ctrl+V)
+  async uploadSetupImages(files: File[]): Promise<{ urls: string[] }> {
+    const formData = new FormData();
+    files.forEach((f) => formData.append('files', f));
+    const res = await apiClient.post<{ urls: string[] }>('/pim/upload-setup-images', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
     return res.data;
   },
 

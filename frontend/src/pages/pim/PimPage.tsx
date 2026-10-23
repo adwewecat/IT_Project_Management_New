@@ -14,7 +14,10 @@ import {
   Check,
   Key,
   Calendar,
-  Download
+  Download,
+  Upload,
+  Image,
+  X
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -115,6 +118,10 @@ export const PimPage: React.FC = () => {
   const [modalSO, setModalSO] = useState<string>('chưa hoàn thành');
   const [modalGuiMail, setModalGuiMail] = useState<string>('chưa hoàn thành');
   const [modalAssignee, setModalAssignee] = useState<string>('');
+  const [modalImages, setModalImages] = useState<string[]>([]);
+  const [isUploadingImages, setIsUploadingImages] = useState<boolean>(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const setupFileInputRef = useRef<HTMLInputElement>(null);
   const [isSavingStatus, setIsSavingStatus] = useState<boolean>(false);
 
   // Modal: Schedule settings (Admin & Super Admin)
@@ -599,6 +606,66 @@ export const PimPage: React.FC = () => {
     }
   };
 
+  // Helper parse danh sách URL hình ảnh setup
+  const parseSetupImages = useCallback((raw?: string | null): string[] => {
+    if (!raw || !raw.trim()) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.filter((u: any) => typeof u === 'string' && u.trim());
+      if (typeof parsed === 'string' && parsed.trim()) return [parsed.trim()];
+    } catch {
+      if (raw.trim().startsWith('/uploads/') || raw.trim().startsWith('http') || raw.trim().startsWith('data:image/')) {
+        return [raw.trim()];
+      }
+    }
+    return [];
+  }, []);
+
+  // Xử lý upload file ảnh setup
+  const handleUploadSetupFiles = async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    const validFiles = fileArray.filter(f => f.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name));
+    if (validFiles.length === 0) {
+      setErrorMessage('Vui lòng chọn hoặc dán tệp hình ảnh hợp lệ (.png, .jpg, .webp)!');
+      return;
+    }
+    setIsUploadingImages(true);
+    try {
+      const res = await pimService.uploadSetupImages(validFiles);
+      if (res.urls && res.urls.length > 0) {
+        setModalImages(prev => [...prev, ...res.urls]);
+        setSuccessMessage(`Đã đính kèm ${res.urls.length} hình ảnh setup thành công!`);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.response?.data?.detail || 'Lỗi tải ảnh lên hệ thống.');
+    } finally {
+      setIsUploadingImages(false);
+      if (setupFileInputRef.current) setupFileInputRef.current.value = '';
+    }
+  };
+
+  // Bắt sự kiện Paste Clipboard (Ctrl + V)
+  const handlePasteSetupImages = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const pastedFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile();
+        if (file) pastedFiles.push(file);
+      }
+    }
+    if (pastedFiles.length > 0) {
+      e.preventDefault();
+      await handleUploadSetupFiles(pastedFiles);
+    }
+  };
+
+  // Gỡ ảnh khỏi danh sách
+  const handleRemoveSetupImage = (idxToRemove: number) => {
+    setModalImages(prev => prev.filter((_, idx) => idx !== idxToRemove));
+  };
+
   // Open Status & SO Update Modal (Available for all users)
   const openStatusModal = (item: PIMRequest) => {
     setSelectedRequestForStatus(item);
@@ -606,6 +673,7 @@ export const PimPage: React.FC = () => {
     setModalSO(item.so === 'hoàn thành' ? 'hoàn thành' : 'chưa hoàn thành');
     setModalGuiMail(item.gui_mail === 'hoàn thành' ? 'hoàn thành' : 'chưa hoàn thành');
     setModalAssignee(item.user_thuc_hien || '');
+    setModalImages(parseSetupImages(item.hinh_anh_setup));
     setStatusModalOpen(true);
   };
 
@@ -621,6 +689,7 @@ export const PimPage: React.FC = () => {
         trang_thai_thuc_hien: modalTrangThai,
         so: modalSO,
         gui_mail: modalGuiMail,
+        hinh_anh_setup: modalImages.length > 0 ? JSON.stringify(modalImages) : '',
       });
       setSuccessMessage(`Đã cập nhật trạng thái yêu cầu #${selectedRequestForStatus.id_yeu_cau} thành công!`);
       setStatusModalOpen(false);
@@ -1108,7 +1177,39 @@ export const PimPage: React.FC = () => {
                           {item.chuoi || '-'}
                         </td>
                         <td style={{ padding: '10px 14px', color: 'var(--text-secondary)', maxWidth: '300px', wordBreak: 'break-word' }}>
-                          {item.mo_ta || '-'}
+                          <div>{item.mo_ta || '-'}</div>
+                          {(() => {
+                            const imgs = parseSetupImages(item.hinh_anh_setup);
+                            if (imgs.length === 0) return null;
+                            return (
+                              <div style={{ marginTop: '4px' }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPreviewImageUrl(imgs[0]);
+                                  }}
+                                  title="Nhấp để xem ảnh chụp file Excel setup món (kiểu MEMO)"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '2px 8px',
+                                    borderRadius: '4px',
+                                    backgroundColor: '#F3E8FF',
+                                    color: '#7E22CE',
+                                    border: '1px solid #D8B4FE',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <Image size={12} />
+                                  <span>📷 Ảnh setup ({imgs.length})</span>
+                                </button>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
                           {formatDateTime(item.thoi_gian_thuc_hien)}
@@ -1389,7 +1490,39 @@ export const PimPage: React.FC = () => {
                           {item.chuoi || '-'}
                         </td>
                         <td style={{ padding: '10px 14px', color: 'var(--text-secondary)', maxWidth: '320px', wordBreak: 'break-word' }}>
-                          {item.mo_ta || '-'}
+                          <div>{item.mo_ta || '-'}</div>
+                          {(() => {
+                            const imgs = parseSetupImages(item.hinh_anh_setup);
+                            if (imgs.length === 0) return null;
+                            return (
+                              <div style={{ marginTop: '4px' }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPreviewImageUrl(imgs[0]);
+                                  }}
+                                  title="Nhấp để xem ảnh chụp file Excel setup món (kiểu MEMO)"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '2px 8px',
+                                    borderRadius: '4px',
+                                    backgroundColor: '#F3E8FF',
+                                    color: '#7E22CE',
+                                    border: '1px solid #D8B4FE',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <Image size={12} />
+                                  <span>📷 Ảnh setup ({imgs.length})</span>
+                                </button>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
                           {formatDateTime(item.thoi_gian_thuc_hien)}
@@ -2325,11 +2458,146 @@ export const PimPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Bước 4 (Chèn mới): Đính kèm hình ảnh chụp file Excel món setup */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  4. Hình Ảnh Chụp File Excel Món Setup (Đính Kèm Hoặc Paste Ctrl+V)
+                </label>
+                {modalImages.length > 0 && (
+                  <span style={{ fontSize: '12px', color: '#7E22CE', fontWeight: 600 }}>
+                    Đã đính kèm: {modalImages.length} hình ảnh
+                  </span>
+                )}
+              </div>
+
+              {/* Vùng Dropzone / Pastezone */}
+              <div
+                tabIndex={0}
+                onPaste={handlePasteSetupImages}
+                onClick={() => setupFileInputRef.current?.click()}
+                style={{
+                  border: '2px dashed #CBD5E1',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: '#F8FAFC',
+                  padding: '16px',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  outline: 'none',
+                }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = '#7C3AED')}
+                onBlur={(e) => (e.currentTarget.style.borderColor = '#CBD5E1')}
+              >
+                <input
+                  type="file"
+                  ref={setupFileInputRef}
+                  multiple
+                  accept="image/*"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleUploadSetupFiles(e.target.files);
+                    }
+                  }}
+                  style={{ display: 'none' }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                  <div style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '50%',
+                    backgroundColor: '#EDE9FE',
+                    color: '#7C3AED',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    {isUploadingImages ? <RefreshCw size={18} className="spin-animation" /> : <Upload size={18} />}
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {isUploadingImages ? 'Đang tải ảnh lên...' : 'Nhấn Ctrl+V để dán ảnh chụp màn hình, hoặc click chọn ảnh'}
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                    Hỗ trợ 1 hoặc nhiều ảnh chụp file Excel setup (.png, .jpg, .webp). Click vào ảnh bên dưới để xem phóng to như MEMO.
+                  </div>
+                </div>
+              </div>
+
+              {/* Danh sách ảnh đã đính kèm */}
+              {modalImages.length > 0 && (
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                  marginTop: '10px',
+                  padding: '10px',
+                  backgroundColor: 'var(--bg-secondary)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-color)'
+                }}>
+                  {modalImages.map((imgUrl, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        position: 'relative',
+                        width: '84px',
+                        height: '84px',
+                        borderRadius: '6px',
+                        border: '1px solid #CBD5E1',
+                        overflow: 'hidden',
+                        backgroundColor: '#FFFFFF',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                      }}
+                    >
+                      <img
+                        src={imgUrl}
+                        alt={`Ảnh setup ${idx + 1}`}
+                        onClick={() => setPreviewImageUrl(imgUrl)}
+                        title="Bấm để xem ảnh phóng to kiểu MEMO"
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          cursor: 'zoom-in'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveSetupImage(idx);
+                        }}
+                        title="Gỡ ảnh này"
+                        style={{
+                          position: 'absolute',
+                          top: '3px',
+                          right: '3px',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          backgroundColor: 'rgba(239, 68, 68, 0.9)',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: 0
+                        }}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Lựa chọn Người Phụ Trách Thực Hiện (Admin) */}
             {isAdmin && (
               <div>
                 <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginBottom: '8px' }}>
-                  4. Người Phụ Trách Thực Hiện (Dành Cho Quản Trị Viên)
+                  5. Người Phụ Trách Thực Hiện (Dành Cho Quản Trị Viên)
                 </label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   <Select
@@ -2369,6 +2637,63 @@ export const PimPage: React.FC = () => {
           </div>
         )}
       </Modal>
+
+      {/* ================= MODAL PHÓNG TO HÌNH ẢNH SETUP (KIỂU MEMO) ================= */}
+      {previewImageUrl && (
+        <Modal
+          isOpen={!!previewImageUrl}
+          onClose={() => setPreviewImageUrl(null)}
+          title="📷 Xem Phóng To Hình Ảnh Setup (File Excel Món)"
+          maxWidth="90vw"
+          footer={
+            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                💡 Nhấn phím <strong>Esc</strong> hoặc nút Đóng để thoát xem ảnh
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <a
+                  href={previewImageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    textDecoration: 'none',
+                    padding: '6px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <ExternalLink size={13} />
+                  <span>Mở tab mới</span>
+                </a>
+                <Button variant="primary" size="sm" onClick={() => setPreviewImageUrl(null)}>
+                  Đóng
+                </Button>
+              </div>
+            </div>
+          }
+        >
+          <div style={{ textAlign: 'center', maxHeight: '78vh', overflow: 'auto', padding: '6px' }}>
+            <img
+              src={previewImageUrl}
+              alt="Setup Excel Preview"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '75vh',
+                objectFit: 'contain',
+                borderRadius: '8px',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+              }}
+            />
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };

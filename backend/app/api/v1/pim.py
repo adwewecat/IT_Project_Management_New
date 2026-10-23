@@ -1,7 +1,10 @@
+import os
+import shutil
+import uuid
 import urllib.parse
 from datetime import datetime
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -345,5 +348,35 @@ def update_pim_schedule(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+UPLOAD_PIM_IMAGES_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../uploads/pim/images"))
+os.makedirs(UPLOAD_PIM_IMAGES_DIR, exist_ok=True)
+
+
+@router.post("/upload-setup-images")
+async def upload_pim_setup_images(
+    files: List[UploadFile] = File(...),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Tải lên hình ảnh chụp file Excel setup món PIM (lưu vào uploads/pim/images/).
+    Hỗ trợ tải lên 1 hoặc nhiều ảnh cùng lúc, hoặc paste từ clipboard.
+    """
+    uploaded_urls: List[str] = []
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    for file in files:
+        orig = file.filename or "setup.png"
+        ext = os.path.splitext(orig)[1].lower()
+        if not ext or ext not in [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]:
+            ext = ".png"
+        uid = uuid.uuid4().hex[:8]
+        safe_name = f"pim_setup_{timestamp}_{uid}{ext}"
+        target_path = os.path.join(UPLOAD_PIM_IMAGES_DIR, safe_name)
+        with open(target_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        uploaded_urls.append(f"/uploads/pim/images/{safe_name}")
+
+    return {"urls": uploaded_urls}
 
 

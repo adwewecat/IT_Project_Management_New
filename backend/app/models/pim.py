@@ -25,6 +25,7 @@ class PIMRequest(Base):
     thoi_gian_update: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     so: Mapped[Optional[str]] = mapped_column(Unicode(50), default="chưa hoàn thành", nullable=True)
     gui_mail: Mapped[Optional[str]] = mapped_column(Unicode(50), default="chưa hoàn thành", nullable=True)
+    hinh_anh_setup: Mapped[Optional[str]] = mapped_column(UnicodeText, nullable=True)
 
 
 class PIMUserThucHien(Base):

@@ -671,6 +671,7 @@ BEGIN
         [thoi_gian_update] datetime NULL,
         [so] nvarchar(50) NULL DEFAULT (N'chưa hoàn thành'),
         [gui_mail] nvarchar(50) NULL DEFAULT (N'chưa hoàn thành'),
+        [hinh_anh_setup] nvarchar(max) NULL,
         CONSTRAINT [PK_PIM] PRIMARY KEY CLUSTERED ([id] ASC)
     );
     PRINT N'Created table [dbo].[PIM] successfully.';

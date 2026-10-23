@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.api.deps import require_app_or_admin
+from app.api.deps import require_app_or_admin, require_admin
 from app.schemas.auth import UserInfo
 from app.schemas.mongodb import (
     KdsMasterStatusToggleRequest,
@@ -296,10 +296,10 @@ def get_standard_app_params(
 def create_standard_app_param(
     payload: StandardAppParamCreateRequest,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(require_app_or_admin)
+    current_user: UserInfo = Depends(require_admin)
 ):
     """
-    Thêm mới một tham số vào Bộ Param Chuẩn trên hệ thống.
+    Thêm mới một tham số vào Bộ Param Chuẩn trên hệ thống. (Chỉ Admin)
     """
     try:
         return MongoDBService.create_standard_app_param(
@@ -320,10 +320,10 @@ def create_standard_app_param(
 def save_single_standard_param(
     payload: SaveSingleStandardParamRequest,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(require_app_or_admin)
+    current_user: UserInfo = Depends(require_admin)
 ):
     """
-    Lưu một tham số cụ thể từ nhà hàng vào Bộ Param Chuẩn trên SQL Server.
+    Lưu một tham số cụ thể từ nhà hàng vào Bộ Param Chuẩn trên SQL Server. (Chỉ Admin)
     """
     try:
         return MongoDBService.save_single_standard_param(
@@ -344,10 +344,10 @@ def save_single_standard_param(
 def save_standard_params_from_restaurant(
     payload: SaveStandardParamsFromRestaurantRequest,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(require_app_or_admin)
+    current_user: UserInfo = Depends(require_admin)
 ):
     """
-    Lưu / đồng bộ các tham số APP_PARAM từ một nhà hàng đang kết nối vào Bộ Param Chuẩn.
+    Lưu / đồng bộ các tham số APP_PARAM từ một nhà hàng đang kết nối vào Bộ Param Chuẩn. (Chỉ Admin)
     """
     try:
         return MongoDBService.save_standard_params_from_restaurant(
@@ -396,10 +396,10 @@ def update_standard_app_param(
     param_code: str,
     payload: StandardAppParamUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(require_app_or_admin)
+    current_user: UserInfo = Depends(require_admin)
 ):
     """
-    Chỉnh sửa tham số trong Bộ Param Chuẩn trên hệ thống.
+    Chỉnh sửa tham số trong Bộ Param Chuẩn trên hệ thống. (Chỉ Admin)
     """
     try:
         return MongoDBService.update_standard_app_param(
@@ -421,10 +421,10 @@ def update_standard_app_param(
 def delete_standard_app_param(
     param_code: str,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(require_app_or_admin)
+    current_user: UserInfo = Depends(require_admin)
 ):
     """
-    Xóa một tham số khỏi Bộ Param Chuẩn trên hệ thống.
+    Xóa một tham số khỏi Bộ Param Chuẩn trên hệ thống. (Chỉ Admin)
     """
     try:
         return MongoDBService.delete_standard_app_param(

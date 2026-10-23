@@ -18,6 +18,7 @@ class PIMRequestBase(BaseModel):
     thoi_gian_update: Optional[datetime] = None
     so: Optional[str] = "chưa hoàn thành"
     gui_mail: Optional[str] = "chưa hoàn thành"
+    hinh_anh_setup: Optional[str] = None
 
 
 class PIMRequestOut(PIMRequestBase):
@@ -32,6 +33,7 @@ class PIMStatusUpdate(BaseModel):
     trang_thai_thuc_hien: Optional[str] = None # 'hoàn thành', 'chưa hoàn thành'
     so: Optional[str] = None # 'hoàn thành', 'chưa hoàn thành'
     gui_mail: Optional[str] = None # 'hoàn thành', 'chưa hoàn thành'
+    hinh_anh_setup: Optional[str] = None
 
 
 class PIMAssignUpdate(BaseModel):

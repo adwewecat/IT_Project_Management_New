@@ -1396,3 +1396,30 @@
   3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
      - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`.
      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.14s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
+
+
+- **CHUẨN HÓA BỘ PARAM CHUẨN (PHÂN TÍCH MONGODB NHÀ HÀNG) & BỔ SUNG ĐÍNH KÈM ẢNH SETUP (PASTE CTRL+V / XEM KIỂU MEMO) CHO QUẢN LÝ YÊU CẦU PIM [2026-10-23]**:
+  1. **Bối Cảnh & Yêu Cầu Người Dùng**:
+     - *Phân Tích MongoDB Nhà Hàng (Tác vụ 9. Xử Lý Param APP_PARAM)*:
+       + ⭐ Bộ Param Chuẩn: Tên Tham Số (Mô Tả Tiếng Việt) phải giống nhau/đồng bộ, chỉ có cột Ghi Chú mới là note mô tả nghiệp vụ (trước đây bị lộn xộn: tên tham số lấy nguyên mã code tiếng Anh như `FUNC_SHOW_NOTE`, trong khi mô tả tiếng Việt lại nằm ở Ghi Chú; hoặc tên là `Hiển thị KDS Bếp` còn Ghi Chú lại ghi mã `SHOW_KDS`).
+       + ⭐ Quản Lý & Áp Dụng Bộ Param Chuẩn Dùng Chung: Thêm nút Bút để cập nhật lại thông tin ở từng dòng param nếu cần (chỉ phân quyền Admin mới được chỉnh sửa).
+     - *Quản Lý Yêu Cầu PIM (`/pim-management`)*:
+       + Khi hoàn thành yêu cầu PIM, bổ sung phần đính kèm hình ảnh chụp file Excel món setup.
+       + Chèn thêm 1 bước nằm giữa Bước 3 ("3. Gửi Mail Thông Báo Nhà Hàng") và Bước 4 ("4. Người Phụ Trách Thực Hiện") để copy rồi nhấn `Ctrl+V` (paste clipboard) hoặc đính kèm tải ảnh lên (1 hoặc nhiều ảnh).
+       + Bấm vào hình ảnh có thể mở xem phóng to sắc nét toàn màn hình tương tự kiểu MEMO.
+  2. **Giải Pháp Kiến Trúc & Triển Khai Toàn Diện**:
+     - *Chuẩn Hóa Bộ Param Chuẩn (`MongoDbParamManagementTask.tsx`, `RestaurantMongoPage.tsx`, `mongodb_service.py`, `mongodb.py`)*:
+       + Từ điển chuẩn hóa tên tham số tiếng Việt `KNOWN_PARAM_NAMES` bao phủ các tham số chuỗi: `SHOW_KDS`, `FUNC_SHOW_NOTE`, `FUNC_SHOW_PAYMENT_QR_ORDER`, `FUNC_SHOW_UPDATE_ROLE`, `ROLE_SETUP_SHOW_HIDE_ITEM`, `FUNC_SHOW_TOTAL_MONEY`, `FUNC_SHOW_VOUCHER`, `FW_SUBMIT_FOR_LESS_THAN_THREE_GUEST`, `FW_SUBMIT_FOR_ROUND_DEFAULT`, `HOT_TIP`, `ALLOW_HIDE_ITEM_GROUP`...
+       + Helper `normalize_param_name_and_note` (Backend) & `getStandardParamDisplay` (Frontend): Luôn lấy Tên Tham Số có nghĩa tiếng Việt. Cột Ghi Chú chỉ lưu ghi chú nghiệp vụ bổ sung (nếu ghi chú trùng mã param hoặc trùng tên thì làm sạch thành `—`, triệt để loại bỏ tình trạng ghi mã param vào cột ghi chú).
+       + Bảo vệ phân quyền Admin 100%: Bổ sung nút Bút Sửa (`<Edit2 size={12} /> Sửa`) và nút Xóa cho từng dòng trong bảng Modal Bộ Param Chuẩn. Chỉ tài khoản Quản trị viên (`isAdmin`) mới nhìn thấy nút Sửa/Xóa và nút Lưu từ nhà vào chuẩn (user khác hiển thị nhãn `🔒 Chỉ Admin`). Backend API bảo vệ các endpoint thao tác chuẩn bằng `Depends(require_admin)`.
+       + Cập nhật bảng `STANDARD_APP_PARAMS` trên CSDL SQL Server đồng bộ dữ liệu chuẩn ngay lập tức.
+     - *Đính Kèm Ảnh Setup Món PIM (Paste Clipboard Ctrl+V & Xem Kiểu MEMO) (`PimPage.tsx`, `pimService.ts`, `pim.py`, `pim_service.py`)*:
+       + Bổ sung cột `hinh_anh_setup NVARCHAR(MAX) NULL` vào bảng `[dbo].[PIM]` trên SQL Server Production (`172.16.8.25:1433/ITDEPT`), cập nhật model SQLAlchemy và schemas Pydantic.
+       + Khai báo kiểm tra cột `hinh_anh_setup` tự động lúc backend khởi động (`lifespan` trong `main.py`) và cập nhật master DDL trong `Script/Full_SCRIPT_SQL_TABLE.sql`.
+       + Bổ sung API `POST /api/v1/pim/upload-setup-images` lưu trữ file an toàn trong thư mục `uploads/pim/images/`.
+       + Modal Cập Nhật Trạng Thái PIM: Chèn bước 4 `4. Hình Ảnh Chụp File Excel Món Setup (Đính Kèm Hoặc Paste Ctrl+V)` (bước phụ trách đổi thành bước 5). Hỗ trợ copy ảnh chụp màn hình bằng Snipping Tool rồi bấm `Ctrl + V` tự động tải lên ngay, hoặc bấm chọn tải file từ máy tính.
+       + Hiển thị danh sách ảnh thumbnails kèm nút xóa X. Click vào ảnh mở Modal Phóng To Hình Ảnh kiểu MEMO (`maxWidth="90vw"`), có nút "Mở tab mới" và đóng bằng phím `Escape`.
+       + Thêm nút bấm/badge `📷 Ảnh setup (N)` ở ngoài bảng danh sách PIM (cả Tab Chưa Hoàn Thành và Đã Hoàn Thành) để xem nhanh ảnh setup bất kỳ lúc nào.
+  3. **Kiểm Thử & Đóng Gói Server (Copy Là Chạy Ngay)**:
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.48s`), thư mục `frontend/dist/` (kèm `web.config` rewrite IIS) hoàn toàn sạch sẽ.
+     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> BACKEND SMOKE TEST PASSED 100%`.

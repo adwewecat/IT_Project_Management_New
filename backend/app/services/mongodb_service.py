@@ -58,6 +58,69 @@ def save_param_default_tails(tails: List[str]) -> List[str]:
             json.dump({"default_tails": clean_tails}, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.error(f"Lỗi ghi {PARAM_SETTINGS_FILE}: {e}")
+
+# Từ điển tên tham số tiếng Việt chuẩn hóa cho toàn hệ thống
+KNOWN_PARAM_NAMES: Dict[str, str] = {
+    "SHOW_KDS": "Hiển thị KDS Bếp",
+    "FUNC_SHOW_NOTE": "Hiển thị ghi chú trên CD",
+    "FUNC_SHOW_PAYMENT_QR_ORDER": "Thanh toán QR Order",
+    "FUNC_SHOW_UPDATE_ROLE": "Phân quyền vai trò User",
+    "ROLE_SETUP_SHOW_HIDE_ITEM": "Quyền Ẩn / Hiện món",
+    "FUNC_SHOW_TOTAL_MONEY": "Hiển thị tổng tiền",
+    "FUNC_SHOW_VOUCHER": "Hiển thị Voucher ưu đãi",
+    "FW_SUBMIT_FOR_LESS_THAN_THREE_GUEST": "Gửi món dưới 3 khách",
+    "FW_SUBMIT_FOR_ROUND_DEFAULT": "Lượt gọi món mặc định",
+    "HOT_TIP": "Số tiền Tip gợi ý",
+    "CONFIG_NEW_QR_ORDER": "Hệ thống QR Order Mới",
+    "AUTO_PRINT_QR_CODE": "Tự động in mã QR Code",
+    "FUNC_BOOKING": "Chức năng Đặt Bàn (Booking)",
+    "FUNC_CALL_SERVICE": "Nút Gọi Nhân Viên trên CO",
+    "FUNC_SHOW_CANCEL_ITEM": "Ẩn / Hiện chức năng Trả Món",
+    "FUNC_SHOW_CO_PAY": "Thanh toán trên máy CO",
+    "PASSWORD_EXIT_TABLE": "Mật khẩu thoát bàn Order",
+    "ROLE_UNLOCK_ORDER": "Quyền mở khóa bàn Order",
+    "CONFIG_COOKING": "Thời gian chế biến món KDS",
+    "PRINT_BILL_AFTER_PAY": "Tự động in Bill sau thanh toán",
+    "ALTER_CO_MENU_ITEM": "Đổi món trên thực đơn CO",
+    "BF_PENDING_DISH": "Món chờ Buffet (Pending Dish)",
+    "CONFIG_LINK_CTKM": "Link Chương Trình Khuyến Mãi",
+    "AUTO_MERGE_ORDER": "Tự động gộp Order",
+    "ENABLE_FAST_PAYMENT": "Thanh toán nhanh (Fast Pay)",
+    "SHOW_PRICE_ON_ORDER": "Hiển thị giá món trên Order",
+    "TABLET_LAYOUT_MODE": "Chế độ giao diện Tablet",
+    "ALLOW_PRINT_TEMP_BILL": "Cho phép in tạm tính",
+    "NOTIFY_NEW_ORDER_SOUND": "Âm thanh thông báo Order mới",
+    "ALLOW_HIDE_ITEM_GROUP": "Quyền thấy món đang hiện",
+}
+
+def normalize_param_name_and_note(param_code: str, raw_name: Optional[str] = None, raw_note: Optional[str] = None):
+    """
+    Chuẩn hóa tên tham số tiếng Việt và ghi chú hướng dẫn:
+    - Tên tham số: Phải là mô tả tiếng Việt có ý nghĩa, không để trùng thô với mã tham số.
+    - Ghi chú: Chỉ là note bổ sung hướng dẫn nghiệp vụ, không trùng mã tham số hay lặp lại tên.
+    """
+    p_code = (param_code or "").strip().upper()
+    name = (raw_name or "").strip()
+    note = (raw_note or "").strip()
+
+    # 1. Tìm tên tiếng Việt chuẩn
+    if p_code in KNOWN_PARAM_NAMES:
+        final_name = KNOWN_PARAM_NAMES[p_code]
+    elif name and name.upper() != p_code:
+        final_name = name
+    elif note and note.upper() != p_code:
+        final_name = note
+        note = ""
+    else:
+        final_name = p_code
+
+    # 2. Làm sạch ghi chú: không được trùng mã hoặc trùng tên
+    if note.upper() == p_code or note == final_name:
+        final_note = ""
+    else:
+        final_note = note
+
+    return final_name, final_note
     return clean_tails
 
 def get_transfer_default_tails() -> List[str]:
@@ -850,8 +913,7 @@ class MongoDBService:
         results: List[StandardAppParamItem] = []
         for r in records:
             p_code = r.param_code or ""
-            p_name = r.param_name or ""
-            note = r.note or ""
+            p_name, note = normalize_param_name_and_note(p_code, r.param_name, r.note)
             val = r.param_value or ""
 
             if search and search.strip():
@@ -896,13 +958,14 @@ class MongoDBService:
             raise ValueError(f"Mã tham số chuẩn '{p_code}' đã tồn tại trong hệ thống!")
 
         now = datetime.datetime.now()
+        p_name, note = normalize_param_name_and_note(p_code, payload.param_name, payload.note)
         item = StandardAppParam(
             param_code=p_code,
-            param_name=payload.param_name.strip() if payload.param_name else p_code,
+            param_name=p_name,
             param_type=p_type,
             status=payload.status,
             param_value=str(payload.param_value or ""),
-            note=str(payload.note or ""),
+            note=note,
             category=payload.category,
             priority=payload.priority or 0,
             nguoi_tao=current_user.username,
@@ -955,7 +1018,8 @@ class MongoDBService:
         old_val = item.param_value
 
         if payload.param_name is not None:
-            item.param_name = payload.param_name.strip()
+            p_name_candidate = payload.param_name.strip()
+            item.param_name = p_name_candidate if p_name_candidate else KNOWN_PARAM_NAMES.get(p_code, p_code)
         if payload.param_type is not None:
             pt = payload.param_type.strip().upper()
             if pt not in ["FUNCTION", "CONFIG"]:
@@ -966,7 +1030,8 @@ class MongoDBService:
         if payload.param_value is not None:
             item.param_value = str(payload.param_value)
         if payload.note is not None:
-            item.note = str(payload.note)
+            n_candidate = str(payload.note).strip()
+            item.note = "" if (n_candidate.upper() == p_code or n_candidate == item.param_name) else n_candidate
         if payload.category is not None:
             item.category = payload.category
         if payload.priority is not None:
@@ -1057,13 +1122,15 @@ class MongoDBService:
             if not p_code:
                 continue
 
-            p_name = str(r.get("paramName") or p_code).strip()
+            raw_name = str(r.get("paramName") or "").strip()
+            raw_note = str(r.get("note") or "").strip()
+            p_name, note = normalize_param_name_and_note(p_code, raw_name, raw_note)
+
             p_type = str(r.get("paramType") or "FUNCTION").strip().upper()
             if p_type not in ["FUNCTION", "CONFIG"]:
                 p_type = "FUNCTION"
             st = int(r.get("status") if r.get("status") is not None else 1)
             val = str(r.get("value") or "")
-            note = str(r.get("note") or "")
 
             existing = db.query(StandardAppParam).filter(StandardAppParam.param_code == p_code).first()
             if existing:
@@ -1193,16 +1260,15 @@ class MongoDBService:
         if not p_code:
             raise ValueError("Mã tham số không được để trống!")
 
+        p_name, note = normalize_param_name_and_note(p_code, payload.param_name, payload.note)
         now = datetime.datetime.now()
         existing = db.query(StandardAppParam).filter(StandardAppParam.param_code == p_code).first()
         if existing:
-            if payload.param_name:
-                existing.param_name = payload.param_name.strip()
+            existing.param_name = p_name
             existing.param_type = (payload.param_type or "FUNCTION").strip().upper()
             existing.status = payload.status
             existing.param_value = str(payload.param_value or "")
-            if payload.note is not None:
-                existing.note = str(payload.note)
+            existing.note = note
             if payload.category is not None:
                 existing.category = payload.category
             if payload.priority:
@@ -1216,11 +1282,11 @@ class MongoDBService:
         else:
             new_item = StandardAppParam(
                 param_code=p_code,
-                param_name=payload.param_name.strip() if payload.param_name else p_code,
+                param_name=p_name,
                 param_type=(payload.param_type or "FUNCTION").strip().upper(),
                 status=payload.status,
                 param_value=str(payload.param_value or ""),
-                note=str(payload.note or ""),
+                note=note,
                 category=payload.category,
                 priority=payload.priority or 0,
                 nguoi_tao=current_user.username,

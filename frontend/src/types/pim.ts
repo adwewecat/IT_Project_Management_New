@@ -15,6 +15,7 @@ export interface PIMRequest {
   thoi_gian_update?: string | null;
   so?: string | null;
   gui_mail?: string | null;
+  hinh_anh_setup?: string | null;
 }
 
 export interface PIMUserThucHien {
