@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 import json
 import logging
 from datetime import datetime, timedelta
@@ -707,24 +708,32 @@ class AgentMultitaskService:
         step_counter = 1
 
         for orig_step in steps:
-            st_type = str(orig_step.get("step_type") or "").upper().strip()
-            st_name = orig_step.get("step_name") or f"Bước {step_counter}"
+            if hasattr(orig_step, "model_dump"):
+                orig_dict = orig_step.model_dump()
+            elif isinstance(orig_step, dict):
+                orig_dict = orig_step
+            else:
+                orig_dict = dict(orig_step)
+
+            st_type = str(orig_dict.get("step_type") or "").upper().strip()
+            st_name = orig_dict.get("step_name") or f"Bước {step_counter}"
 
             # Nếu là bước truyền / copy / giải nén file đính kèm
             if st_type in ("PUSH_FILE", "EXTRACT_FILE", "COPY_FILE", "TRANSFER_FILE", "DEPLOY_FILE"):
-                dest_dir = orig_step.get("target_folder") or default_target_folder or "C:\\Deploy"
-                dest_dir = dest_dir.strip().replace('"', '')
-                file_n = (orig_step.get("file_name") or orig_step.get("storage_file_name") or "file.bin").strip()
-                dl_url = orig_step.get("download_url") or f"/api/v1/agent-multitask/download-package-file/{file_n}"
+                raw_dest = orig_dict.get("target_folder") or default_target_folder or "C:\\Deploy"
+                # Chuẩn hóa thư mục đích: loại bỏ dấu nháy kép và dấu xuyệt cuối để tránh lỗi thoát chuỗi '\"' trong file batch
+                dest_dir = raw_dest.strip().replace('"', '').rstrip(r'\/')
+                file_n = (orig_dict.get("file_name") or orig_dict.get("storage_file_name") or "file.bin").strip()
+                dl_url = orig_dict.get("download_url") or f"/api/v1/agent-multitask/download-package-file/{file_n}"
 
                 if not dl_url.startswith("http://") and not dl_url.startswith("https://"):
                     full_dl_url = f"{server_base_url.rstrip('/')}/{dl_url.lstrip('/')}"
                 else:
                     full_dl_url = dl_url
 
-                is_extract = bool(orig_step.get("auto_extract", st_type == "EXTRACT_FILE"))
+                is_extract = bool(orig_dict.get("auto_extract", st_type == "EXTRACT_FILE"))
                 runner_bat_name = f"_fetch_step_{step_counter}.bat"
-                runner_bat_abs_path = os.path.join(dest_dir, runner_bat_name)
+                runner_bat_abs_path = f"{dest_dir}\\{runner_bat_name}"
 
                 # Soạn kịch bản batch tải file chuẩn mực (100% tiếng Việt không dấu, không dùng khối ngoặc đơn chứa echo theo Quy tắc 9)
                 extract_cmd_block = ""
@@ -762,12 +771,12 @@ class AgentMultitaskService:
                     "\r\n"
                     'echo [THANH CONG] Da nhan file vao "%DEST_FILE%".\r\n'
                     f"{extract_cmd_block}"
-                    '(goto) 2>nul & del "%~f0"\r\n'
+                    'del "%~f0" >nul 2>&1\r\n'
                     "exit /b 0\r\n"
                     "\r\n"
                     ":LoiTaiFile\r\n"
                     'echo [LOI] Khong the tai file tu Server ve "%DEST_FILE%".\r\n'
-                    '(goto) 2>nul & del "%~f0"\r\n'
+                    'del "%~f0" >nul 2>&1\r\n'
                     "exit /b 1\r\n"
                 )
 
@@ -802,7 +811,7 @@ class AgentMultitaskService:
 
             else:
                 # Các bước khác (RUN_SCRIPT, MODIFY_FILE, DELETE_FILE...) giữ nguyên
-                copy_step = dict(orig_step)
+                copy_step = dict(orig_dict)
                 copy_step["step_number"] = step_counter
                 transformed.append(copy_step)
                 step_counter += 1

@@ -232,11 +232,20 @@ def execute_command(
             detail="Bạn chưa có quyền gửi lệnh điều khiển từ xa."
         )
 
-    return AgentMultitaskService.execute_command(
-        payload=payload,
-        current_username=current_user.username or "admin",
-        db=db
-    )
+    try:
+        return AgentMultitaskService.execute_command(
+            payload=payload,
+            current_username=current_user.username or "admin",
+            db=db
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Lỗi khi thực thi lệnh điều khiển từ xa: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi thực thi lệnh điều khiển: {str(e)}"
+        )
 
 
 @router.post("/heartbeat")
@@ -649,6 +658,10 @@ def download_package_file(package_name: str):
     # 2. Nếu không thấy trong tools/packages/, kiểm tra trong tools/
     if not os.path.exists(zip_path):
         zip_path = os.path.join(project_root, "tools", clean_name)
+
+    # 3. Nếu không thấy trong tools/, kiểm tra trong tools/restaurant_support_agent/
+    if not os.path.exists(zip_path):
+        zip_path = os.path.join(agent_dir, clean_name)
 
     # 3. Nếu là Restaurant_Support_GPOS.zip (hoặc alias cũ Restaurant_Support_Agent_Full.zip) và chưa có hoặc cần đồng bộ
     if clean_name.lower() in ("restaurant_support_gpos.zip", "restaurant_support_agent_full.zip") and os.path.exists(agent_dir):

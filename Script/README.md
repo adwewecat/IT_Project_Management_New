@@ -4633,3 +4633,27 @@ estaurant_service.py).
   3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 5.00s`), toàn bộ bundle sạch sẽ trong `frontend/dist/` (kèm `web.config`).
      - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`.
+
+
+- **KHẮC PHỤC TRIỆT ĐỂ LỖI 500 KHI THỰC THI GỬI LỆNH ĐIỀU KHIỂN AGENT MULTITASK TRÊN SERVER [2026-10-23]**:
+  1. **Bối Cảnh & Nguyên Nhân Lỗi**:
+     - Người dùng tải bản build backend/app và frontend/dist lên server, khi mở Modal "Truyền Gói Cài / File Nén & Thực Thi Đa Bước", cấu hình các bước và bấm "Bắt Đầu Thực Thi" thì giao diện báo lỗi đỏ:
+       `⚠️ Lỗi khi gửi lệnh điều khiển: Request failed with status code 500`
+     - **Nguyên nhân gốc rễ**:
+       + Trong `backend/app/services/agent_multitask_service.py`, cơ chế tương thích ngược thông minh `_transform_steps_for_client_compatibility` sử dụng `os.path.join(dest_dir, runner_bat_name)` để tạo đường dẫn tuyệt đối cho script `_fetch_step_*.bat`. Tuy nhiên, file `agent_multitask_service.py` thiếu khai báo `import os` ở đầu file, dẫn đến lỗi runtime nghiêm trọng: `NameError: name 'os' is not defined`.
+       + Cú pháp batch script tạo trên Windows: Khi người dùng nhập đường dẫn thư mục có dấu gạch chéo ngược ở cuối (ví dụ: `D:\GPOS-setup\app\`), câu lệnh `set "DEST_DIR=D:\GPOS-setup\app\"` khiến dấu `\` thoát chuỗi dấu ngoặc kép `\"`, làm vỡ cú pháp biến môi trường CMD Windows.
+       + Endpoint `/command` chưa có khối `try ... except` bao bọc nên khi phát sinh lỗi ngoại lệ Python thì trả về HTTP 500 chung chung thay vì thông báo lỗi cụ thể cho người dùng.
+  2. **Giải Pháp Kiến Trúc & Triển Khai Toàn Diện**:
+     - **Bổ sung `import os` vào `backend/app/services/agent_multitask_service.py`**: Khắc phục dứt điểm `NameError: name 'os' is not defined`.
+     - **Chuẩn hóa thư mục đích an toàn cho Windows Batch (`clean_dest`)**:
+       + Loại bỏ triệt để dấu nháy kép thừa và các dấu gạch chéo ở cuối: `dest_dir = raw_dest.strip().replace('"', '').rstrip(r'\/')`.
+       + Định dạng đường dẫn chuẩn Windows: `runner_bat_abs_path = f"{dest_dir}\\{runner_bat_name}"`.
+       + Sử dụng câu lệnh xóa script an toàn: `del "%~f0" >nul 2>&1` (không dùng khối ngoặc đơn chứa echo theo Quy tắc 9).
+     - **Bao bọc khối xử lý lỗi an toàn tại Endpoint `/command` (`backend/app/api/v1/agent_multitask.py`)**:
+       + Sử dụng `try ... except Exception as e` và `logger.error(..., exc_info=True)` để ghi lại đầy đủ stack trace trong log hệ thống.
+       + Trả về `HTTPException(500, detail=f"Lỗi khi thực thi lệnh điều khiển: {str(e)}")` giúp frontend hiển thị chính xác chi tiết lỗi nếu có phát sinh.
+     - **Bổ sung fallback tìm file cho `/download-package-file/{package_name}`**: Kiểm tra thêm trong thư mục `tools/restaurant_support_agent/` nếu file không nằm trong `tools/packages/`.
+  3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+     - Đã kiểm thử chạy trực tiếp `execute_command` bằng Python script với dữ liệu thực tế 10 bước (gồm xóa file `fxlauncher.jar`, tải file đính kèm `fxlauncher.jar` và chạy script `fix_CO_SO_Fail_to_connect.bat`): **Kết quả `Result success: True`, tạo task PENDING thành công 100%**.
+     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`.
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 8.72s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
