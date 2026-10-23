@@ -977,7 +977,7 @@ def is_running_in_session_0():
 def execute_task(config, task, ip_lan=None):
     """Thuc thi mot tac vu ho tro tu xa nhan tu Server."""
     task_id = task.get("id") or task.get("task_id", 0)
-    action = task.get("action_type") or task.get("action", "")
+    action = (task.get("action_type") or task.get("action") or "").lower().strip()
     payload_str = task.get("command_payload", "{}")
 
     logger.info(">>> NHAN LENH TU XA #%s: Action='%s'", task_id, action)
@@ -1817,14 +1817,14 @@ def execute_task(config, task, ip_lan=None):
 
 
 
-        elif action in ("get_printers", "get_print_management"):
+        elif action in ("get_printers", "get_print_management", "print_management"):
             logger.info("Thuc thi yeu cau quet thong tin Print Management tu Portal...")
             printers_json = get_printers_info()
             success = True
             message = "Da quet va thu thap thong tin may in thanh cong."
             output = printers_json
 
-        elif action in ("clear_print_queue", "restart_spooler"):
+        elif action in ("clear_print_queue", "clear_printer_queue", "restart_spooler"):
             logger.info("Thuc thi yeu cau khoi dong lai Spooler va lam sach hang doi in...")
             ps_spooler = (
                 "Stop-Service -Name Spooler -Force -ErrorAction SilentlyContinue; "

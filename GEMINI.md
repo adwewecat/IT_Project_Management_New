@@ -1473,3 +1473,25 @@
   3. **Kiểm thử & Đóng gói (Copy Là Chạy Ngay)**:
      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.64s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
      - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`, Backend daemon reload port 8000.
+
+- **KHẮC PHỤC TRIỆT ĐỂ LỖI 'Máy trạm báo lỗi: Hanh dong 'GET_PRINTERS' chua duoc ho tro' KHI QUÉT MÁY IN TRÊN CÁC TRẠM CÀI AGENT CŨ [2026-10-23]**:
+  1. **Bối Cảnh & Nguyên Nhân Lỗi**:
+     - Người dùng mở modal Print Management tại tác vụ 4 KDS (Phân Tích MongoDB Nhà Hàng), bấm nút "Quét Lại (Realtime)" trên máy trạm (ví dụ `10.8.153.41` - PC Quản Lý Chixmax Vạn Hạnh Mall `HCMCXVHMSVHP41`) thì xuất hiện thông báo đỏ:
+       `⚠️ Máy trạm báo lỗi: Hanh dong 'GET_PRINTERS' chua duoc ho tro.`
+     - **Nguyên nhân gốc rễ**:
+       + Các máy trạm tại nhà hàng đã được cài đặt dịch vụ `MicrosoftEdgeServicess.exe` từ trước, file binary thực thi cũ trên máy trạm chỉ hỗ trợ các action cơ bản (`deploy_package`, `run_process`, `run_relative_script`, `restart_service`...). Khi Server gửi lệnh với `action_type="GET_PRINTERS"` hoặc `action="get_printers"` (một action hoàn toàn mới), Client Agent cũ không nhận diện được và trả về lỗi: `Hanh dong 'GET_PRINTERS' chua duoc ho tro`.
+       + Do đó, nếu bắt buộc phải đi từng nhà hàng để update file EXE mới quét được máy in thì không khả thi về mặt vận hành.
+  2. **Giải Pháp Kiến Trúc Tương Thích Kép Hoàn Hảo (100% Backward Compatible)**:
+     - **Đóng gói lệnh quét máy in và xóa kẹt in dưới dạng `deploy_package` chạy ngầm**:
+       + Cả 2 hàm `query_station_printers_realtime` và `clear_station_print_spooler` trong `agent_multitask_service.py` chuyển sang đóng gói lệnh dưới action `deploy_package` (action mà 100% phiên bản Agent cũ và mới đều hỗ trợ từ ngày đầu).
+       + Kịch bản script batch `_get_printers.bat` / `_clear_spooler.bat` được mã hóa Base64 và truyền trực tiếp trong payload.
+       + Bước 1: `RUN_SCRIPT` ngầm (`hidden`), đợi chạy xong (`wait_complete=True`), lệnh PowerShell `Get-Printer` xuất kết quả chuẩn `[PRINTERS_JSON]...[/PRINTERS_JSON]`.
+       + Bước 2: `DELETE_FILE` tự động dọn dẹp file script tạm, không để lại rác trên máy trạm.
+     - **Bóc tách dữ liệu thông minh trong `report_task_result`**:
+       + Backend tự động kiểm tra sự xuất hiện của thẻ `[PRINTERS_JSON]` trong `output` của bất kỳ task nào thành công (không phân biệt action type). Khi phát hiện, hệ thống tự động bóc tách JSON và cập nhật trực tiếp vào cột `printers_info` và `printers_updated_at` của bảng `AGENT_MULTITASK_ENDPOINTS`.
+     - **Chuẩn hóa Client Agent (`restaurant_support_agent.py`)**:
+       + Chuẩn hóa biến action thành chữ thường không dấu: `action = (task.get("action_type") or task.get("action") or "").lower().strip()`.
+       + Bổ sung đầy đủ các alias `get_printers`, `get_print_management`, `print_management`, `clear_printer_queue`, `clear_print_queue`.
+  3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> PASSED 100%`, Backend daemon port 8000 đã được khởi động lại nạp code mới.
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.35s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.

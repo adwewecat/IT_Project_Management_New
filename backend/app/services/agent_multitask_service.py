@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 import json
+import base64
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
@@ -1169,21 +1170,28 @@ class AgentMultitaskService:
             ep.last_action = f"Thực thi task #{task_id}: {status_val.upper()}"
             ep.updated_at = datetime.now()
 
-            # Nếu là tác vụ lấy danh sách máy in GET_PRINTERS và thực thi thành công
-            if log_entry and log_entry.action_type in ("GET_PRINTERS", "get_printers") and status_val.upper() == "SUCCESS" and output:
-                try:
-                    clean_out = output.strip()
-                    if clean_out.startswith("[") and clean_out.endswith("]"):
-                        json.loads(clean_out)  # Kiểm tra tính hợp lệ của JSON
-                        ep.printers_info = clean_out
-                        ep.printers_updated_at = datetime.now()
-                    elif "[PRINTERS_JSON]" in clean_out:
+            # Nếu output có chứa thông tin máy in (từ GET_PRINTERS, deploy_package quét máy in hoặc spooler clear)
+            if status_val.upper() == "SUCCESS" and output:
+                clean_out = str(output).strip()
+                extracted_json = None
+                if "[PRINTERS_JSON]" in clean_out:
+                    try:
                         p_part = clean_out.split("[PRINTERS_JSON]")[1].split("[/PRINTERS_JSON]")[0].strip()
                         json.loads(p_part)
-                        ep.printers_info = p_part
-                        ep.printers_updated_at = datetime.now()
-                except Exception as ex_p:
-                    logger.debug("Không thể trích xuất JSON máy in từ output task #%s: %s", task_id, ex_p)
+                        extracted_json = p_part
+                    except Exception as ex_p:
+                        logger.debug("Không thể trích xuất [PRINTERS_JSON] task #%s: %s", task_id, ex_p)
+                elif clean_out.startswith("[") and clean_out.endswith("]"):
+                    try:
+                        json.loads(clean_out)
+                        extracted_json = clean_out
+                    except Exception:
+                        pass
+
+                if extracted_json:
+                    ep.printers_info = extracted_json
+                    ep.printers_updated_at = datetime.now()
+                    logger.info("Đã cập nhật printers_info thành công cho trạm %s (task #%s)", ep.ip_lan, task_id)
 
             db.commit()
 
@@ -1595,6 +1603,7 @@ class AgentMultitaskService:
     def query_station_printers_realtime(restaurant_code: str, ip_lan: str, username: str, db: Session) -> Dict[str, Any]:
         """
         Gửi lệnh tới máy trạm yêu cầu quét và báo cáo lại thông tin Print Management thời gian thực.
+        Sử dụng đóng gói deploy_package tương thích 100% với TẤT CẢ các Client Agent cũ và mới.
         """
         clean_code = (restaurant_code or "").strip()
         clean_ip = (ip_lan or "").strip()
@@ -1602,8 +1611,11 @@ class AgentMultitaskService:
         if not clean_ip:
             raise HTTPException(status_code=400, detail="Thiếu IP LAN máy trạm cần quét máy in.")
 
-        # Câu lệnh PowerShell dự phòng tương thích cả Agent cũ và mới
-        ps_printer_cmd = (
+        # Script batch chạy lệnh PowerShell trích xuất máy in và xuất chuỗi [PRINTERS_JSON]...[/PRINTERS_JSON]
+        bat_script = (
+            "@echo off\r\n"
+            "chcp 65001 >nul 2>&1\r\n"
+            "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \""
             "$ErrorActionPreference = 'SilentlyContinue'; "
             "$arr = Get-Printer | ForEach-Object { "
             "  $pName = $_.Name; "
@@ -1619,20 +1631,36 @@ class AgentMultitaskService:
             "    Shared = [bool]$_.Shared "
             "  } "
             "}; "
-            "Write-Output ('[PRINTERS_JSON]' + ($arr | ConvertTo-Json -Compress) + '[/PRINTERS_JSON]')"
+            "Write-Output ('[PRINTERS_JSON]' + ($arr | ConvertTo-Json -Compress) + '[/PRINTERS_JSON]')\"\r\n"
+            "exit /b 0\r\n"
         )
+        bat_base64 = base64.b64encode(bat_script.encode("utf-8")).decode("ascii")
 
         payload_obj = {
-            "action": "get_printers",
-            "run_mode": "hidden",
-            "run_hidden": True,
-            "powershell_command": ps_printer_cmd
+            "action": "deploy_package",
+            "target_folder": "C:\\Windows\\Temp",
+            "file_name": "_get_printers.bat",
+            "file_content_base64": bat_base64,
+            "steps": [
+                {
+                    "step_type": "RUN_SCRIPT",
+                    "step_name": "Quét danh sách máy in và hàng đợi",
+                    "file_path": "_get_printers.bat",
+                    "run_mode": "hidden",
+                    "wait_complete": True
+                },
+                {
+                    "step_type": "DELETE_FILE",
+                    "step_name": "Dọn dẹp script tạm",
+                    "file_path": "_get_printers.bat"
+                }
+            ]
         }
 
         log_entry = AgentMultitaskLog(
             restaurant_code=clean_code or "AUTO",
             machine_ip=clean_ip,
-            action_type="GET_PRINTERS",
+            action_type="deploy_package",
             command_payload=json.dumps(payload_obj, ensure_ascii=False),
             result_status="PENDING",
             result_message=f"Đã gửi lệnh yêu cầu quét máy in và hàng đợi in tới máy {clean_ip}.",
@@ -1653,6 +1681,7 @@ class AgentMultitaskService:
     def clear_station_print_spooler(restaurant_code: str, ip_lan: str, username: str, db: Session) -> Dict[str, Any]:
         """
         Gửi lệnh tới máy trạm khởi động lại dịch vụ Print Spooler và xóa sạch các lệnh in bị kẹt trong hàng đợi.
+        Sử dụng đóng gói deploy_package tương thích 100% với TẤT CẢ các Client Agent cũ và mới.
         """
         clean_code = (restaurant_code or "").strip()
         clean_ip = (ip_lan or "").strip()
@@ -1660,28 +1689,63 @@ class AgentMultitaskService:
         if not clean_ip:
             raise HTTPException(status_code=400, detail="Thiếu IP LAN máy trạm cần giải phóng hàng đợi in.")
 
-        ps_spooler_cmd = (
+        # Script batch dừng Spooler, xóa sạch file spool kẹt in, bật lại Spooler và quét lại danh sách máy in
+        bat_script = (
+            "@echo off\r\n"
+            "chcp 65001 >nul 2>&1\r\n"
+            "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \""
             "Write-Output '[1/3] Dang dung dich vu Print Spooler...'; "
             "Stop-Service -Name Spooler -Force -ErrorAction SilentlyContinue; "
             "Start-Sleep -Seconds 1; "
             "Write-Output '[2/3] Dang xoa tep lenh in ket trong thu muc spool...'; "
-            "Remove-Item -Path \"$env:SystemRoot\\System32\\spool\\PRINTERS\\*\" -Force -Recurse -ErrorAction SilentlyContinue; "
+            "Remove-Item -Path \\\"$env:SystemRoot\\System32\\spool\\PRINTERS\\*\\\" -Force -Recurse -ErrorAction SilentlyContinue; "
             "Write-Output '[3/3] Dang khoi dong lai dich vu Print Spooler...'; "
             "Start-Service -Name Spooler -ErrorAction SilentlyContinue; "
-            "Write-Output '[HOAN TAT] Da khoi dong lai Spooler va lam sach hang doi in thanh cong!'"
+            "$ErrorActionPreference = 'SilentlyContinue'; "
+            "$arr = Get-Printer | ForEach-Object { "
+            "  $pName = $_.Name; "
+            "  $st = switch ($_.PrinterStatus) { 'Normal' { 'Ready' } default { $_.PrinterStatus.ToString() } }; "
+            "  [PSCustomObject]@{ "
+            "    PrinterName = $pName; "
+            "    QueueStatus = $st; "
+            "    JobsInQueue = [int]$_.JobCount; "
+            "    ServerName = $env:COMPUTERNAME; "
+            "    DriverName = $_.DriverName; "
+            "    PortName = $_.PortName; "
+            "    IsDefault = [bool]$_.Default; "
+            "    Shared = [bool]$_.Shared "
+            "  } "
+            "}; "
+            "Write-Output ('[PRINTERS_JSON]' + ($arr | ConvertTo-Json -Compress) + '[/PRINTERS_JSON]')\"\r\n"
+            "exit /b 0\r\n"
         )
+        bat_base64 = base64.b64encode(bat_script.encode("utf-8")).decode("ascii")
 
         payload_obj = {
-            "action": "clear_print_queue",
-            "run_mode": "hidden",
-            "run_hidden": True,
-            "powershell_command": ps_spooler_cmd
+            "action": "deploy_package",
+            "target_folder": "C:\\Windows\\Temp",
+            "file_name": "_clear_spooler.bat",
+            "file_content_base64": bat_base64,
+            "steps": [
+                {
+                    "step_type": "RUN_SCRIPT",
+                    "step_name": "Khởi động lại Spooler và xóa kẹt in",
+                    "file_path": "_clear_spooler.bat",
+                    "run_mode": "hidden",
+                    "wait_complete": True
+                },
+                {
+                    "step_type": "DELETE_FILE",
+                    "step_name": "Dọn dẹp script tạm",
+                    "file_path": "_clear_spooler.bat"
+                }
+            ]
         }
 
         log_entry = AgentMultitaskLog(
             restaurant_code=clean_code or "AUTO",
             machine_ip=clean_ip,
-            action_type="CLEAR_PRINTER_QUEUE",
+            action_type="deploy_package",
             command_payload=json.dumps(payload_obj, ensure_ascii=False),
             result_status="PENDING",
             result_message=f"Đã gửi lệnh khởi động lại Spooler & xóa kẹt in tới máy {clean_ip}.",
@@ -1697,5 +1761,3 @@ class AgentMultitaskService:
             "message": f"Đã gửi lệnh giải phóng hàng đợi in tới máy {clean_ip}.",
             "task_id": log_entry.id
         }
-
-
