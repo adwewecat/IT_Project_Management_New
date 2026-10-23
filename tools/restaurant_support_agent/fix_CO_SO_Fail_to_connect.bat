@@ -54,12 +54,8 @@ echo.
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -ArgumentList '/elevated' -Verb RunAs" >nul 2>&1
 if %errorlevel% equ 0 exit /b 0
 
-set "VBS_TEMP=%TEMP%\elevate_%RANDOM%.vbs"
-echo Set UAC = CreateObject^("Shell.Application"^) > "%VBS_TEMP%"
-echo UAC.ShellExecute "%~f0", "/elevated", "", "runas", 1 >> "%VBS_TEMP%"
-cscript //nologo "%VBS_TEMP%" >nul 2>&1
-del /f /q "%VBS_TEMP%" >nul 2>&1
-exit /b 0
+:: Neu khong the mo UAC tu dong, huong dan nguoi dung chay thu cong bang Run as administrator
+goto :LoiChuaCoQuyenAdmin
 
 :LoiChuaCoQuyenAdmin
 echo.

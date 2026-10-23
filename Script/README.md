@@ -4839,3 +4839,32 @@ estaurant_service.py).
        + Hướng dẫn nổi bật: `⚡ Nhấn Ctrl+V bất kỳ lúc nào để dán ảnh (không cần click)` giúp trải nghiệm thao tác của người dùng cực kỳ tiện lợi và nhanh chóng.
   3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.67s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
+
+
+- **KHẮC PHỤC TRIỆT ĐỂ LỖI WINDOWS SCRIPT HOST CODE 800711CC (LOẠI BỎ TOÀN BỘ VBSCRIPT KHỎI BỘ CÀI AGENT) [2026-10-23]**:
+  1. **Hiện Tượng & Phản Ánh Người Dùng**:
+     - Khi cài đặt Agent (`Install_Edge_Framework.bat`) trên một máy trạm chạy Windows 11 / Windows có chính sách bảo mật nâng cao, cửa sổ CMD đen nền bật lên và bị treo, đồng thời xuất hiện hộp thoại lỗi Windows Script Host:
+       ```text
+       Script: C:\Users\APP\AppData\Local\Temp\run_edge_22583.vbs
+       Line: 1
+       Char: 1
+       Error: An Application Control policy has blocked this file.
+              Malicious binary reputation.
+       Code: 800711CC
+       Source: (null)
+       ```
+  2. **Nguyên Nhân Gốc Rễ**:
+     - **Chính sách bảo mật kiểm soát ứng dụng**: Máy trạm có bật **Smart App Control (SAC)** trên Windows 11, **Windows Defender Application Control (WDAC)**, AppLocker hoặc phần mềm bảo mật Endpoint (EDR/Antivirus doanh nghiệp). Các chính sách này giám sát thư mục `%TEMP%` và cấm thực thi các file kịch bản không rõ nguồn gốc / chưa ký số (`.vbs`, `.js`).
+     - **Lỗi từ việc sinh script `.vbs` tạm thời**: Trong `Install_Edge_Framework.bat` trước đây có "Phương án B: VBScript ẩn hoàn toàn cửa sổ", tạo tệp `run_edge_%RANDOM%.vbs` rồi gọi `wscript "%RUN_VBS%"`. Khi bị Application Control chặn, trình thông dịch GUI `wscript.exe` tự động bật popup cảnh báo lỗi và tạm dừng (block) tiến trình CMD.
+     - **VBScript hoàn toàn dư thừa & lỗi thời**: Hệ thống đã có **Windows Service (Tier 1)** chạy dưới quyền `LocalSystem`, **Task Scheduler (Tier 2/3)**, **PowerShell Start-Process Hidden (Phương án A)** và **Lệnh `start "" /B` native (Phương án B)** hoàn toàn sạch sẽ, không tạo file tạm và không bị Antivirus chặn. Microsoft cũng đã chính thức đưa VBScript vào danh sách Deprecated.
+  3. **Giải Pháp Đã Xử Lý Triệt Để**:
+     - **Xóa bỏ hoàn toàn việc tạo và chạy VBScript trong bộ cài**:
+       + `Install_Edge_Framework.bat`: Xóa bỏ hoàn toàn "Phương án B: VBScript", chỉ giữ lại Phương án A (PowerShell Start-Process Hidden) và Phương án B (`start "" /B ...` native CMD).
+       + Thay thế đoạn fallback UAC bằng VBScript: Nếu PowerShell UAC không mở được thì chuyển thẳng đến thông báo hướng dẫn người dùng chuột phải chọn `Run as administrator`, không tạo file `.vbs` nữa.
+       + Loại bỏ đoạn fallback VBScript tương tự trong `Go_Cai_Dat_Dich_Vu.bat` và `fix_CO_SO_Fail_to_connect.bat`.
+     - **Đồng bộ và đóng gói lại các gói cài đặt**:
+       + Đồng bộ file đã sửa sang `D:\1.Download\Restaurant_Support_GPOS\`.
+       + Đóng gói lại 2 file ZIP chuẩn sạch sẽ: `tools/packages/Restaurant_Support_GPOS.zip` và `tools/packages/Restaurant_Support_Agent_Full.zip`.
+  4. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> PASSED 100%`.
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.58s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
