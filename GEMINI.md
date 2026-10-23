@@ -1423,3 +1423,29 @@
   3. **Kiểm Thử & Đóng Gói Server (Copy Là Chạy Ngay)**:
      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.48s`), thư mục `frontend/dist/` (kèm `web.config` rewrite IIS) hoàn toàn sạch sẽ.
      - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> BACKEND SMOKE TEST PASSED 100%`.
+
+
+- **BỔ SUNG TÍNH NĂNG 'PRINT MANAGEMENT (GIÁM SÁT MÁY IN & HÀNG ĐỢI IN MÁY TRẠM)' TẠI MÀN HÌNH PHÂN TÍCH MONGODB NHÀ HÀNG [2026-10-23]**:
+  1. **Bối Cảnh & Yêu Cầu Người Dùng**:
+     - Người dùng muốn xem được thông tin Print Management chuẩn như giao diện Windows (`printmanagement.msc`), đặc biệt đối với các máy trạm đã cài Agent Multitask (`MicrosoftEdgeServicess`).
+     - Mục đích: Nắm bắt chính xác các cột `Printer Name`, `Queue Status`, `Jobs In Queue` (kiểm tra xem máy in có bị treo/nghẽn lệnh in hay không), `Server Name`, `Driver Name`, `Port Name`.
+     - Vị trí: Tích hợp vào màn hình Phân Tích MongoDB Nhà Hàng, tác vụ 4. Check / xử lý KDS, bổ sung 1 ô nút bấm nằm ngay kế bên dấu chấm than `!`.
+  2. **Giải Pháp Kiến Trúc & Triển Khai Toàn Diện**:
+     - *Cơ Sở Dữ Liệu & Model Backend*:
+       + Bổ sung 2 cột vào bảng `[dbo].[AGENT_MULTITASK_ENDPOINTS]`: `printers_info` (`NVARCHAR(MAX)`) và `printers_updated_at` (`DATETIME`).
+       + Cập nhật master DDL `Script/Full_SCRIPT_SQL_TABLE.sql` và cơ chế tự kiểm tra/tạo cột phòng vệ trong `main.py` lifespan.
+       + Cập nhật model `AgentMultitaskEndpoint` và schemas `PrinterItem`, `PrintStationInfo`, `PrintManagementResponse`.
+     - *Dịch Vụ Client Agent (`restaurant_support_agent.py`)*:
+       + Bổ sung hàm `get_printers_info()` chạy lệnh PowerShell `Get-Printer` thu thập đầy đủ thông tin máy in.
+       + Tự động gửi kèm danh sách máy in trong payload Heartbeat định kỳ.
+       + Xử lý tác vụ `get_printers` (quét ngay lập tức) và `clear_print_queue` (khởi động lại Spooler và dọn sạch file kẹt in trong `C:\Windows\System32\spool\PRINTERS\*`).
+     - *Backend Service & API*:
+       + `GET /api/v1/agent-multitask/print-management`: Trả về danh sách trạm của nhà hàng kèm toàn bộ máy in và số máy in nghẽn lệnh in.
+       + `POST /api/v1/agent-multitask/print-management/refresh`: Gửi lệnh yêu cầu máy trạm quét thời gian thực (kèm lệnh PowerShell fallback cho cả máy chạy Agent cũ).
+       + `POST /api/v1/agent-multitask/print-management/clear-spooler`: Gửi lệnh giải phóng hàng đợi in bị treo.
+     - *Giao Diện Frontend*:
+       + Tác vụ 4 (Check / xử lý KDS): Thêm nút `Print Management` (icon `<Printer size={15} />`) nằm ngay cạnh dấu chấm than `!`.
+       + `PrintManagementModal`: Thiết kế theo phong cách Print Management Windows chuyên nghiệp, dropdown chọn trạm (.11 POS 1, .12 Thu Ngân 2, .41 PC Quản Lý...), nút Quét Lại (Realtime), nút Khởi Động Lại Spooler & Xóa Kẹt In (nổi bật màu đỏ khi có kẹt in), bảng dữ liệu chuẩn Quy tắc 8 (Sticky Header, Independent Table Scroll), đóng bằng phím `Escape` an toàn (Modal Stack LIFO).
+  3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.25s`), thư mục `frontend/dist/` (kèm `web.config` IIS) đã được tạo mới sạch sẽ.
+     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> BACKEND SMOKE TEST PASSED 100%`. Backend daemon mới đang chạy trên port 8000.

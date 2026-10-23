@@ -79,6 +79,7 @@ import {
 import { KdsKitchenIntakeModal } from './KdsKitchenIntakeModal';
 import { BatchRoleUserModal } from './BatchRoleUserModal';
 import { AndroidEmulatorTab } from './AndroidEmulatorTab';
+import { PrintManagementModal } from '../../components/mongodb/PrintManagementModal';
 
 import {
   mongoService,
@@ -196,6 +197,9 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
   // Ref theo dõi việc tự động switch sang host KDS (.41 / có CONFIG_COOKING) cho mỗi nhà hàng
   const hasAutoSwitchedKdsRef = useRef<string | null>(null);
+
+  // Trạng thái mở Modal Print Management (Giám sát máy in & hàng đợi in máy trạm KDS/POS)
+  const [isPrintManagementOpen, setIsPrintManagementOpen] = useState<boolean>(false);
 
   // Trạng thái toggle hiển thị giải thích chi tiết cho từng tác vụ (nhấn icon chấm than '!')
   const [taskHelpOpen, setTaskHelpOpen] = useState<Record<string, boolean>>({});
@@ -3406,6 +3410,43 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                     >
                       !
                     </button>
+
+                    {/* Nút Print Management (Kế bên dấu ! của tác vụ 4. Check / xử lý KDS) */}
+                    {selectedTaskId === 'check_kds' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!selectedRestaurant) {
+                            showToast('Vui lòng chọn Nhà Hàng cụ thể trước để xem Print Management', 'info');
+                            return;
+                          }
+                          setIsPrintManagementOpen(true);
+                        }}
+                        title="Xem Print Management (Trạng thái máy in & hàng đợi in máy trạm KDS/POS)"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '0 12px',
+                          height: '32px',
+                          borderRadius: '8px',
+                          backgroundColor: '#EFF6FF',
+                          color: '#1D4ED8',
+                          border: '1.5px solid #3B82F6',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                          transition: 'all 0.15s ease',
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#DBEAFE')}
+                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#EFF6FF')}
+                      >
+                        <Printer size={15} color="#1D4ED8" />
+                        <span>Print Management</span>
+                      </button>
+                    )}
 
                     {/* Nút Đồng Bộ Toàn Bộ SO & CO (Chỉ hiển thị cho tác vụ ManageMenuSoCoTask) */}
                     {selectedTaskId === 'manage_menu_so_co' && (
@@ -8755,6 +8796,17 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
           setSelectedKdsDishCodes([]);
         }}
         showToast={showToast}
+      />
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* MODAL: PRINT MANAGEMENT (GIÁM SÁT MÁY IN & HÀNG ĐỢI IN)        */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <PrintManagementModal
+        isOpen={isPrintManagementOpen}
+        onClose={() => setIsPrintManagementOpen(false)}
+        restaurantCode={selectedRestaurant?.rk7 || selectedRestaurant?.sap || String(selectedRestaurant?.id || '')}
+        restaurantName={selectedRestaurant?.res || selectedRestaurant?.res_name || ''}
+        defaultIpLan={connectedHost || selectedRestaurant?.ip || ''}
       />
     </div>
   );

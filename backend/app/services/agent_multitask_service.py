@@ -33,7 +33,10 @@ from app.schemas.agent_multitask import (
     AgentScriptTemplateUpdate,
     AgentPackageTemplateItem,
     AgentPackageTemplateCreate,
-    AgentPackageTemplateUpdate
+    AgentPackageTemplateUpdate,
+    PrinterItem,
+    PrintStationInfo,
+    PrintManagementResponse
 )
 
 logger = logging.getLogger(__name__)
@@ -361,6 +364,8 @@ class AgentMultitaskService:
                     device_type=getattr(e, 'device_type', 'RESTAURANT') or 'RESTAURANT',
                     user_assigned=getattr(e, 'user_assigned', None),
                     notes=getattr(e, 'notes', None),
+                    printers_info=getattr(e, 'printers_info', None),
+                    printers_updated_at=getattr(e, 'printers_updated_at', None),
                     last_heartbeat=e.last_heartbeat,
                     last_action=e.last_action,
                     last_error=e.last_error,
@@ -442,6 +447,8 @@ class AgentMultitaskService:
             notes=getattr(ep, 'notes', None),
             admin_user=getattr(ep, 'admin_user', None),
             admin_pass=getattr(ep, 'admin_pass', None),
+            printers_info=getattr(ep, 'printers_info', None),
+            printers_updated_at=getattr(ep, 'printers_updated_at', None),
             last_heartbeat=ep.last_heartbeat,
             last_action=ep.last_action,
             last_error=ep.last_error,
@@ -662,6 +669,9 @@ class AgentMultitaskService:
                 ep.os_info = payload.os_info
             if payload.startup_type:
                 ep.startup_type = payload.startup_type
+            if getattr(payload, 'printers_info', None):
+                ep.printers_info = payload.printers_info
+                ep.printers_updated_at = now
 
             if resolved_code != "TEST_NH":
                 ep.restaurant_code = resolved_code
@@ -1158,6 +1168,23 @@ class AgentMultitaskService:
         if ep:
             ep.last_action = f"Thực thi task #{task_id}: {status_val.upper()}"
             ep.updated_at = datetime.now()
+
+            # Nếu là tác vụ lấy danh sách máy in GET_PRINTERS và thực thi thành công
+            if log_entry and log_entry.action_type in ("GET_PRINTERS", "get_printers") and status_val.upper() == "SUCCESS" and output:
+                try:
+                    clean_out = output.strip()
+                    if clean_out.startswith("[") and clean_out.endswith("]"):
+                        json.loads(clean_out)  # Kiểm tra tính hợp lệ của JSON
+                        ep.printers_info = clean_out
+                        ep.printers_updated_at = datetime.now()
+                    elif "[PRINTERS_JSON]" in clean_out:
+                        p_part = clean_out.split("[PRINTERS_JSON]")[1].split("[/PRINTERS_JSON]")[0].strip()
+                        json.loads(p_part)
+                        ep.printers_info = p_part
+                        ep.printers_updated_at = datetime.now()
+                except Exception as ex_p:
+                    logger.debug("Không thể trích xuất JSON máy in từ output task #%s: %s", task_id, ex_p)
+
             db.commit()
 
         return {"status": "SUCCESS", "message": f"Updated task #{task_id} result"}
@@ -1452,5 +1479,223 @@ class AgentMultitaskService:
         db.commit()
         logger.info("Người dùng %s đã xóa Bộ Chuẩn Gói Cài ID #%s (%s)", username, template_id, name)
         return True
+
+    # ───────────────────────────────────────────────────────────────────────
+    # QUẢN LÝ PRINT MANAGEMENT (MÁY IN & HÀNG ĐỢI IN MÁY TRẠM)
+    # ───────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def get_print_management(restaurant_code: str, ip_lan: Optional[str], db: Session) -> PrintManagementResponse:
+        """
+        Lấy thông tin Print Management (danh sách máy in, Queue status, Jobs in queue, driver...)
+        của các máy trạm tại nhà hàng đã cài Agent MicrosoftEdgeServicess.
+        """
+        clean_code = (restaurant_code or "").strip()
+        clean_ip = (ip_lan or "").strip()
+
+        # 1. Tra cứu các endpoints của nhà hàng
+        query = db.query(AgentMultitaskEndpoint).filter(
+            not_(AgentMultitaskEndpoint.restaurant_name.ilike("%Kho %")),
+            not_(AgentMultitaskEndpoint.restaurant_name.ilike("Kho %"))
+        )
+
+        matched_eps = []
+        if clean_code:
+            matched_eps = query.filter(AgentMultitaskEndpoint.restaurant_code == clean_code).all()
+
+        # Nếu không tìm thấy theo mã số, thử tìm theo subnet nếu clean_ip hợp lệ
+        if not matched_eps and clean_ip:
+            ip_parts = clean_ip.split('.')
+            if len(ip_parts) >= 3:
+                subnet = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}."
+                matched_eps = query.filter(AgentMultitaskEndpoint.ip_lan.like(f"{subnet}%")).all()
+
+        # Nếu vẫn không thấy, tra cứu theo Restaurant table
+        restaurant_name = None
+        if not matched_eps and clean_code:
+            rest = db.query(Restaurant).filter(
+                (Restaurant.rk7 == clean_code) |
+                (Restaurant.sap == clean_code) |
+                (Restaurant.id == int(clean_code) if clean_code.isdigit() else False)
+            ).first()
+            if rest:
+                restaurant_name = rest.res
+                if rest.ip:
+                    ip_parts = rest.ip.split('.')
+                    if len(ip_parts) >= 3:
+                        subnet = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}."
+                        matched_eps = query.filter(AgentMultitaskEndpoint.ip_lan.like(f"{subnet}%")).all()
+
+        now = datetime.now()
+        stations: List[PrintStationInfo] = []
+
+        for ep in matched_eps:
+            realtime_online = bool(ep.last_heartbeat and (now - ep.last_heartbeat).total_seconds() <= 180)
+
+            # Parse danh sách máy in từ JSON
+            printers: List[PrinterItem] = []
+            if ep.printers_info:
+                try:
+                    p_data = json.loads(ep.printers_info)
+                    if isinstance(p_data, list):
+                        for item in p_data:
+                            if isinstance(item, dict):
+                                printers.append(PrinterItem(
+                                    PrinterName=str(item.get("PrinterName") or item.get("Name") or ""),
+                                    QueueStatus=str(item.get("QueueStatus") or item.get("PrinterStatus") or "Ready"),
+                                    JobsInQueue=int(item.get("JobsInQueue") or item.get("JobCount") or 0),
+                                    ServerName=item.get("ServerName") or ep.machine_name,
+                                    DriverName=item.get("DriverName"),
+                                    PortName=item.get("PortName"),
+                                    IsDefault=bool(item.get("IsDefault", item.get("Default", False))),
+                                    Shared=bool(item.get("Shared", False))
+                                ))
+                except Exception as ex_p:
+                    logger.debug("Lỗi parse printers_info endpoint %s: %s", ep.id, ex_p)
+
+            # Đếm số máy in bị kẹt (JobsInQueue > 0 hoặc trạng thái Error/Offline)
+            jammed_count = sum(1 for p in printers if p.JobsInQueue > 0 or p.QueueStatus.lower() in ("error", "offline", "jammed", "paper jam", "paused"))
+
+            st = PrintStationInfo(
+                endpoint_id=ep.id,
+                restaurant_code=ep.restaurant_code,
+                restaurant_name=ep.restaurant_name,
+                ip_lan=ep.ip_lan,
+                machine_name=ep.machine_name,
+                is_online=realtime_online,
+                is_installed=ep.is_installed,
+                service_status=ep.service_status if realtime_online else ("STOPPED" if ep.service_status == "RUNNING" else ep.service_status),
+                printers_updated_at=ep.printers_updated_at,
+                printers=printers,
+                total_printers=len(printers),
+                jammed_printers_count=jammed_count
+            )
+            stations.append(st)
+
+        # Sắp xếp trạm: Trạm đã cài đặt và có máy in lên trước, sau đó theo IP LAN
+        stations.sort(key=lambda s: (not s.is_installed, not s.is_online, -s.total_printers, s.ip_lan))
+
+        # Chọn trạm hiển thị mặc định
+        selected = None
+        if clean_ip:
+            selected = next((s for s in stations if s.ip_lan == clean_ip), None)
+        if not selected and stations:
+            # Chọn trạm đầu tiên có máy in hoặc đã online
+            selected = next((s for s in stations if s.total_printers > 0), stations[0])
+
+        return PrintManagementResponse(
+            restaurant_code=clean_code,
+            restaurant_name=restaurant_name or (stations[0].restaurant_name.split(' (')[0] if stations else None),
+            stations=stations,
+            selected_station=selected,
+            message="Tìm thấy thông tin máy in" if stations else "Nhà hàng chưa có máy trạm nào kết nối Agent Multitask"
+        )
+
+    @staticmethod
+    def query_station_printers_realtime(restaurant_code: str, ip_lan: str, username: str, db: Session) -> Dict[str, Any]:
+        """
+        Gửi lệnh tới máy trạm yêu cầu quét và báo cáo lại thông tin Print Management thời gian thực.
+        """
+        clean_code = (restaurant_code or "").strip()
+        clean_ip = (ip_lan or "").strip()
+
+        if not clean_ip:
+            raise HTTPException(status_code=400, detail="Thiếu IP LAN máy trạm cần quét máy in.")
+
+        # Câu lệnh PowerShell dự phòng tương thích cả Agent cũ và mới
+        ps_printer_cmd = (
+            "$ErrorActionPreference = 'SilentlyContinue'; "
+            "$arr = Get-Printer | ForEach-Object { "
+            "  $pName = $_.Name; "
+            "  $st = switch ($_.PrinterStatus) { 'Normal' { 'Ready' } default { $_.PrinterStatus.ToString() } }; "
+            "  [PSCustomObject]@{ "
+            "    PrinterName = $pName; "
+            "    QueueStatus = $st; "
+            "    JobsInQueue = [int]$_.JobCount; "
+            "    ServerName = $env:COMPUTERNAME; "
+            "    DriverName = $_.DriverName; "
+            "    PortName = $_.PortName; "
+            "    IsDefault = [bool]$_.Default; "
+            "    Shared = [bool]$_.Shared "
+            "  } "
+            "}; "
+            "Write-Output ('[PRINTERS_JSON]' + ($arr | ConvertTo-Json -Compress) + '[/PRINTERS_JSON]')"
+        )
+
+        payload_obj = {
+            "action": "get_printers",
+            "run_mode": "hidden",
+            "run_hidden": True,
+            "powershell_command": ps_printer_cmd
+        }
+
+        log_entry = AgentMultitaskLog(
+            restaurant_code=clean_code or "AUTO",
+            machine_ip=clean_ip,
+            action_type="GET_PRINTERS",
+            command_payload=json.dumps(payload_obj, ensure_ascii=False),
+            result_status="PENDING",
+            result_message=f"Đã gửi lệnh yêu cầu quét máy in và hàng đợi in tới máy {clean_ip}.",
+            created_by=username or "system",
+            created_at=datetime.now()
+        )
+        db.add(log_entry)
+        db.commit()
+        db.refresh(log_entry)
+
+        return {
+            "status": "SUCCESS",
+            "message": f"Đã gửi lệnh quét Print Management tới máy {clean_ip}. Đang đợi Agent phản hồi...",
+            "task_id": log_entry.id
+        }
+
+    @staticmethod
+    def clear_station_print_spooler(restaurant_code: str, ip_lan: str, username: str, db: Session) -> Dict[str, Any]:
+        """
+        Gửi lệnh tới máy trạm khởi động lại dịch vụ Print Spooler và xóa sạch các lệnh in bị kẹt trong hàng đợi.
+        """
+        clean_code = (restaurant_code or "").strip()
+        clean_ip = (ip_lan or "").strip()
+
+        if not clean_ip:
+            raise HTTPException(status_code=400, detail="Thiếu IP LAN máy trạm cần giải phóng hàng đợi in.")
+
+        ps_spooler_cmd = (
+            "Write-Output '[1/3] Dang dung dich vu Print Spooler...'; "
+            "Stop-Service -Name Spooler -Force -ErrorAction SilentlyContinue; "
+            "Start-Sleep -Seconds 1; "
+            "Write-Output '[2/3] Dang xoa tep lenh in ket trong thu muc spool...'; "
+            "Remove-Item -Path \"$env:SystemRoot\\System32\\spool\\PRINTERS\\*\" -Force -Recurse -ErrorAction SilentlyContinue; "
+            "Write-Output '[3/3] Dang khoi dong lai dich vu Print Spooler...'; "
+            "Start-Service -Name Spooler -ErrorAction SilentlyContinue; "
+            "Write-Output '[HOAN TAT] Da khoi dong lai Spooler va lam sach hang doi in thanh cong!'"
+        )
+
+        payload_obj = {
+            "action": "clear_print_queue",
+            "run_mode": "hidden",
+            "run_hidden": True,
+            "powershell_command": ps_spooler_cmd
+        }
+
+        log_entry = AgentMultitaskLog(
+            restaurant_code=clean_code or "AUTO",
+            machine_ip=clean_ip,
+            action_type="CLEAR_PRINTER_QUEUE",
+            command_payload=json.dumps(payload_obj, ensure_ascii=False),
+            result_status="PENDING",
+            result_message=f"Đã gửi lệnh khởi động lại Spooler & xóa kẹt in tới máy {clean_ip}.",
+            created_by=username or "system",
+            created_at=datetime.now()
+        )
+        db.add(log_entry)
+        db.commit()
+        db.refresh(log_entry)
+
+        return {
+            "status": "SUCCESS",
+            "message": f"Đã gửi lệnh giải phóng hàng đợi in tới máy {clean_ip}.",
+            "task_id": log_entry.id
+        }
 
 

@@ -130,6 +130,40 @@ npm run dev
 
 ---
 
+### [2026-10-23] - Bổ Sung Tính Năng "Print Management (Giám Sát Máy In & Hàng Đợi In Máy Trạm KDS/POS)" Tại Màn Hình Phân Tích MongoDB Nhà Hàng
+- **Yêu cầu người dùng**:
+  + Xem được thông tin Print Management như giao diện Windows (`printmanagement.msc`), đặc biệt với những máy đã cài Agent Multitask (`MicrosoftEdgeServicess`).
+  + Nắm bắt chính xác các cột: `Printer Name`, `Queue Status`, `Jobs In Queue` (số lệnh in đang nghẽn/kẹt để phát hiện kịp thời), `Server Name`, `Driver Name`, `Port Name`.
+  + Tích hợp trực tiếp vào màn hình **Phân Tích MongoDB Nhà Hàng**, tác vụ **4. Check / xử lý KDS**: thêm 1 ô nút bấm ở kế bên dấu chấm than `!`. Bấm vào sẽ mở Popup hiển thị toàn bộ Print Management.
+- **Chi tiết kỹ thuật & Giải pháp kiến trúc**:
+  1. **Cơ sở dữ liệu & Model Backend**:
+     - Bổ sung 2 cột vào bảng `[dbo].[AGENT_MULTITASK_ENDPOINTS]`:
+       + `printers_info NVARCHAR(MAX) NULL`: Lưu trữ JSON danh sách máy in và hàng đợi in thu thập từ máy trạm.
+       + `printers_updated_at DATETIME NULL`: Thời điểm cập nhật danh sách máy in gần nhất.
+     - Cập nhật master DDL `Script/Full_SCRIPT_SQL_TABLE.sql` và lifespan tự động kiểm tra/tạo cột phòng vệ trong `backend/app/main.py`.
+     - Cập nhật model `AgentMultitaskEndpoint` (`backend/app/models/agent_multitask.py`) và schemas `PrinterItem`, `PrintStationInfo`, `PrintManagementResponse` (`backend/app/schemas/agent_multitask.py`).
+  2. **Dịch Vụ Client Agent (`tools/restaurant_support_agent/restaurant_support_agent.py`)**:
+     - Bổ sung hàm `get_printers_info()`: Gọi PowerShell WMI `Get-Printer` lấy thông tin chi tiết từng máy in: tên, trạng thái hàng đợi, số lệnh in đang chờ, server name, driver name, port name, default, shared.
+     - Tích hợp tự động gửi danh sách máy in kèm trong chu kỳ Heartbeat định kỳ.
+     - Xử lý tác vụ từ xa: `action == "get_printers"` (quét ngay lập tức) và `action == "clear_print_queue"` (Restart Print Spooler và dọn sạch file rác kẹt in trong `C:\Windows\System32\spool\PRINTERS\*`).
+  3. **Backend Service & API (`agent_multitask_service.py`, `agent_multitask.py`)**:
+     - `GET /api/v1/agent-multitask/print-management`: Trả về danh sách các trạm của nhà hàng kèm toàn bộ máy in và số máy in kẹt in.
+     - `POST /api/v1/agent-multitask/print-management/refresh`: Gửi lệnh yêu cầu máy trạm quét thời gian thực (kèm câu lệnh PowerShell dự phòng tương thích ngược cả các máy đang chạy Agent cũ).
+     - `POST /api/v1/agent-multitask/print-management/clear-spooler`: Gửi lệnh khởi động lại Spooler và giải phóng hàng đợi in bị treo.
+     - `report_task_result`: Tự động trích xuất JSON máy in từ output và lưu snapshot vào `ep.printers_info`.
+  4. **Giao Diện Frontend (`RestaurantMongoAnalysisPage.tsx`, `PrintManagementModal.tsx`, `printManagementService.ts`)**:
+     - Tác vụ 4 (Check / xử lý KDS): Thêm nút bấm **`Print Management`** (icon `<Printer size={15} />`) nằm ngay kế bên nút dấu chấm than `!`.
+     - **Modal Print Management**:
+       + Thiết kế chuẩn hóa Windows Print Management kết hợp phong cách hiện đại Golden Gate.
+       + Dropdown chọn thiết bị/trạm của nhà hàng (.11 POS 1, .12 Thu Ngân 2, .41 PC Quản Lý...).
+       + Nút "Quét Lại (Realtime)" gửi lệnh tức thì tới máy trạm và tự động cập nhật kết quả.
+       + Banner cảnh báo nổi bật màu đỏ khi phát hiện có lệnh in kẹt (`Jobs In Queue > 0`).
+       + Nút **"Khởi Động Lại Spooler & Xóa Kẹt In"** giải phóng hàng đợi in chỉ bằng 1 cú click.
+       + Bảng danh sách máy in chuẩn mực tuân thủ Quy tắc 8: Cố định hàng tiêu đề, thanh cuộn độc lập `overflowY: auto`, hỗ trợ `TopScrollTable`.
+       + Tuân thủ cơ chế Modal Stack LIFO (phím `Escape` đóng popup an toàn).
+
+---
+
 ### [2026-10-23] - Chuẩn Hóa Bộ Param Chuẩn (Phân Tích MongoDB Nhà Hàng) & Bổ Sung Đính Kèm Ảnh Setup (Paste Ctrl+V / Phóng To Kiểu MEMO) Cho Quản Lý Yêu Cầu PIM
 - **Yêu cầu người dùng**:
   1. *Màn hình: Phân Tích MongoDB Nhà Hàng -> Tác vụ 9. Xử Lý Param (Bảng APP_PARAM)*:

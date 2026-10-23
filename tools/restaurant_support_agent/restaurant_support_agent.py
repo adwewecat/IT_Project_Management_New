@@ -374,9 +374,63 @@ def get_server_candidates(config):
     return candidates
 
 
+def get_printers_info():
+    """
+    Thu thap thong tin Print Management may tram qua PowerShell WMI:
+    - Printer Name
+    - Queue Status (Ready, Paused, Error, Offline...)
+    - Jobs In Queue (So luong lenh in dang cho/ket trong hang doi)
+    - Server Name (ComputerName)
+    - Driver Name
+    - Port Name
+    - IsDefault, Shared
+    """
+    try:
+        ps_cmd = (
+            "$ErrorActionPreference = 'SilentlyContinue'; "
+            "$arr = Get-Printer | ForEach-Object { "
+            "  $pName = $_.Name; "
+            "  $st = switch ($_.PrinterStatus) { 'Normal' { 'Ready' } default { $_.PrinterStatus.ToString() } }; "
+            "  [PSCustomObject]@{ "
+            "    PrinterName = $pName; "
+            "    QueueStatus = $st; "
+            "    JobsInQueue = [int]$_.JobCount; "
+            "    ServerName = $env:COMPUTERNAME; "
+            "    DriverName = $_.DriverName; "
+            "    PortName = $_.PortName; "
+            "    IsDefault = [bool]$_.Default; "
+            "    Shared = [bool]$_.Shared "
+            "  } "
+            "}; "
+            "ConvertTo-Json -InputObject $arr -Compress"
+        )
+        res = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
+            capture_output=True,
+            text=True,
+            timeout=8
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            raw = res.stdout.strip()
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return json.dumps([parsed], ensure_ascii=False)
+            elif isinstance(parsed, list):
+                return json.dumps(parsed, ensure_ascii=False)
+    except Exception as ex_p:
+        logger.debug("Loi thu thap Print Management: %s", ex_p)
+    return "[]"
+
+
 def send_heartbeat(config, ip_lan, machine_name, os_info):
     """Gui tin hieu Heartbeat len Central Server."""
     server_candidates = get_server_candidates(config)
+
+    printers_json = None
+    try:
+        printers_json = get_printers_info()
+    except Exception:
+        pass
 
     payload = {
         "restaurant_code": str(config.get("restaurant_code", "UNKNOWN")),
@@ -386,7 +440,8 @@ def send_heartbeat(config, ip_lan, machine_name, os_info):
         "service_status": "RUNNING",
         "agent_version": AGENT_VERSION,
         "os_info": os_info,
-        "startup_type": "Automatic"
+        "startup_type": "Automatic",
+        "printers_info": printers_json
     }
 
     for srv in server_candidates:
@@ -1761,6 +1816,35 @@ def execute_task(config, task, ip_lan=None):
                     logger.warning("Loi spawn tien trinh installer: %s", ex_sp)
 
 
+
+        elif action in ("get_printers", "get_print_management"):
+            logger.info("Thuc thi yeu cau quet thong tin Print Management tu Portal...")
+            printers_json = get_printers_info()
+            success = True
+            message = "Da quet va thu thap thong tin may in thanh cong."
+            output = printers_json
+
+        elif action in ("clear_print_queue", "restart_spooler"):
+            logger.info("Thuc thi yeu cau khoi dong lai Spooler va lam sach hang doi in...")
+            ps_spooler = (
+                "Stop-Service -Name Spooler -Force -ErrorAction SilentlyContinue; "
+                "Start-Sleep -Seconds 1; "
+                "Remove-Item -Path \"$env:SystemRoot\\System32\\spool\\PRINTERS\\*\" -Force -Recurse -ErrorAction SilentlyContinue; "
+                "Start-Service -Name Spooler -ErrorAction SilentlyContinue; "
+                "Write-Output 'CLEARED_OK'"
+            )
+            r_sp = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_spooler],
+                capture_output=True,
+                text=True,
+                timeout=15
+            )
+            success = r_sp.returncode == 0
+            message = "Da khoi dong lai Spooler va lam sach hang doi in thanh cong." if success else f"Loi: {r_sp.stderr}"
+            try:
+                output = get_printers_info()
+            except Exception:
+                output = r_sp.stdout.strip()
 
         else:
             message = f"Hanh dong '{action}' chua duoc ho tro."

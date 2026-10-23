@@ -48,6 +48,8 @@ class AgentEndpointItem(BaseModel):
     notes: Optional[str] = None
     admin_user: Optional[str] = None
     admin_pass: Optional[str] = None
+    printers_info: Optional[str] = None
+    printers_updated_at: Optional[datetime] = None
     last_heartbeat: Optional[datetime] = None
     last_action: Optional[str] = None
     last_error: Optional[str] = None
@@ -155,6 +157,41 @@ class AgentHeartbeatRequest(BaseModel):
     agent_version: Optional[str] = "1.0.0"
     os_info: Optional[str] = None
     startup_type: Optional[str] = "Automatic"
+    printers_info: Optional[str] = None
+
+
+class PrinterItem(BaseModel):
+    PrinterName: str
+    QueueStatus: str = "Ready"  # Ready, Paused, Error, Offline, Jammed...
+    JobsInQueue: int = 0
+    ServerName: Optional[str] = None
+    DriverName: Optional[str] = None
+    PortName: Optional[str] = None
+    IsDefault: Optional[bool] = False
+    Shared: Optional[bool] = False
+
+
+class PrintStationInfo(BaseModel):
+    endpoint_id: int
+    restaurant_code: str
+    restaurant_name: str
+    ip_lan: str
+    machine_name: Optional[str] = None
+    is_online: bool = False
+    is_installed: bool = False
+    service_status: str = "UNKNOWN"
+    printers_updated_at: Optional[datetime] = None
+    printers: List[PrinterItem] = []
+    total_printers: int = 0
+    jammed_printers_count: int = 0  # Số máy in có JobsInQueue > 0 hoặc Error
+
+
+class PrintManagementResponse(BaseModel):
+    restaurant_code: str
+    restaurant_name: Optional[str] = None
+    stations: List[PrintStationInfo] = []
+    selected_station: Optional[PrintStationInfo] = None
+    message: Optional[str] = None
 
 
 class AgentLogItem(BaseModel):

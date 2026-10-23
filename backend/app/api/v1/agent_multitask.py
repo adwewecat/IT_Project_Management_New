@@ -35,7 +35,8 @@ from app.schemas.agent_multitask import (
     AgentScriptTemplateUpdate,
     AgentPackageTemplateItem,
     AgentPackageTemplateCreate,
-    AgentPackageTemplateUpdate
+    AgentPackageTemplateUpdate,
+    PrintManagementResponse
 )
 from app.services.agent_multitask_service import AgentMultitaskService
 
@@ -695,6 +696,65 @@ def download_package_file(package_name: str):
         filename=clean_name,
         media_type="application/octet-stream",
         headers={"Content-Disposition": f"attachment; filename={clean_name}"}
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ENDPOINTS QUẢN LÝ PRINT MANAGEMENT (MÁY IN & HÀNG ĐỢI IN MÁY TRẠM)
+# ──────────────────────────────────────────────────────────────────────────
+@router.get("/print-management", response_model=PrintManagementResponse)
+def get_print_management(
+    restaurant_code: str = Query(..., description="Mã nhà hàng (RK7, SAP hoặc ID)"),
+    ip_lan: Optional[str] = Query(None, description="IP LAN máy trạm đang chọn"),
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """
+    Lấy thông tin Print Management (danh sách máy in, Queue status, Jobs in queue, Driver name...)
+    của các máy trạm tại nhà hàng đã cài Agent Multitask.
+    """
+    return AgentMultitaskService.get_print_management(
+        restaurant_code=restaurant_code,
+        ip_lan=ip_lan,
+        db=db
+    )
+
+
+@router.post("/print-management/refresh")
+def refresh_station_printers(
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """
+    Gửi lệnh tới máy trạm yêu cầu quét và báo cáo lại thông tin Print Management thời gian thực.
+    """
+    restaurant_code = str(payload.get("restaurant_code") or "")
+    ip_lan = str(payload.get("ip_lan") or "")
+    return AgentMultitaskService.query_station_printers_realtime(
+        restaurant_code=restaurant_code,
+        ip_lan=ip_lan,
+        username=current_user.username or "system",
+        db=db
+    )
+
+
+@router.post("/print-management/clear-spooler")
+def clear_station_print_spooler(
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    """
+    Khởi động lại dịch vụ Print Spooler và xóa sạch các lệnh in bị kẹt trong hàng đợi.
+    """
+    restaurant_code = str(payload.get("restaurant_code") or "")
+    ip_lan = str(payload.get("ip_lan") or "")
+    return AgentMultitaskService.clear_station_print_spooler(
+        restaurant_code=restaurant_code,
+        ip_lan=ip_lan,
+        username=current_user.username or "system",
+        db=db
     )
 
 
