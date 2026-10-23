@@ -661,6 +661,52 @@ export const PimPage: React.FC = () => {
     }
   };
 
+  // Lắng nghe sự kiện Paste (Ctrl + V) toàn cục khi Modal Cập Nhật Trạng Thái đang mở
+  // Người dùng chỉ cần nhấn Ctrl+V ở bất kỳ đâu trên màn hình là hệ thống lập tức dán ảnh setup,
+  // không cần phải click vào ô đính kèm hoặc bị bật cửa sổ chọn file
+  useEffect(() => {
+    if (!statusModalOpen) return;
+
+    const handleGlobalWindowPaste = (e: ClipboardEvent) => {
+      // Nếu con trỏ đang ở ô input text hoặc textarea khác thì bỏ qua
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'text' || target.tagName === 'TEXTAREA')) {
+        return;
+      }
+
+      const items = e.clipboardData?.items;
+      if (!items || items.length === 0) return;
+
+      const pastedFiles: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.indexOf('image') !== -1) {
+          const file = item.getAsFile();
+          if (file) {
+            let namedFile = file;
+            if (file.name === 'image.png' || !file.name) {
+              const now = new Date();
+              const timeStr = `${now.getHours()}h${now.getMinutes()}p${now.getSeconds()}s`;
+              namedFile = new File([file], `Ảnh_setup_${timeStr}.png`, { type: file.type });
+            }
+            pastedFiles.push(namedFile);
+          }
+        }
+      }
+
+      if (pastedFiles.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleUploadSetupFiles(pastedFiles);
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalWindowPaste);
+    return () => {
+      window.removeEventListener('paste', handleGlobalWindowPaste);
+    };
+  }, [statusModalOpen]);
+
   // Gỡ ảnh khỏi danh sách
   const handleRemoveSetupImage = (idxToRemove: number) => {
     setModalImages(prev => prev.filter((_, idx) => idx !== idxToRemove));
@@ -2475,14 +2521,12 @@ export const PimPage: React.FC = () => {
               <div
                 tabIndex={0}
                 onPaste={handlePasteSetupImages}
-                onClick={() => setupFileInputRef.current?.click()}
                 style={{
                   border: '2px dashed #CBD5E1',
                   borderRadius: 'var(--radius-md)',
                   backgroundColor: '#F8FAFC',
                   padding: '16px',
                   textAlign: 'center',
-                  cursor: 'pointer',
                   transition: 'all 0.2s ease',
                   outline: 'none',
                 }}
@@ -2501,10 +2545,10 @@ export const PimPage: React.FC = () => {
                   }}
                   style={{ display: 'none' }}
                 />
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                   <div style={{
-                    width: '36px',
-                    height: '36px',
+                    width: '40px',
+                    height: '40px',
                     borderRadius: '50%',
                     backgroundColor: '#EDE9FE',
                     color: '#7C3AED',
@@ -2512,14 +2556,53 @@ export const PimPage: React.FC = () => {
                     alignItems: 'center',
                     justifyContent: 'center'
                   }}>
-                    {isUploadingImages ? <RefreshCw size={18} className="spin-animation" /> : <Upload size={18} />}
+                    {isUploadingImages ? <RefreshCw size={20} className="spin-animation" /> : <Upload size={20} />}
                   </div>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {isUploadingImages ? 'Đang tải ảnh lên...' : 'Nhấn Ctrl+V để dán ảnh chụp màn hình, hoặc click chọn ảnh'}
+
+                  <div>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#7C3AED' }}>
+                      {isUploadingImages ? 'Đang tải ảnh lên hệ thống...' : '⚡ Nhấn Ctrl+V bất kỳ lúc nào để dán ảnh (không cần click)'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      Hệ thống tự động nhận ảnh chụp màn hình từ Clipboard khi cửa sổ này đang mở
+                    </div>
                   </div>
-                  <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                    Hỗ trợ 1 hoặc nhiều ảnh chụp file Excel setup (.png, .jpg, .webp). Click vào ảnh bên dưới để xem phóng to như MEMO.
-                  </div>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setupFileInputRef.current?.click();
+                    }}
+                    disabled={isUploadingImages}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: '#FFFFFF',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      boxShadow: 'var(--shadow-sm)',
+                      transition: 'all 0.15s ease',
+                      marginTop: '2px',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = '#7C3AED';
+                      e.currentTarget.style.color = '#7C3AED';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = '#CBD5E1';
+                      e.currentTarget.style.color = 'var(--text-primary)';
+                    }}
+                  >
+                    <Image size={14} color="#7C3AED" />
+                    <span>Hoặc bấm vào đây để chọn ảnh từ máy tính</span>
+                  </button>
                 </div>
               </div>
 

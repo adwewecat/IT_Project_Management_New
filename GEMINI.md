@@ -1495,3 +1495,19 @@
   3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
      - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> PASSED 100%`, Backend daemon port 8000 đã được khởi động lại nạp code mới.
      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.35s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
+
+- **TỐI ƯU HÓA TRẢI NGHIỆM DÁN ẢNH SETUP PIM (CTRL+V TOÀN CỤC KHÔNG CẦN CLICK VÀO Ô) [2026-10-23]**:
+  1. **Vấn Đề & Bối Cảnh Người Dùng**:
+     - Trong Modal "Cập Nhật Trạng Thái Yêu Cầu" của Quản Lý PIM (`/pim-management`), người dùng phản ánh:
+       * Khi muốn dán ảnh bằng phím tắt `Ctrl + V`, người dùng phải click vào ô đính kèm. Nhưng khi click vào ô đó thì hệ thống lại tự động bung cửa sổ chọn file của Windows Explorer ra, người dùng phải bấm Hủy/Thoát ra khỏi cửa sổ đó thì mới `Ctrl+V` được.
+       * Nếu không click vào ô đó thì bấm `Ctrl+V` không có tác dụng do ô đó chưa nhận focus.
+  2. **Giải Pháp Kiến Trúc & UI/UX Đã Triển Khai**:
+     - **Lắng nghe sự kiện Paste toàn cục (`window.addEventListener('paste')`) khi Modal đang mở**:
+       + Ngay khi người dùng mở Modal Cập Nhật Trạng Thái, hệ thống tự động kích hoạt bộ lắng nghe Clipboard toàn cục.
+       + Người dùng vừa mở modal ra là có thể nhấn `Ctrl + V` ngay lập tức ở bất kỳ đâu trên màn hình, hệ thống tự động nhận diện ảnh chụp màn hình từ Snipping Tool / Clipboard và tải lên ngay lập tức mà không cần click chuột vào bất kỳ ô nào!
+     - **Tách biệt nút bấm chọn tệp khỏi vùng Pastezone**:
+       + Loại bỏ sự kiện `onClick` mở file picker trên toàn bộ container ngoài của Bước 4.
+       + Thêm nút bấm chuyên dụng riêng biệt: `📁 Hoặc bấm vào đây để chọn ảnh từ máy tính`.
+       + Hướng dẫn nổi bật: `⚡ Nhấn Ctrl+V bất kỳ lúc nào để dán ảnh (không cần click)` giúp trải nghiệm thao tác của người dùng cực kỳ tiện lợi và nhanh chóng.
+  3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.67s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
