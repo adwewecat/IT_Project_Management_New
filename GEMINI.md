@@ -1375,3 +1375,24 @@
      - Đã kiểm thử chạy trực tiếp `execute_command` bằng Python script với dữ liệu thực tế 10 bước (gồm xóa file `fxlauncher.jar`, tải file đính kèm `fxlauncher.jar` và chạy script `fix_CO_SO_Fail_to_connect.bat`): **Kết quả `Result success: True`, tạo task PENDING thành công 100%**.
      - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`.
      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 8.72s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
+
+
+- **KHẮC PHỤC TRIỆT ĐỂ LỖI 'The batch file cannot be found.' KHI CHẠY `_fetch_step_*.bat` TRÊN MÁY TRẠM [2026-10-23]**:
+  1. **Bối Cảnh & Nguyên Nhân Lỗi**:
+     - Khi thực thi tác vụ DEPLOY_PACKAGE tới máy trạm (ví dụ: Chixmax Vạn Hạnh Mall `10.8.153.41`), file `Tat_dich_vu_GPOS.bat` đã tải về máy trạm và script `_fetch_step_1.bat` được tạo thành công, nhưng khi chạy bước 1 thì báo lỗi:
+       `❌ [Bước 1: Copy file đính kèm vào thư mục đích] Chay _fetch_step_1.bat ngam: FAILED (ExitCode: 1)`
+       `The batch file cannot be found.`
+     - **Nguyên nhân gốc rễ**:
+       + Trong kịch bản batch tải file (`bat_script_content`) sinh ra từ Backend, có câu lệnh tự xóa: `del "%~f0" >nul 2>&1` ngay trước `exit /b 0`.
+       + Trong Windows CMD, khi một file batch tự xóa chính nó (`del "%~f0"`) trong lúc đang chạy, con trỏ tệp tin của `cmd.exe` bị mất dấu vì file không còn tồn tại trên đĩa. Khi `cmd.exe` cố gắng đọc dòng lệnh tiếp theo (`exit /b 0`), nó lập tức báo lỗi: `The batch file cannot be found.` và trả về `ExitCode: 1`.
+       + Do exit code là 1 khác 0 nên Client Agent đánh dấu bước 1 bị lỗi và dừng toàn bộ quy trình.
+  2. **Giải Pháp Kiến Trúc & Triển Khai**:
+     - **Loại bỏ hoàn toàn `del "%~f0"` trong kịch bản batch tải file (`backend/app/services/agent_multitask_service.py`)**:
+       + File script `_fetch_step_*.bat` sau khi tải file thành công sẽ thực thi thẳng câu lệnh `exit /b 0` (hoặc `exit /b 1` nếu lỗi tải file), trả về exit code 0 cho `cmd.exe`.
+       + Không còn hiện tượng `The batch file cannot be found.`!
+     - **Cơ chế dọn dẹp script an toàn bằng Python (`tools/restaurant_support_agent/restaurant_support_agent.py`)**:
+       + Chuyển việc dọn dẹp file script tạm `_fetch_step_*.bat` sang tiến trình Python sau khi lệnh `subprocess.run` đã kết thúc thành công (exit code 0). Khi tiến trình CMD đã đóng, Python xóa file script an toàn mà không làm ảnh hưởng đến CMD.
+     - **Chuẩn hóa lệnh gọi batch script**: `cmd.exe /c call "{target_script_path}" {script_args}` không bị lồng dấu ngoặc kép đôi.
+  3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `PASSED 100%`.
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.14s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.

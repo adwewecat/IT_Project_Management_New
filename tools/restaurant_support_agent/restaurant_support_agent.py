@@ -1557,7 +1557,7 @@ def execute_task(config, task, ip_lan=None):
                     s_ext = s_ext.lower()
 
                     if s_ext in [".bat", ".cmd", ".txt"]:
-                        exec_cmd = f'cmd.exe /c "call \"{target_script_path}\" {script_args}"'.strip()
+                        exec_cmd = f'cmd.exe /c call "{target_script_path}" {script_args}'.strip()
                     elif s_ext in [".ps1"]:
                         exec_cmd = f'powershell.exe -ExecutionPolicy Bypass -File "{target_script_path}" {script_args}'.strip()
                     else:
@@ -1605,6 +1605,11 @@ def execute_task(config, task, ip_lan=None):
                             )
                             if res_sub.returncode == 0:
                                 log_pipeline.append(f"[{step_name}] Chay {scr_name} ngam: OK (ExitCode: 0)\n{res_sub.stdout.strip()}")
+                                if scr_name.lower().startswith("_fetch_step_") and os.path.isfile(target_script_path):
+                                    try:
+                                        os.remove(target_script_path)
+                                    except Exception:
+                                        pass
                             else:
                                 log_pipeline.append(f"❌ [{step_name}] Chay {scr_name} ngam: FAILED (ExitCode: {res_sub.returncode})\n{res_sub.stderr.strip() or res_sub.stdout.strip()}")
                                 pipeline_success = False

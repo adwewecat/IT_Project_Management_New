@@ -771,12 +771,10 @@ class AgentMultitaskService:
                     "\r\n"
                     'echo [THANH CONG] Da nhan file vao "%DEST_FILE%".\r\n'
                     f"{extract_cmd_block}"
-                    'del "%~f0" >nul 2>&1\r\n'
                     "exit /b 0\r\n"
                     "\r\n"
                     ":LoiTaiFile\r\n"
                     'echo [LOI] Khong the tai file tu Server ve "%DEST_FILE%".\r\n'
-                    'del "%~f0" >nul 2>&1\r\n'
                     "exit /b 1\r\n"
                 )
 
