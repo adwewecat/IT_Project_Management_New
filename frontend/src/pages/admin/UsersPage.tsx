@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Search,
   UserPlus,
@@ -478,10 +478,24 @@ export const UsersPage: React.FC = () => {
     }
   };
 
-  const roleLevelOptions = [
+  // Lọc chỉ hiển thị các nhóm quyền mở rộng đang Hoạt động (active) khi tạo mới
+  const createRoleOptions = useMemo(() => [
     { value: '0', label: '0 - Mặc định (Không gán)' },
-    ...roles.map((r) => ({ value: String(r.id), label: `${r.id} - ${r.tenquyen || 'Nhóm ' + r.id}` })),
-  ];
+    ...roles
+      .filter((r) => r.active)
+      .map((r) => ({ value: String(r.id), label: `${r.id} - ${r.tenquyen || 'Nhóm ' + r.id}` })),
+  ], [roles]);
+
+  // Khi chỉnh sửa: Chỉ hiển thị các nhóm đang Hoạt động; nếu user đang giữ nhóm bị khóa thì hiển thị kèm nhãn (Tạm khóa)
+  const editRoleOptions = useMemo(() => [
+    { value: '0', label: '0 - Mặc định (Không gán)' },
+    ...roles
+      .filter((r) => r.active || String(r.id) === String(editForm.quyen_mo_rong))
+      .map((r) => ({
+        value: String(r.id),
+        label: `${r.id} - ${r.tenquyen || 'Nhóm ' + r.id}${!r.active ? ' (Tạm khóa)' : ''}`,
+      })),
+  ], [roles, editForm.quyen_mo_rong]);
 
   return (
     <div className="page-container-fullheight" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px', height: '100%', overflow: 'hidden' }}>
@@ -860,7 +874,7 @@ export const UsersPage: React.FC = () => {
               label="Nhóm quyền mở rộng (Chi tiết quyền cột & hạ tầng)"
               value={createForm.quyen_mo_rong || '0'}
               onChange={(e) => setCreateForm({ ...createForm, quyen_mo_rong: e.target.value })}
-              options={roleLevelOptions}
+              options={createRoleOptions}
             />
           </div>
 
@@ -983,7 +997,7 @@ export const UsersPage: React.FC = () => {
               label="Nhóm quyền mở rộng (Chi tiết quyền cột & hạ tầng)"
               value={editForm.quyen_mo_rong || '0'}
               onChange={(e) => setEditForm({ ...editForm, quyen_mo_rong: e.target.value })}
-              options={roleLevelOptions}
+              options={editRoleOptions}
             />
           </div>
 

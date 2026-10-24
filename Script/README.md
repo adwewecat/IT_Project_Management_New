@@ -4868,3 +4868,15 @@ estaurant_service.py).
   4. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
      - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> PASSED 100%`.
      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.58s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
+
+
+- **TỐI ƯU HÓA PHÂN QUYỀN: ẨN CÁC NHÓM QUYỀN MỞ RỘNG BỊ TẠM KHÓA KHỎI DROPDOWN GÁN USER [2026-10-24]**:
+  1. **Vấn Đề & Phản Ánh Người Dùng**:
+     - Trong màn hình "Nhóm Quyền & Phân Quyền Chi Tiết", một số nhóm quyền mở rộng đã được chuyển trạng thái "Tạm khóa" (`active = False`, ví dụ: `#4 - HELPDESK_DEFAULT`, `#7 - APP_DEFAULT`).
+     - Tuy nhiên khi mở Modal Tạo mới hoặc Chỉnh sửa Người dùng, tại ô Dropdown "Nhóm quyền mở rộng (Chi tiết quyền cột & hạ tầng)", hệ thống vẫn nạp ra danh sách tất cả các nhóm gồm cả các nhóm đã bị tạm khóa, khiến người quản trị dễ bấm chọn nhầm vào nhóm không còn áp dụng.
+  2. **Giải Pháp Đã Xử Lý**:
+     - Cập nhật `UsersPage.tsx`:
+       + Tạo mới user (`createRoleOptions`): Lọc bỏ hoàn toàn các nhóm có `active === false`, chỉ hiển thị các nhóm đang `Hoạt động`.
+       + Chỉnh sửa user (`editRoleOptions`): Chỉ hiển thị các nhóm đang `Hoạt động`. Nếu user đó vốn đang mang một nhóm cũ bị khóa thì vẫn hiển thị để giữ nguyên trạng thái kèm hậu tố `(Tạm khóa)` cảnh báo rõ ràng, còn các nhóm bị khóa khác không liên quan sẽ bị ẩn hoàn toàn.
+  3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.32s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.

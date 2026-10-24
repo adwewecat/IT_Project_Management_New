@@ -1,5 +1,65 @@
 [
   {
+    "id": "94038d4f",
+    "job_id": "job_sync_pim_requests",
+    "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",
+    "started_at": "2026-10-24 12:00:12",
+    "finished_at": "2026-10-24 12:00:12",
+    "duration_seconds": 32.73,
+    "status": "success",
+    "message": "Thành công lúc 12:00 (Quét: 15 | Mới: 0 | Cập nhật: 15)",
+    "details": "Tự động quét PIM theo lịch 3 khung giờ lúc 12:00:\n- Tổng quét: 15\n- Mới: 0\n- Cập nhật: 15",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
+    "id": "851091b7",
+    "job_id": "job_review_missing_restaurant_info",
+    "job_name": "Rà Soát Thông Tin Nhà Hàng Còn Thiếu",
+    "started_at": "2026-10-24 09:30:04",
+    "finished_at": "2026-10-24 09:30:38",
+    "duration_seconds": 33.96,
+    "status": "failed",
+    "message": "Lỗi trong quá trình rà soát thông tin nhà hàng: _ssl.c:1064: The handshake operation timed out",
+    "details": "Ngoại lệ: _ssl.c:1064: The handshake operation timed out",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
+    "id": "ce7a75f8",
+    "job_id": "job_sync_sales_daily_server",
+    "job_name": "Lấy dữ liệu tổng sales, tổng khách từ SERVER Dcorp về Server IT Daily Sales",
+    "started_at": "2026-10-24 05:45:19",
+    "finished_at": "2026-10-24 05:45:41",
+    "duration_seconds": 21.72,
+    "status": "success",
+    "message": "Đồng bộ thành công dữ liệu doanh số ngày 2026-10-23 từ Server RK7 (172.16.8.26) về bảng SO_LIEU_CHECK_SALES_DAILY trên DB ITSS (172.16.20.103).",
+    "details": "Kết quả thực thi thực tế:\n- Ngày chốt doanh số: 2026-10-23\n- Tổng số nhà hàng lấy về: 319\n- Số nhà hàng có doanh số: 307\n- Tổng doanh thu hệ thống: 11,282,134,895 VNĐ\n- Tổng lượng khách (TC): 27,916\n- Database đích: ITDEPT (172.16.20.103)\n- Bảng dữ liệu: dbo.SO_LIEU_CHECK_SALES_DAILY & dbo.TOTAL_SALES_DAILY",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
+    "id": "81a73ea8",
+    "job_id": "job_sync_pim_requests",
+    "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",
+    "started_at": "2026-10-24 03:00:06",
+    "finished_at": "2026-10-24 03:00:06",
+    "duration_seconds": 28.24,
+    "status": "success",
+    "message": "Thành công lúc 03:00 (Quét: 15 | Mới: 0 | Cập nhật: 15)",
+    "details": "Tự động quét PIM theo lịch 3 khung giờ lúc 03:00:\n- Tổng quét: 15\n- Mới: 0\n- Cập nhật: 15",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
+    "id": "26136749",
+    "job_id": "job_sync_pim_requests",
+    "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",
+    "started_at": "2026-10-23 16:30:17",
+    "finished_at": "2026-10-23 16:30:17",
+    "duration_seconds": 29.28,
+    "status": "success",
+    "message": "Thành công lúc 16:30 (Quét: 15 | Mới: 3 | Cập nhật: 12)",
+    "details": "Tự động quét PIM theo lịch 3 khung giờ lúc 16:30:\n- Tổng quét: 15\n- Mới: 3\n- Cập nhật: 12",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
     "id": "934d86b1",
     "job_id": "job_sync_pim_requests",
     "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",
