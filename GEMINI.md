@@ -1576,3 +1576,29 @@
   3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
      - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> PASSED 100%`, Backend daemon port 8000 đã reload nạp endpoint mới.
      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.02s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
+
+- **KHẮC PHỤC TRIỆT ĐỂ LỖI TỰ ĐỘNG GÁN G-PROCESS CHO DUNG.NGUYENANH & BỔ SUNG ĐIỀU KIỆN CHẶN TỰ GÁN [2026-10-24]**:
+  1. **Yêu Cầu & Bối Cảnh Người Dùng**:
+     - Khi chạy tác vụ tự động đóng ticket 3CX và G-Process hàng loạt (Cron hoặc thủ công), các nhiệm vụ G-Process chưa gửi tới `dung.nguyenanh` (chưa phân công người thực hiện, đang ở hàng đợi/pool hoặc đang phân công cho người khác) bị hệ thống tự động gán cho `dung.nguyenanh`.
+     - Yêu cầu xử lý triệt để: Bổ sung điều kiện bắt buộc, những nhiệm vụ nào chưa gán đích danh cho `dung.nguyenanh` thì **tuyệt đối đừng tự gán cho `dung.nguyenanh`** và không được can thiệp đóng.
+  2. **Nguyên Nhân Gốc Rễ (Root Cause)**:
+     - **Ở khâu quét danh sách (`_fetch_gprocess_mission_list`)**:
+       + Khi bắt API `https://process-gpms.ggg.com.vn/api/v1/list-my-task`, code cũ chỉ kiểm tra tên nhiệm vụ có chứa "xác nhận lỗi kỹ thuật" hoặc `step_id == 11702`. Hoàn toàn bỏ quên việc kiểm tra người thực hiện (`assignee`), dẫn đến việc lấy cả các nhiệm vụ chưa gán (unassigned) hoặc gán cho người khác/nhóm chung trong API.
+       + Code cũ còn tự gán cứng trường `"assignee": username or "dung.nguyenanh"`.
+     - **Hậu quả dây chuyền khi đóng nhiệm vụ (`_close_gprocess_mission`)**:
+       + Các nhiệm vụ chưa gán lọt vào danh sách đóng. Khi mở URL `https://gpms.ggg.com.vn/g-process/my-mission/{m_id}`, trình duyệt đang đăng nhập SSO của `dung.nguyenanh`. Khi script tự động tick "Không đạt", điền feedback, tick "Không phê duyệt", "Kết thúc quy trình" và click "Xác nhận", hệ thống GPMS tự động gán người submit bước này (`dung.nguyenanh`) làm Người thực hiện chính thức!
+  3. **Giải Pháp Phòng Vệ Đa Tầng (Multi-layer Defense)**:
+     - **Lớp 1 - Lọc nghiêm ngặt từ khâu quét danh sách (`_fetch_gprocess_mission_list`)**:
+       + Xây dựng bộ lọc kiểm tra người thực hiện: Trích xuất toàn diện các trường `assignee`, `executor`, `assigned_user`, `current_assignee`, `handler`, `implementer`, `assignees`... từ API JSON.
+       + Đồng thời đọc trước bảng HTML trên trang GPMS (`tbody tr`) để lấy cột 4 (Người thực hiện) đối chiếu 100% với giao diện thực tế.
+       + Nhận diện các dấu hiệu chưa gán: Rỗng, `-`, `—`, `+`, `chưa gán`, `chua gan`, `chưa phân công`, `chua phan cong`, `chưa tiếp nhận`, `chua tiep nhan`, `gán người`, `gan nguoi`, `nhóm it`, `bộ phận it`... -> **BỎ QUA NGAY (SKIP)**, tuyệt đối không đưa vào danh sách đóng.
+       + Nhận diện gán cho người khác: Nếu Người thực hiện không chứa `dung.nguyenanh`, `Nguyễn Anh Dũng` (hoặc username truyền vào) -> **BỎ QUA NGAY (SKIP)**.
+       + Chỉ ghi nhận nhiệm vụ khi xác định đích danh người thực hiện là `dung.nguyenanh`.
+     - **Lớp 2 - Kiểm tra phòng vệ tuyệt đối trước khi thao tác form (`_close_gprocess_mission`)**:
+       + Ngay sau khi mở trang chi tiết nhiệm vụ, trước khi click bất kỳ nút nào trên form:
+         * Kiểm tra sự xuất hiện của nút "Tiếp nhận" / "Nhận việc" / "Claim": Nếu có, chứng minh nhiệm vụ chưa được tiếp nhận bởi cá nhân -> **DỪNG NGAY LẬP TỨC**, ghi log cảnh báo và trả về trạng thái `skipped`, không tự gán.
+         * Quét thông tin "Người thực hiện" hiển thị trên trang chi tiết: Nếu là chưa gán hoặc là người khác -> **DỪNG NGAY LẬP TỨC**, trả về `skipped`, tuyệt đối không click "Không đạt" hay "Xác nhận".
+  4. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+     - Backend: Viết unit test xác thực 9 test cases (`test_assignee_filter.py`), đạt kết quả pass 100%. `python -m compileall app` sạch lỗi, Smoke Test pass 100%.
+     - Khởi động lại Backend daemon port 8000 sạch sẽ.
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`dist/` kèm `web.config` cập nhật mới).
