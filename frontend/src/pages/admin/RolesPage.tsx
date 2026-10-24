@@ -13,6 +13,8 @@ import {
   Check,
   X,
   Lock,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { RoleItem, RoleCreatePayload, PermissionDetailItem } from '../../types/role';
 import { roleService } from '../../services/roleService';
@@ -120,6 +122,11 @@ export const RolesPage: React.FC = () => {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAddCustomOpen, setIsAddCustomOpen] = useState(false);
   const [editRole, setEditRole] = useState<RoleItem | null>(null);
+
+  // Delete role modal states (Chỉ dành cho Super Admin)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [roleToDelete, setRoleToDelete] = useState<RoleItem | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Forms
   const [createForm, setCreateForm] = useState<RoleCreatePayload>({
@@ -241,6 +248,59 @@ export const RolesPage: React.FC = () => {
       setAlertInfo({ type: 'error', message: err.response?.data?.detail || 'Cập nhật nhóm quyền thất bại.' });
     } finally {
       setFormLoading(false);
+    }
+  };
+
+  // Mở modal xác nhận xóa nhóm quyền (Chỉ Super Admin)
+  const handleOpenDelete = (r: RoleItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!isSuperAdminUser) return;
+    if (r.id === 1 || r.tenquyen?.toUpperCase() === 'ADMINISTRATOR') return;
+
+    if (r.active) {
+      setAlertInfo({
+        type: 'error',
+        message: `Không thể xóa nhóm "${r.tenquyen}" đang Hoạt động. Vui lòng bấm Sửa để chuyển sang Tạm khóa trước khi xóa.`
+      });
+      return;
+    }
+
+    if (r.user_count > 0) {
+      setAlertInfo({
+        type: 'error',
+        message: `Không thể xóa nhóm "${r.tenquyen}" vì hiện vẫn còn ${r.user_count} tài khoản đang sử dụng nhóm này.`
+      });
+      return;
+    }
+
+    setRoleToDelete(r);
+    setDeleteModalOpen(true);
+  };
+
+  // Thực hiện xóa nhóm quyền vĩnh viễn
+  const handleConfirmDelete = async () => {
+    if (!roleToDelete) return;
+    setDeleteLoading(true);
+    try {
+      const res = await roleService.deleteRole(roleToDelete.id);
+      setAlertInfo({
+        type: 'success',
+        message: res.message || `Đã xóa thành công nhóm quyền: ${roleToDelete.tenquyen}`
+      });
+      setDeleteModalOpen(false);
+      if (selectedRole?.id === roleToDelete.id) {
+        setSelectedRole(null);
+        setPermissions([]);
+      }
+      setRoleToDelete(null);
+      await loadRoles();
+    } catch (err: any) {
+      setAlertInfo({
+        type: 'error',
+        message: err.response?.data?.detail || 'Xóa nhóm quyền thất bại.'
+      });
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -601,24 +661,54 @@ export const RolesPage: React.FC = () => {
                               {r.active ? 'Hoạt động' : 'Tạm khóa'}
                             </Badge>
                             {r.id !== 1 && r.tenquyen?.toUpperCase() !== 'ADMINISTRATOR' ? (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openEditModal(r);
-                                }}
-                                title="Sửa nhóm quyền"
-                                style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  color: 'var(--text-muted)',
-                                  padding: '2px',
-                                  display: 'flex',
-                                }}
-                              >
-                                <Edit2 size={14} />
-                              </button>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openEditModal(r);
+                                  }}
+                                  title="Sửa nhóm quyền"
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    color: 'var(--text-muted)',
+                                    padding: '2px',
+                                    display: 'flex',
+                                    borderRadius: '4px',
+                                  }}
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                                {isSuperAdminUser && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleOpenDelete(r, e)}
+                                    disabled={r.active || r.user_count > 0}
+                                    title={
+                                      !r.active && r.user_count === 0
+                                        ? 'Xóa vĩnh viễn nhóm quyền này (Đã Tạm khóa & Không còn tài khoản)'
+                                        : r.active
+                                        ? 'Chỉ Super Admin được xóa khi nhóm đã Tạm khóa (Bấm Sửa để tạm khóa)'
+                                        : `Chỉ Super Admin được xóa khi không còn tài khoản sử dụng (Hiện còn ${r.user_count} tài khoản)`
+                                    }
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      cursor: !r.active && r.user_count === 0 ? 'pointer' : 'not-allowed',
+                                      color: !r.active && r.user_count === 0 ? '#EF4444' : 'var(--text-muted)',
+                                      opacity: !r.active && r.user_count === 0 ? 1 : 0.3,
+                                      padding: '2px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      borderRadius: '4px',
+                                    }}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
+                              </div>
                             ) : (
                               <span title="Nhóm được bảo vệ bất biến" style={{ color: 'var(--color-primary-text)', display: 'flex' }}>
                                 <Lock size={13} />
@@ -1306,6 +1396,67 @@ export const RolesPage: React.FC = () => {
             <span>Tự động áp dụng cột này cho tất cả các nhóm quyền</span>
           </label>
         </form>
+      </Modal>
+
+      {/* Modal: Xác nhận xóa vĩnh viễn nhóm quyền (Chỉ dành riêng cho Super Admin) */}
+      <Modal
+        isOpen={deleteModalOpen}
+        onClose={() => !deleteLoading && setDeleteModalOpen(false)}
+        title="Xác Nhận Xóa Vĩnh Viễn Nhóm Quyền"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteModalOpen(false)} disabled={deleteLoading}>
+              Hủy Bỏ
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleConfirmDelete}
+              isLoading={deleteLoading}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Trash2 size={15} />
+                <span>Xác Nhận Xóa Vĩnh Viễn</span>
+              </span>
+            </Button>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '12px 14px',
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+            }}
+          >
+            <AlertTriangle size={24} style={{ color: '#EF4444', flexShrink: 0 }} />
+            <div style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+              Bạn có chắc chắn muốn xóa vĩnh viễn nhóm quyền{' '}
+              <strong style={{ color: '#EF4444' }}>{roleToDelete?.tenquyen}</strong> (Mã nhóm: #{roleToDelete?.id})?
+            </div>
+          </div>
+
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            <p style={{ margin: '0 0 8px 0', fontWeight: 600, color: 'var(--text-primary)' }}>
+              ⚠️ Điều kiện & Lưu ý quan trọng:
+            </p>
+            <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <li>
+                Toàn bộ ma trận quyền chi tiết của nhóm này trong hệ thống sẽ bị xóa sạch hoàn toàn.
+              </li>
+              <li>
+                Hành động này <strong>không thể hoàn tác</strong>.
+              </li>
+              <li>
+                Nhóm này đã thỏa mãn điều kiện: <strong>Đã Tạm khóa</strong> và <strong>không có tài khoản nào sử dụng</strong>.
+              </li>
+            </ul>
+          </div>
+        </div>
       </Modal>
     </div>
   );

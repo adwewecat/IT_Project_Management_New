@@ -968,3 +968,27 @@
        + Chỉnh sửa user (`editRoleOptions`): Chỉ hiển thị các nhóm đang `Hoạt động`. Nếu user đó vốn đang mang một nhóm cũ bị khóa thì vẫn hiển thị để giữ nguyên trạng thái kèm hậu tố `(Tạm khóa)` cảnh báo rõ ràng, còn các nhóm bị khóa khác không liên quan sẽ bị ẩn hoàn toàn.
   3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.32s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
+
+
+- **BỔ SUNG TÍNH NĂNG XÓA VĨNH VIỄN NHÓM QUYỀN MỞ RỘNG (DÀNH RIÊNG CHO SUPER ADMIN) [2026-10-24]**:
+  1. **Yêu Cầu & Bối Cảnh Người Dùng**:
+     - Cho phép xóa các nhóm quyền mở rộng (trong tab 'Nhóm Quyền & Phân Quyền Chi Tiết') dành riêng cho quyền Super Admin.
+     - Điều kiện bắt buộc: Nhóm quyền đó phải không còn user nào đang sử dụng (`user_count == 0`) và đã được chuyển sang trạng thái tắt kích hoạt (`active == False` / Tạm khóa).
+  2. **Giải Pháp Đã Xử Lý Toàn Diện (Backend & Frontend)**:
+     - **Backend (`role_service.py` & `roles.py`)**:
+       + Bổ sung endpoint `DELETE /api/v1/roles/{role_id}` được bảo vệ nghiêm ngặt bằng dependency `require_super_admin`.
+       + Kiểm tra phòng thủ (Defense in Depth):
+         * Bảo vệ bất biến: Tuyệt đối không cho phép xóa nhóm `Administrator` (ID = 1).
+         * Kiểm tra trạng thái: Nếu nhóm đang `Hoạt động` (`active = True`), từ chối và yêu cầu chuyển sang `Tạm khóa` trước.
+         * Kiểm tra người dùng: Nếu vẫn còn bất kỳ tài khoản nào mang `quyen_mo_rong` của nhóm này (`user_count > 0`), từ chối xóa và báo rõ số lượng tài khoản còn lại.
+       + Khi thỏa mãn: Xóa sạch toàn bộ ma trận phân quyền của nhóm trong bảng `dbo.PHANQUYEN_DETAIL` (`id_quyen = str(role_id)`) và xóa bản ghi trong `dbo.LV_QUYEN`. Ghi log thao tác quản trị viên `Delete_Nhomquyen_morong`.
+     - **Frontend (`roleService.ts` & `RolesPage.tsx`)**:
+       + Thêm hàm `deleteRole(id)` vào `roleService`.
+       + Trong danh sách Nhóm Quyền bên trái:
+         * Chỉ hiển thị icon thùng rác `Trash2` khi người đăng nhập là **Super Admin** (`isSuperAdminUser`).
+         * Khi nhóm thỏa điều kiện (`!r.active && r.user_count === 0`): Icon thùng rác sáng đỏ `#EF4444`, hover nổi bật, click mở Modal xác nhận.
+         * Khi chưa thỏa điều kiện (đang Hoạt động hoặc còn tài khoản): Icon mờ nhạt (disabled, `opacity: 0.3`) kèm tooltip giải thích chi tiết lý do vì sao chưa thể xóa.
+       + Bổ sung Modal Xác Nhận Xóa Vĩnh Viễn: Cảnh báo tên nhóm, mã nhóm, ghi chú hành động không thể hoàn tác và xóa sạch ma trận quyền chi tiết.
+  3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> PASSED 100%`, Backend daemon port 8000 đã reload nạp endpoint mới.
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.02s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.

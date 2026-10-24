@@ -318,6 +318,67 @@ def update_role(db: Session, role_id: int, data: RoleUpdate, actor: str) -> Role
     return get_role_by_id(db, role.id)
 
 
+def delete_role(db: Session, role_id: int, actor: str) -> dict:
+    """
+    Xóa vĩnh viễn nhóm quyền mở rộng khỏi hệ thống (Chỉ dành cho Super Admin).
+    Điều kiện khắt khe:
+    1. Không được xóa nhóm Administrator tối cao (ID=1).
+    2. Nhóm quyền phải đã tắt kích hoạt (active = False / Tạm khóa).
+    3. Nhóm quyền phải không còn bất kỳ tài khoản (user) nào đang sử dụng.
+    """
+    role = db.get(RoleLevel, role_id)
+    if not role:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Không tìm thấy nhóm quyền có mã #{role_id}."
+        )
+
+    # 1. Bảo vệ nhóm Administrator bất biến
+    if role_id == 1 or (role.tenquyen and role.tenquyen.strip().upper() == "ADMINISTRATOR"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nhóm Administrator tối cao được bảo vệ bất biến của hệ thống, không thể xóa."
+        )
+
+    # 2. Điều kiện 1: Nhóm phải đã được Tạm khóa (tắt kích hoạt)
+    if role.active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Nhóm quyền '{role.tenquyen}' đang ở trạng thái Hoạt động. Vui lòng chuyển trạng thái sang 'Tạm khóa' trước khi xóa."
+        )
+
+    # 3. Điều kiện 2: Không còn bất kỳ tài khoản nào đang được gán nhóm này
+    user_count = db.scalar(
+        select(func.count(User.id)).where(User.quyen_mo_rong == str(role_id))
+    ) or 0
+
+    if user_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Không thể xóa nhóm quyền '{role.tenquyen}' vì hiện vẫn còn {user_count} tài khoản đang được gán nhóm này."
+        )
+
+    role_name = role.tenquyen or f"Nhóm #{role_id}"
+
+    # Xóa toàn bộ ma trận phân quyền chi tiết của nhóm này trong dbo.PHANQUYEN_DETAIL
+    db.execute(
+        text("DELETE FROM dbo.PHANQUYEN_DETAIL WHERE id_quyen = :qid"),
+        {"qid": str(role_id)}
+    )
+
+    # Xóa bản ghi nhóm quyền trong dbo.LV_QUYEN
+    db.delete(role)
+
+    # Lưu log thao tác của Super Admin
+    log_content = f"Xóa vĩnh viễn nhóm quyền mở rộng #{role_id} - Tên Quyền: {role_name}"
+    log_admin_action(db, "Admin_quyenmo_rong", "Delete_Nhomquyen_morong", actor, log_content)
+    db.commit()
+
+    return {
+        "message": f"Đã xóa thành công nhóm quyền #{role_id} - '{role_name}' và toàn bộ ma trận phân quyền liên quan."
+    }
+
+
 def get_role_permissions(db: Session, role_id: int) -> RoleWithPermissionsResponse:
     role = db.get(RoleLevel, role_id)
     if not role:

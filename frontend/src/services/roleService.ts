@@ -28,6 +28,11 @@ export const roleService = {
     return response.data;
   },
 
+  async deleteRole(id: number): Promise<{ message: string }> {
+    const response = await apiClient.delete<{ message: string }>(`/roles/${id}`);
+    return response.data;
+  },
+
   async getRolePermissions(id: number): Promise<RoleWithPermissions> {
     const response = await apiClient.get<RoleWithPermissions>(`/roles/${id}/permissions`);
     return response.data;

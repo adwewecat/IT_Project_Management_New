@@ -18,6 +18,7 @@ from app.services.role_service import (
     get_role_by_id,
     create_role,
     update_role,
+    delete_role,
     get_role_permissions,
     update_role_permissions,
     add_custom_column_permission,
@@ -83,6 +84,19 @@ def api_update_role(
     admin: UserInfo = Depends(require_admin)
 ):
     return update_role(db, role_id, payload, actor=admin.username)
+
+
+@router.delete(
+    "/{role_id}",
+    summary="Xóa nhóm quyền mở rộng",
+    description="Xóa vĩnh viễn nhóm quyền và ma trận phân quyền chi tiết. Yêu cầu quyền Super Admin. Điều kiện: nhóm đã Tạm khóa và không còn tài khoản sử dụng."
+)
+def api_delete_role(
+    role_id: int,
+    db: Session = Depends(get_db),
+    admin: UserInfo = Depends(require_super_admin)
+):
+    return delete_role(db, role_id, actor=admin.username)
 
 
 @router.get(
