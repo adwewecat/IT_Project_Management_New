@@ -10,7 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   Sliders,
-  ExternalLink,
+  Layers,
   Phone,
   MapPin,
   LogOut,
@@ -21,8 +21,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { getRestaurants } from '../../services/restaurantService';
 import { RestaurantItem } from '../../types/restaurant';
-import { KdsRoleUserModal } from '../app/KdsQuayModals';
-import { RestaurantDetailModal } from '../../components/restaurants/RestaurantDetailModal';
+import { KdsRoleUserModal, KdsKitchenAccountsModal } from '../app/KdsQuayModals';
 import { Modal } from '../../components/ui/Modal';
 import { copyToClipboard } from '../../utils/clipboard';
 
@@ -50,9 +49,9 @@ export const MobileRestaurantPage: React.FC = () => {
   const [kdsModalOpen, setKdsModalOpen] = useState<boolean>(false);
   const [selectedKdsRestaurant, setSelectedKdsRestaurant] = useState<RestaurantItem | null>(null);
 
-  // Full Restaurant Detail Modal state
-  const [detailModalOpen, setDetailModalOpen] = useState<boolean>(false);
-  const [selectedDetailRestaurant, setSelectedDetailRestaurant] = useState<RestaurantItem | null>(null);
+  // Kitchen Accounts (Quầy Bếp ACCOUNT) Modal state
+  const [kitchenAccountsModalOpen, setKitchenAccountsModalOpen] = useState<boolean>(false);
+  const [selectedKitchenRestaurant, setSelectedKitchenRestaurant] = useState<RestaurantItem | null>(null);
 
   // Toast feedback state
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -894,34 +893,6 @@ export const MobileRestaurantPage: React.FC = () => {
                         )}
                       </div>
                     )}
-
-                    {/* Nút mở xem toàn bộ chi tiết chuyên sâu */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedDetailRestaurant(item);
-                        setDetailModalOpen(true);
-                      }}
-                      style={{
-                        marginTop: '4px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        padding: '8px',
-                        borderRadius: '6px',
-                        backgroundColor: '#334155',
-                        color: '#E2E8F0',
-                        border: '1px solid #475569',
-                        fontSize: '11.5px',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        touchAction: 'manipulation',
-                      }}
-                    >
-                      <ExternalLink size={13} color="#38BDF8" />
-                      <span>Xem toàn bộ thông tin chi tiết nhà hàng ➔</span>
-                    </button>
                   </div>
                 )}
               </div>
@@ -979,36 +950,37 @@ export const MobileRestaurantPage: React.FC = () => {
               </div>
             </button>
 
-            {/* Chức năng 2: Xem chi tiết toàn bộ hồ sơ nhà hàng */}
+            {/* Chức năng 2: Xem danh sách Quầy Bếp (ACCOUNT) */}
             <button
               type="button"
               onClick={() => {
                 const target = quickActionsRestaurant;
                 setQuickActionsRestaurant(null);
-                setSelectedDetailRestaurant(target);
-                setDetailModalOpen(true);
+                setSelectedKitchenRestaurant(target);
+                setKitchenAccountsModalOpen(true);
               }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '10px',
                 padding: '10px 12px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #CBD5E1',
+                backgroundColor: '#F0FDF4',
+                border: '1.5px solid #16A34A',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 textAlign: 'left',
+                transition: 'all 0.15s ease'
               }}
             >
-              <div style={{ width: '30px', height: '30px', borderRadius: '6px', backgroundColor: '#475569', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <ExternalLink size={15} />
+              <div style={{ width: '30px', height: '30px', borderRadius: '6px', backgroundColor: '#16A34A', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Layers size={15} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ color: '#1E293B', fontWeight: 700, fontSize: '12px' }}>
-                  Xem Chi Tiết Đầy Đủ Nhà Hàng
+                <div style={{ color: '#15803D', fontWeight: 800, fontSize: '12px' }}>
+                  🍳 Quầy Bếp (ACCOUNT)
                 </div>
                 <div style={{ color: '#64748B', fontSize: '11px', fontWeight: 500, marginTop: '2px' }}>
-                  IP LAN/WAN, FTTH, TeamViewer, RustDesk, Cost Center...
+                  Xem tài khoản, mật khẩu quầy bếp (101, 102...) &amp; số lượng món từng quầy
                 </div>
               </div>
             </button>
@@ -1037,17 +1009,21 @@ export const MobileRestaurantPage: React.FC = () => {
       )}
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* 5. MODAL CHI TIẾT NHÀ HÀNG ĐẦY ĐỦ */}
+      {/* 6. MODAL QUẦY BẾP (ACCOUNT) */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      {selectedDetailRestaurant && (
-        <RestaurantDetailModal
-          isOpen={detailModalOpen}
+      {selectedKitchenRestaurant && (
+        <KdsKitchenAccountsModal
+          isOpen={kitchenAccountsModalOpen}
           onClose={() => {
-            setDetailModalOpen(false);
-            setSelectedDetailRestaurant(null);
+            setKitchenAccountsModalOpen(false);
+            setSelectedKitchenRestaurant(null);
           }}
-          restaurant={selectedDetailRestaurant}
-          canEdit={false}
+          restaurantId={selectedKitchenRestaurant.id}
+          host={selectedKitchenRestaurant.ip || ''}
+          port={27017}
+          restaurantCode={selectedKitchenRestaurant.rk7 || selectedKitchenRestaurant.sap || ''}
+          restaurantName={selectedKitchenRestaurant.res || ''}
+          showToast={showToast}
         />
       )}
 

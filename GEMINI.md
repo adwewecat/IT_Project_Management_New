@@ -1678,3 +1678,37 @@
 - **Kiểm thử & Đóng gói**:
   - Frontend: `cmd /c "npm run build"` exit code 0 (`✓ built in 4.51s`), thư mục `frontend/dist/` sạch sẽ sẵn sàng triển khai.
   - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> BACKEND PASSED 100%`.
+
+
+---
+
+### [2026-10-25] - Nâng Cấp Mobile Portal: Bỏ Chi Tiết Đầy Đủ, Bổ Sung Quầy Bếp (ACCOUNT) & Logs KDS (Order & Ra Món - Soi Món)
+- **Bối cảnh & Yêu cầu người dùng**:
+  - Giao diện Mobile Portal (`/mobile`) cần loại bỏ nút "Xem Chi Tiết Đầy Đủ Nhà Hàng" (vốn là popup Web Desktop cồng kềnh, không phù hợp màn hình dọc điện thoại).
+  - Bổ sung 1 dòng tính năng để xem danh sách Quầy Bếp (ACCOUNT) với thông tin tài khoản (101, 102...), mật khẩu và số lượng món ăn từng quầy.
+  - Bổ sung 1 dòng tính năng vào Modal "Cấu Hình KDS" đó là "Logs KDS (Order & Ra Món)" để xem lịch sử đơn, thời gian làm món và tính năng "Soi Món" (dish timeline audit) như trên phiên bản Web.
+- **Giải pháp & Triển khai chi tiết**:
+  1. **Loại bỏ tính năng xem chi tiết hồ sơ cũ trên mobile**:
+     - Trong `MobileRestaurantPage.tsx`:
+       + Loại bỏ hoàn toàn nút "Xem toàn bộ thông tin chi tiết nhà hàng ➔" ở đáy thẻ mở rộng.
+       + Loại bỏ mục "Xem Chi Tiết Đầy Đủ Nhà Hàng" trong popup `⚡ Xử Lý Nhanh`.
+       + Dọn dẹp sạch sẽ các import, state (`detailModalOpen`, `selectedDetailRestaurant`, `RestaurantDetailModal`, `ExternalLink`).
+  2. **Thêm tính năng xem Quầy Bếp (ACCOUNT) - `KdsKitchenAccountsModal`**:
+     - Tạo mới component `KdsKitchenAccountsModal` trong `frontend/src/pages/app/KdsQuayModals.tsx`:
+       + Tự động quét và ping kiểm tra tín hiệu thực tế MongoDB (.11, .12, .41).
+       + Gọi `mongoService.getKdsItems` lấy dữ liệu quầy và món ăn từ cơ sở dữ liệu `G_KITCHEN` / `G_ORDER`.
+       + Hiển thị hàng badges quầy bếp trực quan: `Tất cả quầy`, `Food control`, `QUẦY THỊT`, `QUẦY NÓNG`, `QUẦY SALAD`... kèm mã account (`101`, `102`...), mật khẩu quầy (`pass: 1`) và số lượng món của từng quầy.
+       + Bấm vào badge quầy để lọc nhanh danh sách món bên dưới.
+       + Bổ sung ô tìm kiếm món ăn theo tên món, mã món, mã SAP, nhóm bếp.
+       + Tích hợp nút `[📋 Sao chép Account/Pass]` để copy nhanh thông tin gửi hỗ trợ nhà hàng.
+     - Tích hợp vào popup `⚡ Xử Lý Nhanh` của `MobileRestaurantPage.tsx` dưới dạng nút xanh nổi bật `[🍳 Quầy Bếp (ACCOUNT)]`.
+  3. **Thêm Logs KDS (Order & Ra Món - Soi Món) vào Cấu Hình KDS**:
+     - Trong `KdsRoleUserModal` (`KdsQuayModals.tsx`):
+       + Thêm Card chức năng: `LOGS_KDS: Logs KDS (Order & Ra Món)` với nút `[📋 Logs KDS (Order & Ra Món)]`.
+       + Bấm nút sẽ mở `KdsLogsModal` (với bộ lọc ngày, giờ, bàn ăn, món ăn, thời gian thực tế vs chuẩn, trạng thái Kịp giờ/Trễ).
+       + Hỗ trợ đầy đủ nút `[👁️ Soi Món]` mở popup `KdsDishAuditHistoryModal` để xem chi tiết timeline từng lần order, huỷ, ra món của món ăn.
+       + Thêm Card chức năng: `QUAY_BEP: Quầy Bếp (ACCOUNT)` với nút `[🍳 Quầy Bếp (ACCOUNT)]` ngay trong Cấu Hình KDS để kỹ thuật viên thao tác tiện lợi mà không cần thoát modal.
+       + Quản lý modal phân tầng LIFO qua `useModalStack` trong `Modal.tsx`: Đóng modal con trên cùng bằng phím `Escape` hoặc nút `X` sẽ quay về đúng màn hình Cấu Hình KDS mà không làm mất trạng thái.
+- **Kiểm thử & Đóng gói**:
+  - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 6.70s`), thư mục `frontend/dist/` sạch sẽ 100%.
+  - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> BACKEND SMOKE TEST PASSED 100%`.

@@ -31,7 +31,8 @@ import {
   KdsRoleUsersResponse,
   KdsItemDish,
   KdsLogItem,
-  KdsDishHistoryResponse
+  KdsDishHistoryResponse,
+  KdsItemsResponse
 } from '../../services/mongoService';
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1315,6 +1316,8 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
   const [copied, setCopied] = useState<boolean>(false);
   const [selectedUserCodes, setSelectedUserCodes] = useState<string[]>([]);
   const [batchLoading, setBatchLoading] = useState<boolean>(false);
+  const [kdsLogsOpen, setKdsLogsOpen] = useState<boolean>(false);
+  const [kitchenAccountsOpen, setKitchenAccountsOpen] = useState<boolean>(false);
 
   const isShowHideRole = paramCode === 'ROLE_SETUP_SHOW_HIDE_ITEM';
 
@@ -1580,8 +1583,9 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
   );
 
   return (
-    <Modal
-      isOpen={isOpen}
+    <>
+      <Modal
+        isOpen={isOpen}
       onClose={onClose}
       title={modalTitle}
       maxWidth="880px"
@@ -2042,6 +2046,166 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
               </div>
             )}
 
+            {/* Card 4: Tra Cứu Logs KDS (Order & Ra Món) & Soi Món */}
+            {!isShowHideRole && (
+              <div
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: '#EFF6FF',
+                  border: '1.5px solid #93C5FD',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '8px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span
+                    style={{
+                      backgroundColor: '#1E3A8A',
+                      color: '#60A5FA',
+                      fontWeight: 800,
+                      fontSize: '11.5px',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontFamily: 'monospace'
+                    }}
+                  >
+                    LOGS_KDS
+                  </span>
+                  <span
+                    style={{
+                      border: '1px solid #BFDBFE',
+                      color: '#1E40AF',
+                      backgroundColor: '#DBEAFE',
+                      fontWeight: 700,
+                      fontSize: '10.5px',
+                      padding: '1px 6px',
+                      borderRadius: '4px'
+                    }}
+                  >
+                    AUDIT &amp; SOI MÓN
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      color: '#1D4ED8'
+                    }}
+                  >
+                    • Tra cứu Order &amp; Giờ Bấm Done KDS
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setKdsLogsOpen(true)}
+                  disabled={!onlineHosts.length}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '4px 10px',
+                    borderRadius: '5px',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    backgroundColor: '#0284C7',
+                    color: '#FFFFFF',
+                    border: '1px solid #0369A1',
+                    cursor: onlineHosts.length ? 'pointer' : 'not-allowed',
+                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
+                    transition: 'background-color 0.15s ease'
+                  }}
+                  title="Tra cứu nhật ký KDS: Giờ order từ CO/SO, giờ bấm done món và soi món"
+                >
+                  <History size={12} />
+                  <span>Logs KDS (Order &amp; Ra Món)</span>
+                </button>
+              </div>
+            )}
+
+            {/* Card 5: Quầy Bếp (ACCOUNT) */}
+            {!isShowHideRole && (
+              <div
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: '#F0FDF4',
+                  border: '1.5px solid #86EFAC',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '8px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span
+                    style={{
+                      backgroundColor: '#064E3B',
+                      color: '#34D399',
+                      fontWeight: 800,
+                      fontSize: '11.5px',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontFamily: 'monospace'
+                    }}
+                  >
+                    QUAY_BEP
+                  </span>
+                  <span
+                    style={{
+                      border: '1px solid #BBF7D0',
+                      color: '#166534',
+                      backgroundColor: '#DCFCE7',
+                      fontWeight: 700,
+                      fontSize: '10.5px',
+                      padding: '1px 6px',
+                      borderRadius: '4px'
+                    }}
+                  >
+                    ACCOUNT
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      color: '#15803D'
+                    }}
+                  >
+                    • Tài khoản quầy, mật khẩu &amp; số món
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setKitchenAccountsOpen(true)}
+                  disabled={!onlineHosts.length}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '4px 10px',
+                    borderRadius: '5px',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    backgroundColor: '#16A34A',
+                    color: '#FFFFFF',
+                    border: '1px solid #15803D',
+                    cursor: onlineHosts.length ? 'pointer' : 'not-allowed',
+                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
+                    transition: 'background-color 0.15s ease'
+                  }}
+                  title="Xem các quầy bếp (Food control, Quầy thịt, Quầy nóng...), tài khoản ID, pass và danh sách món"
+                >
+                  <Layers size={12} />
+                  <span>Quầy Bếp (ACCOUNT)</span>
+                </button>
+              </div>
+            )}
+
             {/* Ô Nhập Thêm Mã User Vào Quyền (Phân quyền nhanh) */}
             <div
               style={{
@@ -2398,6 +2562,33 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
         </div>
       </div>
     </Modal>
+
+    {/* Modal Tra Cứu Logs KDS (Order & Ra Món) */}
+    {kdsLogsOpen && (
+      <KdsLogsModal
+        isOpen={kdsLogsOpen}
+        onClose={() => setKdsLogsOpen(false)}
+        host={currentHost || host}
+        port={port}
+        restaurantName={restaurantCode || title || ''}
+        showToast={showToast}
+      />
+    )}
+
+    {/* Modal Quầy Bếp (ACCOUNT) */}
+    {kitchenAccountsOpen && (
+      <KdsKitchenAccountsModal
+        isOpen={kitchenAccountsOpen}
+        onClose={() => setKitchenAccountsOpen(false)}
+        restaurantId={restaurantId}
+        host={currentHost || host}
+        port={port}
+        restaurantCode={restaurantCode}
+        restaurantName={title}
+        showToast={showToast}
+      />
+    )}
+    </>
   );
 };
 
@@ -2949,14 +3140,14 @@ interface KdsLogsModalProps {
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
-export const KdsLogsModal: React.FC<KdsLogsModalProps> = ({
+export function KdsLogsModal({
   isOpen,
   onClose,
   host,
   port = 27017,
   restaurantName = '',
   showToast
-}) => {
+}: KdsLogsModalProps) {
   const [filterDate, setFilterDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [filterFromTime, setFilterFromTime] = useState<string>('');
   const [filterToTime, setFilterToTime] = useState<string>('');
@@ -4207,5 +4398,495 @@ export const KdsDeleteCookingConfigModal: React.FC<KdsDeleteCookingConfigModalPr
     </Modal>
   );
 };
+
+// ══════════════════════════════════════════════════════════════════════════
+// 12. MODAL XEM QUẦY BẾP (ACCOUNT) - TÀI KHOẢN, MẬT KHẨU & SỐ LƯỢNG MÓN
+// ══════════════════════════════════════════════════════════════════════════
+export interface KdsKitchenAccountsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  restaurantId?: number;
+  host: string;
+  port?: number;
+  restaurantCode?: string;
+  restaurantName?: string;
+  showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
+}
+
+export function KdsKitchenAccountsModal({
+  isOpen,
+  onClose,
+  restaurantId,
+  host,
+  port = 27017,
+  restaurantCode,
+  restaurantName,
+  showToast
+}: KdsKitchenAccountsModalProps) {
+  const [loading, setLoading] = useState<boolean>(false);
+  const [probingMongo, setProbingMongo] = useState<boolean>(false);
+  const [onlineHosts, setOnlineHosts] = useState<string[]>([]);
+  const [mongoProbeError, setMongoProbeError] = useState<string | null>(null);
+  const [currentHost, setCurrentHost] = useState<string>(host);
+  const [kdsData, setKdsData] = useState<KdsItemsResponse | null>(null);
+  const [selectedQuay, setSelectedQuay] = useState<string>('ALL');
+  const [dishSearch, setDishSearch] = useState<string>('');
+  const [copiedAccounts, setCopiedAccounts] = useState<boolean>(false);
+
+  // Ping dò tìm các máy chủ MongoDB (.11, .12, .41) thực sự online
+  const probeMongoConnections = async (targetIp?: string) => {
+    const ipToProbe = targetIp || host;
+    if (!ipToProbe && !restaurantId) return;
+    setProbingMongo(true);
+    setMongoProbeError(null);
+    try {
+      const res = await mongoService.checkConnection(restaurantId, ipToProbe);
+      const online = res.connected_ips || [];
+      if (online.length === 0) {
+        setOnlineHosts([]);
+        setMongoProbeError('Nhà hàng không có mongo 11, 12, 41 nào online');
+      } else {
+        setOnlineHosts(online);
+        setMongoProbeError(null);
+        const bestHost = online.includes(currentHost) ? currentHost : online[0];
+        setCurrentHost(bestHost);
+        fetchKdsItems(bestHost);
+      }
+    } catch {
+      setOnlineHosts([]);
+      setMongoProbeError('Nhà hàng không có mongo 11, 12, 41 nào online');
+    } finally {
+      setProbingMongo(false);
+    }
+  };
+
+  const fetchKdsItems = async (targetHost?: string) => {
+    const h = targetHost || currentHost || host;
+    if (!h) return;
+    setLoading(true);
+    try {
+      const data = await mongoService.getKdsItems(h, port);
+      setKdsData(data);
+    } catch (err: any) {
+      showToast(`Lỗi khi tải dữ liệu quầy bếp tại ${h}: ` + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedQuay('ALL');
+      setDishSearch('');
+      probeMongoConnections(host);
+    }
+  }, [isOpen, host, restaurantId, port]);
+
+  if (!isOpen) return null;
+
+  // Lọc món ăn theo quầy được chọn và từ khóa tìm kiếm
+  const filteredDishes = (kdsData?.items || []).filter((item) => {
+    // Lọc theo quầy bếp (ACCOUNT)
+    if (selectedQuay !== 'ALL') {
+      const itemQuays = item.quays || [];
+      const match = itemQuays.some((q) => q.toLowerCase() === selectedQuay.toLowerCase());
+      if (!match) return false;
+    }
+    // Lọc theo từ khóa tìm kiếm món
+    if (dishSearch.trim()) {
+      const q = dishSearch.trim().toLowerCase();
+      const matchName = (item.menu_item_name || '').toLowerCase().includes(q);
+      const matchCode = (item.menu_item_code || '').toLowerCase().includes(q);
+      const matchSap = (item.sap_code || '').toLowerCase().includes(q);
+      const matchGroup = (item.group_type_kds || '').toLowerCase().includes(q);
+      if (!matchName && !matchCode && !matchSap && !matchGroup) return false;
+    }
+    return true;
+  });
+
+  // Sao chép danh sách Account & Mật khẩu quầy bếp
+  const handleCopyAccounts = () => {
+    if (!kdsData?.accounts_summary || kdsData.accounts_summary.length === 0) {
+      showToast('Không có dữ liệu quầy bếp để sao chép!', 'info');
+      return;
+    }
+    const lines = [
+      `🍳 QUẦY BẾP (ACCOUNT) - ${restaurantCode || ''} ${restaurantName || ''}`,
+      `Host: ${currentHost}:${port} | Tổng: ${kdsData.total} món`,
+      '─────────────────────────',
+      ...kdsData.accounts_summary.map(
+        (acc) => `• ${acc.account_name}: ID ${acc.account_id} / Pass: ${acc.acc_pass || '(trống)'} (${acc.dish_count} món)`
+      )
+    ];
+    navigator.clipboard.writeText(lines.join('\n'));
+    setCopiedAccounts(true);
+    showToast('Đã sao chép danh sách Quầy Bếp & Mật Khẩu vào Clipboard!', 'success');
+    setTimeout(() => setCopiedAccounts(false), 2500);
+  };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', flexWrap: 'wrap' }}>
+          <span>🍳 Quầy Bếp (ACCOUNT):</span>
+          <span style={{ fontWeight: 800, color: '#059669' }}>
+            {restaurantCode || ''} {restaurantName || ''}
+          </span>
+        </div>
+      }
+      maxWidth="920px"
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+            Tổng số: <strong>{kdsData?.accounts_summary?.length || 0}</strong> quầy bếp | <strong>{filteredDishes.length}</strong> món
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyAccounts}
+              disabled={!kdsData?.accounts_summary?.length}
+              leftIcon={copiedAccounts ? <Check size={13} color="#059669" /> : <Copy size={13} />}
+              style={{ fontSize: '11.5px', padding: '4px 10px' }}
+            >
+              {copiedAccounts ? 'Đã sao chép' : 'Sao chép Account/Pass'}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={onClose} style={{ fontSize: '11.5px', padding: '4px 10px' }}>
+              Đóng
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {/* Thanh trạng thái MongoDB Host */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '8px',
+            padding: '7px 12px',
+            backgroundColor: '#F8FAFC',
+            borderRadius: '6px',
+            border: '1px solid #E2E8F0',
+            fontSize: '11.5px'
+          }}
+        >
+          {probingMongo ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#0284C7' }}>
+              <RefreshCw size={13} className="animate-spin" />
+              <span>Đang ping kiểm tra kết nối MongoDB nhà hàng (11, 12, 41)...</span>
+            </div>
+          ) : mongoProbeError ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '8px' }}>
+              <span style={{ color: '#DC2626', fontWeight: 700 }}>⚠️ {mongoProbeError}</span>
+              <button
+                type="button"
+                onClick={() => probeMongoConnections(host)}
+                style={{
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  border: '1px solid #DC2626',
+                  backgroundColor: '#FEF2F2',
+                  color: '#DC2626',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Thử lại
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Database size={13} color="#059669" />
+                <span style={{ fontWeight: 600, color: '#334155' }}>Máy chủ MongoDB:</span>
+                <code style={{ fontWeight: 700, color: '#059669', backgroundColor: '#ECFDF5', padding: '1px 6px', borderRadius: '4px' }}>
+                  {currentHost}:{port}
+                </code>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#16A34A' }}>(Online)</span>
+              </div>
+
+              {/* Nếu có từ 2 máy online trở lên mới cho chọn */}
+              {onlineHosts.length > 1 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '11px', color: '#64748B' }}>Chuyển host:</span>
+                  {onlineHosts.map((h) => (
+                    <button
+                      key={h}
+                      type="button"
+                      onClick={() => {
+                        setCurrentHost(h);
+                        fetchKdsItems(h);
+                      }}
+                      style={{
+                        padding: '2px 7px',
+                        borderRadius: '4px',
+                        border: currentHost === h ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                        backgroundColor: currentHost === h ? '#ECFDF5' : '#FFFFFF',
+                        color: currentHost === h ? '#047857' : '#475569',
+                        fontSize: '11px',
+                        fontWeight: currentHost === h ? 700 : 500,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {h}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Khối hiển thị các Quầy Bếp (ACCOUNT) */}
+        {kdsData?.accounts_summary && kdsData.accounts_summary.length > 0 && (
+          <div
+            style={{
+              padding: '10px',
+              borderRadius: '8px',
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border-color)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#059669' }}>
+                <Layers size={14} />
+                <span>Quầy Bếp (ACCOUNT):</span>
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748B' }}>
+                Bấm vào quầy để lọc danh sách món bên dưới
+              </div>
+            </div>
+
+            {/* Danh sách các nút quầy bếp */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setSelectedQuay('ALL')}
+                style={{
+                  padding: '5px 10px',
+                  borderRadius: '16px',
+                  fontSize: '11.5px',
+                  fontWeight: selectedQuay === 'ALL' ? 700 : 500,
+                  backgroundColor: selectedQuay === 'ALL' ? '#059669' : '#FFFFFF',
+                  color: selectedQuay === 'ALL' ? '#FFFFFF' : '#334155',
+                  border: selectedQuay === 'ALL' ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                Tất cả quầy ({kdsData.total})
+              </button>
+
+              {kdsData.accounts_summary.map((acc) => {
+                const isSel = selectedQuay === acc.account_name;
+                return (
+                  <button
+                    key={acc.account_id}
+                    type="button"
+                    onClick={() => setSelectedQuay(isSel ? 'ALL' : acc.account_name)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '16px',
+                      fontSize: '11.5px',
+                      fontWeight: isSel ? 700 : 500,
+                      backgroundColor: isSel ? '#059669' : '#FFFFFF',
+                      color: isSel ? '#FFFFFF' : '#1E293B',
+                      border: isSel ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '1px',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ fontWeight: 700 }}>{acc.account_name}</span>
+                      <span
+                        style={{
+                          padding: '1px 5px',
+                          borderRadius: '8px',
+                          backgroundColor: isSel ? 'rgba(255,255,255,0.25)' : '#F1F5F9',
+                          color: isSel ? '#FFFFFF' : '#0F172A',
+                          fontSize: '10.5px',
+                          fontWeight: 700
+                        }}
+                      >
+                        {acc.dish_count} món
+                      </span>
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        opacity: isSel ? 0.95 : 0.75,
+                        fontFamily: 'monospace'
+                      }}
+                    >
+                      {acc.account_id} / pass: {acc.acc_pass || '(trống)'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Ô Tìm Kiếm Món */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <input
+              type="text"
+              placeholder="🔍 Tìm món theo tên, mã món, mã SAP..."
+              value={dishSearch}
+              onChange={(e) => setDishSearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 10px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                fontSize: '12px',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)'
+              }}
+            />
+            {dishSearch && (
+              <button
+                type="button"
+                onClick={() => setDishSearch('')}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#94A3B8'
+                }}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+          {selectedQuay !== 'ALL' && (
+            <button
+              type="button"
+              onClick={() => setSelectedQuay('ALL')}
+              style={{
+                fontSize: '11px',
+                color: '#EF4444',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                fontWeight: 600
+              }}
+            >
+              ✕ Bỏ lọc quầy
+            </button>
+          )}
+        </div>
+
+        {/* Bảng Danh Sách Món Thuộc Quầy Bếp */}
+        <div
+          style={{
+            maxHeight: '340px',
+            overflowY: 'auto',
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            border: '1px solid var(--border-color)',
+            borderRadius: '6px',
+            backgroundColor: '#FFFFFF'
+          }}
+        >
+          <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', fontSize: '11.5px' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1.5px solid #CBD5E1', textAlign: 'left', position: 'sticky', top: 0, zIndex: 5 }}>
+                <th style={{ padding: '6px 8px', width: '38px', textAlign: 'center' }}>STT</th>
+                <th style={{ padding: '6px 8px', width: '90px' }}>Mã Món</th>
+                <th style={{ padding: '6px 8px' }}>Tên Món</th>
+                <th style={{ padding: '6px 8px', width: '140px' }}>Quầy Bếp (ACCOUNT)</th>
+                <th style={{ padding: '6px 8px', width: '130px' }}>Nhóm Bếp</th>
+                <th style={{ padding: '6px 8px', width: '85px', textAlign: 'center' }}>Mã SAP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: '30px', textAlign: 'center', color: '#64748B' }}>
+                    <RefreshCw size={16} className="animate-spin" style={{ display: 'inline', marginRight: '6px' }} />
+                    Đang tải danh sách món ăn từ MongoDB...
+                  </td>
+                </tr>
+              ) : filteredDishes.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: '30px', textAlign: 'center', color: '#94A3B8' }}>
+                    Không tìm thấy món ăn nào phù hợp với bộ lọc.
+                  </td>
+                </tr>
+              ) : (
+                filteredDishes.map((dish, idx) => (
+                  <tr key={dish.menu_item_code} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
+                    <td style={{ padding: '6px 8px', textAlign: 'center', color: '#94A3B8', fontSize: '11px' }}>
+                      {idx + 1}
+                    </td>
+                    <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontWeight: 700, color: '#059669' }}>
+                      {dish.menu_item_code}
+                    </td>
+                    <td style={{ padding: '6px 8px', fontWeight: 600, color: '#1E293B' }}>
+                      {dish.menu_item_name}
+                    </td>
+                    <td style={{ padding: '6px 8px' }}>
+                      {(dish.quays && dish.quays.length > 0) ? (
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                          {dish.quays.map((q) => (
+                            <span
+                              key={q}
+                              style={{
+                                display: 'inline-block',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                backgroundColor: '#DCFCE7',
+                                color: '#166534',
+                                border: '1px solid #86EFAC',
+                                fontSize: '10.5px',
+                                fontWeight: 700
+                              }}
+                            >
+                              {q}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ color: '#EF4444', fontSize: '10.5px', fontWeight: 600 }}>Chưa gán quầy</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '6px 8px', color: '#64748B', fontSize: '11px' }}>
+                      {dish.group_type_kds || '—'}
+                    </td>
+                    <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: 'monospace', fontSize: '11px', color: '#475569' }}>
+                      {dish.sap_code || '—'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 
 
