@@ -1100,6 +1100,15 @@ export const mongoService = {
     return res.data;
   },
 
+  toggleAllowHideItemGroup: async (host: string, status: number, port: number = 27017): Promise<KdsRoleUsersResponse> => {
+    const res = await api.put<KdsRoleUsersResponse>('/mongodb/kds/allow-hide-item-group/toggle', {
+      host,
+      port,
+      status
+    });
+    return res.data;
+  },
+
   addKdsRoleUsersBatch: async (host: string, userCodes: string[], port: number = 27017, paramCode: string = 'ROLE_SETUP_CONFIG_COOKING'): Promise<KdsRoleUsersResponse> => {
     const res = await api.post<KdsRoleUsersResponse>('/mongodb/kds-role-users', {
       host,
@@ -1417,6 +1426,9 @@ export interface KdsRoleUsersResponse {
   note?: string;
   show_kds_status?: number;
   show_kds_enabled?: boolean;
+  allow_hide_item_group_status?: number;
+  allow_hide_item_group_enabled?: boolean;
+  allow_hide_item_group_value?: string;
   restaurant_users: KdsRoleUserItem[];
   authorized_users?: KdsRoleUserItem[];
   available_employees?: KdsRoleUserItem[];

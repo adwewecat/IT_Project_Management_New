@@ -34,6 +34,8 @@ ALL_PERMISSIONS = [
     "hotline_3cx_duty", "view_hotline_3cx_duty", "update_hotline_3cx_duty",
     # Agent Multitask permissions
     "agent_multitask", "view_agent_multitask", "update_agent_multitask",
+    # Mobile Dedicated View permissions
+    "mobile_dedicated_view", "view_mobile_dedicated_view", "update_mobile_dedicated_view",
 ]
 
 ROLE_MAP = {
@@ -120,6 +122,10 @@ def get_user_permissions(db: Session, phanquyen: Optional[str], quyen_mo_rong: O
         permissions["agent_multitask"] = False
         permissions["view_agent_multitask"] = False
         permissions["update_agent_multitask"] = False
+        # Mobile Dedicated View cũng không mặc định cấp cho admin thường (chỉ Super Admin hoặc dung.nguyenanh được phân quyền)
+        permissions["mobile_dedicated_view"] = False
+        permissions["view_mobile_dedicated_view"] = False
+        permissions["update_mobile_dedicated_view"] = False
 
     # Collect all role IDs associated with this user
     role_ids_to_check = set()

@@ -25,6 +25,7 @@ import { RestaurantMongoPage } from '../pages/app/RestaurantMongoPage';
 import { RestaurantMongoAnalysisPage } from '../pages/app/RestaurantMongoAnalysisPage';
 import { SsoManagementPage } from '../pages/app/SsoManagementPage';
 import { AgentMultitaskPage } from '../pages/app/AgentMultitaskPage';
+import { MobileRestaurantPage } from '../pages/mobile/MobileRestaurantPage';
 import { MainLayout } from '../components/layout/MainLayout';
 import { ProtectedRoute } from './ProtectedRoute';
 
@@ -33,6 +34,16 @@ export const AppRoutes: React.FC = () => {
     <Routes>
       {/* Public Route */}
       <Route path="/login" element={<LoginPage />} />
+
+      {/* Giao diện dành riêng cho điện thoại (Mobile Portal - Phân quyền mobile_dedicated_view) */}
+      <Route
+        path="/mobile"
+        element={
+          <ProtectedRoute requiredPermission="mobile_dedicated_view">
+            <MobileRestaurantPage />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Protected Routes */}
       <Route

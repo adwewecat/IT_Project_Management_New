@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Alert } from '../components/ui/Alert';
 import { Card } from '../components/ui/Card';
+import { hasNewScreenAccess, isMobileDevice } from '../utils/authUtils';
 
 export const LoginPage: React.FC = () => {
   const { login, isAuthenticated } = useAuth();
@@ -21,7 +22,19 @@ export const LoginPage: React.FC = () => {
   // Redirect if already authenticated
   React.useEffect(() => {
     if (isAuthenticated) {
-      navigate('/restaurants', { replace: true });
+      let savedUser: any = null;
+      try {
+        savedUser = JSON.parse(localStorage.getItem('user_info') || '{}');
+      } catch {
+        savedUser = null;
+      }
+      const isMobile = isMobileDevice();
+      const hasMobilePermission = hasNewScreenAccess(savedUser, 'mobile_dedicated_view');
+      if (isMobile && hasMobilePermission) {
+        navigate('/mobile', { replace: true });
+      } else {
+        navigate('/restaurants', { replace: true });
+      }
     }
   }, [isAuthenticated, navigate]);
 
@@ -46,6 +59,21 @@ export const LoginPage: React.FC = () => {
         password,
         remember_me: rememberMe,
       });
+
+      // Lấy thông tin user vừa lưu để kiểm tra thiết bị & quyền Mobile
+      let loggedUser: any = null;
+      try {
+        loggedUser = JSON.parse(localStorage.getItem('user_info') || '{}');
+      } catch {
+        loggedUser = null;
+      }
+      const isMobile = isMobileDevice();
+      const hasMobilePermission = hasNewScreenAccess(loggedUser, 'mobile_dedicated_view');
+
+      if (isMobile && hasMobilePermission) {
+        navigate('/mobile', { replace: true });
+        return;
+      }
 
       // Chuyển hướng toàn bộ user vào trang danh sách nhà hàng đầu tiên
       const from = (location.state as { from?: { pathname: string } })?.from?.pathname;

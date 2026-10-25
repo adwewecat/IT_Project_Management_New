@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LogOut, Shield, KeyRound, Sun, Moon, Menu, X as CloseIcon, Headphones, PhoneCall } from 'lucide-react';
+import { LogOut, Shield, KeyRound, Sun, Moon, Menu, X as CloseIcon, Headphones, PhoneCall, Smartphone } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useHotline } from '../../contexts/HotlineContext';
+import { hasNewScreenAccess } from '../../utils/authUtils';
 import { Button } from '../ui/Button';
 import { ChangePasswordModal } from '../auth/ChangePasswordModal';
 
@@ -220,6 +221,33 @@ export const Header: React.FC<HeaderProps> = ({
                 .trim()}
             </span>
           </div>
+        )}
+
+        {/* Nút chuyển sang Giao diện Mobile Portal nếu có quyền */}
+        {hasNewScreenAccess(user, 'mobile_dedicated_view') && (
+          <Link
+            to="/mobile"
+            title="Chuyển sang giao diện tối giản cho điện thoại"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              height: '34px',
+              padding: '0 10px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid #38BDF8',
+              backgroundColor: 'rgba(56, 189, 248, 0.1)',
+              color: '#0284C7',
+              fontSize: '12px',
+              fontWeight: 700,
+              textDecoration: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <Smartphone size={15} />
+            <span className="header-hotline-text">Mobile Portal</span>
+          </Link>
         )}
 
         {/* Nút chuyển đổi Dark / Light Mode */}

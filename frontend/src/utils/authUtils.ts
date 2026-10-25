@@ -131,6 +131,17 @@ export const hasNewScreenAccess = (user?: UserInfo | null, screenKey?: string): 
     );
   }
 
+  // Riêng Mobile Dedicated View (Giao diện điện thoại riêng):
+  // Chỉ Super Admin hoặc dung.nguyenanh mặc định có quyền, các user khác (kể cả admin thường) phải được phân quyền
+  if (cleanKey === 'mobile_dedicated_view') {
+    if (checkIsDungOrSuperAdmin(user)) return true;
+    return Boolean(
+      perms['mobile_dedicated_view'] ||
+      perms['view_mobile_dedicated_view'] ||
+      perms['update_mobile_dedicated_view']
+    );
+  }
+
   // Các màn hình mới thông thường khác: Admin có toàn quyền truy cập mặc định
   if (checkIsAdmin(user)) return true;
 
@@ -139,5 +150,16 @@ export const hasNewScreenAccess = (user?: UserInfo | null, screenKey?: string): 
     perms[`view_${cleanKey}`] ||
     perms[`access_${cleanKey}`]
   );
+};
+
+/**
+ * Kiểm tra xem người dùng đang truy cập bằng thiết bị điện thoại / màn hình di động hay không.
+ */
+export const isMobileDevice = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+  const isSmallScreen = window.innerWidth <= 768;
+  return isMobileUA || isSmallScreen;
 };
 

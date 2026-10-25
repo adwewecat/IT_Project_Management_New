@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   PlusCircle,
   Printer,
@@ -20,7 +20,8 @@ import {
   X,
   ArrowRightLeft,
   Layers,
-  History
+  History,
+  Database
 } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
@@ -1280,6 +1281,7 @@ export interface KdsRoleUserModalProps {
   onClose: () => void;
   host: string;
   port?: number;
+  availableHosts?: string[];
   restaurantCode?: string;
   paramCode?: string;
   title?: string;
@@ -1291,18 +1293,21 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
   onClose,
   host,
   port = 27017,
+  availableHosts,
   restaurantCode,
   paramCode = 'ROLE_SETUP_CONFIG_COOKING',
   title,
   showToast
 }) => {
   const [loading, setLoading] = useState<boolean>(false);
+  const [currentHost, setCurrentHost] = useState<string>(host);
   const [roleData, setRoleData] = useState<KdsRoleUsersResponse | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [manualCode, setManualCode] = useState<string>('');
   const [actionLoadingCode, setActionLoadingCode] = useState<string | null>(null);
   const [togglingStatus, setTogglingStatus] = useState<boolean>(false);
   const [togglingMasterStatus, setTogglingMasterStatus] = useState<boolean>(false);
+  const [togglingHideItemGroup, setTogglingHideItemGroup] = useState<boolean>(false);
   const [showRawValue, setShowRawValue] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [selectedUserCodes, setSelectedUserCodes] = useState<string[]>([]);
@@ -1310,14 +1315,34 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
 
   const isShowHideRole = paramCode === 'ROLE_SETUP_SHOW_HIDE_ITEM';
 
-  const fetchRoleUsers = async () => {
-    if (!host) return;
+  useEffect(() => {
+    if (host) {
+      setCurrentHost(host);
+    }
+  }, [host]);
+
+  // Danh sách các IP MongoDB khả dụng (.11, .12 hoặc do component cha truyền vào)
+  const candidateHosts = useMemo(() => {
+    if (availableHosts && availableHosts.length > 0) {
+      return Array.from(new Set(availableHosts));
+    }
+    const target = currentHost || host || '';
+    const subnetMatch = target.match(/^(\d+\.\d+\.\d+)\.(\d+)$/);
+    if (subnetMatch) {
+      return [`${subnetMatch[1]}.11`, `${subnetMatch[1]}.12`];
+    }
+    return target ? [target] : [];
+  }, [availableHosts, currentHost, host]);
+
+  const fetchRoleUsers = async (targetHost?: string) => {
+    const h = targetHost || currentHost || host;
+    if (!h) return;
     setLoading(true);
     try {
-      const data = await mongoService.getKdsRoleUsers(host, port, restaurantCode, undefined, paramCode);
+      const data = await mongoService.getKdsRoleUsers(h, port, restaurantCode, undefined, paramCode);
       setRoleData(data);
     } catch (err: any) {
-      showToast(`Lỗi khi tải danh sách quyền ${paramCode}: ` + (err.response?.data?.detail || err.message), 'error');
+      showToast(`Lỗi khi tải danh sách quyền ${paramCode} tại ${h}: ` + (err.response?.data?.detail || err.message), 'error');
     } finally {
       setLoading(false);
     }
@@ -1325,13 +1350,13 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      fetchRoleUsers();
+      fetchRoleUsers(currentHost || host);
       setSearchTerm('');
       setManualCode('');
       setShowRawValue(false);
       setSelectedUserCodes([]);
     }
-  }, [isOpen, host, port, paramCode]);
+  }, [isOpen, currentHost, host, port, paramCode]);
 
   if (!isOpen) return null;
 
@@ -1346,12 +1371,13 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
 
     setActionLoadingCode('MANUAL');
     try {
+      const activeHost = currentHost || host;
       let updated: KdsRoleUsersResponse;
       if (codes.length === 1) {
-        updated = await mongoService.addKdsRoleUser(host, codes[0], port, paramCode);
+        updated = await mongoService.addKdsRoleUser(activeHost, codes[0], port, paramCode);
         showToast(`Đã thêm mã '${codes[0]}' vào quyền ${paramCode} thành công!`, 'success');
       } else {
-        updated = await mongoService.addKdsRoleUsersBatch(host, codes, port, paramCode);
+        updated = await mongoService.addKdsRoleUsersBatch(activeHost, codes, port, paramCode);
         showToast(`Đã thêm ${codes.length} mã nhân viên vào quyền ${paramCode} thành công!`, 'success');
       }
       setRoleData(updated);
@@ -1367,7 +1393,8 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
     if (selectedUserCodes.length === 0) return;
     setBatchLoading(true);
     try {
-      const updated = await mongoService.addKdsRoleUsersBatch(host, selectedUserCodes, port, paramCode);
+      const activeHost = currentHost || host;
+      const updated = await mongoService.addKdsRoleUsersBatch(activeHost, selectedUserCodes, port, paramCode);
       setRoleData(updated);
       showToast(`Đã cấp quyền thành công cho ${selectedUserCodes.length} nhân viên đã chọn!`, 'success');
       setSelectedUserCodes([]);
@@ -1386,9 +1413,10 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
     }
     setBatchLoading(true);
     try {
-      const updated = await mongoService.removeKdsRoleUsersBatch(host, selectedUserCodes, port, paramCode);
+      const activeHost = currentHost || host;
+      const updated = await mongoService.removeKdsRoleUsersBatch(activeHost, selectedUserCodes, port, paramCode);
       if (updated) setRoleData(updated);
-      else await fetchRoleUsers();
+      else await fetchRoleUsers(activeHost);
       showToast(`Đã thu hồi quyền thành công của ${selectedUserCodes.length} nhân viên!`, 'success');
       setSelectedUserCodes([]);
     } catch (err: any) {
@@ -1405,7 +1433,8 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
     }
     setActionLoadingCode(code);
     try {
-      const updated = await mongoService.removeKdsRoleUser(host, code, port, paramCode);
+      const activeHost = currentHost || host;
+      const updated = await mongoService.removeKdsRoleUser(activeHost, code, port, paramCode);
       setRoleData(updated);
       showToast(`Đã thu hồi quyền ${roleNameDisplay} của mã '${code}'!`, 'success');
     } catch (err: any) {
@@ -1425,7 +1454,8 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
     }
     setTogglingStatus(true);
     try {
-      const res = await mongoService.toggleKdsRoleStatus(host, newStatus, port, paramCode);
+      const activeHost = currentHost || host;
+      const res = await mongoService.toggleKdsRoleStatus(activeHost, newStatus, port, paramCode);
       setRoleData(res);
       showToast(`Đã ${actionText} tham số cấu hình thành công!`, 'success');
     } catch (err: any) {
@@ -1457,7 +1487,8 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
     }
     setTogglingMasterStatus(true);
     try {
-      const res = await mongoService.toggleKdsMasterStatus(host, newStatus, port);
+      const activeHost = currentHost || host;
+      const res = await mongoService.toggleKdsMasterStatus(activeHost, newStatus, port);
       setRoleData((prev) => (prev ? { ...prev, show_kds_status: res.status, show_kds_enabled: res.is_enabled } : null));
       showToast(res.message || `Đã ${actionText} tham số SHOW_KDS thành công!`, 'success');
     } catch (err: any) {
@@ -1467,8 +1498,38 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
     }
   };
 
+  const handleToggleAllowHideItemGroup = async () => {
+    if (!roleData) return;
+    const currentStatus = roleData.allow_hide_item_group_status ?? 1;
+    const newStatus = currentStatus === 1 ? 0 : 1;
+    const actionText = newStatus === 1 ? 'BẬT CHO PHÉP ẨN MÓN THEO NHÓM' : 'TẮT HẾT MÓN KHÔNG CHO ẨN';
+    const confirmMsg = newStatus === 1
+      ? `Bạn có chắc chắn muốn BẬT cho phép ẩn món theo nhóm (ALLOW_HIDE_ITEM_GROUP = 1) trên máy tính bảng/POS không?`
+      : `⚠️ XÁC NHẬN TẮT HẾT MÓN KHÔNG CHO ẨN:\nBạn có chắc chắn muốn TẮT HẾT MÓN KHÔNG CHO ẨN (ALLOW_HIDE_ITEM_GROUP = 0) không?\n\n- Toàn bộ thiết bị tablet/POS sẽ không thể ẩn món theo nhóm hàng.`;
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+    setTogglingHideItemGroup(true);
+    try {
+      const activeHost = currentHost || host;
+      const res = await mongoService.toggleAllowHideItemGroup(activeHost, newStatus, port);
+      setRoleData((prev) => (prev ? {
+        ...prev,
+        allow_hide_item_group_status: res.allow_hide_item_group_status,
+        allow_hide_item_group_enabled: res.allow_hide_item_group_enabled,
+        allow_hide_item_group_value: res.allow_hide_item_group_value
+      } : null));
+      showToast(`Đã ${actionText.toLowerCase()} thành công!`, 'success');
+    } catch (err: any) {
+      showToast('Lỗi khi đổi trạng thái ALLOW_HIDE_ITEM_GROUP: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setTogglingHideItemGroup(false);
+    }
+  };
+
   const isEnabled = roleData ? (roleData.status === 1 || roleData.is_enabled) : (!isShowHideRole);
   const isMasterKdsEnabled = roleData ? (roleData.show_kds_status === 1 || roleData.show_kds_enabled) : true;
+  const isAllowHideItemGroupEnabled = roleData ? (roleData.allow_hide_item_group_status === 1 || roleData.allow_hide_item_group_enabled) : true;
 
   const restaurantUsers = (roleData?.restaurant_users || []).filter((u) => {
     const term = searchTerm.toLowerCase().trim();
@@ -1509,6 +1570,64 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
       maxWidth="880px"
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%' }}>
+        {/* Lựa chọn kết nối MongoDB nếu nhà hàng có nhiều kết nối (.11, .12...) */}
+        {candidateHosts.length > 1 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: '#F1F5F9',
+              padding: '8px 14px',
+              borderRadius: '8px',
+              border: '1px solid #CBD5E1',
+              flexWrap: 'wrap',
+              gap: '8px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: '#1E293B' }}>
+              <Database size={15} color="#0284C7" />
+              <span style={{ fontWeight: 600 }}>Máy chủ MongoDB:</span>
+              <span style={{ fontWeight: 800, color: '#0284C7', fontFamily: 'monospace' }}>{currentHost}:{port}</span>
+              {loading && <RefreshCw size={12} className="animate-spin" color="#0284C7" />}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '11.5px', color: '#64748B' }}>Chọn kết nối:</span>
+              {candidateHosts.map((h) => {
+                const isSelected = h === currentHost;
+                const label = h.endsWith('.11') ? `${h} (POS 11)` : h.endsWith('.12') ? `${h} (POS 12)` : h;
+                return (
+                  <button
+                    key={h}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => {
+                      if (h !== currentHost) {
+                        setCurrentHost(h);
+                        fetchRoleUsers(h);
+                      }
+                    }}
+                    style={{
+                      padding: '4px 12px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: isSelected ? 800 : 600,
+                      backgroundColor: isSelected ? '#0284C7' : '#FFFFFF',
+                      color: isSelected ? '#FFFFFF' : '#334155',
+                      border: `1.5px solid ${isSelected ? '#0284C7' : '#CBD5E1'}`,
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                      boxShadow: isSelected ? '0 1px 3px rgba(2, 132, 199, 0.3)' : 'none',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Card Master: Trạng Thái Hoạt Động Toàn Hệ Thống KDS (SHOW_KDS) - Chỉ hiển thị khi cấu hình KDS */}
         {!isShowHideRole && (
           <div
@@ -1812,6 +1931,102 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
             </div>
           )}
         </div>
+
+        {/* Card 3: Ẩn món theo nhóm (ALLOW_HIDE_ITEM_GROUP) - Chỉ hiển thị khi cấu hình KDS */}
+        {!isShowHideRole && (
+          <div
+            style={{
+              padding: '12px 16px',
+              borderRadius: '10px',
+              backgroundColor: isAllowHideItemGroupEnabled ? '#F0FDF4' : '#FEF2F2',
+              border: `1.5px solid ${isAllowHideItemGroupEnabled ? '#86EFAC' : '#FCA5A5'}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span
+                  style={{
+                    backgroundColor: '#1E293B',
+                    color: '#F59E0B',
+                    fontWeight: 800,
+                    fontSize: '12.5px',
+                    padding: '3px 10px',
+                    borderRadius: '6px',
+                    fontFamily: 'monospace'
+                  }}
+                >
+                  ALLOW_HIDE_ITEM_GROUP
+                </span>
+                <span
+                  style={{
+                    border: '1px solid #CBD5E1',
+                    color: '#475569',
+                    backgroundColor: '#FFFFFF',
+                    fontWeight: 700,
+                    fontSize: '11px',
+                    padding: '2px 8px',
+                    borderRadius: '4px'
+                  }}
+                >
+                  Loại: FUNCTION
+                </span>
+                <span
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: isAllowHideItemGroupEnabled ? '#15803D' : '#DC2626'
+                  }}
+                >
+                  {isAllowHideItemGroupEnabled
+                    ? '• Đang BẬT (Cho phép ẩn món theo nhóm trên Tablet/POS)'
+                    : '• Đang TẮT (Tắt hết món không cho ẩn theo nhóm)'}
+                </span>
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                Tham số quyết định nhân viên có thể ẩn hàng loạt món theo nhóm hàng hay không. Khi TẮT (status: 0), không cho phép ẩn món theo nhóm.
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={togglingHideItemGroup}
+              onClick={handleToggleAllowHideItemGroup}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 16px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 700,
+                backgroundColor: isAllowHideItemGroupEnabled ? '#DC2626' : '#16A34A',
+                color: '#FFFFFF',
+                border: `1.5px solid ${isAllowHideItemGroupEnabled ? '#B91C1C' : '#15803D'}`,
+                cursor: togglingHideItemGroup ? 'not-allowed' : 'pointer',
+                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
+                transition: 'background-color 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = isAllowHideItemGroupEnabled ? '#B91C1C' : '#15803D';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = isAllowHideItemGroupEnabled ? '#DC2626' : '#16A34A';
+              }}
+            >
+              {togglingHideItemGroup ? (
+                <RefreshCw size={13} className="animate-spin" />
+              ) : (
+                <Power size={13} />
+              )}
+              <span>{isAllowHideItemGroupEnabled ? 'Tắt Hết Món Không Cho Ẩn' : 'Bật Cho Phép Ẩn Món Theo Nhóm'}</span>
+            </button>
+          </div>
+        )}
 
         {/* Ô Nhập Thêm Mã User Vào Quyền */}
         <div

@@ -77,6 +77,8 @@ const BASE_LABELS: Record<string, { label: string; module: string }> = {
   // Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa (Chỉ Super Admin mới thấy dòng này để phân quyền)
   agent_multitask: { label: 'Quyền Quản Lý & Điều Khiển Agent Multitask', module: 'Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa' },
 
+  // Màn Hình & Phân Hệ Mới: Giao diện điện thoại riêng (Mobile Portal)
+  mobile_dedicated_view: { label: 'Quyền Sử Dụng Giao Diện Điện Thoại Riêng (Mobile Portal)', module: 'Màn Hình & Phân Hệ Mới' },
 };
 
 const PRESET_MODULE_OPTIONS = [
@@ -409,6 +411,13 @@ export const RolesPage: React.FC = () => {
         ) {
           return { ...p, active: nextActive };
         }
+        // Đảm bảo đồng bộ tuyệt đối các mã quyền mobile_dedicated_view
+        if (
+          (chucnang === 'mobile_dedicated_view' || chucnang === 'view_mobile_dedicated_view') &&
+          (p.chucnang === 'mobile_dedicated_view' || p.chucnang === 'view_mobile_dedicated_view')
+        ) {
+          return { ...p, active: nextActive };
+        }
         return p;
       });
     });
@@ -528,13 +537,15 @@ export const RolesPage: React.FC = () => {
 
   // Filter feature rows by search query
   const filteredFeatureRows = useMemo(() => {
-    // NGUYÊN TẮC BẤT DI BẤT DỊCH: Quyền Agent Multitask CHỈ Super Admin mới thấy dòng này để phân quyền!
-    // Các tài khoản khác kể cả Admin thường khi vào xem phân quyền thì HOÀN TOÀN ẨN dòng này để tránh lộ!
-    const availableRows = isSuperAdminUser
+    // NGUYÊN TẮC BẤT DI BẤT DỊCH: Quyền Agent Multitask & Mobile Dedicated View CHỈ Super Admin hoặc dung.nguyenanh mới thấy dòng này để phân quyền!
+    // Các tài khoản khác kể cả Admin thường khi vào xem phân quyền thì HOÀN TOÀN ẨN các dòng này để bảo mật!
+    const isDungOrSuperAdmin = isSuperAdminUser || (user?.username || '').toLowerCase().trim() === 'dung.nguyenanh';
+    const availableRows = isDungOrSuperAdmin
       ? allFeatureRows
       : allFeatureRows.filter(
           (r) =>
             r.baseKey !== 'agent_multitask' &&
+            r.baseKey !== 'mobile_dedicated_view' &&
             !r.moduleGroup.includes('Agent Multitask') &&
             !r.moduleGroup.includes('Dịch Vụ Máy Trạm')
         );

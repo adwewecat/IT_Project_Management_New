@@ -1602,3 +1602,47 @@
      - Backend: Viết unit test xác thực 9 test cases (`test_assignee_filter.py`), đạt kết quả pass 100%. `python -m compileall app` sạch lỗi, Smoke Test pass 100%.
      - Khởi động lại Backend daemon port 8000 sạch sẽ.
      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`dist/` kèm `web.config` cập nhật mới).
+
+- **TRIỂN KHAI PHÂN HỆ GIAO DIỆN ĐIỆN THOẠI RIÊNG (MOBILE PORTAL) & NÂNG CẤP BẬT/TẮT KDS TOÀN NHÀ HÀNG [2026-10-25]**:
+  1. **Yêu Cầu & Bối Cảnh Nghiệp Vụ Người Dùng**:
+     - Cần một giao diện riêng biệt (Mobile Portal / Model view) khi người dùng đăng nhập bằng điện thoại di động (hoặc viewport di động).
+     - **Quy tắc phân quyền độc quyền**: Màn hình này là một quyền riêng (`mobile_dedicated_view`). **Chỉ Super Admin hoặc `dung.nguyenanh` mới có quyền truy cập mặc định và có quyền phân bổ quyền này cho các User/Role khác**. Nếu tài khoản chưa được cấp quyền này, khi đăng nhập trên điện thoại vẫn chỉ hiển thị giao diện web bình thường (`/restaurants`).
+     - **Giao diện tối giản chuẩn Mobile**:
+       + Ban đầu không load trước danh sách nhà hàng; chỉ có **1 ô search duy nhất** ở phía trên cùng.
+       + Khi người dùng nhập từ khóa tìm kiếm (mã SAP, tên nhà hàng, IP, RK7...), kết quả hiển thị dạng Card dọc theo từng nhà hàng.
+       + Mỗi Card mặc định **chỉ ưu tiên hiển thị đúng 4 dòng thông tin chính**:
+         * **Dòng 1: Tên Nhà Hàng** : `5096 Ashima Forest Thiso Mai Chí Thọ (RK7: 1013) 10.8.160.x` (kết hợp SAP, Tên, RK7 và dải Subnet IP đuôi `.x`).
+         * **Dòng 2: Email** : Địa chỉ email nhà hàng kèm nút sao chép 1 chạm và link gửi mail (tuân thủ phân quyền).
+         * **Dòng 3: Mật khẩu OU (Không sys)** : Mật khẩu OU với nút ẩn/hiện mắt (`••••••••` / text) và nút sao chép (tuân thủ che dữ liệu theo phân quyền).
+         * **Dòng 4: Các chức năng cần xử lý** : Nút bấm thao tác nhanh `⚡ Cấu Hình Phân Quyền & Bật / Tắt KDS Toàn Nhà Hàng`.
+         * **Dòng 5: Xem chi tiết... ▼ / Thu gọn ▲** : Nút bấm mở rộng/thu gọn. Khi bấm vào mới hiển thị các trường còn thiếu (SAP, RK7, Cost Center/Oracle, IP LAN, IP WAN, Remote TV/RustDesk các máy POS/PC, FTTH, SĐT gọi trực tiếp, Địa chỉ, Ghi chú, Nút xem chi tiết chuyên sâu).
+     - **Nâng Cấp Tính Năng "Cấu Hình Phân Quyền & Bật / Tắt KDS Toàn Nhà Hàng"**:
+       + Bổ sung chức năng: **Tắt hết món không cho ẩn** (chính là tham số `ALLOW_HIDE_ITEM_GROUP` trong `G_ORDER.APP_PARAM`). Khi BẬT (`status: 1`): Cho phép ẩn món theo nhóm trên Tablet/POS. Khi TẮT (`status: 0`): Khóa tính năng, tắt hết món không cho ẩn theo nhóm.
+       + Hỗ trợ chọn kết nối MongoDB: Nếu nhà hàng có nhiều trạm POS (Server `.11`, POS `.12`...), cho phép kỹ thuật viên chọn đúng kết nối MongoDB `.11` hoặc `.12` ngay trên popup.
+       + Đồng bộ tính năng này lên Web tại menu: `Các Tính Năng KDS ▾` -> `Cấu Hình Phân Quyền & Bật / Tắt KDS Toàn Nhà Hàng`.
+  2. **Giải Pháp & Kiến Trúc Kỹ Thuật Đã Triển Khai**:
+     - **Backend (Python / FastAPI / MongoDB Service)**:
+       + `backend/app/schemas/mongodb.py`: Thêm các trường `allow_hide_item_group_status`, `allow_hide_item_group_enabled`, `allow_hide_item_group_value` vào `KdsRoleUsersResponse`.
+       + `backend/app/services/mongodb_service.py`:
+         * Mở rộng `get_kds_role_users` để truy vấn thêm tham số `ALLOW_HIDE_ITEM_GROUP` từ `G_ORDER.APP_PARAM`.
+         * Bổ sung hàm `toggle_allow_hide_item_group(host, status, port)`: Cập nhật `status` (1/0) và `value` ('1'/'0') vào MongoDB và ghi audit log.
+       + `backend/app/api/v1/mongodb.py`: Thêm endpoint `PUT /api/v1/mongodb/kds/allow-hide-item-group/toggle`.
+       + `backend/app/services/auth_service.py` & `role_service.py`:
+         * Đăng ký mã quyền `mobile_dedicated_view`, `view_mobile_dedicated_view`, `update_mobile_dedicated_view` vào `ALL_PERMISSIONS` và `BASE_PERMISSION_DEFINITIONS`.
+         * Trong `get_user_permissions`: Super Admin và `dung.nguyenanh` bypass; đối với Admin thường thì mặc định `mobile_dedicated_view = False` (chỉ có khi được phân quyền cụ thể trong `PHANQUYEN_DETAIL`).
+     - **Frontend (React 18 / TypeScript / Vite)**:
+       + `frontend/src/services/mongoService.ts`: Bổ sung `toggleAllowHideItemGroup(host, status, port)` và cập nhật interface `KdsRoleUsersResponse`.
+       + `frontend/src/pages/app/KdsQuayModals.tsx` (`KdsRoleUserModal`):
+         * Bổ sung Card thứ 3: `ALLOW_HIDE_ITEM_GROUP` hiển thị trạng thái và nút "Tắt Hết Món Không Cho Ẩn" / "Bật Cho Phép Ẩn Món Theo Nhóm".
+         * Bổ sung thanh chọn MongoDB (`candidateHosts` `.11` / `.12`) với hiển thị host đang kết nối và nút chuyển đổi tức thì.
+       + `frontend/src/pages/app/RestaurantMongoAnalysisPage.tsx`: Cập nhật menu tính năng số 4 thành `Cấu Hình Phân Quyền & Bật / Tắt KDS Toàn Nhà Hàng`.
+       + `frontend/src/utils/authUtils.ts`:
+         * Bổ sung logic kiểm tra quyền `mobile_dedicated_view` trong `hasNewScreenAccess` (chỉ Super Admin hoặc `dung.nguyenanh` mặc định có quyền).
+         * Bổ sung hàm tiện ích `isMobileDevice()`.
+       + `frontend/src/pages/admin/RolesPage.tsx`: Khai báo `mobile_dedicated_view` vào `BASE_LABELS`, thiết lập bảo mật chỉ Super Admin hoặc `dung.nguyenanh` mới nhìn thấy dòng này trong ma trận để phân quyền cho người khác.
+       + `frontend/src/pages/mobile/MobileRestaurantPage.tsx`: Tạo mới toàn bộ trang Mobile Portal tối giản 100%, gồm thanh Header di động, 1 ô search duy nhất, kết quả Card dọc 4 dòng ưu tiên, mở rộng chi tiết và modal KDS.
+       + `frontend/src/routes/AppRoutes.tsx` & `LoginPage.tsx`: Thêm route `/mobile` được bảo vệ bằng `ProtectedRoute requiredPermission="mobile_dedicated_view"`. Tự động điều hướng khi đăng nhập trên di động nếu có quyền.
+       + `frontend/src/components/layout/Header.tsx` & `Sidebar.tsx`: Bổ sung nút chuyển đổi qua lại giữa Mobile Portal và Desktop Web.
+  3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> PASSED 100%`, Backend daemon port 8000 đã reload chạy bản mới.
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 10.55s`), tạo mới bản build hoàn chỉnh trong `frontend/dist/` (kèm `web.config` rewrite cho IIS).

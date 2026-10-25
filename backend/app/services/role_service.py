@@ -133,6 +133,11 @@ BASE_PERMISSION_DEFINITIONS = [
     {"chucnang": "agent_multitask", "module": "Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa", "action": "Quyền Quản Lý & Điều Khiển Agent Multitask"},
     {"chucnang": "view_agent_multitask", "module": "Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa", "action": "Xem Trạng Thái Dịch Vụ Máy Trạm Agent Multitask"},
     {"chucnang": "update_agent_multitask", "module": "Hệ Thống: Dịch Vụ Máy Trạm & Điều Khiển Từ Xa", "action": "Thực Thi Lệnh & Cấu Hình Agent Multitask"},
+
+    # === MÀN HÌNH & PHÂN HỆ MỚI ===
+    {"chucnang": "mobile_dedicated_view", "module": "Màn Hình & Phân Hệ Mới", "action": "Quyền Sử Dụng Giao Diện Điện Thoại Riêng (Mobile Portal)"},
+    {"chucnang": "view_mobile_dedicated_view", "module": "Màn Hình & Phân Hệ Mới", "action": "Xem Giao Diện Điện Thoại Riêng (Mobile Portal)"},
+    {"chucnang": "update_mobile_dedicated_view", "module": "Màn Hình & Phân Hệ Mới", "action": "Thao Tác Giao Diện Điện Thoại Riêng (Mobile Portal)"},
 ]
 
 

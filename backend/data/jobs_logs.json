@@ -1,5 +1,41 @@
 [
   {
+    "id": "7750c1a1",
+    "job_id": "job_sync_sales_daily_server",
+    "job_name": "Lấy dữ liệu tổng sales, tổng khách từ SERVER Dcorp về Server IT Daily Sales",
+    "started_at": "2026-10-25 05:45:08",
+    "finished_at": "2026-10-25 05:45:33",
+    "duration_seconds": 25.82,
+    "status": "success",
+    "message": "Đồng bộ thành công dữ liệu doanh số ngày 2026-10-24 từ Server RK7 (172.16.8.26) về bảng SO_LIEU_CHECK_SALES_DAILY trên DB ITSS (172.16.20.103).",
+    "details": "Kết quả thực thi thực tế:\n- Ngày chốt doanh số: 2026-10-24\n- Tổng số nhà hàng lấy về: 319\n- Số nhà hàng có doanh số: 310\n- Tổng doanh thu hệ thống: 19,445,906,945 VNĐ\n- Tổng lượng khách (TC): 47,611\n- Database đích: ITDEPT (172.16.20.103)\n- Bảng dữ liệu: dbo.SO_LIEU_CHECK_SALES_DAILY & dbo.TOTAL_SALES_DAILY",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
+    "id": "a4e9e002",
+    "job_id": "job_sync_pim_requests",
+    "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",
+    "started_at": "2026-10-25 03:00:02",
+    "finished_at": "2026-10-25 03:00:02",
+    "duration_seconds": 32.6,
+    "status": "success",
+    "message": "Thành công lúc 03:00 (Quét: 18 | Mới: 0 | Cập nhật: 18)",
+    "details": "Tự động quét PIM theo lịch 3 khung giờ lúc 03:00:\n- Tổng quét: 18\n- Mới: 0\n- Cập nhật: 18",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
+    "id": "4b77855b",
+    "job_id": "job_auto_purge_old_logs",
+    "job_name": "Tự Động Dọn Dẹp Logs Cũ (Sau 3 Năm)",
+    "started_at": "2026-10-25 03:00:02",
+    "finished_at": "2026-10-25 03:00:02",
+    "duration_seconds": 0.01,
+    "status": "success",
+    "message": "Đã dọn dẹp 0 bản ghi logs cũ hơn 3 năm trong LOGS__New.",
+    "details": "Tác vụ dọn dẹp Logs định kỳ (> 3 năm) thành công. Tổng số bản ghi được giải phóng: 0 dòng.",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
     "id": "e8cd90f1",
     "job_id": "job_sync_pim_requests",
     "job_name": "Đồng bộ Yêu cầu PIM & Phân công tự động",

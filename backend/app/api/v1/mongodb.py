@@ -1616,6 +1616,28 @@ def toggle_kds_master_status(
         )
 
 
+@router.put("/kds/allow-hide-item-group/toggle", response_model=KdsMasterStatusResponse)
+def toggle_allow_hide_item_group(
+    payload: KdsMasterStatusToggleRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Bật (status: 1, value: '1') hoặc Tắt (status: 0, value: '0') tham số ALLOW_HIDE_ITEM_GROUP (Tắt/Bật hết món không cho ẩn).
+    """
+    try:
+        return MongoDBService.toggle_allow_hide_item_group(
+            payload=payload,
+            current_user=current_user,
+            db=db
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Lỗi khi đổi trạng thái ALLOW_HIDE_ITEM_GROUP ({payload.host}): {str(e)}"
+        )
+
+
 def _check_is_dung_or_super_admin(user: UserInfo) -> bool:
     username = (getattr(user, "username", "") or "").lower().strip()
     is_super = getattr(user, "is_super_admin", False) or username in ["admin", "administrator", "dung.nguyenanh"]

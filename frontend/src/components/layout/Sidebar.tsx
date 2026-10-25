@@ -28,6 +28,7 @@ import {
   KeyRound,
   ScrollText,
   Cpu,
+  Smartphone,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { dashboardService, PendingSummaryResponse } from '../../services/dashboardService';
@@ -38,6 +39,7 @@ import {
   checkIsAppRole,
   checkIsHelpdeskRole,
   checkIsInventoryRole,
+  hasNewScreenAccess,
 } from '../../utils/authUtils';
 
 export interface SidebarProps {
@@ -273,6 +275,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span>Lịch Trực Hotline</span>
           </NavLink>
         </li>
+
+        {/* 4. Giao diện Điện Thoại (Mobile Portal - Phân quyền mobile_dedicated_view) */}
+        {hasNewScreenAccess(user, 'mobile_dedicated_view') && (
+          <li>
+            <NavLink
+              to="/mobile"
+              className="sidebar-interactive-item"
+              style={({ isActive }) => getLinkStyle(isActive)}
+            >
+              <Smartphone size={18} style={{ color: '#0284C7' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>Mobile Portal</span>
+                <span
+                  style={{
+                    backgroundColor: '#0284C7',
+                    color: '#FFFFFF',
+                    fontSize: '9.5px',
+                    fontWeight: 700,
+                    padding: '1px 5px',
+                    borderRadius: '10px',
+                  }}
+                >
+                  NEW
+                </span>
+              </div>
+            </NavLink>
+          </li>
+        )}
 
         {/* ================= PHẦN 2: PHÂN HỆ ĐẶC THÙ THEO QUYỀN (GOM NHÓM COLLAPSIBLE) ================= */}
         <li style={{ ...sectionTitleStyle, marginTop: '10px' }}>Phân Hệ Nghiệp Vụ</li>

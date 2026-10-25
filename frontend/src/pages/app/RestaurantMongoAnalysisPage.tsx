@@ -8233,10 +8233,10 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700, fontSize: '13px', color: '#075985', marginBottom: '3px' }}>
-                  Phân Quyền User KDS
+                  Cấu Hình Phân Quyền &amp; Bật / Tắt KDS Toàn Nhà Hàng
                 </div>
                 <div style={{ fontSize: '11px', color: '#0369A1', lineHeight: '1.4' }}>
-                  Cấp quyền truy cập cấu hình bếp trên máy POS trạm (ROLE_SETUP_CONFIG_COOKING).
+                  Tắt/Bật toàn bộ KDS (SHOW_KDS), kiểm tra quyền (ROLE_SETUP_CONFIG_COOKING), tắt hết món không cho ẩn (ALLOW_HIDE_ITEM_GROUP) &amp; cấp quyền user.
                 </div>
               </div>
             </button>

@@ -325,6 +325,9 @@ class KdsRoleUsersResponse(BaseModel):
     note: Optional[str] = None
     show_kds_status: int = 1
     show_kds_enabled: bool = True
+    allow_hide_item_group_status: int = 1
+    allow_hide_item_group_enabled: bool = True
+    allow_hide_item_group_value: str = "1"
     restaurant_users: List[KdsRoleUserItem] = []
     authorized_users: List[KdsRoleUserItem] = []
     available_employees: List[KdsRoleUserItem] = []

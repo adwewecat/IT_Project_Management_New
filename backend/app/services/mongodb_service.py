@@ -4460,6 +4460,20 @@ class MongoDBService:
             except Exception:
                 pass
 
+            allow_hide_st = 1
+            allow_hide_en = True
+            allow_hide_val = "1"
+            try:
+                ah_doc = db_order["APP_PARAM"].find_one({"paramCode": "ALLOW_HIDE_ITEM_GROUP"})
+                if ah_doc:
+                    st = ah_doc.get("status")
+                    val = str(ah_doc.get("value", "")).strip()
+                    allow_hide_val = val
+                    allow_hide_st = int(st) if st is not None else (1 if val == "1" else 0)
+                    allow_hide_en = (allow_hide_st == 1 and val != "0")
+            except Exception:
+                pass
+
             p_type = param_doc.get("paramType", "CONFIG") if param_doc else "CONFIG"
             p_name = param_doc.get("paramName", target_param) if param_doc else target_param
             p_note = param_doc.get("note", "") if param_doc else ""
@@ -4475,6 +4489,9 @@ class MongoDBService:
                 note=p_note,
                 show_kds_status=show_kds_st,
                 show_kds_enabled=show_kds_en,
+                allow_hide_item_group_status=allow_hide_st,
+                allow_hide_item_group_enabled=allow_hide_en,
+                allow_hide_item_group_value=allow_hide_val,
                 restaurant_users=restaurant_users_list,
                 authorized_users=[],
                 available_employees=[]
@@ -4610,6 +4627,72 @@ class MongoDBService:
             res = MongoDBService.get_kds_master_status(payload.host, payload.port)
             res.message = f"Đã {st_text} thành công tham số SHOW_KDS!"
             return res
+        finally:
+            client.close()
+
+    @staticmethod
+    def toggle_allow_hide_item_group(
+        payload: KdsMasterStatusToggleRequest,
+        current_user: UserInfo,
+        db: Optional[Session] = None
+    ) -> KdsMasterStatusResponse:
+        """
+        Bật (status=1, value="1") hoặc Tắt (status=0, value="0") tham số ALLOW_HIDE_ITEM_GROUP trong G_ORDER.APP_PARAM.
+        Quyết định quyền thấy món đang hiện / cho phép ẩn món theo nhóm trên thiết bị tablet nhà hàng.
+        """
+        client = MongoClient(payload.host, payload.port, serverSelectionTimeoutMS=4000)
+        try:
+            db_order = client["G_ORDER"]
+            param_col = db_order["APP_PARAM"]
+            param_doc = param_col.find_one({"paramCode": "ALLOW_HIDE_ITEM_GROUP"})
+
+            new_status = 1 if payload.status == 1 else 0
+            new_value = "1" if new_status == 1 else "0"
+
+            if param_doc:
+                param_col.update_one(
+                    {"_id": param_doc["_id"]},
+                    {"$set": {"status": new_status, "value": new_value}}
+                )
+            else:
+                param_col.insert_one({
+                    "paramCode": "ALLOW_HIDE_ITEM_GROUP",
+                    "paramName": "ALLOW_HIDE_ITEM_GROUP",
+                    "paramType": "FUNCTION",
+                    "status": new_status,
+                    "value": new_value,
+                    "note": "Quyền thấy món đang hiện",
+                    "checkTimeRange": 0
+                })
+
+            st_text = "Bật (1 - Cho phép ẩn món theo nhóm)" if new_status == 1 else "Tắt (0 - Tắt hết món không cho ẩn)"
+            if db:
+                try:
+                    log_entry = AuditLog(
+                        USER_ACTION=current_user.username,
+                        ACTION_TYPE="TOGGLE_ALLOW_HIDE_ITEM_GROUP",
+                        TARGET_OBJECT="APP_PARAM:ALLOW_HIDE_ITEM_GROUP",
+                        DESCRIPTION=f"Đổi trạng thái ALLOW_HIDE_ITEM_GROUP sang {st_text} trên {payload.host}:{payload.port}",
+                        DETAILS=f'{{"host": "{payload.host}", "status": {new_status}, "value": "{new_value}", "param": "ALLOW_HIDE_ITEM_GROUP"}}',
+                        DATE_ACTION=datetime.datetime.now(),
+                    )
+                    db.add(log_entry)
+                    db.commit()
+                except Exception:
+                    pass
+
+            return KdsMasterStatusResponse(
+                host=payload.host,
+                port=payload.port,
+                param_code="ALLOW_HIDE_ITEM_GROUP",
+                param_name="ALLOW_HIDE_ITEM_GROUP",
+                param_type="FUNCTION",
+                status=new_status,
+                value=new_value,
+                is_enabled=bool(new_status == 1),
+                note="Quyền thấy món đang hiện",
+                message=f"Đã {st_text} thành công tham số ALLOW_HIDE_ITEM_GROUP!"
+            )
         finally:
             client.close()
 
