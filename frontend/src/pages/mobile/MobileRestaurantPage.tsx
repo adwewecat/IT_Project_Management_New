@@ -238,7 +238,10 @@ export const MobileRestaurantPage: React.FC = () => {
           {/* Nút chuyển sang Web Desktop */}
           <button
             type="button"
-            onClick={() => navigate('/restaurants')}
+            onClick={() => {
+              sessionStorage.setItem('prefer_desktop', 'true');
+              navigate('/restaurants');
+            }}
             title="Chuyển sang giao diện Web Desktop"
             style={{
               display: 'inline-flex',

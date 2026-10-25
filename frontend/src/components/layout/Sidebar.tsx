@@ -283,6 +283,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               to="/mobile"
               className="sidebar-interactive-item"
               style={({ isActive }) => getLinkStyle(isActive)}
+              onClick={() => {
+                sessionStorage.removeItem('prefer_desktop');
+                if (onCloseMobile) onCloseMobile();
+              }}
             >
               <Smartphone size={18} style={{ color: '#0284C7' }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

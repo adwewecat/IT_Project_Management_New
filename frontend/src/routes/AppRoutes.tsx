@@ -28,6 +28,25 @@ import { AgentMultitaskPage } from '../pages/app/AgentMultitaskPage';
 import { MobileRestaurantPage } from '../pages/mobile/MobileRestaurantPage';
 import { MainLayout } from '../components/layout/MainLayout';
 import { ProtectedRoute } from './ProtectedRoute';
+import { useAuth } from '../contexts/AuthContext';
+import { hasNewScreenAccess, isMobileDevice } from '../utils/authUtils';
+
+/**
+ * Điều hướng trang chủ thông minh:
+ * Nếu người dùng truy cập từ điện thoại (mobile) và có quyền Mobile Portal
+ * mà không có cờ prefer_desktop -> Tự động chuyển thẳng vào /mobile.
+ */
+const IndexRedirect: React.FC = () => {
+  const { user } = useAuth();
+  const preferDesktop = typeof window !== 'undefined' && sessionStorage.getItem('prefer_desktop') === 'true';
+  const isMobile = isMobileDevice();
+  const hasMobilePortal = hasNewScreenAccess(user, 'mobile_dedicated_view');
+
+  if (isMobile && hasMobilePortal && !preferDesktop) {
+    return <Navigate to="/mobile" replace />;
+  }
+  return <Navigate to="/restaurants" replace />;
+};
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -54,7 +73,7 @@ export const AppRoutes: React.FC = () => {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/restaurants" replace />} />
+        <Route index element={<IndexRedirect />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="restaurants" element={<RestaurantListPage />} />
         <Route path="restaurants/logs" element={<RestaurantAuditLogsPage />} />

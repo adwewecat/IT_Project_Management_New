@@ -227,6 +227,9 @@ export const Header: React.FC<HeaderProps> = ({
         {hasNewScreenAccess(user, 'mobile_dedicated_view') && (
           <Link
             to="/mobile"
+            onClick={() => {
+              sessionStorage.removeItem('prefer_desktop');
+            }}
             title="Chuyển sang giao diện tối giản cho điện thoại"
             style={{
               display: 'inline-flex',

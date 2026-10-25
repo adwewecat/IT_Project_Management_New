@@ -5014,3 +5014,28 @@ estaurant_service.py).
   3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.43s`), thư mục `frontend/dist/` (kèm `web.config` IIS) cập nhật mới sạch sẽ 100%.
      - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> PASSED 100%`.
+
+---
+
+### [2026-10-25] - Khắc Phục Tự Động Điều Hướng Sang Giao Diện Mobile Portal (/mobile) Khi Truy Cập Bằng Điện Thoại
+- **Hiện tượng & Báo cáo người dùng**:
+  - Người dùng truy cập bằng trình duyệt Chrome trên điện thoại Android (IP server port 5001) nhưng màn hình lại hiển thị giao diện bảng dữ liệu Web Desktop (/restaurants) với đầy đủ các nút '+ Thêm Nhà Hàng', 'Xuất Excel', 'Cài Đặt VNC / KDS', bảng nhiều cột... thay vì giao diện Mobile Portal (/mobile) dạng thẻ tối giản.
+- **Nguyên nhân gốc rễ**:
+  - Trước đây luồng tự động chuyển sang `/mobile` chỉ được kích hoạt trong `LoginPage.tsx` tại thời điểm submit đăng nhập.
+  - Khi người dùng đã đăng nhập sẵn từ trước (JWT lưu trong localStorage) hoặc tải lại trang, mở tab cũ hay truy cập vào trang chủ `/`:
+    + Route index `/` trong `AppRoutes.tsx` trước đây chuyển cứng sang `<Navigate to="/restaurants" replace />`.
+    + Trang `RestaurantListPage.tsx` khi mount trên điện thoại không có cơ chế phát hiện thiết bị để điều hướng sang `/mobile`.
+- **Giải pháp & Triển khai triệt để**:
+  1. **Tạo `IndexRedirect` trong `AppRoutes.tsx`**:
+     - Khi truy cập vào trang chủ `/`, hệ thống tự động kiểm tra: Nếu là thiết bị di động (`isMobileDevice()`) và tài khoản có quyền Mobile Portal (`hasNewScreenAccess(user, 'mobile_dedicated_view')`) đồng thời không có cờ muốn xem bản máy tính (`sessionStorage.getItem('prefer_desktop') !== 'true'`), hệ thống **tự động chuyển hướng ngay sang `/mobile`**.
+  2. **Tự động chuyển hướng tại `RestaurantListPage.tsx`**:
+     - Bổ sung `useEffect` kiểm tra ngay khi trang Danh Sách Nhà Hàng mount: Nếu phát hiện đang mở trên mobile và có quyền mà không có cờ `prefer_desktop`, tự động chuyển hướng sang `/mobile`.
+     - Nếu người dùng chủ động chọn xem bản Desktop trên mobile (`prefer_desktop === 'true'`), hiển thị thanh banner thông báo trang nhã trên đầu: `📱 Đang xem bản Web máy tính trên điện thoại. [📱 Về Mobile Portal]` để người dùng có thể quay lại giao diện Mobile bất kỳ lúc nào chỉ bằng 1 chạm.
+  3. **Quản lý cờ `prefer_desktop` thông minh**:
+     - Trong `MobileRestaurantPage.tsx`: Khi người dùng bấm nút `[💻 Desktop]`, gán `sessionStorage.setItem('prefer_desktop', 'true')` trước khi chuyển sang `/restaurants`.
+     - Trong `Header.tsx` (nút icon `[📱]`) và `Sidebar.tsx` (mục `Mobile Portal`): Khi người dùng bấm để vào lại Mobile Portal, tự động xóa cờ `sessionStorage.removeItem('prefer_desktop')`.
+     - Trong `LoginPage.tsx`: Tự động xóa cờ `prefer_desktop` khi đăng nhập mới.
+     - Trong `authUtils.ts`: Cho phép Quản trị viên (Super Admin và Admin) mặc định có quyền `mobile_dedicated_view` chuẩn theo Rule 10.
+- **Kiểm thử & Đóng gói**:
+  - Frontend: `cmd /c "npm run build"` exit code 0 (`✓ built in 4.51s`), thư mục `frontend/dist/` sạch sẽ sẵn sàng triển khai.
+  - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> BACKEND PASSED 100%`.

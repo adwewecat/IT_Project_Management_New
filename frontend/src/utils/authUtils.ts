@@ -132,9 +132,9 @@ export const hasNewScreenAccess = (user?: UserInfo | null, screenKey?: string): 
   }
 
   // Riêng Mobile Dedicated View (Giao diện điện thoại riêng):
-  // Chỉ Super Admin hoặc dung.nguyenanh mặc định có quyền, các user khác (kể cả admin thường) phải được phân quyền
+  // Super Admin và Admin mặc định có quyền (theo Rule 10), các user khác phải được phân quyền
   if (cleanKey === 'mobile_dedicated_view') {
-    if (checkIsDungOrSuperAdmin(user)) return true;
+    if (checkIsAdmin(user)) return true;
     return Boolean(
       perms['mobile_dedicated_view'] ||
       perms['view_mobile_dedicated_view'] ||

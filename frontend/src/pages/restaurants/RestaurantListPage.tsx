@@ -17,6 +17,7 @@ import {
   X,
   Phone,
   PhoneCall,
+  Smartphone,
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -43,7 +44,7 @@ import { RestaurantSoftwareVersionsModal } from '../../components/restaurants/Re
 import { DailyPendingTasksModal } from '../../components/dashboard/DailyPendingTasksModal';
 import { dashboardService, PendingSummaryResponse } from '../../services/dashboardService';
 import { useAuth } from '../../contexts/AuthContext';
-import { checkIsSuperAdmin, checkIsAdmin, checkIsAppRole, checkIsDungOrSuperAdmin } from '../../utils/authUtils';
+import { checkIsSuperAdmin, checkIsAdmin, checkIsAppRole, checkIsDungOrSuperAdmin, hasNewScreenAccess, isMobileDevice } from '../../utils/authUtils';
 
 const TRANG_THAI_OPTIONS: MultiSelectOption[] = [
   {
@@ -80,6 +81,17 @@ export const RestaurantListPage: React.FC = () => {
   const shouldShowDailyNotice = isAppRole || isDungOrSuperAdmin || isSuperAdmin;
   const hasExtendedPermission = !!user?.quyen_mo_rong && user?.quyen_mo_rong !== '0';
   const canManageBrandRegion = isAdmin || hasExtendedPermission;
+
+  // Tự động chuyển hướng sang Mobile Portal nếu người dùng truy cập từ điện thoại và có quyền
+  useEffect(() => {
+    const isMobile = isMobileDevice();
+    const hasMobilePortal = hasNewScreenAccess(user, 'mobile_dedicated_view');
+    const preferDesktop = typeof window !== 'undefined' && sessionStorage.getItem('prefer_desktop') === 'true';
+
+    if (isMobile && hasMobilePortal && !preferDesktop) {
+      navigate('/mobile', { replace: true });
+    }
+  }, [user, navigate]);
 
   // 3CX Hotline Call Alert
   const {
@@ -391,6 +403,50 @@ export const RestaurantListPage: React.FC = () => {
 
   return (
     <div className="page-container-fullheight" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px', height: '100%', overflow: 'hidden' }}>
+      {/* Banner thông báo và nút chuyển về Mobile Portal nếu đang xem trên điện thoại */}
+      {isMobileDevice() && hasNewScreenAccess(user, 'mobile_dedicated_view') && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px',
+            padding: '8px 12px',
+            backgroundColor: '#0284C7',
+            color: '#FFFFFF',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 600,
+            boxShadow: '0 2px 4px rgba(2, 132, 199, 0.2)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Smartphone size={16} />
+            <span>Đang xem bản Web máy tính trên điện thoại</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              sessionStorage.removeItem('prefer_desktop');
+              navigate('/mobile');
+            }}
+            style={{
+              backgroundColor: '#FFFFFF',
+              color: '#0284C7',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '4px 10px',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            📱 Về Mobile Portal
+          </button>
+        </div>
+      )}
+
       {/* Header Section */}
       <div
         style={{

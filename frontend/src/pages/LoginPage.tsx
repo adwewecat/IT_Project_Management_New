@@ -71,6 +71,7 @@ export const LoginPage: React.FC = () => {
       const hasMobilePermission = hasNewScreenAccess(loggedUser, 'mobile_dedicated_view');
 
       if (isMobile && hasMobilePermission) {
+        sessionStorage.removeItem('prefer_desktop');
         navigate('/mobile', { replace: true });
         return;
       }
