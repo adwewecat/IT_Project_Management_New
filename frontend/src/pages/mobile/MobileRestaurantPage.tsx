@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
   X,
   Mail,
   Key,
-  Eye,
-  EyeOff,
   Copy,
   Check,
   ChevronDown,
@@ -25,6 +23,7 @@ import { getRestaurants } from '../../services/restaurantService';
 import { RestaurantItem } from '../../types/restaurant';
 import { KdsRoleUserModal } from '../app/KdsQuayModals';
 import { RestaurantDetailModal } from '../../components/restaurants/RestaurantDetailModal';
+import { Modal } from '../../components/ui/Modal';
 import { copyToClipboard } from '../../utils/clipboard';
 
 export const MobileRestaurantPage: React.FC = () => {
@@ -41,8 +40,8 @@ export const MobileRestaurantPage: React.FC = () => {
   // Expanded card state: set of restaurant IDs
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
 
-  // Password visibility state: set of restaurant IDs
-  const [visiblePassIds, setVisiblePassIds] = useState<Set<number>>(new Set());
+  // Quick Action popup state
+  const [quickActionsRestaurant, setQuickActionsRestaurant] = useState<RestaurantItem | null>(null);
 
   // Copied feedback: map of fieldKey -> boolean
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -124,16 +123,6 @@ export const MobileRestaurantPage: React.FC = () => {
     });
   };
 
-  // Toggle password visibility
-  const togglePassVisibility = (id: number) => {
-    setVisiblePassIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
   // Copy text to clipboard with toast
   const handleCopy = (text: string | null | undefined, key: string, label: string) => {
     if (!text) {
@@ -172,17 +161,6 @@ export const MobileRestaurantPage: React.FC = () => {
     const match = ip.trim().match(/^(\d+\.\d+\.\d+)/);
     return match ? match[1] : '';
   };
-
-  // Candidate hosts for KDS modal
-  const kdsCandidateHosts = useMemo(() => {
-    if (!selectedKdsRestaurant?.ip) return [];
-    const ip = selectedKdsRestaurant.ip.trim();
-    const subnet = getSubnet(ip);
-    if (subnet) {
-      return [`${subnet}.11`, `${subnet}.12`];
-    }
-    return [ip];
-  }, [selectedKdsRestaurant]);
 
   return (
     <div
@@ -490,7 +468,6 @@ export const MobileRestaurantPage: React.FC = () => {
         {/* DANH SÁCH NHÀ HÀNG THEO CHIỀU DỌC (ƯU TIÊN 4 DÒNG CHÍNH) */}
         {restaurants.map((item) => {
           const isExpanded = expandedIds.has(item.id);
-          const isPassVisible = visiblePassIds.has(item.id);
           const subnet = getSubnet(item.ip);
           const passOuValue = item.pass_ou_ko_sys || item.sys_sales;
 
@@ -501,27 +478,27 @@ export const MobileRestaurantPage: React.FC = () => {
                 backgroundColor: '#1E293B',
                 borderRadius: '12px',
                 border: '1.5px solid #334155',
-                padding: '14px',
+                padding: '12px',
                 boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '10px',
+                gap: '8px',
                 position: 'relative',
               }}
             >
               {/* ───────────────────────────────────────────────────────── */}
               {/* DÒNG 1: TÊN NHÀ HÀNG : 5096 Ashima Forest Thiso Mai Chí Thọ (RK7: 1013) 10.8.160.x */}
               {/* ───────────────────────────────────────────────────────── */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase' }}>
                   Tên Nhà Hàng :
                 </div>
                 <div
                   style={{
-                    fontSize: '14px',
+                    fontSize: '13.5px',
                     fontWeight: 800,
                     color: '#F8FAFC',
-                    lineHeight: '1.4',
+                    lineHeight: '1.35',
                   }}
                 >
                   {item.sap ? (
@@ -529,9 +506,9 @@ export const MobileRestaurantPage: React.FC = () => {
                       style={{
                         backgroundColor: '#D97706',
                         color: '#FFFFFF',
-                        padding: '1px 6px',
+                        padding: '1px 5px',
                         borderRadius: '4px',
-                        fontSize: '12px',
+                        fontSize: '11.5px',
                         fontWeight: 800,
                         marginRight: '6px',
                         fontFamily: 'monospace',
@@ -545,7 +522,7 @@ export const MobileRestaurantPage: React.FC = () => {
                     <span
                       style={{
                         color: '#38BDF8',
-                        fontSize: '12.5px',
+                        fontSize: '12px',
                         fontWeight: 700,
                         marginLeft: '6px',
                       }}
@@ -559,9 +536,9 @@ export const MobileRestaurantPage: React.FC = () => {
                         backgroundColor: '#0F172A',
                         color: '#34D399',
                         border: '1px solid #065F46',
-                        padding: '1px 6px',
+                        padding: '1px 5px',
                         borderRadius: '4px',
-                        fontSize: '11.5px',
+                        fontSize: '11px',
                         fontWeight: 700,
                         fontFamily: 'monospace',
                         marginLeft: '6px',
@@ -574,7 +551,7 @@ export const MobileRestaurantPage: React.FC = () => {
               </div>
 
               {/* ───────────────────────────────────────────────────────── */}
-              {/* DÒNG 2: EMAIL */}
+              {/* DÒNG 2: EMAIL (NHỎ LẠI) */}
               {/* ───────────────────────────────────────────────────────── */}
               <div
                 style={{
@@ -582,17 +559,17 @@ export const MobileRestaurantPage: React.FC = () => {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   backgroundColor: '#0F172A',
-                  padding: '7px 10px',
+                  padding: '5px 8px',
                   borderRadius: '6px',
                   border: '1px solid #334155',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
-                  <Mail size={14} color="#38BDF8" style={{ flexShrink: 0 }} />
-                  <span style={{ fontSize: '11.5px', color: '#94A3B8', flexShrink: 0 }}>Email:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: 1, minWidth: 0 }}>
+                  <Mail size={13} color="#38BDF8" style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: '11px', color: '#94A3B8', flexShrink: 0 }}>Email:</span>
                   <span
                     style={{
-                      fontSize: '12.5px',
+                      fontSize: '11.5px',
                       color: item.email ? '#F1F5F9' : '#64748B',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -616,19 +593,19 @@ export const MobileRestaurantPage: React.FC = () => {
                       padding: '2px 4px',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '3px',
-                      fontSize: '11px',
+                      gap: '2px',
+                      fontSize: '10.5px',
                       fontWeight: 600,
                       touchAction: 'manipulation',
                     }}
                   >
-                    {copiedKey === `email_${item.id}` ? <Check size={13} /> : <Copy size={13} />}
+                    {copiedKey === `email_${item.id}` ? <Check size={12} /> : <Copy size={12} />}
                   </button>
                 )}
               </div>
 
               {/* ───────────────────────────────────────────────────────── */}
-              {/* DÒNG 3: MẬT KHẨU OU (KHÔNG SYS) */}
+              {/* DÒNG 3: MẬT KHẨU OU (KHÔNG SYS) - HIỆN TRỰC TIẾP, KHÔNG ẨN */}
               {/* ───────────────────────────────────────────────────────── */}
               <div
                 style={{
@@ -636,59 +613,42 @@ export const MobileRestaurantPage: React.FC = () => {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   backgroundColor: '#0F172A',
-                  padding: '7px 10px',
+                  padding: '5px 8px',
                   borderRadius: '6px',
                   border: '1px solid #334155',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
-                  <Key size={14} color="#F59E0B" style={{ flexShrink: 0 }} />
-                  <span style={{ fontSize: '11.5px', color: '#94A3B8', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: 1, minWidth: 0 }}>
+                  <Key size={13} color="#F59E0B" style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: '11px', color: '#94A3B8', flexShrink: 0 }}>
                     Mật khẩu OU (Không sys):
                   </span>
 
                   {!canViewPassOu ? (
-                    <span style={{ fontSize: '11.5px', color: '#EF4444', fontWeight: 600 }}>
+                    <span style={{ fontSize: '11px', color: '#EF4444', fontWeight: 600 }}>
                       🔒 Bị ẩn theo phân quyền
                     </span>
                   ) : !passOuValue ? (
-                    <span style={{ fontSize: '12px', color: '#64748B' }}>—</span>
+                    <span style={{ fontSize: '11.5px', color: '#64748B' }}>—</span>
                   ) : (
                     <span
                       style={{
-                        fontSize: '12.5px',
-                        fontFamily: isPassVisible ? 'monospace' : 'inherit',
-                        color: isPassVisible ? '#FDE047' : '#94A3B8',
+                        fontSize: '11.5px',
+                        fontFamily: 'monospace',
+                        color: '#FDE047',
                         fontWeight: 700,
-                        letterSpacing: isPassVisible ? '0.5px' : '2px',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {isPassVisible ? passOuValue : '••••••••'}
+                      {passOuValue}
                     </span>
                   )}
                 </div>
 
                 {canViewPassOu && passOuValue && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-                    <button
-                      type="button"
-                      onClick={() => togglePassVisibility(item.id)}
-                      title={isPassVisible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#94A3B8',
-                        cursor: 'pointer',
-                        padding: '3px',
-                        display: 'flex',
-                        alignItems: 'center',
-                      }}
-                    >
-                      {isPassVisible ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
                     <button
                       type="button"
                       onClick={() => handleCopy(passOuValue, `pass_${item.id}`, 'Mật khẩu OU')}
@@ -698,42 +658,37 @@ export const MobileRestaurantPage: React.FC = () => {
                         border: 'none',
                         color: copiedKey === `pass_${item.id}` ? '#4ADE80' : '#F59E0B',
                         cursor: 'pointer',
-                        padding: '3px',
+                        padding: '2px 4px',
                         display: 'flex',
                         alignItems: 'center',
                       }}
                     >
-                      {copiedKey === `pass_${item.id}` ? <Check size={14} /> : <Copy size={14} />}
+                      {copiedKey === `pass_${item.id}` ? <Check size={12} /> : <Copy size={12} />}
                     </button>
                   </div>
                 )}
               </div>
 
               {/* ───────────────────────────────────────────────────────── */}
-              {/* DÒNG 4: CÁC CHỨC NĂNG CẦN XỬ LÝ (POPUP XỬ LÝ NHANH KDS) */}
+              {/* DÒNG 4: NÚT XỬ LÝ NHANH (MỞ POPUP CÁC CHỨC NĂNG) */}
               {/* ───────────────────────────────────────────────────────── */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase' }}>
-                  Các chức năng cần xử lý :
-                </div>
-
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', marginTop: '1px' }}>
                 <button
                   type="button"
-                  onClick={() => handleOpenKdsModal(item)}
+                  onClick={() => setQuickActionsRestaurant(item)}
                   style={{
-                    display: 'flex',
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    padding: '10px 14px',
+                    gap: '4px',
+                    padding: '5px 12px',
                     backgroundColor: '#0284C7',
                     color: '#FFFFFF',
                     border: '1px solid #0369A1',
-                    borderRadius: '8px',
-                    fontSize: '12.5px',
+                    borderRadius: '6px',
+                    fontSize: '11.5px',
                     fontWeight: 700,
                     cursor: 'pointer',
-                    boxShadow: '0 2px 4px rgba(2, 132, 199, 0.25)',
+                    boxShadow: '0 1px 3px rgba(2, 132, 199, 0.25)',
                     touchAction: 'manipulation',
                     transition: 'background-color 0.15s ease',
                   }}
@@ -744,8 +699,8 @@ export const MobileRestaurantPage: React.FC = () => {
                     e.currentTarget.style.backgroundColor = '#0284C7';
                   }}
                 >
-                  <Sliders size={15} />
-                  <span>⚡ Cấu Hình Phân Quyền &amp; Bật / Tắt KDS Toàn Nhà Hàng</span>
+                  <Sliders size={13} />
+                  <span>⚡ Xử lý nhanh</span>
                 </button>
               </div>
 
@@ -973,7 +928,93 @@ export const MobileRestaurantPage: React.FC = () => {
       </main>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* 4. MODAL CẤU HÌNH PHÂN QUYỀN & BẬT/TẮT KDS TOÀN NHÀ HÀNG */}
+      {/* 4. MODAL POPUP: TÍNH NĂNG XỬ LÝ NHANH CHO NHÀ HÀNG */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {quickActionsRestaurant && (
+        <Modal
+          isOpen={!!quickActionsRestaurant}
+          onClose={() => setQuickActionsRestaurant(null)}
+          title={`⚡ Xử Lý Nhanh: ${quickActionsRestaurant.sap || ''} ${quickActionsRestaurant.res}`}
+          maxWidth="460px"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '4px 0' }}>
+            <div style={{ fontSize: '11.5px', color: '#64748B', marginBottom: '2px' }}>
+              Chọn nghiệp vụ xử lý nhanh cho nhà hàng này:
+            </div>
+
+            {/* Chức năng 1: Cấu hình KDS & Phân quyền */}
+            <button
+              type="button"
+              onClick={() => {
+                const target = quickActionsRestaurant;
+                setQuickActionsRestaurant(null);
+                handleOpenKdsModal(target);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '10px 12px',
+                backgroundColor: '#F0F9FF',
+                border: '1.5px solid #0284C7',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <div style={{ width: '30px', height: '30px', borderRadius: '6px', backgroundColor: '#0284C7', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Sliders size={15} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: '#0369A1', fontWeight: 800, fontSize: '12px' }}>
+                  ⚡ Cấu Hình Phân Quyền &amp; Bật / Tắt KDS Toàn Nhà Hàng
+                </div>
+                <div style={{ color: '#64748B', fontSize: '11px', fontWeight: 500, marginTop: '2px' }}>
+                  Bật/tắt KDS master, tắt hết món không cho ẩn, phân quyền nhân viên
+                </div>
+              </div>
+            </button>
+
+            {/* Chức năng 2: Xem chi tiết toàn bộ hồ sơ nhà hàng */}
+            <button
+              type="button"
+              onClick={() => {
+                const target = quickActionsRestaurant;
+                setQuickActionsRestaurant(null);
+                setSelectedDetailRestaurant(target);
+                setDetailModalOpen(true);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '10px 12px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #CBD5E1',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <div style={{ width: '30px', height: '30px', borderRadius: '6px', backgroundColor: '#475569', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <ExternalLink size={15} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: '#1E293B', fontWeight: 700, fontSize: '12px' }}>
+                  Xem Chi Tiết Đầy Đủ Nhà Hàng
+                </div>
+                <div style={{ color: '#64748B', fontSize: '11px', fontWeight: 500, marginTop: '2px' }}>
+                  IP LAN/WAN, FTTH, TeamViewer, RustDesk, Cost Center...
+                </div>
+              </div>
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* 5. MODAL CẤU HÌNH PHÂN QUYỀN & BẬT/TẮT KDS TOÀN NHÀ HÀNG */}
       {/* ═══════════════════════════════════════════════════════════ */}
       {selectedKdsRestaurant && (
         <KdsRoleUserModal
@@ -983,7 +1024,7 @@ export const MobileRestaurantPage: React.FC = () => {
             setSelectedKdsRestaurant(null);
           }}
           host={selectedKdsRestaurant.ip || ''}
-          availableHosts={kdsCandidateHosts}
+          restaurantId={selectedKdsRestaurant.id}
           port={27017}
           restaurantCode={selectedKdsRestaurant.rk7 || selectedKdsRestaurant.sap || ''}
           paramCode="ROLE_SETUP_CONFIG_COOKING"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   PlusCircle,
   Printer,
@@ -1281,7 +1281,7 @@ export interface KdsRoleUserModalProps {
   onClose: () => void;
   host: string;
   port?: number;
-  availableHosts?: string[];
+  restaurantId?: number;
   restaurantCode?: string;
   paramCode?: string;
   title?: string;
@@ -1293,13 +1293,16 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
   onClose,
   host,
   port = 27017,
-  availableHosts,
+  restaurantId,
   restaurantCode,
   paramCode = 'ROLE_SETUP_CONFIG_COOKING',
   title,
   showToast
 }) => {
   const [loading, setLoading] = useState<boolean>(false);
+  const [probingMongo, setProbingMongo] = useState<boolean>(false);
+  const [onlineHosts, setOnlineHosts] = useState<string[]>([]);
+  const [mongoProbeError, setMongoProbeError] = useState<string | null>(null);
   const [currentHost, setCurrentHost] = useState<string>(host);
   const [roleData, setRoleData] = useState<KdsRoleUsersResponse | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -1321,19 +1324,6 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
     }
   }, [host]);
 
-  // Danh sách các IP MongoDB khả dụng (.11, .12 hoặc do component cha truyền vào)
-  const candidateHosts = useMemo(() => {
-    if (availableHosts && availableHosts.length > 0) {
-      return Array.from(new Set(availableHosts));
-    }
-    const target = currentHost || host || '';
-    const subnetMatch = target.match(/^(\d+\.\d+\.\d+)\.(\d+)$/);
-    if (subnetMatch) {
-      return [`${subnetMatch[1]}.11`, `${subnetMatch[1]}.12`];
-    }
-    return target ? [target] : [];
-  }, [availableHosts, currentHost, host]);
-
   const fetchRoleUsers = async (targetHost?: string) => {
     const h = targetHost || currentHost || host;
     if (!h) return;
@@ -1348,15 +1338,42 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
     }
   };
 
+  // Ping dò tìm các máy chủ MongoDB (.11, .12, .41) thực sự online
+  const probeMongoConnections = async (targetIp?: string) => {
+    const ipToProbe = targetIp || host;
+    if (!ipToProbe && !restaurantId) return;
+    setProbingMongo(true);
+    setMongoProbeError(null);
+    try {
+      const res = await mongoService.checkConnection(restaurantId, ipToProbe);
+      const online = res.connected_ips || [];
+      if (online.length === 0) {
+        setOnlineHosts([]);
+        setMongoProbeError('Nhà hàng không có mongo 11, 12, 41 nào online');
+      } else {
+        setOnlineHosts(online);
+        setMongoProbeError(null);
+        const bestHost = online.includes(currentHost) ? currentHost : online[0];
+        setCurrentHost(bestHost);
+        fetchRoleUsers(bestHost);
+      }
+    } catch (err: any) {
+      setOnlineHosts([]);
+      setMongoProbeError('Nhà hàng không có mongo 11, 12, 41 nào online');
+    } finally {
+      setProbingMongo(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
-      fetchRoleUsers(currentHost || host);
       setSearchTerm('');
       setManualCode('');
       setShowRawValue(false);
       setSelectedUserCodes([]);
+      probeMongoConnections(host);
     }
-  }, [isOpen, currentHost, host, port, paramCode]);
+  }, [isOpen, host, restaurantId, port, paramCode]);
 
   if (!isOpen) return null;
 
@@ -1569,793 +1586,813 @@ export const KdsRoleUserModal: React.FC<KdsRoleUserModalProps> = ({
       title={modalTitle}
       maxWidth="880px"
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%' }}>
-        {/* Lựa chọn kết nối MongoDB nếu nhà hàng có nhiều kết nối (.11, .12...) */}
-        {candidateHosts.length > 1 && (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+        {/* 1. Trạng thái Ping Dò Tìm Máy Chủ MongoDB */}
+        {probingMongo && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              backgroundColor: '#F0F9FF',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid #BAE6FD',
+              color: '#0284C7',
+              fontSize: '12px',
+              fontWeight: 600
+            }}
+          >
+            <RefreshCw size={14} className="animate-spin" />
+            <span>Đang ping kiểm tra kết nối MongoDB nhà hàng (11, 12, 41)...</span>
+          </div>
+        )}
+
+        {/* 2. Lỗi Không Tìm Thấy Máy Chủ MongoDB Nào Online */}
+        {!probingMongo && mongoProbeError && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: '#FEF2F2',
+              padding: '10px 14px',
+              borderRadius: '8px',
+              border: '1.5px solid #FCA5A5',
+              color: '#DC2626',
+              fontSize: '12px',
+              fontWeight: 700,
+              flexWrap: 'wrap',
+              gap: '8px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <AlertTriangle size={16} color="#DC2626" />
+              <span>{mongoProbeError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => probeMongoConnections()}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 10px',
+                borderRadius: '5px',
+                backgroundColor: '#DC2626',
+                color: '#FFFFFF',
+                border: 'none',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              <RefreshCw size={12} />
+              <span>Thử lại</span>
+            </button>
+          </div>
+        )}
+
+        {/* 3. Máy Chủ MongoDB Online (Nếu chỉ có 1 -> Hiện thông tin, Không hiện nút chọn. Nếu có 2-3 -> Hiện nút chọn) */}
+        {!probingMongo && !mongoProbeError && onlineHosts.length > 0 && (
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               backgroundColor: '#F1F5F9',
-              padding: '8px 14px',
+              padding: '6px 12px',
               borderRadius: '8px',
               border: '1px solid #CBD5E1',
               flexWrap: 'wrap',
               gap: '8px'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: '#1E293B' }}>
-              <Database size={15} color="#0284C7" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#1E293B' }}>
+              <Database size={14} color="#0284C7" />
               <span style={{ fontWeight: 600 }}>Máy chủ MongoDB:</span>
               <span style={{ fontWeight: 800, color: '#0284C7', fontFamily: 'monospace' }}>{currentHost}:{port}</span>
+              {onlineHosts.length === 1 && (
+                <span style={{ fontSize: '11px', color: '#16A34A', fontWeight: 700 }}>(Online)</span>
+              )}
               {loading && <RefreshCw size={12} className="animate-spin" color="#0284C7" />}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '11.5px', color: '#64748B' }}>Chọn kết nối:</span>
-              {candidateHosts.map((h) => {
-                const isSelected = h === currentHost;
-                const label = h.endsWith('.11') ? `${h} (POS 11)` : h.endsWith('.12') ? `${h} (POS 12)` : h;
-                return (
-                  <button
-                    key={h}
-                    type="button"
-                    disabled={loading}
-                    onClick={() => {
-                      if (h !== currentHost) {
-                        setCurrentHost(h);
-                        fetchRoleUsers(h);
-                      }
-                    }}
-                    style={{
-                      padding: '4px 12px',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: isSelected ? 800 : 600,
-                      backgroundColor: isSelected ? '#0284C7' : '#FFFFFF',
-                      color: isSelected ? '#FFFFFF' : '#334155',
-                      border: `1.5px solid ${isSelected ? '#0284C7' : '#CBD5E1'}`,
-                      cursor: loading ? 'not-allowed' : 'pointer',
-                      boxShadow: isSelected ? '0 1px 3px rgba(2, 132, 199, 0.3)' : 'none',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
-        {/* Card Master: Trạng Thái Hoạt Động Toàn Hệ Thống KDS (SHOW_KDS) - Chỉ hiển thị khi cấu hình KDS */}
-        {!isShowHideRole && (
-          <div
-            style={{
-              padding: '12px 16px',
-              borderRadius: '10px',
-              backgroundColor: isMasterKdsEnabled ? '#F0FDF4' : '#FEF2F2',
-              border: `1.5px solid ${isMasterKdsEnabled ? '#86EFAC' : '#FCA5A5'}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '12px'
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span
-                  style={{
-                    backgroundColor: '#0F172A',
-                    color: '#38BDF8',
-                    fontWeight: 800,
-                    fontSize: '12.5px',
-                    padding: '3px 10px',
-                    borderRadius: '6px',
-                    fontFamily: 'monospace'
-                  }}
-                >
-                  SHOW_KDS
-                </span>
-                <span
-                  style={{
-                    border: '1px solid #CBD5E1',
-                    color: '#475569',
-                    backgroundColor: '#FFFFFF',
-                    fontWeight: 700,
-                    fontSize: '11px',
-                    padding: '2px 8px',
-                    borderRadius: '4px'
-                  }}
-                >
-                  Loại: FUNCTION
-                </span>
-                <span
-                  style={{
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    color: isMasterKdsEnabled ? '#15803D' : '#DC2626'
-                  }}
-                >
-                  {isMasterKdsEnabled ? '• KDS Toàn Nhà Hàng Đang BẬT (status: 1)' : '• KDS Toàn Nhà Hàng Đang TẮT HOÀN TOÀN (status: 0)'}
-                </span>
+            {onlineHosts.length > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', color: '#64748B' }}>Chọn kết nối:</span>
+                {onlineHosts.map((h) => {
+                  const isSelected = h === currentHost;
+                  const label = h.endsWith('.11') ? `${h} (POS 11)` : h.endsWith('.12') ? `${h} (POS 12)` : h.endsWith('.41') ? `${h} (Bếp 41)` : h;
+                  return (
+                    <button
+                      key={h}
+                      type="button"
+                      disabled={loading}
+                      onClick={() => {
+                        if (h !== currentHost) {
+                          setCurrentHost(h);
+                          fetchRoleUsers(h);
+                        }
+                      }}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '5px',
+                        fontSize: '11px',
+                        fontWeight: isSelected ? 800 : 600,
+                        backgroundColor: isSelected ? '#0284C7' : '#FFFFFF',
+                        color: isSelected ? '#FFFFFF' : '#334155',
+                        border: `1px solid ${isSelected ? '#0284C7' : '#CBD5E1'}`,
+                        cursor: loading ? 'not-allowed' : 'pointer',
+                        boxShadow: isSelected ? '0 1px 2px rgba(2, 132, 199, 0.25)' : 'none',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
-              <div style={{ fontSize: '11.5px', color: '#64748B' }}>
-                Tham số tổng quyết định toàn bộ thiết bị KDS &amp; GPOS tại nhà hàng có hiển thị/nhận order bếp KDS hay không.
-              </div>
-            </div>
-
-            <button
-              type="button"
-              disabled={togglingMasterStatus}
-              onClick={handleToggleMasterStatus}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 16px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: 700,
-                backgroundColor: isMasterKdsEnabled ? '#DC2626' : '#16A34A',
-                color: '#FFFFFF',
-                border: `1px solid ${isMasterKdsEnabled ? '#B91C1C' : '#15803D'}`,
-                cursor: togglingMasterStatus ? 'not-allowed' : 'pointer',
-                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
-                transition: 'background-color 0.15s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = isMasterKdsEnabled ? '#B91C1C' : '#15803D';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = isMasterKdsEnabled ? '#DC2626' : '#16A34A';
-              }}
-            >
-              {togglingMasterStatus ? (
-                <RefreshCw size={13} className="animate-spin" />
-              ) : (
-                <Power size={13} />
-              )}
-              <span>{isMasterKdsEnabled ? 'Tắt Hoàn Toàn KDS' : 'Bật Hoàn Toàn KDS'}</span>
-            </button>
-          </div>
-        )}
-
-        {/* Card Chi tiết Tham Số Phân Quyền & Trạng Thái Bật/Tắt */}
-        <div
-          style={{
-            padding: '12px 16px',
-            borderRadius: '10px',
-            backgroundColor: isEnabled ? '#F0FDF4' : '#F8FAFC',
-            border: `1.5px solid ${isEnabled ? '#86EFAC' : '#CBD5E1'}`,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '10px'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span
-                style={{
-                  backgroundColor: isShowHideRole ? '#D97706' : '#EA580C',
-                  color: '#FFFFFF',
-                  fontWeight: 800,
-                  fontSize: '12.5px',
-                  padding: '3px 10px',
-                  borderRadius: '6px',
-                  fontFamily: 'monospace',
-                  letterSpacing: '0.3px'
-                }}
-              >
-                {roleData?.param_code || paramCode}
-              </span>
-              <span
-                style={{
-                  border: isShowHideRole ? '1px solid #FCD34D' : '1px solid #38BDF8',
-                  color: isShowHideRole ? '#B45309' : '#0284C7',
-                  backgroundColor: isShowHideRole ? '#FFFBEB' : '#F0F9FF',
-                  fontWeight: 700,
-                  fontSize: '11px',
-                  padding: '2px 8px',
-                  borderRadius: '4px'
-                }}
-              >
-                Loại: {roleData?.param_type || (isShowHideRole ? 'FUNCTION' : 'CONFIG')}
-              </span>
-            </div>
-
-            {/* Trạng thái Bật / Tắt + Nút Toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  padding: '3px 10px',
-                  borderRadius: '20px',
-                  fontSize: '12px',
-                  fontWeight: 800,
-                  backgroundColor: isEnabled ? '#DCFCE7' : '#E2E8F0',
-                  color: isEnabled ? '#15803D' : '#64748B',
-                  border: `1px solid ${isEnabled ? '#86EFAC' : '#CBD5E1'}`
-                }}
-              >
-                <span
-                  style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    backgroundColor: isEnabled ? '#22C55E' : '#94A3B8'
-                  }}
-                />
-                {isEnabled ? 'Đang BẬT (status: 1)' : 'Đang TẮT (status: 0)'}
-              </span>
-
-              <button
-                type="button"
-                disabled={togglingStatus}
-                onClick={handleToggleStatus}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '5px 14px',
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  backgroundColor: isEnabled ? '#DC2626' : '#16A34A',
-                  color: '#FFFFFF',
-                  border: `1px solid ${isEnabled ? '#B91C1C' : '#15803D'}`,
-                  cursor: togglingStatus ? 'not-allowed' : 'pointer',
-                  opacity: togglingStatus ? 0.7 : 1,
-                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
-                  transition: 'background-color 0.15s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = isEnabled ? '#B91C1C' : '#15803D';
-                  e.currentTarget.style.color = '#FFFFFF';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = isEnabled ? '#DC2626' : '#16A34A';
-                  e.currentTarget.style.color = '#FFFFFF';
-                }}
-              >
-                {togglingStatus ? (
-                  <RefreshCw size={13} className="animate-spin" />
-                ) : (
-                  <Power size={13} />
-                )}
-                <span>{isEnabled ? 'Tắt Kiểm Tra Quyền' : 'Bật Kiểm Tra Quyền'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Banner giải thích quy tắc hoạt động */}
-          <div
-            style={{
-              fontSize: '11.5px',
-              color: '#475569',
-              backgroundColor: '#F8FAFC',
-              padding: '6px 10px',
-              borderRadius: '6px',
-              border: '1px solid #E2E8F0',
-              lineHeight: '1.45'
-            }}
-          >
-            {isShowHideRole ? (
-              <span>
-                💡 <strong>Quy tắc hoạt động:</strong> Khi <strong>BẬT (status: 1)</strong>, chỉ những nhân viên có mã trong danh sách mới được phép thực hiện chức năng Ẩn/Hiện món trên POS/CO/SO. Khi <strong>TẮT (status: 0)</strong>, hệ thống không kiểm tra quyền (mặc định tất cả nhân viên đều có quyền).
-              </span>
-            ) : (
-              <span>
-                💡 <strong>Quy tắc hoạt động:</strong> Khi <strong>BẬT (status: 1)</strong>, chỉ những user có mã được cấu hình mới có quyền truy cập vào màn hình cấu hình in / bếp KDS. Khi <strong>TẮT (status: 0)</strong>, tính năng kiểm tra quyền bị vô hiệu hóa.
-              </span>
             )}
           </div>
+        )}
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px', color: '#475569', flexWrap: 'wrap', gap: '8px' }}>
-            <div>
-              Tổng số user đang được cấp quyền trong hệ thống:{' '}
-              <strong style={{ color: '#0F172A', fontSize: '13px' }}>
-                {roleData?.total_users || 0} user
-              </strong>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button
-                type="button"
-                onClick={() => setShowRawValue(!showRawValue)}
+        {/* CÁC TÍNH NĂNG CHỈ HIỂN THỊ KHI ĐÃ CÓ KẾT NỐI ONLINE VÀ KHÔNG BỊ LỖI PROBE */}
+        {!mongoProbeError && (
+          <>
+            {/* Card Master: Trạng Thái Hoạt Động Toàn Hệ Thống KDS (SHOW_KDS) - Chỉ hiển thị khi cấu hình KDS */}
+            {!isShowHideRole && (
+              <div
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#0284C7',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  textDecoration: 'underline'
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: isMasterKdsEnabled ? '#F0FDF4' : '#FEF2F2',
+                  border: `1.5px solid ${isMasterKdsEnabled ? '#86EFAC' : '#FCA5A5'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '8px'
                 }}
               >
-                {showRawValue ? 'Ẩn chuỗi value' : 'Xem chuỗi value thô'}
-              </button>
-            </div>
-          </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span
+                    style={{
+                      backgroundColor: '#0F172A',
+                      color: '#38BDF8',
+                      fontWeight: 800,
+                      fontSize: '11.5px',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontFamily: 'monospace'
+                    }}
+                  >
+                    SHOW_KDS
+                  </span>
+                  <span
+                    style={{
+                      border: '1px solid #CBD5E1',
+                      color: '#475569',
+                      backgroundColor: '#FFFFFF',
+                      fontWeight: 700,
+                      fontSize: '10.5px',
+                      padding: '1px 6px',
+                      borderRadius: '4px'
+                    }}
+                  >
+                    FUNCTION
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      color: isMasterKdsEnabled ? '#15803D' : '#DC2626'
+                    }}
+                  >
+                    {isMasterKdsEnabled ? '• Đang BẬT (status: 1)' : '• Đang TẮT HOÀN TOÀN (status: 0)'}
+                  </span>
+                </div>
 
-          {/* Khối hiển thị raw value (thu gọn) */}
-          {showRawValue && roleData?.raw_value && (
-            <div
-              style={{
-                marginTop: '4px',
-                padding: '10px',
-                borderRadius: '6px',
-                backgroundColor: '#0F172A',
-                color: '#F8FAFC',
-                fontSize: '11px',
-                fontFamily: 'monospace',
-                position: 'relative'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ color: '#94A3B8' }}>Chuỗi value thực tế trong DB G_ORDER:</span>
                 <button
                   type="button"
-                  onClick={handleCopyRaw}
+                  disabled={togglingMasterStatus || !onlineHosts.length}
+                  onClick={handleToggleMasterStatus}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '4px',
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    backgroundColor: '#1E293B',
-                    border: '1px solid #334155',
-                    color: '#38BDF8',
-                    fontSize: '11px',
-                    cursor: 'pointer'
+                    padding: '4px 10px',
+                    borderRadius: '5px',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    backgroundColor: isMasterKdsEnabled ? '#DC2626' : '#16A34A',
+                    color: '#FFFFFF',
+                    border: `1px solid ${isMasterKdsEnabled ? '#B91C1C' : '#15803D'}`,
+                    cursor: (togglingMasterStatus || !onlineHosts.length) ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
+                    transition: 'background-color 0.15s ease'
                   }}
                 >
-                  {copied ? <Check size={12} color="#4ADE80" /> : <Copy size={12} />}
-                  {copied ? 'Đã chép' : 'Sao chép'}
+                  {togglingMasterStatus ? (
+                    <RefreshCw size={12} className="animate-spin" />
+                  ) : (
+                    <Power size={12} />
+                  )}
+                  <span>{isMasterKdsEnabled ? 'Tắt Hoàn Toàn KDS' : 'Bật Hoàn Toàn KDS'}</span>
                 </button>
               </div>
-              <div
-                style={{
-                  maxHeight: '80px',
-                  overflowY: 'auto',
-                  wordBreak: 'break-all',
-                  whiteSpace: 'pre-wrap',
-                  lineHeight: '1.4'
-                }}
-              >
-                {roleData.raw_value}
-              </div>
-            </div>
-          )}
-        </div>
+            )}
 
-        {/* Card 3: Ẩn món theo nhóm (ALLOW_HIDE_ITEM_GROUP) - Chỉ hiển thị khi cấu hình KDS */}
-        {!isShowHideRole && (
-          <div
-            style={{
-              padding: '12px 16px',
-              borderRadius: '10px',
-              backgroundColor: isAllowHideItemGroupEnabled ? '#F0FDF4' : '#FEF2F2',
-              border: `1.5px solid ${isAllowHideItemGroupEnabled ? '#86EFAC' : '#FCA5A5'}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '12px'
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span
-                  style={{
-                    backgroundColor: '#1E293B',
-                    color: '#F59E0B',
-                    fontWeight: 800,
-                    fontSize: '12.5px',
-                    padding: '3px 10px',
-                    borderRadius: '6px',
-                    fontFamily: 'monospace'
-                  }}
-                >
-                  ALLOW_HIDE_ITEM_GROUP
-                </span>
-                <span
-                  style={{
-                    border: '1px solid #CBD5E1',
-                    color: '#475569',
-                    backgroundColor: '#FFFFFF',
-                    fontWeight: 700,
-                    fontSize: '11px',
-                    padding: '2px 8px',
-                    borderRadius: '4px'
-                  }}
-                >
-                  Loại: FUNCTION
-                </span>
-                <span
-                  style={{
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    color: isAllowHideItemGroupEnabled ? '#15803D' : '#DC2626'
-                  }}
-                >
-                  {isAllowHideItemGroupEnabled
-                    ? '• Đang BẬT (Cho phép ẩn món theo nhóm trên Tablet/POS)'
-                    : '• Đang TẮT (Tắt hết món không cho ẩn theo nhóm)'}
-                </span>
-              </div>
-              <div style={{ fontSize: '11.5px', color: '#64748B' }}>
-                Tham số quyết định nhân viên có thể ẩn hàng loạt món theo nhóm hàng hay không. Khi TẮT (status: 0), không cho phép ẩn món theo nhóm.
-              </div>
-            </div>
-
-            <button
-              type="button"
-              disabled={togglingHideItemGroup}
-              onClick={handleToggleAllowHideItemGroup}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 16px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: 700,
-                backgroundColor: isAllowHideItemGroupEnabled ? '#DC2626' : '#16A34A',
-                color: '#FFFFFF',
-                border: `1.5px solid ${isAllowHideItemGroupEnabled ? '#B91C1C' : '#15803D'}`,
-                cursor: togglingHideItemGroup ? 'not-allowed' : 'pointer',
-                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
-                transition: 'background-color 0.15s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = isAllowHideItemGroupEnabled ? '#B91C1C' : '#15803D';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = isAllowHideItemGroupEnabled ? '#DC2626' : '#16A34A';
-              }}
-            >
-              {togglingHideItemGroup ? (
-                <RefreshCw size={13} className="animate-spin" />
-              ) : (
-                <Power size={13} />
-              )}
-              <span>{isAllowHideItemGroupEnabled ? 'Tắt Hết Món Không Cho Ẩn' : 'Bật Cho Phép Ẩn Món Theo Nhóm'}</span>
-            </button>
-          </div>
-        )}
-
-        {/* Ô Nhập Thêm Mã User Vào Quyền */}
-        <div
-          style={{
-            padding: '12px 14px',
-            borderRadius: '8px',
-            backgroundColor: '#F8FAFC',
-            border: '1px solid #E2E8F0',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px'
-          }}
-        >
-          <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1E293B' }}>
-            {isShowHideRole ? 'Thêm mã user vào quyền ẩn/hiện món:' : 'Thêm mã user vào quyền cấu hình KDS:'}
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleAddUser(manualCode);
-            }}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}
-          >
-            <input
-              type="text"
-              placeholder={isShowHideRole ? "Nhập mã user cần cấp quyền ẩn/hiện món (VD: 30001, 14373...)" : "Nhập mã user cần cấp quyền (VD: 30001, 14373, 40...)"}
-              value={manualCode}
-              onChange={(e) => setManualCode(e.target.value)}
-              style={{
-                flex: 1,
-                padding: '7px 12px',
-                borderRadius: '6px',
-                border: '1px solid #CBD5E1',
-                fontSize: '13px',
-                fontWeight: 600
-              }}
-            />
-            <Button
-              type="submit"
-              size="sm"
-              style={{ backgroundColor: isShowHideRole ? '#D97706' : '#0284C7', color: '#fff', fontWeight: 700 }}
-              isLoading={actionLoadingCode === manualCode && manualCode !== ''}
-              leftIcon={<UserPlus size={14} />}
-            >
-              + Thêm Vào Quyền
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => fetchRoleUsers()}
-              isLoading={loading}
-              leftIcon={<RefreshCw size={13} />}
-            >
-              Làm Mới
-            </Button>
-          </form>
-        </div>
-
-        {/* Danh Sách User Của Nhà Hàng Hiện Có */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>
-              Danh sách nhân viên nhà hàng hiện có ({restaurantUsers.length} nhân viên):
-            </div>
-
-            <div style={{ position: 'relative', width: '220px', minWidth: '180px', flex: '1 1 auto', maxWidth: '320px' }}>
-              <Search size={14} style={{ position: 'absolute', left: '10px', top: '8px', color: '#94A3B8' }} />
-              <input
-                type="text"
-                placeholder="Tìm theo mã NV hoặc tên..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '5px 10px 5px 30px',
-                  borderRadius: '6px',
-                  border: '1px solid #CBD5E1',
-                  fontSize: '12px'
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Thanh công cụ thao tác hàng loạt khi có user được chọn */}
-          {selectedUserCodes.length > 0 && (
+            {/* Card Chi tiết Tham Số Phân Quyền & Trạng Thái Bật/Tắt */}
             <div
               style={{
                 padding: '8px 12px',
-                backgroundColor: '#EFF6FF',
-                border: '1.5px solid #93C5FD',
-                borderRadius: '6px',
+                borderRadius: '8px',
+                backgroundColor: isEnabled ? '#F0FDF4' : '#F8FAFC',
+                border: `1.5px solid ${isEnabled ? '#86EFAC' : '#CBD5E1'}`,
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '8px'
+                flexDirection: 'column',
+                gap: '6px'
               }}
             >
-              <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1E40AF', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>Đã chọn: <strong style={{ color: '#1D4ED8', fontSize: '13px' }}>{selectedUserCodes.length}</strong> nhân viên</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span
+                    style={{
+                      backgroundColor: isShowHideRole ? '#D97706' : '#EA580C',
+                      color: '#FFFFFF',
+                      fontWeight: 800,
+                      fontSize: '11.5px',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontFamily: 'monospace'
+                    }}
+                  >
+                    {roleData?.param_code || paramCode}
+                  </span>
+                  <span
+                    style={{
+                      border: isShowHideRole ? '1px solid #FCD34D' : '1px solid #38BDF8',
+                      color: isShowHideRole ? '#B45309' : '#0284C7',
+                      backgroundColor: isShowHideRole ? '#FFFBEB' : '#F0F9FF',
+                      fontWeight: 700,
+                      fontSize: '10.5px',
+                      padding: '1px 6px',
+                      borderRadius: '4px'
+                    }}
+                  >
+                    {roleData?.param_type || (isShowHideRole ? 'FUNCTION' : 'CONFIG')}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      color: isEnabled ? '#15803D' : '#64748B'
+                    }}
+                  >
+                    {isEnabled ? '• Đang BẬT (status: 1)' : '• Đang TẮT (status: 0)'}
+                  </span>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => setSelectedUserCodes([])}
+                  disabled={togglingStatus || !onlineHosts.length}
+                  onClick={handleToggleStatus}
                   style={{
-                    border: 'none',
-                    background: 'none',
-                    color: '#64748B',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '4px 10px',
+                    borderRadius: '5px',
                     fontSize: '11.5px',
-                    textDecoration: 'underline',
-                    cursor: 'pointer',
-                    padding: '0 4px'
+                    fontWeight: 700,
+                    backgroundColor: isEnabled ? '#DC2626' : '#16A34A',
+                    color: '#FFFFFF',
+                    border: `1px solid ${isEnabled ? '#B91C1C' : '#15803D'}`,
+                    cursor: (togglingStatus || !onlineHosts.length) ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
+                    transition: 'background-color 0.15s ease'
                   }}
                 >
-                  (Bỏ chọn tất cả)
+                  {togglingStatus ? (
+                    <RefreshCw size={12} className="animate-spin" />
+                  ) : (
+                    <Power size={12} />
+                  )}
+                  <span>{isEnabled ? 'Tắt Kiểm Tra Quyền' : 'Bật Kiểm Tra Quyền'}</span>
                 </button>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <Button
-                  size="sm"
-                  style={{ backgroundColor: '#16A34A', color: '#fff', fontSize: '11.5px', fontWeight: 700 }}
-                  isLoading={batchLoading}
-                  onClick={handleBatchAddSelected}
-                  leftIcon={<UserPlus size={13} />}
-                >
-                  + Cấp Quyền Cho {selectedUserCodes.length} NV Đã Chọn
-                </Button>
-                <Button
-                  size="sm"
-                  style={{ backgroundColor: '#DC2626', color: '#fff', fontSize: '11.5px', fontWeight: 700 }}
-                  isLoading={batchLoading}
-                  onClick={handleBatchRemoveSelected}
-                  leftIcon={<UserMinus size={13} />}
-                >
-                  - Thu Hồi Quyền {selectedUserCodes.length} NV Đã Chọn
-                </Button>
-              </div>
-            </div>
-          )}
 
-          <div style={{ maxHeight: '340px', overflowY: 'auto', overflowX: 'auto', WebkitOverflowScrolling: 'touch', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-            {loading ? (
-              <div style={{ padding: '36px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
-                <RefreshCw size={22} className="animate-spin" style={{ margin: '0 auto 8px', color: '#0284C7' }} />
-                Đang tải thông tin nhân viên nhà hàng...
+              {/* Dòng tóm tắt số user + toggle chuỗi value thô */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11.5px', color: '#475569', flexWrap: 'wrap', gap: '6px' }}>
+                <div>
+                  Tổng user cấp quyền:{' '}
+                  <strong style={{ color: '#0F172A', fontSize: '12px' }}>
+                    {roleData?.total_users || 0} user
+                  </strong>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowRawValue(!showRawValue)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#0284C7',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  {showRawValue ? 'Ẩn chuỗi value' : 'Xem chuỗi value thô'}
+                </button>
               </div>
-            ) : (
-              <table style={{ width: '100%', minWidth: '580px', borderCollapse: 'collapse', fontSize: '12.5px' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
-                    <th style={{ padding: '9px 10px', width: '40px', textAlign: 'center' }}>
-                      <input
-                        type="checkbox"
-                        checked={
-                          restaurantUsers.length > 0 &&
-                          restaurantUsers.every((u) => selectedUserCodes.includes(u.user_code))
-                        }
-                        onChange={handleSelectAllVisible}
-                        style={{ cursor: 'pointer', transform: 'scale(1.1)' }}
-                        title="Chọn tất cả nhân viên đang hiển thị"
-                      />
-                    </th>
-                    <th style={{ padding: '9px 14px', width: '130px' }}>Mã NV (Code)</th>
-                    <th style={{ padding: '9px 14px' }}>Họ Và Tên</th>
-                    <th style={{ padding: '9px 14px', width: '160px' }}>{isShowHideRole ? 'Quyền Ẩn/Hiện Món' : 'Quyền Cấu Hình'}</th>
-                    <th style={{ padding: '9px 14px', width: '130px', textAlign: 'center' }}>Thao Tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {restaurantUsers.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#94A3B8' }}>
-                        Không tìm thấy nhân viên nào của nhà hàng
-                      </td>
-                    </tr>
+
+              {/* Khối hiển thị raw value (thu gọn) */}
+              {showRawValue && roleData?.raw_value && (
+                <div
+                  style={{
+                    marginTop: '2px',
+                    padding: '8px',
+                    borderRadius: '5px',
+                    backgroundColor: '#0F172A',
+                    color: '#F8FAFC',
+                    fontSize: '10.5px',
+                    fontFamily: 'monospace',
+                    position: 'relative'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <span style={{ color: '#94A3B8' }}>Chuỗi value trong DB:</span>
+                    <button
+                      type="button"
+                      onClick={handleCopyRaw}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        padding: '1px 6px',
+                        borderRadius: '3px',
+                        backgroundColor: '#1E293B',
+                        border: '1px solid #334155',
+                        color: '#38BDF8',
+                        fontSize: '10.5px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {copied ? <Check size={11} color="#4ADE80" /> : <Copy size={11} />}
+                      {copied ? 'Đã chép' : 'Sao chép'}
+                    </button>
+                  </div>
+                  <div
+                    style={{
+                      maxHeight: '60px',
+                      overflowY: 'auto',
+                      wordBreak: 'break-all',
+                      whiteSpace: 'pre-wrap',
+                      lineHeight: '1.35'
+                    }}
+                  >
+                    {roleData.raw_value}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Card 3: Ẩn món theo nhóm (ALLOW_HIDE_ITEM_GROUP) - Chỉ hiển thị khi cấu hình KDS */}
+            {!isShowHideRole && (
+              <div
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: isAllowHideItemGroupEnabled ? '#F0FDF4' : '#FEF2F2',
+                  border: `1.5px solid ${isAllowHideItemGroupEnabled ? '#86EFAC' : '#FCA5A5'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '8px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span
+                    style={{
+                      backgroundColor: '#1E293B',
+                      color: '#F59E0B',
+                      fontWeight: 800,
+                      fontSize: '11.5px',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontFamily: 'monospace'
+                    }}
+                  >
+                    ALLOW_HIDE_ITEM_GROUP
+                  </span>
+                  <span
+                    style={{
+                      border: '1px solid #CBD5E1',
+                      color: '#475569',
+                      backgroundColor: '#FFFFFF',
+                      fontWeight: 700,
+                      fontSize: '10.5px',
+                      padding: '1px 6px',
+                      borderRadius: '4px'
+                    }}
+                  >
+                    FUNCTION
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      color: isAllowHideItemGroupEnabled ? '#15803D' : '#DC2626'
+                    }}
+                  >
+                    {isAllowHideItemGroupEnabled ? '• Đang BẬT' : '• Đang TẮT (Tắt hết món không cho ẩn)'}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={togglingHideItemGroup || !onlineHosts.length}
+                  onClick={handleToggleAllowHideItemGroup}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '4px 10px',
+                    borderRadius: '5px',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    backgroundColor: isAllowHideItemGroupEnabled ? '#DC2626' : '#16A34A',
+                    color: '#FFFFFF',
+                    border: `1px solid ${isAllowHideItemGroupEnabled ? '#B91C1C' : '#15803D'}`,
+                    cursor: (togglingHideItemGroup || !onlineHosts.length) ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
+                    transition: 'background-color 0.15s ease'
+                  }}
+                >
+                  {togglingHideItemGroup ? (
+                    <RefreshCw size={12} className="animate-spin" />
                   ) : (
-                    restaurantUsers.map((u, idx) => (
-                      <tr
-                        key={idx}
-                        style={{
-                          borderBottom: '1px solid var(--border-color)',
-                          backgroundColor: selectedUserCodes.includes(u.user_code) ? '#F0F9FF' : undefined
-                        }}
-                      >
-                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                    <Power size={12} />
+                  )}
+                  <span>{isAllowHideItemGroupEnabled ? 'Tắt Hết Món Không Cho Ẩn' : 'Bật Cho Phép Ẩn Món Theo Nhóm'}</span>
+                </button>
+              </div>
+            )}
+
+            {/* Ô Nhập Thêm Mã User Vào Quyền (Phân quyền nhanh) */}
+            <div
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px'
+              }}
+            >
+              <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#1E293B' }}>
+                {isShowHideRole ? 'Phân quyền nhanh (mã NV ẩn/hiện món):' : 'Phân quyền nhanh (thêm mã NV):'}
+              </div>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleAddUser(manualCode);
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}
+              >
+                <input
+                  type="text"
+                  placeholder="Nhập mã user (VD: 30001, 14373...)"
+                  value={manualCode}
+                  onChange={(e) => setManualCode(e.target.value)}
+                  style={{
+                    flex: 1,
+                    minWidth: '150px',
+                    padding: '5px 8px',
+                    borderRadius: '5px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '11.5px',
+                    fontWeight: 600
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={actionLoadingCode === manualCode && manualCode !== ''}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '5px',
+                    backgroundColor: isShowHideRole ? '#D97706' : '#0284C7',
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: '11.5px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <UserPlus size={12} />
+                  <span>+ Thêm</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fetchRoleUsers()}
+                  disabled={loading}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '5px',
+                    backgroundColor: '#FFFFFF',
+                    color: '#475569',
+                    fontWeight: 600,
+                    fontSize: '11.5px',
+                    border: '1px solid #CBD5E1',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+                  <span>Làm Mới</span>
+                </button>
+              </form>
+            </div>
+
+            {/* Danh Sách User Của Nhà Hàng Hiện Có */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#334155' }}>
+                  Danh sách nhân viên ({restaurantUsers.length} NV):
+                </div>
+
+                <div style={{ position: 'relative', width: '200px', minWidth: '150px', flex: '1 1 auto', maxWidth: '280px' }}>
+                  <Search size={12} style={{ position: 'absolute', left: '8px', top: '7px', color: '#94A3B8' }} />
+                  <input
+                    type="text"
+                    placeholder="Tìm theo mã NV hoặc tên..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      padding: '4px 8px 4px 26px',
+                      borderRadius: '5px',
+                      border: '1px solid #CBD5E1',
+                      fontSize: '11.5px'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Thanh công cụ thao tác hàng loạt khi có user được chọn */}
+              {selectedUserCodes.length > 0 && (
+                <div
+                  style={{
+                    padding: '6px 10px',
+                    backgroundColor: '#EFF6FF',
+                    border: '1.5px solid #93C5FD',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '6px'
+                  }}
+                >
+                  <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#1E40AF', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>Đã chọn: <strong style={{ color: '#1D4ED8', fontSize: '12px' }}>{selectedUserCodes.length}</strong> NV</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedUserCodes([])}
+                      style={{
+                        border: 'none',
+                        background: 'none',
+                        color: '#64748B',
+                        fontSize: '11px',
+                        textDecoration: 'underline',
+                        cursor: 'pointer',
+                        padding: '0 2px'
+                      }}
+                    >
+                      (Bỏ chọn)
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      disabled={batchLoading}
+                      onClick={handleBatchAddSelected}
+                      style={{
+                        backgroundColor: '#16A34A',
+                        color: '#fff',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '3px 8px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <UserPlus size={11} />
+                      <span>+ Cấp {selectedUserCodes.length} NV</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={batchLoading}
+                      onClick={handleBatchRemoveSelected}
+                      style={{
+                        backgroundColor: '#DC2626',
+                        color: '#fff',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '3px 8px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <UserMinus size={11} />
+                      <span>- Thu Hồi {selectedUserCodes.length} NV</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ maxHeight: '300px', overflowY: 'auto', overflowX: 'auto', WebkitOverflowScrolling: 'touch', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+                {loading ? (
+                  <div style={{ padding: '24px', textAlign: 'center', color: '#64748B', fontSize: '12px' }}>
+                    <RefreshCw size={18} className="animate-spin" style={{ margin: '0 auto 6px', color: '#0284C7' }} />
+                    Đang tải danh sách nhân viên...
+                  </div>
+                ) : (
+                  <table style={{ width: '100%', minWidth: '500px', borderCollapse: 'collapse', fontSize: '11.5px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1.5px solid var(--border-color)', textAlign: 'left' }}>
+                        <th style={{ padding: '6px 8px', width: '36px', textAlign: 'center' }}>
                           <input
                             type="checkbox"
-                            checked={selectedUserCodes.includes(u.user_code)}
-                            onChange={() => handleToggleSelectUser(u.user_code)}
-                            style={{ cursor: 'pointer', transform: 'scale(1.1)' }}
+                            checked={
+                              restaurantUsers.length > 0 &&
+                              restaurantUsers.every((u) => selectedUserCodes.includes(u.user_code))
+                            }
+                            onChange={handleSelectAllVisible}
+                            style={{ cursor: 'pointer' }}
+                            title="Chọn tất cả nhân viên đang hiển thị"
                           />
-                        </td>
-                        <td style={{ padding: '8px 12px' }}>
-                          <span
+                        </th>
+                        <th style={{ padding: '6px 10px', width: '110px' }}>Mã NV</th>
+                        <th style={{ padding: '6px 10px' }}>Họ Và Tên</th>
+                        <th style={{ padding: '6px 10px', width: '130px' }}>{isShowHideRole ? 'Quyền Ẩn/Hiện' : 'Quyền Cấu Hình'}</th>
+                        <th style={{ padding: '6px 10px', width: '100px', textAlign: 'center' }}>Thao Tác</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {restaurantUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} style={{ padding: '20px', textAlign: 'center', color: '#94A3B8' }}>
+                            Không tìm thấy nhân viên nào của nhà hàng
+                          </td>
+                        </tr>
+                      ) : (
+                        restaurantUsers.map((u, idx) => (
+                          <tr
+                            key={idx}
                             style={{
-                              fontFamily: 'monospace',
-                              fontWeight: 700,
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              backgroundColor: '#F1F5F9',
-                              color: '#1E293B',
-                              fontSize: '12px'
+                              borderBottom: '1px solid var(--border-color)',
+                              backgroundColor: selectedUserCodes.includes(u.user_code) ? '#F0F9FF' : undefined
                             }}
                           >
-                            {u.user_code}
-                          </span>
-                        </td>
-                        <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {u.employee_name || '—'}
-                        </td>
-                        <td style={{ padding: '8px 12px' }}>
-                          {u.is_in_role ? (
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                backgroundColor: '#DCFCE7',
-                                color: '#15803D',
-                                fontWeight: 700,
-                                fontSize: '11.5px',
-                                border: '1px solid #86EFAC'
-                              }}
-                            >
-                              ✅ Đã có quyền
-                            </span>
-                          ) : (
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                backgroundColor: '#F1F5F9',
-                                color: '#64748B',
-                                fontWeight: 600,
-                                fontSize: '11.5px'
-                              }}
-                            >
-                              Chưa có quyền
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                          {u.is_in_role ? (
-                            <button
-                              type="button"
-                              disabled={actionLoadingCode === u.user_code}
-                              onClick={() => handleRemoveUser(u.user_code)}
-                              title={isShowHideRole ? "Thu hồi quyền ẩn/hiện món của user này" : "Xóa quyền cấu hình KDS của user này"}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '4px 10px',
-                                borderRadius: '4px',
-                                border: '1px solid #FCA5A5',
-                                backgroundColor: '#FEF2F2',
-                                color: '#DC2626',
-                                fontSize: '11.5px',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = '#DC2626';
-                                e.currentTarget.style.color = '#FFFFFF';
-                                e.currentTarget.style.borderColor = '#B91C1C';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = '#FEF2F2';
-                                e.currentTarget.style.color = '#DC2626';
-                                e.currentTarget.style.borderColor = '#FCA5A5';
-                              }}
-                            >
-                              <UserMinus size={12} />
-                              {actionLoadingCode === u.user_code ? '...' : 'Thu hồi'}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={actionLoadingCode === u.user_code}
-                              onClick={() => handleAddUser(u.user_code)}
-                              title={isShowHideRole ? "Thêm user này vào danh sách quyền ẩn/hiện món" : "Thêm user này vào danh sách quyền"}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '4px 10px',
-                                borderRadius: '4px',
-                                border: '1px solid #86EFAC',
-                                backgroundColor: '#F0FDF4',
-                                color: '#15803D',
-                                fontSize: '11.5px',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = '#16A34A';
-                                e.currentTarget.style.color = '#FFFFFF';
-                                e.currentTarget.style.borderColor = '#15803D';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = '#F0FDF4';
-                                e.currentTarget.style.color = '#15803D';
-                                e.currentTarget.style.borderColor = '#86EFAC';
-                              }}
-                            >
-                              <UserPlus size={12} />
-                              {actionLoadingCode === u.user_code ? '...' : '+ Thêm quyền'}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
+                            <td style={{ padding: '5px 8px', textAlign: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedUserCodes.includes(u.user_code)}
+                                onChange={() => handleToggleSelectUser(u.user_code)}
+                                style={{ cursor: 'pointer' }}
+                              />
+                            </td>
+                            <td style={{ padding: '5px 10px' }}>
+                              <span
+                                style={{
+                                  fontFamily: 'monospace',
+                                  fontWeight: 700,
+                                  padding: '1px 5px',
+                                  borderRadius: '3px',
+                                  backgroundColor: '#F1F5F9',
+                                  color: '#1E293B',
+                                  fontSize: '11px'
+                                }}
+                              >
+                                {u.user_code}
+                              </span>
+                            </td>
+                            <td style={{ padding: '5px 10px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                              {u.employee_name || '—'}
+                            </td>
+                            <td style={{ padding: '5px 10px' }}>
+                              {u.is_in_role ? (
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px',
+                                    padding: '1px 6px',
+                                    borderRadius: '3px',
+                                    backgroundColor: '#DCFCE7',
+                                    color: '#15803D',
+                                    fontWeight: 700,
+                                    fontSize: '10.5px',
+                                    border: '1px solid #86EFAC'
+                                  }}
+                                >
+                                  ✅ Đã có quyền
+                                </span>
+                              ) : (
+                                <span
+                                  style={{
+                                    padding: '1px 6px',
+                                    borderRadius: '3px',
+                                    backgroundColor: '#F1F5F9',
+                                    color: '#64748B',
+                                    fontWeight: 600,
+                                    fontSize: '10.5px'
+                                  }}
+                                >
+                                  Chưa có quyền
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                              {u.is_in_role ? (
+                                <button
+                                  type="button"
+                                  disabled={actionLoadingCode === u.user_code}
+                                  onClick={() => handleRemoveUser(u.user_code)}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px',
+                                    padding: '2px 8px',
+                                    borderRadius: '3px',
+                                    border: '1px solid #FCA5A5',
+                                    backgroundColor: '#FEF2F2',
+                                    color: '#DC2626',
+                                    fontSize: '10.5px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  <UserMinus size={11} />
+                                  <span>{actionLoadingCode === u.user_code ? '...' : 'Thu hồi'}</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={actionLoadingCode === u.user_code}
+                                  onClick={() => handleAddUser(u.user_code)}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px',
+                                    padding: '2px 8px',
+                                    borderRadius: '3px',
+                                    border: '1px solid #86EFAC',
+                                    backgroundColor: '#F0FDF4',
+                                    color: '#15803D',
+                                    fontSize: '10.5px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  <UserPlus size={11} />
+                                  <span>{actionLoadingCode === u.user_code ? '...' : '+ Thêm'}</span>
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Footer */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px' }}>
-          <Button variant="outline" size="sm" onClick={onClose}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '2px' }}>
+          <Button variant="outline" size="sm" onClick={onClose} style={{ fontSize: '11.5px', padding: '4px 12px' }}>
             Đóng
           </Button>
         </div>

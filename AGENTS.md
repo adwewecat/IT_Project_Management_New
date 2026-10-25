@@ -68,6 +68,13 @@
 >     - **Bảo vệ 2 lớp (Sidebar & Route Guard)**:
 >       + Menu Sidebar: Dùng hàm `hasNewScreenAccess(user, 'key')` (Admin luôn thấy, nhóm khác chỉ thấy khi đã được Admin phân quyền).
 >       + Route Guard: Dùng `<ProtectedRoute requiredPermission="key">` trong `AppRoutes.tsx`. Nếu người dùng không có quyền cố tình gõ link trực tiếp vào trình duyệt, hiển thị giao diện thông báo 403 Forbidden trang nhã giải thích rõ ràng và có nút quay lại.
+>
+> 11. **Quy tắc Bất Di Bất Dịch Cho Giao Diện Mobile (Mobile-First Compact, Pure Action, Zero Chú Thích Dài Dòng)**:
+>     - **Font chữ & Button siêu tinh gọn (10.5px - 12.5px)**: Trên giao diện Mobile, cỡ chữ thông tin, tiêu đề phụ, nhãn, dữ liệu chỉ dùng từ `11px - 12.5px`, badge `10.5px - 11px`, nút bấm padding nhỏ gọn `4px 10px` để tiết kiệm tối đa diện tích dọc (vertical viewport), giúp màn hình 5-6 inch hiển thị được trọn vẹn thông tin mà không cần cuộn nhiều lần.
+>     - **Triệt để loại bỏ văn bản giới thiệu / chú thích dài dòng**: Tuyệt đối không chèn các đoạn văn giải thích lý thuyết, quy tắc hoạt động nhiều dòng vào các thẻ/modal thao tác tác vụ trên mobile. Chỉ giữ lại tên tham số, trạng thái (status), và nút bấm hành động (Action Buttons: Tắt hoàn toàn KDS, Tắt kiểm tra quyền, Tắt hết món không cho ẩn...).
+>     - **Hiển thị trực tiếp mật khẩu (Không che `••••••••`)**: Mật khẩu OU (không sys) trên mobile hiển thị trực tiếp bằng font monospace rõ ràng kèm nút copy 1-chạm (nếu tài khoản có quyền xem), không bắt người dùng bấm thêm nút mở mắt toggle để tránh tốn thao tác ngón tay.
+>     - **Gom tính năng vào Popup "Xử Lý Nhanh"**: Không trải các nút chức năng to cồng kềnh chiếm diện tích trên từng thẻ nhà hàng. Thay vào đó, dùng nút `⚡ Xử lý nhanh` mở Modal Popup gom các nghiệp vụ xử lý nhanh (KDS, mở quyền, hồ sơ...) khi cần.
+>     - **Dò tìm tín hiệu kết nối thực tế trước khi hiển thị (Ping Check First)**: Với các máy chủ MongoDB nhà hàng (.11, .12, .41), bắt buộc ping kiểm tra tín hiệu thực tế trước. Nếu không có máy chủ nào phản hồi, báo lỗi ngắn gọn `Nhà hàng không có mongo 11, 12, 41 nào online` và không hiện nút chọn; nếu chỉ có 1 máy chủ online thì tự động kết nối; chỉ khi có từ 2 máy chủ online trở lên mới hiển thị nút chọn giữa các máy chủ online đó.
 
 ---
 

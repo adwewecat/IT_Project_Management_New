@@ -4974,3 +4974,43 @@ estaurant_service.py).
   3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
      - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> PASSED 100%`, Backend daemon port 8000 đã reload chạy bản mới.
      - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 10.55s`), tạo mới bản build hoàn chỉnh trong `frontend/dist/` (kèm `web.config` rewrite cho IIS).
+
+- **TỐI ƯU HÓA GIAO DIỆN MOBILE PORTAL & NÂNG CẤP DÒ TÌM PING MONGODB (11, 12, 41) TRƯỚC KHI CHỌN [2026-10-25]**:
+  1. **Yêu Cầu & Bối Cảnh Người Dùng**:
+     - **Tối ưu thẻ nhà hàng trên Mobile**:
+       + Email và Mật khẩu OU (Không sys) font chữ nhỏ lại, gọn gàng hơn.
+       + Mật khẩu OU (Không sys) hiển thị trực tiếp (không che `••••••••`, bỏ nút mắt toggle) kèm icon sao chép 1-chạm.
+       + Xóa bỏ dòng tiêu đề "CÁC CHỨC NĂNG CẦN XỬ LÝ :".
+       + Không để nút to chiếm diện tích ở ngoài; thay vào đó là nút nhỏ gọn `⚡ Xử lý nhanh`, click vào mở Popup "Tính Năng Xử Lý Nhanh" chứa các chức năng bên trong.
+     - **Tối ưu Modal Cấu hình KDS**:
+       + Chữ ở button và giao diện nhỏ lại (10.5px - 11.5px), padding nhỏ gọn để hiển thị được nhiều thông tin hơn.
+       + Bỏ toàn bộ các đoạn giới thiệu/chú thích dài dòng (bỏ giải thích SHOW_KDS, bỏ banner "💡 Quy tắc hoạt động...", bỏ chú thích ALLOW_HIDE_ITEM_GROUP).
+       + Giữ lại các nút bấm hành động trực diện: `Tắt Hoàn Toàn KDS`, `Tắt Kiểm Tra Quyền`, `Tắt Hết Món Không Cho Ẩn`.
+       + Khối phân quyền nhanh (thêm mã NV): bỏ chú thích, chữ nhỏ lại, thêm nhanh mã NV vào quyền.
+     - **Dò tìm tín hiệu Ping MongoDB thực tế trước khi hiển thị**:
+       + Bắt buộc ping kiểm tra tín hiệu thực tế của các máy chủ MongoDB (.11, .12, .41) trước khi cho chọn.
+       + Nếu không có máy chủ nào online: Báo lỗi ngắn gọn `Nhà hàng không có mongo 11, 12, 41 nào online` kèm nút "Thử lại", không hiển thị các nút chọn.
+       + Nếu chỉ có 1 máy chủ online: Tự động kết nối, không hiện nút chọn thừa thãi.
+       + Nếu có từ 2 đến 3 máy chủ online: Hiển thị các nút chọn tương ứng cho các máy online đó.
+     - **Quy tắc bất di bất dịch cho Mobile**:
+       + Bổ sung Rule 11 vào cẩm nang `AGENTS.md` và `GEMINI.md`: Chữ nhỏ, button nhỏ, bỏ chú thích dài dòng, tối ưu hiển thị tinh gọn nhất có thể.
+  2. **Giải Pháp & Chi Tiết Triển Khai**:
+     - **Frontend (`MobileRestaurantPage.tsx`)**:
+       + Cập nhật Email và Mật khẩu OU: font `11.5px`, padding `5px 8px`. Mật khẩu OU hiển thị trực tiếp bằng font monospace màu vàng sáng `#FDE047` kèm nút copy 1-chạm (nếu không có quyền xem thì che `🔒 Bị ẩn theo phân quyền`).
+       + Xóa bỏ hoàn toàn header text `Các chức năng cần xử lý :`.
+       + Bổ sung nút `⚡ Xử lý nhanh` nhỏ gọn mở Popup `quickActionsRestaurant`.
+       + Xây dựng Modal Popup "Tính Năng Xử Lý Nhanh" với 2 action items: `⚡ Cấu Hình Phân Quyền & Bật / Tắt KDS Toàn Nhà Hàng` và `Xem Chi Tiết Đầy Đủ Nhà Hàng`.
+       + Truyền `restaurantId={selectedKdsRestaurant.id}` vào `KdsRoleUserModal` để kích hoạt cơ chế dò tìm mongo tự động.
+     - **Frontend (`KdsQuayModals.tsx` -> `KdsRoleUserModal`)**:
+       + Bổ sung hàm `probeMongoConnections`: Tự động gọi `mongoService.checkConnection(restaurantId, host)` khi mở popup.
+       + Khi đang kiểm tra: Hiển thị spinner "Đang ping kiểm tra kết nối MongoDB nhà hàng (11, 12, 41)...".
+       + Khi không có kết nối: Hiển thị alert box đỏ nổi bật `⚠️ Nhà hàng không có mongo 11, 12, 41 nào online` kèm nút "Thử lại".
+       + Khi có 1 máy online: Hiển thị nhãn `🟢 Máy chủ MongoDB: IP:27017 (Online)` mà không hiện nút chọn.
+       + Khi có 2-3 máy online: Hiển thị nút bấm để kỹ thuật viên chuyển đổi giữa các IP online.
+       + Cắt bỏ triệt để toàn bộ các đoạn text giải thích dài dòng ở cả 3 Card (`SHOW_KDS`, `ROLE_SETUP_CONFIG_COOKING`, `ALLOW_HIDE_ITEM_GROUP`).
+       + Tinh gọn khối phân quyền nhanh và bảng nhân viên: Font `11px - 11.5px`, badge `10.5px`, padding `5px 8px`.
+     - **Cẩm nang Quy tắc (`AGENTS.md` & `GEMINI.md`)**:
+       + Bổ sung chính thức **Rule 11**: Quy tắc Bất Di Bất Dịch Cho Giao Diện Mobile (Mobile-First Compact, Pure Action, Zero Chú Thích Dài Dòng).
+  3. **Kiểm Thử & Đóng Gói (Copy Là Chạy Ngay)**:
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.43s`), thư mục `frontend/dist/` (kèm `web.config` IIS) cập nhật mới sạch sẽ 100%.
+     - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> PASSED 100%`.
