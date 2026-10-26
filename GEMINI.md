@@ -1712,3 +1712,43 @@
 - **Kiểm thử & Đóng gói**:
   - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 6.70s`), thư mục `frontend/dist/` sạch sẽ 100%.
   - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> BACKEND SMOKE TEST PASSED 100%`.
+
+---
+
+### [2026-10-26] - Khắc Phục Lỗi Quét G-Process Trong Tác Vụ Đóng Ticket Hàng Loạt (Lọc Chuẩn Xác 'IT Xác Nhận Lỗi Kỹ Thuật' & Gán Đích Danh 'dung.nguyenanh')
+- **Bối cảnh & Yêu cầu người dùng**:
+  - Trong tác vụ ngầm Ticket theo Danh Mục (Đóng Ticket Hàng Loạt 3CX & G-Process), khi quét danh sách thì hệ thống báo tìm thấy 0 nhiệm vụ G-Process (Tìm thấy 0 ticket 3CX và 0 nhiệm vụ G-Process), mặc dù trên hệ thống GPMS thực tế đang có rất nhiều nhiệm vụ G-Process đang chờ xử lý.
+  - Người dùng tái khẳng định và chốt chặt chẽ 2 điều kiện bắt buộc để lọc và xử lý G-Process:
+    1. Nhiệm vụ có tên: 'IT xác nhận lỗi kỹ thuật' (hoặc step_id == 11702).
+    2. NGƯỜI THỰC HIỆN: Phải ĐÃ ĐƯỢC GÁN là 'dung.nguyenanh' thì mới xử lý. Các nhiệm vụ chưa gán (hiển thị nút 'Gán người xử lý') hoặc gán cho người khác tuyệt đối không xử lý và không tự gán.
+- **Nguyên nhân gốc rễ (Root Cause)**:
+  1. **Lệch cấu trúc dữ liệu JSON từ API list-my-task**:
+     - API https://process-gpms.ggg.com.vn/api/v1/list-my-task của GPMS không trả về chuỗi text người thực hiện dạng assignee, executor hay user, mà người thực hiện được định danh bằng mã số assignee_id (với dung.nguyenanh, ID là 442).
+     - Khi chưa gán người thực hiện, assignee_id là None hoặc null.
+     - Code phiên bản trước tìm kiếm các key dạng text string (assignee, executor...), không tìm thấy trường text nào và cũng không đọc trường assignee_id, dẫn đến danh sách extracted_assignees luôn bị rỗng [].
+  2. **Bản đồ đối chiếu DOM (html_assignee_map) bị rỗng**:
+     - Code cũ cố gắng map html_assignee_map bằng cách lấy link cells[0].locator('a') hoặc thuộc tính data-row-key của tr. Tuy nhiên, trong Ant Design Table của GPMS, ô đầu tiên là thẻ <span> (không có thẻ <a>), và thuộc tính data-row-key của hàng trả về None, khiến bản đồ DOM map bị rỗng {}.
+     - Dẫn đến việc ở bước lọc điều kiện: if not extracted_assignees: continue, toàn bộ 100% nhiệm vụ thực tế của dung.nguyenanh đều bị bỏ qua (skip), làm cho kết quả quét trả về 0 nhiệm vụ.
+  3. **Đồng bộ tài khoản SSO**:
+     - Mật khẩu lưu trong ticket_batch_config.json nếu chưa được đồng bộ từ module Quản Lý SSO (UserSSOConfig trong CSDL) sẽ khiến phiên Playwright đăng nhập SSO thất bại.
+- **Giải pháp & Triển khai chi tiết**:
+  1. **Nâng cấp get_sso_credentials() trong ticket_batch_service.py**:
+     - Tự động đồng bộ credentials từ bảng USER_SSO_CONFIG trong CSDL nếu file cấu hình thiếu mật khẩu hoặc cần cập nhật, đảm bảo luôn khớp 100% với tài khoản SSO hiện tại của dung.nguyenanh.
+  2. **Nâng cấp hàm quét _fetch_gprocess_mission_list()**:
+     - **Bắt target_user_id chuẩn xác**: Tự động nhận diện target_user_id (442 đối với dung.nguyenanh) từ query param object_id của request API list-my-task hoặc API users/info-by-username.
+     - **Xây dựng bản đồ đối chiếu DOM (dom_assignee_map)**: Quét các hàng dữ liệu tr.ant-table-row trên trang GPMS my-mission, lấy tên yêu cầu ở cột 3 (ticket_request_name) map sang người thực hiện ở cột 4 (dung.nguyenanh hoặc nút 'Gán người xử lý' / người khác).
+     - **Hỗ trợ tự động chuyển trang (Pagination Next)**: Nếu còn trang sau (li.ant-pagination-next:not(.ant-pagination-disabled)), tự động click Next để thu thập trọn vẹn tất cả các trang nhiệm vụ.
+     - **Thực thi 2 điều kiện cốt lõi**:
+       + *Điều kiện 1 (Tên nhiệm vụ)*: Kiểm tra 'xác nhận lỗi kỹ thuật' in task_name.lower() hoặc step_id == 11702.
+       + *Điều kiện 2 (Người thực hiện gán đích danh dung.nguyenanh)*:
+         * Kiểm tra assignee_id: Nếu là None hoặc 0 (chưa gán - ví dụ nhiệm vụ [IT app] Kết thúc có nút 'Gán người xử lý') -> BỎ QUA NGAY (SKIP), tuyệt đối không tự gán!
+         * Nếu assignee_id != target_user_id (gán cho nhân viên khác) -> BỎ QUA NGAY (SKIP)!
+         * Nếu assignee_id == target_user_id (442): Xác nhận chính thức đã được gán cho dung.nguyenanh.
+         * Đối chiếu thêm với dom_assignee_map: Nếu bảng trên trang hiển thị từ khóa chưa gán ('gán người', 'chưa gán', '-'...) hoặc tên người khác -> BỎ QUA NGAY!
+         * Nếu bảng trên trang hiển thị đúng dung.nguyenanh -> Thêm vào danh sách xử lý gprocess_items.
+     - **Fallback HTML DOM table**: Trong trường hợp không bắt được API JSON, quét trực tiếp tr.ant-table-row, cột 0 có tên nhiệm vụ và cột 4 hiển thị text dung.nguyenanh, loại bỏ mọi từ khóa chưa gán.
+- **Kiểm thử thực tế & Đóng gói (Copy Là Chạy Ngay)**:
+  - Chạy kiểm thử hàm preview_tickets(): Quét thành công **chính xác 13/13 nhiệm vụ G-Process** đang có trên hệ thống của dung.nguyenanh (gồm các yêu cầu #659967, #659856, #659111, #658327, #658315, #658267, #658265, #658205, #658187, #658070, #657892, #657294, #657171), khớp 100% với ảnh chụp thực tế của người dùng.
+  - Các nhiệm vụ chưa gán người xử lý (nút 'Gán người xử lý') đã được loại bỏ chính xác và an toàn.
+  - Backend: python -m compileall app sạch lỗi 100%, Smoke Test >>> BACKEND SMOKE TEST PASSED 100%.
+  - Frontend: cmd /c 'npm run build' đạt exit code 0 (✓ built in 9.26s), thư mục frontend/dist/ (kèm web.config) cập nhật mới sạch sẽ.

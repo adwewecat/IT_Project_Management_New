@@ -182,13 +182,36 @@ def save_latest_history(data: Dict[str, Any]) -> None:
 
 
 def get_sso_credentials() -> tuple[str, str]:
-    """Lấy username và password SSO đã lưu. Raise nếu chưa cấu hình."""
+    """Lấy username và password SSO đã lưu. Ưu tiên config file, nếu chưa có thì đồng bộ từ DB UserSSOConfig."""
     cfg = load_config()
     username = (cfg.get("sso_username") or "").strip()
     password_b64 = (cfg.get("sso_password_b64") or "").strip()
-    if not username or not password_b64:
+    password = _decode_password(password_b64) if password_b64 else ""
+
+    # Tự động đồng bộ từ DB UserSSOConfig nếu config chưa có password
+    if not username or not password:
+        try:
+            from app.core.database import SessionLocal
+            from app.models.user_sso_config import UserSSOConfig
+            db = SessionLocal()
+            sso_user = username or "dung.nguyenanh"
+            user_cfg = db.query(UserSSOConfig).filter(UserSSOConfig.system_username == sso_user).first()
+            if not user_cfg and "@" not in sso_user:
+                user_cfg = db.query(UserSSOConfig).filter(UserSSOConfig.system_username == f"{sso_user}@ggg.com.vn").first()
+            if user_cfg and user_cfg.sso_password:
+                password = user_cfg.sso_password
+                username = user_cfg.system_username.split('@')[0] if "@" in user_cfg.system_username else user_cfg.system_username
+                cfg["sso_username"] = username
+                cfg["sso_password_b64"] = _encode_password(password)
+                save_config(cfg)
+                logger.info(f"[TICKET_BATCH] Đã đồng bộ tài khoản SSO '{username}' từ UserSSOConfig trong CSDL.")
+            db.close()
+        except Exception as db_err:
+            logger.debug(f"[TICKET_BATCH] Lỗi đọc UserSSOConfig từ DB: {db_err}")
+
+    if not username or not password:
         raise ValueError("Chưa cấu hình tài khoản SSO. Vui lòng cấu hình username và password SSO trước khi chạy.")
-    return username, _decode_password(password_b64)
+    return username, password
 
 
 async def _safe_wait_network_idle(page, timeout_ms: int = 24000):
@@ -682,18 +705,40 @@ async def _fetch_ticket_list(page, username: str) -> List[Dict[str, Any]]:
 async def _fetch_gprocess_mission_list(page, username: str) -> List[Dict[str, Any]]:
     """
     Lấy danh sách nhiệm vụ G-Process cần xử lý tại https://gpms.ggg.com.vn/g-process/my-mission.
-    Lọc các nhiệm vụ:
-    - NHIỆM VỤ: 'IT xác nhận lỗi kỹ thuật' (hoặc step_id == 11702)
-    - NGƯỜI THỰC HIỆN: 'dung.nguyenanh' (hoặc username)
+    Điều kiện bắt buộc lọc và xử lý:
+    1. Nhiệm vụ có tên: 'IT xác nhận lỗi kỹ thuật' (hoặc step_id == 11702).
+    2. NGƯỜI THỰC HIỆN: Phải ĐÃ ĐƯỢC GÁN là 'dung.nguyenanh' (hoặc target_user).
+       - Trong API list-my-task: assignee_id == target_user_id (mặc định 442 của dung.nguyenanh).
+       - Bỏ qua tuyệt đối nếu assignee_id là None (chưa gán) hoặc gán cho người khác.
+       - Đối chiếu với DOM bảng my-mission: cột 4 (Người thực hiện) phải là 'dung.nguyenanh'.
     """
     gprocess_items = []
     seen_ids = set()
     try:
         logger.info("[GPROCESS] Bắt đầu lấy danh sách nhiệm vụ từ https://gpms.ggg.com.vn/g-process/my-mission...")
         intercepted_tasks: List[Dict[str, Any]] = []
+        target_user = (username or "dung.nguyenanh").strip().lower()
+        target_user_id = 442 if "dung.nguyenanh" in target_user else 0
 
         async def _on_response(response):
-            if "list-my-task" in response.url:
+            nonlocal target_user_id
+            url = response.url
+            if "info-by-username" in url or "info-full" in url:
+                try:
+                    u_json = await response.json()
+                    uid = u_json.get("data", {}).get("id")
+                    if uid:
+                        target_user_id = uid
+                except Exception:
+                    pass
+
+            if "list-my-task" in url:
+                m_obj = re.search(r'object_id=(\d+)', url)
+                if m_obj:
+                    try:
+                        target_user_id = int(m_obj.group(1))
+                    except Exception:
+                        pass
                 try:
                     res_json = await response.json()
                     task_list = res_json.get("data", {}).get("list", [])
@@ -720,14 +765,13 @@ async def _fetch_gprocess_mission_list(page, username: str) -> List[Dict[str, An
             if intercepted_tasks:
                 break
             try:
-                row_cnt = await page.locator('.ant-table-tbody tr, tbody tr').count()
-                if row_cnt > 1:
+                row_cnt = await page.locator('tr.ant-table-row, tbody tr').count()
+                if row_cnt > 0:
                     break
             except Exception:
                 pass
             await asyncio.sleep(0.5)
 
-        target_user = (username or "dung.nguyenanh").strip().lower()
         VALID_TARGETS = [target_user, "dung.nguyenanh", "nguyễn anh dũng", "nguyen anh dung"]
         UNASSIGNED_KEYWORDS = [
             "-", "—", "+", "none", "null", "undefined",
@@ -736,116 +780,109 @@ async def _fetch_gprocess_mission_list(page, username: str) -> List[Dict[str, An
             "chờ tiếp nhận", "cho tiep nhan", "phòng cntt", "bộ phận it", "nhóm it"
         ]
 
-        # Quét trước bảng HTML table trên trang để lập bản đồ đối chiếu cột 'Người thực hiện' (cột 4)
-        html_assignee_map = {}
+        # Quét bảng HTML table trên trang để lập bản đồ đối chiếu cột 'Người thực hiện' (cột 4)
+        dom_assignee_map = {}
         try:
-            init_rows = await page.locator('.ant-table-tbody tr, tbody tr').all()
-            for r in init_rows:
+            dom_rows = await page.locator('tr.ant-table-row').all()
+            for r in dom_rows:
                 cells = await r.locator('td').all()
                 if len(cells) >= 5:
-                    nguoi_th_text = (await cells[4].inner_text()).strip()
-                    row_mid = ""
-                    link_tag = cells[0].locator('a').first
-                    if await link_tag.count() > 0:
-                        href = await link_tag.get_attribute('href') or ""
-                        m_m = re.search(r'/my-mission/([0-9A-Za-z_-]+)', href)
-                        if m_m:
-                            row_mid = m_m.group(1)
-                    if not row_mid:
-                        r_key = await r.get_attribute('data-row-key')
-                        if r_key and r_key != "None":
-                            row_mid = str(r_key)
-                    if row_mid:
-                        html_assignee_map[row_mid] = nguoi_th_text
+                    c_req = (await cells[3].inner_text()).strip()
+                    c_assignee = (await cells[4].inner_text()).strip()
+                    if c_req:
+                        clean_k = re.sub(r'\s+', ' ', c_req).strip().lower()
+                        dom_assignee_map[clean_k] = c_assignee
         except Exception as map_err:
-            logger.debug(f"[GPROCESS] Lỗi xây dựng html_assignee_map: {map_err}")
+            logger.debug(f"[GPROCESS] Lỗi xây dựng dom_assignee_map: {map_err}")
+
+        # Hỗ trợ phân trang: Nếu còn trang tiếp theo, click để nạp thêm tasks
+        try:
+            next_page_btn = page.locator('li.ant-pagination-next:not(.ant-pagination-disabled) button, li.ant-pagination-next:not(.ant-pagination-disabled) a').first
+            p_count = 0
+            while await next_page_btn.count() > 0 and p_count < 5:
+                is_disabled = await next_page_btn.get_attribute("disabled")
+                if is_disabled is not None:
+                    break
+                logger.info(f"[GPROCESS] Đang click sang trang tiếp theo (trang {p_count + 2})...")
+                await next_page_btn.click()
+                await _safe_wait_network_idle(page, 15000)
+                await asyncio.sleep(1.5)
+                # Cập nhật thêm dom_assignee_map
+                try:
+                    p_rows = await page.locator('tr.ant-table-row').all()
+                    for r in p_rows:
+                        cells = await r.locator('td').all()
+                        if len(cells) >= 5:
+                            c_req = (await cells[3].inner_text()).strip()
+                            c_assignee = (await cells[4].inner_text()).strip()
+                            if c_req:
+                                clean_k = re.sub(r'\s+', ' ', c_req).strip().lower()
+                                dom_assignee_map[clean_k] = c_assignee
+                except Exception:
+                    pass
+                p_count += 1
+                next_page_btn = page.locator('li.ant-pagination-next:not(.ant-pagination-disabled) button, li.ant-pagination-next:not(.ant-pagination-disabled) a').first
+        except Exception as page_e:
+            logger.debug(f"[GPROCESS] Xử lý phân trang next: {page_e}")
 
         # 1. Ưu tiên cao nhất: Lấy từ intercepted_tasks của API list-my-task (dữ liệu chuẩn 100% của GPMS)
         if intercepted_tasks:
-            logger.info(f"[GPROCESS] Đã bắt được {len(intercepted_tasks)} nhiệm vụ từ API list-my-task. Đang lọc theo điều kiện gán cho '{target_user}'...")
+            logger.info(
+                f"[GPROCESS] Đã bắt được {len(intercepted_tasks)} nhiệm vụ từ API list-my-task. "
+                f"Đang lọc điều kiện: Tên 'IT xác nhận lỗi kỹ thuật' & Người thực hiện gán cho '{target_user}' (ID: {target_user_id})..."
+            )
             for item in intercepted_tasks:
                 m_id = str(item.get("id"))
                 if not m_id or m_id in seen_ids:
                     continue
 
                 task_name = (item.get("name") or "").strip()
-                is_it_confirm = "xác nhận lỗi kỹ thuật" in task_name.lower() or item.get("step_id") == 11702
+                step_id = item.get("step_id")
+                req_name = (item.get("ticket_request_name") or "").strip()
+
+                # ========================================================
+                # ĐIỀU KIỆN 1: Nhiệm vụ có tên: "IT xác nhận lỗi kỹ thuật"
+                # ========================================================
+                is_it_confirm = (
+                    "xác nhận lỗi kỹ thuật" in task_name.lower() or
+                    "it xác nhận lỗi kỹ thuật" in task_name.lower() or
+                    step_id == 11702
+                )
                 if not is_it_confirm:
                     continue
 
                 # ========================================================
-                # KIỂM TRA ĐIỀU KIỆN TIÊN QUYẾT: NGƯỜI THỰC HIỆN / ASSIGNEE
-                # Chỉ xử lý các nhiệm vụ đã được gán ĐÍCH DANH cho dung.nguyenanh.
-                # Tuyệt đối không tự gán hoặc xử lý các nhiệm vụ chưa gán / gán cho người khác!
+                # ĐIỀU KIỆN 2: NGƯỜI THỰC HIỆN phải ĐÃ ĐƯỢC GÁN là "dung.nguyenanh"
+                # Tuyệt đối không tự gán hoặc xử lý nhiệm vụ chưa gán / gán cho người khác!
                 # ========================================================
-                html_nguoi_th = html_assignee_map.get(m_id, "")
+                assignee_id = item.get("assignee_id")
                 
-                # Trích xuất người thực hiện từ API item
-                extracted_assignees = []
-                for field_key in ["assignee", "executor", "assigned_user", "current_assignee", "handler", "implementer", "user"]:
-                    field_val = item.get(field_key)
-                    if not field_val:
+                # Đối chiếu thêm với bảng DOM trên trang (nếu tìm thấy theo tên yêu cầu)
+                clean_req = re.sub(r'\s+', ' ', req_name).strip().lower()
+                dom_assignee = dom_assignee_map.get(clean_req, "")
+
+                # 2.1. Kiểm tra trạng thái Chưa gán:
+                if dom_assignee:
+                    d_low = dom_assignee.lower().strip()
+                    if not d_low or d_low in ["-", "—", "+"] or any(k in d_low for k in UNASSIGNED_KEYWORDS):
+                        logger.info(f"[GPROCESS] ⏭️ Bỏ qua nhiệm vụ #{m_id}: Bảng trên trang hiển thị Chưa gán ('{dom_assignee}'). Tuyệt đối không tự gán!")
                         continue
-                    if isinstance(field_val, dict):
-                        u_name = field_val.get("user_name") or field_val.get("email") or field_val.get("username") or field_val.get("full_name") or field_val.get("name")
-                        if u_name:
-                            extracted_assignees.append(str(u_name).strip())
-                    elif isinstance(field_val, str):
-                        extracted_assignees.append(field_val.strip())
-                    elif isinstance(field_val, list):
-                        for sub_v in field_val:
-                            if isinstance(sub_v, dict):
-                                sub_u = sub_v.get("user_name") or sub_v.get("email") or sub_v.get("username") or sub_v.get("full_name") or sub_v.get("name")
-                                if sub_u:
-                                    extracted_assignees.append(str(sub_u).strip())
-                            elif isinstance(sub_v, str):
-                                extracted_assignees.append(sub_v.strip())
+                    if not any(v in d_low for v in VALID_TARGETS):
+                        logger.info(f"[GPROCESS] ⏭️ Bỏ qua nhiệm vụ #{m_id}: Bảng trên trang hiển thị gán cho '{dom_assignee}', không phải {target_user}.")
+                        continue
 
-                assignees_list_val = item.get("assignees")
-                if isinstance(assignees_list_val, list):
-                    for sub_v in assignees_list_val:
-                        if isinstance(sub_v, dict):
-                            sub_u = sub_v.get("user_name") or sub_v.get("email") or sub_v.get("username") or sub_v.get("full_name")
-                            if sub_u:
-                                extracted_assignees.append(str(sub_u).strip())
-                        elif isinstance(sub_v, str):
-                            extracted_assignees.append(sub_v.strip())
-
-                if html_nguoi_th:
-                    extracted_assignees.append(html_nguoi_th)
-
-                # Xác định tên hiển thị của người thực hiện
-                assignee_display_name = html_nguoi_th or (extracted_assignees[0] if extracted_assignees else "Chưa gán")
-
-                # BƯỚC 1: Nếu không có bất kỳ thông tin assignee nào -> Coi là Chưa gán, bỏ qua ngay
-                if not extracted_assignees:
-                    logger.info(f"[GPROCESS] ⏭️ Bỏ qua nhiệm vụ #{m_id}: Chưa có người thực hiện (API không có assignee). Tuyệt đối không tự gán!")
+                # 2.2. Kiểm tra assignee_id từ API:
+                if assignee_id is None or assignee_id == 0:
+                    # Nếu API không có assignee_id và trên DOM cũng không xác nhận là dung.nguyenanh -> Chưa gán
+                    if not dom_assignee or not any(v in dom_assignee.lower() for v in VALID_TARGETS):
+                        logger.info(f"[GPROCESS] ⏭️ Bỏ qua nhiệm vụ #{m_id}: Chưa có người thực hiện (assignee_id=None). Tuyệt đối không tự gán!")
+                        continue
+                elif target_user_id > 0 and assignee_id != target_user_id:
+                    # Gán cho người khác
+                    logger.info(f"[GPROCESS] ⏭️ Bỏ qua nhiệm vụ #{m_id}: Nhiệm vụ này gán cho User ID #{assignee_id}, không phải {target_user} (ID #{target_user_id}).")
                     continue
 
-                # BƯỚC 2: Nếu thông tin assignee rơi vào từ khóa chưa gán -> Bỏ qua ngay
-                is_unassigned = False
-                for a_name in extracted_assignees:
-                    a_low = a_name.lower().strip()
-                    if not a_low or a_low in ["-", "—", "+"] or any(k in a_low for k in UNASSIGNED_KEYWORDS):
-                        is_unassigned = True
-                        break
-                if is_unassigned:
-                    logger.info(f"[GPROCESS] ⏭️ Bỏ qua nhiệm vụ #{m_id}: Trạng thái chưa gán ('{assignee_display_name}'). Tuyệt đối không tự gán!")
-                    continue
-
-                # BƯỚC 3: Kiểm tra xem có đích danh dung.nguyenanh (hoặc target_user) hay không
-                is_assigned_to_dung = any(
-                    any(v_tar in a_name.lower() for v_tar in VALID_TARGETS)
-                    for a_name in extracted_assignees
-                )
-                if not is_assigned_to_dung:
-                    logger.info(f"[GPROCESS] ⏭️ Bỏ qua nhiệm vụ #{m_id}: Nhiệm vụ này gán cho '{assignee_display_name}', không phải {target_user} (chưa gửi tới dung.nguyenanh).")
-                    continue
-
-                req_name = (item.get("ticket_request_name") or "").strip()
-                full_name = f"{task_name} ({req_name})" if req_name else task_name
-
-                # Người tạo
+                # Xác định người tạo
                 creator_obj = item.get("creator") or {}
                 nguoi_tao = creator_obj.get("user_name") or creator_obj.get("full_name") or "—"
 
@@ -865,18 +902,20 @@ async def _fetch_gprocess_mission_list(page, username: str) -> List[Dict[str, An
                         pass
 
                 detail_url = f"https://gpms.ggg.com.vn/g-process/my-mission/{m_id}"
+                full_name = f"{task_name} ({req_name})" if req_name else task_name
+
                 gprocess_items.append({
                     "ticket_id": m_id,
                     "ticket_name": full_name,
                     "created_by": nguoi_tao,
-                    "assignee": assignee_display_name,
+                    "assignee": dom_assignee or "dung.nguyenanh",
                     "due_date": due_date_str,
                     "url": detail_url,
                     "source_type": "GPROCESS",
                     "status": "Đang triển khai",
                 })
                 seen_ids.add(m_id)
-                logger.info(f"[GPROCESS] ✅ Tìm thấy nhiệm vụ hợp lệ của {target_user}: #{m_id} - {full_name} (Assignee: {assignee_display_name})")
+                logger.info(f"[GPROCESS] ✅ Tìm thấy nhiệm vụ hợp lệ của {target_user}: #{m_id} - {full_name} (Assignee: {dom_assignee or 'dung.nguyenanh'})")
 
         # 2. Fallback: Parse từ HTML table nếu không có API response
         if not gprocess_items:
@@ -885,7 +924,7 @@ async def _fetch_gprocess_mission_list(page, username: str) -> List[Dict[str, An
             max_pages = 5
             while page_num <= max_pages:
                 await asyncio.sleep(1)
-                rows = await page.locator('.ant-table-tbody tr, tbody tr').all()
+                rows = await page.locator('tr.ant-table-row, .ant-table-tbody tr, tbody tr').all()
                 if not rows:
                     break
 
@@ -927,7 +966,7 @@ async def _fetch_gprocess_mission_list(page, username: str) -> List[Dict[str, An
 
                         is_dung = any(v_tar in nguoi_th_text.lower() for v_tar in VALID_TARGETS)
                         if not is_dung:
-                            logger.info(f"[GPROCESS] (Fallback) ⏭️ Bỏ qua nhiệm vụ hàng {idx+1}: Gán cho '{nguoi_th_text}', không phải {target_user} (chưa gửi tới dung.nguyenanh).")
+                            logger.info(f"[GPROCESS] (Fallback) ⏭️ Bỏ qua nhiệm vụ hàng {idx+1}: Gán cho '{nguoi_th_text}', không phải {target_user}.")
                             continue
 
                         mission_id = ""
