@@ -5117,3 +5117,26 @@ estaurant_service.py).
     + Do hệ thống Production chạy độc lập trên server `172.16.8.25:5001` (service NSSM `ITBackend`), khi người dùng bấm quét trên web `172.16.8.25` mà vẫn thấy 0 ticket là do server `.25` chưa nạp mã nguồn mới.
     + Để cập nhật: Chỉ cần copy thư mục `backend/app` (hoặc chạy `git pull`) lên `C:\DUNGIT\IT_Project_Management_New\` trên server `172.16.8.25` và chạy lệnh restart service: `C:\DUNGIT\IT_Project_Management_New\nssm-2.24\win64\nssm.exe restart ITBackend`. Khi đó nút quét trên web sẽ lập tức nhận đủ 13 nhiệm vụ.
 
+---
+
+### [2026-10-27] - Cập Nhật Quy Tắc Timesheet Cho G-Process: Không Khai Báo Giờ (Tổng Thời Gian HTTT = 0)
+- **Bối cảnh & Yêu cầu người dùng**:
+  - Người dùng gửi hình ảnh chụp popup "Khai báo Timesheet" trên hệ thống GPMS khi hoàn tất nhiệm vụ G-Process:
+    + Header popup: `Khai báo Timesheet`
+    + Các cột: `Ngày thực hiện`, `Số lần/Số SP đã thực hiện` (mặc định 1), `Tổng thời gian HTTT` (mặc định 0), `Ghi chú` (`-`), `Đính kèm`.
+    + Nút bấm: `+ Thêm mới`, nút `Lưu` màu vàng góc dưới bên phải.
+  - **Quy tắc bắt buộc từ người dùng**: *"không được khai báo timesheet cho Gprocess nhé, hãy để 0"*.
+- **Triển khai kỹ thuật**:
+  - Trong hàm `_close_gprocess_mission()` ([backend/app/services/ticket_batch_service.py](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/services/ticket_batch_service.py)):
+    + Khi popup "Khai báo Timesheet" xuất hiện sau khi bấm "Xác nhận", hệ thống duyệt qua từng hàng trong bảng Timesheet:
+      * Giữ nguyên / điền `Số lần/Số SP đã thực hiện = 1` nếu ô rỗng.
+      * **Bắt buộc điền `Tổng thời gian HTTT = 0`** cho toàn bộ các hàng (ngày 24, 25, 26, 27...), tuyệt đối không điền 1 giờ hay bất kỳ số giờ dương nào.
+      * Điền `Ghi chú = '-'` nếu ô rỗng.
+    + Quét lại toàn bộ các thẻ input thời gian (`name*="time"`, `input[type="number"]`) để đồng bộ chắc chắn giá trị `'0'` vào React state.
+    + Bấm nút **Lưu** (màu vàng) để lưu khai báo timesheet 0 giờ hợp lệ theo đúng luồng GPMS.
+    + G-Process hoàn toàn không tiêu tốn quỹ giờ `remaining_hours` của bảng Timesheet cá nhân.
+- **Kiểm thử & Đóng gói**:
+  - Backend compileall sạch lỗi 100%, Backend Smoke Test `PASSED 100%`.
+  - Frontend `npm run build` thành công rực rỡ (`dist/` kèm `web.config` cho IIS).
+
+

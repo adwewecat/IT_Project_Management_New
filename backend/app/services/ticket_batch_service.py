@@ -1761,23 +1761,93 @@ async def _close_gprocess_mission(page, context, mission: Dict[str, Any]) -> Dic
                 pass
             logger.info(f"[GPROCESS] #{mission_id} (modal step {modal_step+1}): Phát hiện modal: {modal_text[:100]}...")
 
-            # TH 6.1: Modal Timesheet
+            # TH 6.1: Modal Timesheet (QUY TẮC BẮT BUỘC: KHÔNG khai báo timesheet cho G-Process, để Tổng thời gian HTTT = 0)
             time_inputs = visible_modal.locator('input[name*="actual_time"], input[name*="time"], input[name*="hour"], input[type="number"]')
             has_time_input = await time_inputs.count() > 0
-            if "timesheet" in modal_text or "thời gian" in modal_text or has_time_input:
-                logger.info(f"[GPROCESS] #{mission_id}: Điền thông tin popup Timesheet.")
-                if has_time_input:
-                    await time_inputs.first.fill('1')
-                    await asyncio.sleep(0.2)
-                note_inputs = visible_modal.locator('input[name*="note"], textarea[name*="note"], textarea')
-                if await note_inputs.count() > 0:
-                    await note_inputs.first.fill('Hỗ trợ hoàn thành nhiệm vụ')
-                    await asyncio.sleep(0.2)
+            if "timesheet" in modal_text or "thời gian" in modal_text or "khai báo" in modal_text or has_time_input:
+                logger.info(f"[GPROCESS] #{mission_id}: Phát hiện popup Khai báo Timesheet -> Để thời gian HTTT là 0 (KHÔNG khai báo timesheet cho G-Process).")
 
-                save_btn = visible_modal.locator('button:has-text("Lưu"), button:has-text("Xác nhận"), button:has-text("Đồng ý"), button.ant-btn-primary').first
+                # Cập nhật các hàng trong bảng Timesheet:
+                # - Số lần/Số SP: 1
+                # - Tổng thời gian HTTT: 0 (BẮT BUỘC = 0 theo yêu cầu)
+                # - Ghi chú: '-'
+                try:
+                    await visible_modal.evaluate("""(modal) => {
+                        const rows = modal.querySelectorAll('tbody tr, .ant-table-row, div[class*="row"]');
+                        if (rows && rows.length > 0) {
+                            rows.forEach(r => {
+                                const inputs = r.querySelectorAll('input:not([type="hidden"])');
+                                if (inputs.length >= 3) {
+                                    // inputs[0]: Ngày thực hiện
+                                    // inputs[1]: Số lần / Số SP đã thực hiện (mặc định 1)
+                                    if (!inputs[1].value || inputs[1].value.trim() === '') {
+                                        inputs[1].value = '1';
+                                        inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+                                        inputs[1].dispatchEvent(new Event('change', { bubbles: true }));
+                                    }
+                                    // inputs[2]: Tổng thời gian HTTT -> BẮT BUỘC ĐỂ 0
+                                    inputs[2].value = '0';
+                                    inputs[2].dispatchEvent(new Event('input', { bubbles: true }));
+                                    inputs[2].dispatchEvent(new Event('change', { bubbles: true }));
+
+                                    // inputs[3]: Ghi chú -> để '-' nếu rỗng
+                                    if (inputs.length >= 4) {
+                                        if (!inputs[3].value || inputs[3].value.trim() === '') {
+                                            inputs[3].value = '-';
+                                            inputs[3].dispatchEvent(new Event('input', { bubbles: true }));
+                                            inputs[3].dispatchEvent(new Event('change', { bubbles: true }));
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                        // Quét phòng ngừa tất cả các ô input thời gian / time / hour để chắc chắn 100% mang giá trị 0
+                        const allInps = modal.querySelectorAll('input:not([type="hidden"])');
+                        allInps.forEach(inp => {
+                            const name = (inp.getAttribute('name') || '').toLowerCase();
+                            const placeholder = (inp.getAttribute('placeholder') || '').toLowerCase();
+                            if (name.includes('time') || name.includes('hour') || name.includes('actual') ||
+                                placeholder.includes('thời gian') || placeholder.includes('time')) {
+                                inp.value = '0';
+                                inp.dispatchEvent(new Event('input', { bubbles: true }));
+                                inp.dispatchEvent(new Event('change', { bubbles: true }));
+                            }
+                        });
+                    }""")
+                    await asyncio.sleep(0.3)
+                except Exception as eval_err:
+                    logger.debug(f"[GPROCESS] #{mission_id}: Evaluate Timesheet rows: {eval_err}")
+
+                # Quét lại qua Playwright locators để đồng bộ giá trị '0' vào các ô thời gian
+                for t_idx in range(await time_inputs.count()):
+                    try:
+                        t_inp = time_inputs.nth(t_idx)
+                        name_attr = (await t_inp.get_attribute("name") or "").lower()
+                        # Không đè lên ô số lần / số lượng
+                        if any(k in name_attr for k in ["quantity", "count", "so_lan", "solan", "sp"]):
+                            continue
+                        await t_inp.fill('0')
+                        await asyncio.sleep(0.05)
+                    except Exception:
+                        pass
+
+                # Ghi chú: Điền '-' nếu rỗng
+                note_inputs = visible_modal.locator('input[name*="note"], textarea[name*="note"], input[placeholder*="Ghi chú"], textarea')
+                for n_idx in range(await note_inputs.count()):
+                    try:
+                        n_inp = note_inputs.nth(n_idx)
+                        n_val = await n_inp.input_value()
+                        if not n_val or n_val.strip() == "":
+                            await n_inp.fill('-')
+                            await asyncio.sleep(0.05)
+                    except Exception:
+                        pass
+
+                # Bấm nút "Lưu" (nút màu vàng ở góc dưới bên phải modal Timesheet)
+                save_btn = visible_modal.locator('button:has-text("Lưu"), button.ant-btn-primary:has-text("Lưu"), button:has-text("Xác nhận"), button:has-text("Đồng ý")').first
                 if await save_btn.count() > 0:
                     await save_btn.click(timeout=15000)
-                    logger.info(f"[GPROCESS] #{mission_id}: Đã bấm nút lưu Timesheet.")
+                    logger.info(f"[GPROCESS] #{mission_id}: Đã bấm nút 'Lưu' Timesheet (Tổng thời gian HTTT = 0).")
                     await asyncio.sleep(1.2)
                 continue
 
