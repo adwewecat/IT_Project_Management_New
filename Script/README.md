@@ -5113,3 +5113,7 @@ estaurant_service.py).
   - Các nhiệm vụ chưa gán người xử lý (nút "Gán người xử lý") đã được loại bỏ chính xác và an toàn.
   - Backend: `python -m compileall app` sạch lỗi 100%, Smoke Test `>>> BACKEND SMOKE TEST PASSED 100%`.
   - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 9.26s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
+  - **Triển khai Server Production (172.16.8.25)**:
+    + Do hệ thống Production chạy độc lập trên server `172.16.8.25:5001` (service NSSM `ITBackend`), khi người dùng bấm quét trên web `172.16.8.25` mà vẫn thấy 0 ticket là do server `.25` chưa nạp mã nguồn mới.
+    + Để cập nhật: Chỉ cần copy thư mục `backend/app` (hoặc chạy `git pull`) lên `C:\DUNGIT\IT_Project_Management_New\` trên server `172.16.8.25` và chạy lệnh restart service: `C:\DUNGIT\IT_Project_Management_New\nssm-2.24\win64\nssm.exe restart ITBackend`. Khi đó nút quét trên web sẽ lập tức nhận đủ 13 nhiệm vụ.
+
