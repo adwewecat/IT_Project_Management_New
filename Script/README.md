@@ -5139,4 +5139,30 @@ estaurant_service.py).
   - Backend compileall sạch lỗi 100%, Backend Smoke Test `PASSED 100%`.
   - Frontend `npm run build` thành công rực rỡ (`dist/` kèm `web.config` cho IIS).
 
+---
+
+### [2026-10-27] - Khắc Phục Triệt Để Lỗi Bỏ Qua (Skipped) Nhiệm Vụ G-Process Do Nhận Nhầm Người Thực Hiện Của Bước Tiếp Theo ("Chọn người dùng")
+- **Bối cảnh & Yêu cầu người dùng**:
+  - Người dùng quét danh sách chọn 3 nhiệm vụ G-Process (#659967, #659856, #659111) đã hiển thị đúng người thực hiện là `dung.nguyenanh` và bấm "Bắt Đầu Xử Lý (3 Mục)".
+  - Kết quả trả về cả 3 mục đều bị `Bỏ qua` (Skipped: 3, Thành công: 0).
+  - Người dùng phản hồi: *"kết quả sao lại bỏ qua, rõ ràng đúng yêu cầu là tên nhiệm vụ : Tên Nhiệm Vụ và người xử lý là 'dung.nguyenanh', sao không xử lý"*.
+- **Nguyên nhân gốc rễ (Root Cause)**:
+  - Khi xem lại lịch sử chi tiết từ server: `execution_message` ghi nhận:
+    `"Nhiệm vụ gán cho 'Chọn người dùng', không phải dung.nguyenanh, đã bỏ qua"`.
+  - Phân tích DOM trực tiếp trên trang chi tiết nhiệm vụ GPMS (`/g-process/my-mission/659967`):
+    + Trang chi tiết hiển thị form của bước hiện tại: `Nhiệm vụ: IT xác nhận lỗi kỹ thuật` của `dung.nguyenanh`.
+    + Tuy nhiên, ở cuối form có khối **"BƯỚC TIẾP THEO"** (Next Step: Bước 5 - CS xác nhận hoàn thành tích lũy) có trường chọn:
+      `Người thực hiện: [Chọn người dùng]` (Select user dropdown placeholder).
+    + Khối kiểm tra `assignee_on_page` trong code `_close_gprocess_mission()` trước đây quét toàn bộ trang để tìm text `người thực hiện` $\rightarrow$ Đã bắt trúng nhãn của **BƯỚC TIẾP THEO** với giá trị `"Chọn người dùng"`.
+    + Do `"Chọn người dùng"` không phải là `"dung.nguyenanh"`, code đã hiểu nhầm nhiệm vụ này bị gán cho người khác nên đã đánh dấu `skipped` (Bỏ qua).
+- **Khắc phục triệt để**:
+  - Người thực hiện của nhiệm vụ này đã được xác thực chính xác 100% từ danh sách `my-mission` (thông qua `assignee_id == 442` và cột hiển thị DOM là `dung.nguyenanh`).
+  - Xóa bỏ hoàn toàn khối quét nhãn `assignee_on_page` trên toàn trang chi tiết để không bị dính vào trường người thực hiện của Bước tiếp theo.
+  - Vẫn giữ nguyên cơ chế kiểm tra nút `claim_btn` ("Tiếp nhận", "Nhận việc") để phòng vệ không bao giờ tự nhận nhiệm vụ chưa gán.
+- **Kiểm thử & Đóng gói**:
+  - Backend compileall sạch lỗi 100%, Backend Smoke Test `PASSED 100%`.
+  - Frontend build `dist/` sạch sẽ.
+  - Đồng bộ ngay lên GitHub repository (`main`).
+
+
 

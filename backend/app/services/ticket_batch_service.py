@@ -1571,73 +1571,10 @@ async def _close_gprocess_mission(page, context, mission: Dict[str, Any]) -> Dic
                 "url": target_url
             }
 
-        # Kiểm tra 2: Quét thông tin Người thực hiện hiển thị trên trang chi tiết
-        assignee_on_page = await detail_page.evaluate("""() => {
-            const labels = Array.from(document.querySelectorAll('label, div, span, p, td, th'));
-            for (const el of labels) {
-                const txt = (el.textContent || '').trim().toLowerCase();
-                if (
-                    txt === 'người thực hiện:' || txt === 'người thực hiện' ||
-                    txt === 'người xử lý:' || txt === 'người xử lý' ||
-                    txt === 'cán bộ xử lý:' || txt === 'cán bộ xử lý' ||
-                    txt === 'assignee:' || txt === 'assignee' ||
-                    txt === 'phân công cho:' || txt === 'phân công cho'
-                ) {
-                    let valEl = el.nextElementSibling;
-                    if (!valEl && el.parentElement) {
-                        const sibs = Array.from(el.parentElement.children);
-                        const idx = sibs.indexOf(el);
-                        if (idx >= 0 && idx + 1 < sibs.length) {
-                            valEl = sibs[idx + 1];
-                        }
-                    }
-                    if (valEl) {
-                        return (valEl.textContent || '').trim();
-                    }
-                }
-            }
-            return null;
-        }""")
+        # Lưu ý: Người thực hiện của nhiệm vụ này đã được xác thực 100% tại danh sách my-mission
+        # (assignee_id == 442, dom_assignee == 'dung.nguyenanh'). Không quét nhãn 'Người thực hiện'
+        # trong form chi tiết vì form chi tiết có trường 'BƯỚC TIẾP THEO -> Người thực hiện: Chọn người dùng'.
 
-        if assignee_on_page:
-            assignee_lower = assignee_on_page.lower().strip()
-            is_unassigned = not assignee_lower or any(pat in assignee_lower for pat in UNASSIGNED_KEYWORDS)
-            if is_unassigned:
-                logger.warning(
-                    f"[GPROCESS] 🛑 DỪNG XỬ LÝ #{mission_id}: Người thực hiện trên trang là '{assignee_on_page}'. "
-                    f"Nhiệm vụ này CHƯA ĐƯỢC GÁN cho dung.nguyenanh. Bỏ qua để không tự gán!"
-                )
-                return {
-                    "ticket_id": mission_id,
-                    "ticket_name": mission.get("ticket_name", f"G-Process #{mission_id}"),
-                    "status": "skipped",
-                    "source_type": "GPROCESS",
-                    "type": "gprocess",
-                    "message": f"Nhiệm vụ chưa được gán cho dung.nguyenanh (Trên trang: '{assignee_on_page}'), đã bỏ qua để tránh tự gán",
-                    "created_by": mission.get("created_by", "—"),
-                    "assignee": assignee_on_page,
-                    "due_date": mission.get("due_date", "—"),
-                    "url": target_url
-                }
-
-            is_valid_assignee = any(v_tar in assignee_lower for v_tar in VALID_TARGETS)
-            if not is_valid_assignee:
-                logger.warning(
-                    f"[GPROCESS] 🛑 DỪNG XỬ LÝ #{mission_id}: Người thực hiện trên trang là '{assignee_on_page}', không phải dung.nguyenanh. "
-                    f"Bỏ qua để không xử lý nhầm nhiệm vụ của người khác!"
-                )
-                return {
-                    "ticket_id": mission_id,
-                    "ticket_name": mission.get("ticket_name", f"G-Process #{mission_id}"),
-                    "status": "skipped",
-                    "source_type": "GPROCESS",
-                    "type": "gprocess",
-                    "message": f"Nhiệm vụ gán cho '{assignee_on_page}', không phải dung.nguyenanh, đã bỏ qua",
-                    "created_by": mission.get("created_by", "—"),
-                    "assignee": assignee_on_page,
-                    "due_date": mission.get("due_date", "—"),
-                    "url": target_url
-                }
 
         # 2. Check vào "Không đạt" ở ô Phản hồi xác nhận thông tin (Checklist)
         kd_selector = 'label:has-text("Không đạt"), label.ant-radio-wrapper:has-text("Không đạt"), :text("Không đạt")'
