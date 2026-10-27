@@ -54,6 +54,10 @@ from app.schemas.mongodb import (
     KdsCreateFoodControlResponse,
     KdsAssignDishQuayRequest,
     KdsAssignDishQuayResponse,
+    KdsDishLookupResponse,
+    KdsAddDishItem,
+    KdsAddDishesRequest,
+    KdsAddDishesResponse,
     KdsTransferQuayRequest,
     KdsTransferQuayResponse,
     KdsSyncGroupsByQuaysRequest,
@@ -1117,6 +1121,48 @@ def create_kds_place(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Lỗi khi tạo quầy KDS ({payload.host}): {str(e)}"
+        )
+
+
+@router.get("/kds-dishes/lookup", response_model=KdsDishLookupResponse)
+def lookup_dish_for_kds(
+    host: str = Query(..., description="IP máy trạm MongoDB nhà hàng"),
+    code: str = Query(..., description="Mã món ăn / Mã RK7 cần tra cứu"),
+    port: int = Query(27017, description="Cổng MongoDB"),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Tra cứu nhanh thông tin món ăn từ G_ORDER (tên, SAP, giá, menu, nhóm)
+    và đối soát cấu hình hiện tại trong G_KITCHEN.CONFIG_COOKING (quầy bếp, thời gian nấu).
+    """
+    try:
+        return MongoDBService.lookup_dish_for_kds(host=host, code=code, port=port)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Lỗi khi tra cứu món ăn ({code}): {str(e)}"
+        )
+
+
+@router.post("/kds-dishes/add", response_model=KdsAddDishesResponse)
+def add_dishes_to_kds(
+    payload: KdsAddDishesRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Thêm món ăn vào hệ thống KDS (G_KITCHEN.CONFIG_COOKING), gán quầy bếp và thời gian nấu.
+    """
+    try:
+        return MongoDBService.add_dishes_to_kds(
+            payload=payload,
+            current_user=current_user,
+            db=db
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Lỗi khi thêm món vào KDS ({payload.host}): {str(e)}"
         )
 
 

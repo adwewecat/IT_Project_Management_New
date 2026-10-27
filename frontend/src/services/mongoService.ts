@@ -941,6 +941,24 @@ export const mongoService = {
     return res.data;
   },
 
+  lookupDishForKds: async (
+    host: string,
+    code: string,
+    port: number = 27017
+  ): Promise<KdsDishLookupResponse> => {
+    const res = await api.get<KdsDishLookupResponse>('/mongodb/kds-dishes/lookup', {
+      params: { host, code, port }
+    });
+    return res.data;
+  },
+
+  addDishesToKds: async (
+    payload: KdsAddDishesRequest
+  ): Promise<KdsAddDishesResponse> => {
+    const res = await api.post<KdsAddDishesResponse>('/mongodb/kds-dishes/add', payload);
+    return res.data;
+  },
+
   assignDishesToQuay: async (
     payload: KdsAssignDishQuayRequest
   ): Promise<KdsAssignDishQuayResponse> => {
@@ -1576,6 +1594,57 @@ export interface KdsAssignDishQuayResponse {
   success: boolean;
   modified_count: number;
   message: string;
+}
+
+export interface KdsDishLookupResponse {
+  code: string;
+  found: boolean;
+  name?: string;
+  sap_code?: string;
+  price?: number;
+  group_name?: string;
+  menu_name?: string;
+  in_kds: boolean;
+  kds_id?: number;
+  kds_place_ids: number[];
+  kds_place_names: string[];
+  kds_group_type?: string;
+  kds_cooking_time?: number;
+  kds_cooking_time_str?: string;
+  message?: string;
+}
+
+export interface KdsAddDishItem {
+  menu_item_code: string;
+  menu_item_name?: string;
+  place_ids: number[];
+  single_cooking_time?: number; // seconds (default 600)
+  group_type_kds?: string;
+  sap_code?: string;
+}
+
+export interface KdsAddDishesRequest {
+  host: string;
+  port?: number;
+  dishes: KdsAddDishItem[];
+  overwrite_if_exists?: boolean;
+}
+
+export interface KdsAddDishesResponse {
+  success: boolean;
+  message: string;
+  added_count: number;
+  updated_count: number;
+  total_count: number;
+  details: Array<{
+    code: string;
+    name: string;
+    action: 'ADDED' | 'UPDATED';
+    id?: number;
+    place_ids: number[];
+    group_type: string;
+    cooking_time: number;
+  }>;
 }
 
 export interface KdsTransferQuayRequest {

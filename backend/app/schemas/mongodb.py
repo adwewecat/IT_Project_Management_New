@@ -467,6 +467,50 @@ class KdsAssignDishQuayResponse(BaseModel):
     message: str
 
 
+class KdsDishLookupResponse(BaseModel):
+    code: str
+    found: bool = False
+    name: Optional[str] = None
+    sap_code: Optional[str] = None
+    price: Optional[float] = None
+    group_name: Optional[str] = None
+    menu_name: Optional[str] = None
+    in_kds: bool = False
+    kds_id: Optional[int] = None
+    kds_place_ids: List[int] = []
+    kds_place_names: List[str] = []
+    kds_group_type: Optional[str] = None
+    kds_cooking_time: Optional[int] = None
+    kds_cooking_time_str: Optional[str] = None
+    message: Optional[str] = None
+
+
+class KdsAddDishItem(BaseModel):
+    menu_item_code: str
+    menu_item_name: Optional[str] = None
+    place_ids: List[int] = []
+    single_cooking_time: int = 600  # seconds (mặc định 10 phút = 600s)
+    group_type_kds: Optional[str] = None
+    sap_code: Optional[str] = None
+
+
+class KdsAddDishesRequest(BaseModel):
+    host: str
+    port: int = 27017
+    dishes: List[KdsAddDishItem]
+    overwrite_if_exists: bool = True
+
+
+class KdsAddDishesResponse(BaseModel):
+    success: bool
+    message: str
+    added_count: int
+    updated_count: int
+    total_count: int
+    details: List[dict] = []
+
+
+
 class KdsTransferQuayRequest(BaseModel):
     host: str
     port: int = 27017

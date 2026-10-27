@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional, Dict, Any
 import pymongo.common
 pymongo.common.MIN_SUPPORTED_WIRE_VERSION = 0
-from pymongo import MongoClient
+from pymongo import MongoClient, ReturnDocument
 from sqlalchemy.orm import Session
 
 import os
@@ -240,6 +240,10 @@ from app.schemas.mongodb import (
     KdsCreateFoodControlResponse,
     KdsAssignDishQuayRequest,
     KdsAssignDishQuayResponse,
+    KdsDishLookupResponse,
+    KdsAddDishItem,
+    KdsAddDishesRequest,
+    KdsAddDishesResponse,
     KdsTransferQuayRequest,
     KdsTransferQuayResponse,
     KdsLogQueryRequest,
@@ -2658,6 +2662,380 @@ class MongoDBService:
                 success=True,
                 modified_count=modified_count,
                 message=f"Đã cập nhật quầy thành công cho {len(payload.menu_item_codes)} món!"
+            )
+        finally:
+            client.close()
+
+    @staticmethod
+    def lookup_dish_for_kds(host: str, code: str, port: int = 27017) -> KdsDishLookupResponse:
+        """
+        Tra cứu nhanh thông tin món ăn từ G_ORDER (name, sapCode, price, menu, group)
+        và đối soát trạng thái hiện tại trong G_KITCHEN.CONFIG_COOKING (quầy bếp, nhóm KDS, thời gian nấu).
+        """
+        clean_code = str(code).strip()
+        if not clean_code:
+            return KdsDishLookupResponse(code="", found=False, message="Mã món ăn trống")
+
+        client = MongoClient(host, port, serverSelectionTimeoutMS=3000)
+        try:
+            db_order = client["G_ORDER"]
+            db_kitchen = client["G_KITCHEN"]
+
+            dish_name = ""
+            sap_code = ""
+            price = 0.0
+            group_name = ""
+            menu_name = ""
+
+            # 1. Tra cứu từ DISH_CACHE trong G_ORDER
+            try:
+                for doc in db_order["DISH_CACHE"].find():
+                    for d in (doc.get("dishs") or []):
+                        mi = d.get("menuItem") or {}
+                        c = str(mi.get("code") or "").strip()
+                        if c == clean_code:
+                            dish_name = mi.get("name") or dish_name
+                            sap_code = str(mi.get("sapCode") or "").strip() or sap_code
+                            p = d.get("price")
+                            if p is not None:
+                                try:
+                                    price = float(p)
+                                except (ValueError, TypeError):
+                                    pass
+                            break
+                    if dish_name:
+                        break
+            except Exception as e:
+                logger.warning("Lỗi tra cứu DISH_CACHE: %s", e)
+
+            # 2. Tra cứu từ CO_MENU_ITEM trong G_ORDER
+            try:
+                co_doc = db_order["CO_MENU_ITEM"].find_one({"code": clean_code})
+                if co_doc:
+                    if not dish_name:
+                        dish_name = co_doc.get("nameVn") or co_doc.get("name") or ""
+                    if not sap_code:
+                        sap_code = str(co_doc.get("sapCode") or "").strip()
+                    if price == 0.0 and co_doc.get("coMenuItemDetails"):
+                        try:
+                            price = float(co_doc["coMenuItemDetails"][0].get("price", 0.0))
+                        except Exception:
+                            pass
+            except Exception as e:
+                logger.warning("Lỗi tra cứu CO_MENU_ITEM: %s", e)
+
+            # 3. Tra cứu từ SHOW_HIDE_ITEMS / OUT_OF_DISH
+            if not dish_name or not sap_code:
+                try:
+                    sh_doc = db_order["SHOW_HIDE_ITEMS"].find_one({"itemCode": clean_code})
+                    if sh_doc:
+                        dish_name = dish_name or sh_doc.get("itemName") or ""
+                        sap_code = sap_code or str(sh_doc.get("sapCode") or "").strip()
+                        if price == 0.0 and sh_doc.get("price") is not None:
+                            price = float(sh_doc.get("price"))
+                except Exception:
+                    pass
+
+            # 4. Tra cứu Menu / Nhóm từ ORDER_MENU_CACHE_CATEGORY
+            try:
+                for omc in db_order["ORDER_MENU_CACHE_CATEGORY"].find():
+                    m_code = str(omc.get("category-code") or "").strip()
+                    m_name = omc.get("main-menu", {}).get("name") or f"Menu {m_code}"
+                    groups = omc.get("main-menu", {}).get("items", []) or []
+                    for g in groups:
+                        g_code = str(g.get("code") or "").strip()
+                        g_name = str(g.get("name") or g_code).strip()
+                        for it in (g.get("items") or []):
+                            mi = it.get("menu-item") or {}
+                            if str(mi.get("code") or "").strip() == clean_code:
+                                dish_name = dish_name or mi.get("name") or ""
+                                group_name = g_name
+                                menu_name = m_name
+                                if not sap_code:
+                                    sap_code = str(mi.get("sap-code") or mi.get("sapCode") or "").strip()
+                                break
+                        if group_name:
+                            break
+                    if group_name:
+                        break
+            except Exception as e:
+                logger.warning("Lỗi tra cứu ORDER_MENU_CACHE_CATEGORY: %s", e)
+
+            # 5. Đối soát trong G_KITCHEN.CONFIG_COOKING
+            in_kds = False
+            kds_id = None
+            kds_place_ids = []
+            kds_place_names = []
+            kds_group_type = ""
+            kds_cooking_time = 0
+            kds_cooking_time_str = "0s"
+
+            # Lấy map tên quầy từ CONFIG_KDS
+            place_names_map = {}
+            try:
+                kds_cfg = db_kitchen["CONFIG_KDS"].find_one() or {}
+                for p in (kds_cfg.get("places") or []):
+                    if isinstance(p, dict) and p.get("id") is not None:
+                        place_names_map[int(p["id"])] = p.get("name", f"Quầy #{p['id']}")
+            except Exception:
+                pass
+
+            try:
+                q = [{"menuItemCode": clean_code}]
+                if clean_code.isdigit():
+                    q.append({"menuItemCode": int(clean_code)})
+                c_doc = db_kitchen["CONFIG_COOKING"].find_one({"$or": q})
+                if c_doc:
+                    in_kds = True
+                    kds_id = c_doc.get("id")
+                    raw_pids = c_doc.get("placeIds") or []
+                    for pid in raw_pids:
+                        try:
+                            pid_int = int(pid)
+                            kds_place_ids.append(pid_int)
+                            kds_place_names.append(place_names_map.get(pid_int, f"Quầy #{pid_int}"))
+                        except (ValueError, TypeError):
+                            pass
+
+                    grp_raw = c_doc.get("groupTypeKds")
+                    if isinstance(grp_raw, dict):
+                        kds_group_type = str(grp_raw.get("name") or grp_raw.get("code") or "")
+                    elif grp_raw:
+                        kds_group_type = str(grp_raw)
+
+                    raw_time = c_doc.get("singleCookingTime")
+                    if raw_time is not None:
+                        try:
+                            kds_cooking_time = int(raw_time)
+                            mins = kds_cooking_time // 60
+                            secs = kds_cooking_time % 60
+                            if mins > 0 and secs > 0:
+                                kds_cooking_time_str = f"{mins}p {secs}s"
+                            elif mins > 0:
+                                kds_cooking_time_str = f"{mins} phút"
+                            else:
+                                kds_cooking_time_str = f"{secs}s"
+                        except (ValueError, TypeError):
+                            pass
+
+                    # Nếu G_ORDER không có tên món nhưng CONFIG_COOKING có tên món
+                    if not dish_name and c_doc.get("menuItemName"):
+                        dish_name = str(c_doc["menuItemName"]).strip()
+                    if not sap_code and c_doc.get("sapCode"):
+                        sap_code = str(c_doc["sapCode"]).strip()
+            except Exception as e:
+                logger.warning("Lỗi đối soát CONFIG_COOKING: %s", e)
+
+            found = bool(dish_name or in_kds)
+            return KdsDishLookupResponse(
+                code=clean_code,
+                found=found,
+                name=dish_name,
+                sap_code=sap_code,
+                price=price,
+                group_name=group_name,
+                menu_name=menu_name,
+                in_kds=in_kds,
+                kds_id=kds_id,
+                kds_place_ids=kds_place_ids,
+                kds_place_names=kds_place_names,
+                kds_group_type=kds_group_type,
+                kds_cooking_time=kds_cooking_time,
+                kds_cooking_time_str=kds_cooking_time_str,
+                message="Đã tìm thấy thông tin món" if found else "Không tìm thấy món với mã này trong GPOS"
+            )
+        finally:
+            client.close()
+
+    @staticmethod
+    def add_dishes_to_kds(
+        payload: KdsAddDishesRequest,
+        current_user: Optional[UserInfo] = None,
+        db: Optional[Session] = None
+    ) -> KdsAddDishesResponse:
+        """
+        Thêm món ăn mới vào hệ thống KDS (G_KITCHEN.CONFIG_COOKING), gán quầy bếp (places)
+        và thời gian nấu. Nếu món đã có trong CONFIG_COOKING và overwrite_if_exists=True,
+        tự động cập nhật quầy bếp và thời gian nấu mới.
+        """
+        if not payload.dishes:
+            raise ValueError("Danh sách món ăn cần thêm vào KDS không được để trống.")
+
+        client = MongoClient(payload.host, payload.port, serverSelectionTimeoutMS=4000)
+        try:
+            db_kitchen = client["G_KITCHEN"]
+            db_order = client["G_ORDER"]
+            cook_col = db_kitchen["CONFIG_COOKING"]
+
+            # 1. Lấy thông tin quầy từ CONFIG_KDS để map tên quầy và sinh nhóm KDS chuẩn
+            kds_cfg = db_kitchen["CONFIG_KDS"].find_one() or {}
+            place_id_to_name = {}
+            for p in (kds_cfg.get("places") or []):
+                if isinstance(p, dict) and p.get("id") is not None:
+                    place_id_to_name[int(p["id"])] = p.get("name") or f"Quầy #{p['id']}"
+
+            # 2. Khởi tạo / Đồng bộ sequence trong COUNTERS và max id hiện có trong CONFIG_COOKING
+            max_doc = cook_col.find_one(
+                {"id": {"$exists": True, "$type": "number"}},
+                sort=[("id", -1)]
+            )
+            current_max_id = int(max_doc["id"]) if (max_doc and max_doc.get("id") is not None) else 0
+
+            # Đồng bộ COUNTERS seq để không bao giờ bị trùng ID
+            counter_doc = db_kitchen["COUNTERS"].find_one({"_id": "CONFIG_COOKING_SEQ"})
+            current_seq = int(counter_doc["seq"]) if (counter_doc and counter_doc.get("seq") is not None) else 0
+            if current_seq < current_max_id:
+                db_kitchen["COUNTERS"].update_one(
+                    {"_id": "CONFIG_COOKING_SEQ"},
+                    {"$set": {"seq": current_max_id}},
+                    upsert=True
+                )
+
+            added_count = 0
+            updated_count = 0
+            details = []
+
+            for it in payload.dishes:
+                code_str = str(it.menu_item_code).strip()
+                if not code_str:
+                    continue
+
+                # Tra cứu tên món và mã SAP nếu chưa có
+                name_str = (it.menu_item_name or "").strip()
+                sap_str = (it.sap_code or "").strip()
+
+                if not name_str or not sap_str:
+                    # Tra cứu nhanh trong G_ORDER
+                    co_doc = db_order["CO_MENU_ITEM"].find_one({"code": code_str})
+                    if co_doc:
+                        name_str = name_str or co_doc.get("nameVn") or co_doc.get("name") or ""
+                        sap_str = sap_str or str(co_doc.get("sapCode") or "").strip()
+
+                if not name_str:
+                    # Tra cứu trong DISH_CACHE
+                    for doc in db_order["DISH_CACHE"].find():
+                        for d in (doc.get("dishs") or []):
+                            mi = d.get("menuItem") or {}
+                            if str(mi.get("code") or "").strip() == code_str:
+                                name_str = mi.get("name") or ""
+                                sap_str = sap_str or str(mi.get("sapCode") or "").strip()
+                                break
+                        if name_str:
+                            break
+
+                final_name = name_str or f"Món {code_str}"
+
+                # Xác định nhóm bếp KDS: ưu tiên it.group_type_kds, nếu không có lấy theo tên quầy đầu tiên
+                target_grp_name = (it.group_type_kds or "").strip()
+                if not target_grp_name and it.place_ids:
+                    target_grp_name = place_id_to_name.get(it.place_ids[0], "ALL")
+                if not target_grp_name:
+                    target_grp_name = "ALL"
+
+                code_grp_name = MongoDBService.to_kds_group_code(target_grp_name)
+                grp_obj = {
+                    "id": 0,
+                    "code": code_grp_name,
+                    "name": code_grp_name
+                }
+
+                cooking_time = int(it.single_cooking_time) if it.single_cooking_time is not None else 600
+
+                # Kiểm tra món đã tồn tại trong CONFIG_COOKING chưa
+                q_exist = [{"menuItemCode": code_str}]
+                if code_str.isdigit():
+                    q_exist.append({"menuItemCode": int(code_str)})
+
+                existing = cook_col.find_one({"$or": q_exist})
+
+                if existing:
+                    if payload.overwrite_if_exists:
+                        update_fields = {
+                            "placeIds": it.place_ids,
+                            "groupTypeKds": grp_obj,
+                            "singleCookingTime": cooking_time
+                        }
+                        if final_name and final_name != f"Món {code_str}":
+                            update_fields["menuItemName"] = final_name
+                        if sap_str:
+                            update_fields["sapCode"] = sap_str
+
+                        cook_col.update_one({"_id": existing["_id"]}, {"$set": update_fields})
+                        updated_count += 1
+                        details.append({
+                            "code": code_str,
+                            "name": final_name,
+                            "action": "UPDATED",
+                            "place_ids": it.place_ids,
+                            "group_type": code_grp_name,
+                            "cooking_time": cooking_time
+                        })
+                else:
+                    # Tăng sequence an toàn
+                    seq_doc = db_kitchen["COUNTERS"].find_one_and_update(
+                        {"_id": "CONFIG_COOKING_SEQ"},
+                        {"$inc": {"seq": 1}},
+                        upsert=True,
+                        return_document=ReturnDocument.AFTER
+                    )
+                    new_id = int(seq_doc["seq"])
+
+                    new_doc = {
+                        "id": new_id,
+                        "menuItemCode": code_str,
+                        "menuItemName": final_name,
+                        "placeIds": it.place_ids,
+                        "singleCookingTime": cooking_time,
+                        "groupTypeKds": grp_obj,
+                        "delayTime": 0,
+                        "delayTimeSubmit": 0,
+                        "typeDelay": 0
+                    }
+                    if sap_str:
+                        new_doc["sapCode"] = sap_str
+
+                    cook_col.insert_one(new_doc)
+                    added_count += 1
+                    details.append({
+                        "code": code_str,
+                        "name": final_name,
+                        "action": "ADDED",
+                        "id": new_id,
+                        "place_ids": it.place_ids,
+                        "group_type": code_grp_name,
+                        "cooking_time": cooking_time
+                    })
+
+            # Ghi nhật ký AuditLog
+            if db and current_user:
+                try:
+                    log_entry = AuditLog(
+                        USER_ACTION=current_user.username,
+                        ACTION_TYPE="ADD_DISH_TO_KDS",
+                        TARGET_OBJECT=f"CONFIG_COOKING:add_{added_count}_upd_{updated_count}",
+                        DESCRIPTION=f"Thêm {added_count} món mới, cập nhật {updated_count} món vào KDS trên {payload.host}:{payload.port}",
+                        DETAILS=json.dumps({
+                            "host": payload.host,
+                            "added_count": added_count,
+                            "updated_count": updated_count,
+                            "total": len(payload.dishes)
+                        }, ensure_ascii=False),
+                        DATE_ACTION=datetime.datetime.now(),
+                    )
+                    db.add(log_entry)
+                    db.commit()
+                except Exception as log_ex:
+                    logger.warning("Lỗi ghi AuditLog ADD_DISH_TO_KDS: %s", log_ex)
+
+            total_affected = added_count + updated_count
+            msg = f"Đã xử lý thành công {total_affected} món (Thêm mới: {added_count}, Cập nhật: {updated_count}) vào bếp KDS!"
+            return KdsAddDishesResponse(
+                success=True,
+                message=msg,
+                added_count=added_count,
+                updated_count=updated_count,
+                total_count=total_affected,
+                details=details
             )
         finally:
             client.close()

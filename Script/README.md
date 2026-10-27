@@ -5250,3 +5250,27 @@ estaurant_service.py).
   - Backend compileall sạch lỗi 100%, Backend Smoke Test `PASSED 100%`.
   - Tiến trình Backend daemon port 8000 đang hoạt động ổn định.
   - Đồng bộ ngay lên GitHub repository (`main`).
+
+
+---
+
+### [2026-10-27] - Bổ Sung Tính Năng Thêm Món Vào KDS & Gán Bếp Nấu (Tra Cứu Realtime & Nhập Hàng Loạt)
+- **Bối cảnh & Yêu cầu người dùng**:
+  1. Người dùng cần thêm món ăn vào hệ thống KDS (màn hình bếp) và gán món vào quầy bếp mong muốn trực tiếp từ giao diện Tác vụ 4 (Check / xử lý KDS) tại màn hình Phân Tích MongoDB Nhà Hàng (`/app/mongo-analysis`).
+  2. Các tính năng hỗ trợ:
+     - Chỉ định quầy bếp mục tiêu (`placeIds`) kèm thông tin trạm, tài khoản KDS, máy in, số món hiện có.
+     - Tự động đồng bộ hoặc tùy chọn Nhóm Bếp KDS (`groupTypeKds`: Thịt, Rau, Bar, Nóng, Lạnh...).
+     - Cấu hình Thời gian chế biến (`singleCookingTime` giây/phút) với các nút chọn nhanh (0s, 5p, 10p, 15p, 20p).
+     - Tra cứu thời gian thực mã món từ `G_ORDER` (`DISH_CACHE`, `CO_MENU_ITEM`, `ORDER_MENU_CACHE_CATEGORY`), tự động điền Tên món, Mã SAP, Giá bán và cảnh báo nếu món đã tồn tại trong KDS ở quầy khác.
+     - Hỗ trợ 2 chế độ: **Thêm 1 Món (Tra Cứu Nhanh)** và **Nhập Hàng Loạt (Batch Paste)** dán danh sách mã món để phân tích và thêm đồng loạt.
+- **Kiến trúc Database & API Backend**:
+  1. Cơ chế Sequence tự tăng: MongoDB `G_KITCHEN.COUNTERS` với `_id: "CONFIG_COOKING_SEQ"` tự động tăng `seq` khi thêm món mới vào `G_KITCHEN.CONFIG_COOKING`. Cập nhật tại chỗ nếu món đã có trong KDS.
+  2. API tra cứu: `GET /api/v1/mongodb/kds-dishes/lookup`.
+  3. API thêm món: `POST /api/v1/mongodb/kds-dishes/add` (ghi nhận AuditLog `ADD_DISH_TO_KDS`).
+- **Giao diện Frontend**:
+  1. Component `KdsAddDishModal` (`frontend/src/pages/app/KdsQuayModals.tsx`).
+  2. Nút bấm `+ Thêm Món Vào KDS` (màu xanh ngọc `#059669`) trên Toolbar Tác vụ 4 KDS.
+  3. Thẻ chức năng `+ Thêm Món Vào Bếp KDS` trong popup `⚙️ Các Tính Năng KDS`.
+- **Kiểm thử & Đóng gói**:
+  - Frontend `npm run build` đạt exit code 0 (`dist/` kèm `web.config` IIS).
+  - Backend compileall 100% sạch lỗi, Smoke test `PASSED 100%`.

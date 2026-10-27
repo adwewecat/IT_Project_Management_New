@@ -74,7 +74,8 @@ import {
   KdsTransferQuayModal,
   KdsLogsModal,
   KdsEditDishGroupModal,
-  KdsDeleteCookingConfigModal
+  KdsDeleteCookingConfigModal,
+  KdsAddDishModal
 } from './KdsQuayModals';
 import { KdsKitchenIntakeModal } from './KdsKitchenIntakeModal';
 import { BatchRoleUserModal } from './BatchRoleUserModal';
@@ -1499,6 +1500,9 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
   // Modal: Gỡ bỏ món khỏi KDS (CONFIG_COOKING) cho Vé Buffet / Đồ uống đóng chai
   const [showDeleteDishConfigModal, setShowDeleteDishConfigModal] = useState<boolean>(false);
   const [dishesToDeleteConfig, setDishesToDeleteConfig] = useState<KdsItemDish[]>([]);
+
+  // Modal: Thêm món vào KDS (CONFIG_COOKING) & gán quầy bếp
+  const [showAddDishToKdsModal, setShowAddDishToKdsModal] = useState<boolean>(false);
 
   // Đang chạy đồng nhất nhóm bếp
   const [isSyncingKdsGroups, setIsSyncingKdsGroups] = useState<boolean>(false);
@@ -4988,6 +4992,23 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  {/* Nút Thêm Món Vào KDS: Thêm món mới vào bếp, gán quầy và thời gian chế biến */}
+                  <Button
+                    size="sm"
+                    style={{
+                      backgroundColor: '#059669',
+                      color: '#fff',
+                      borderColor: '#047857',
+                      fontWeight: 700,
+                      boxShadow: '0 1px 2px rgba(5, 150, 105, 0.2)'
+                    }}
+                    onClick={() => setShowAddDishToKdsModal(true)}
+                    leftIcon={<PlusCircle size={14} />}
+                    title="Thêm món ăn vào hệ thống KDS (gán quầy bếp & thời gian chế biến)"
+                  >
+                    + Thêm Món Vào KDS
+                  </Button>
+
                   {/* Nút Các tính năng: Mở popup chứa toàn bộ các tác vụ cấu hình KDS */}
                   <Button
                     size="sm"
@@ -8015,6 +8036,62 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
               gap: '12px'
             }}
           >
+            {/* 0. Thêm món vào bếp KDS */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowKdsFeaturesModal(false);
+                setShowAddDishToKdsModal(true);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                padding: '14px',
+                borderRadius: '10px',
+                border: '1.5px solid #10B981',
+                backgroundColor: '#ECFDF5',
+                textAlign: 'left',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.2)';
+                e.currentTarget.style.borderColor = '#059669';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)';
+                e.currentTarget.style.borderColor = '#10B981';
+              }}
+            >
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '8px',
+                  backgroundColor: '#059669',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <PlusCircle size={20} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '13px', color: '#065F46', marginBottom: '3px' }}>
+                  + Thêm Món Vào Bếp KDS
+                </div>
+                <div style={{ fontSize: '11px', color: '#047857', lineHeight: '1.4' }}>
+                  Tra cứu món từ GPOS/Menu để thêm vào KDS, chỉ định bếp nấu, nhóm bếp và thời gian chế biến. Hỗ trợ nhập hàng loạt.
+                </div>
+              </div>
+            </button>
+
             {/* 1. Thêm quầy và account */}
             <button
               type="button"
@@ -8795,6 +8872,30 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
             fetchKdsPlaces(hostToUse);
           }
           setSelectedKdsDishCodes([]);
+        }}
+        showToast={showToast}
+      />
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* MODAL: THÊM MÓN VÀO KDS & GÁN QUẦY BẾP                        */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      <KdsAddDishModal
+        isOpen={showAddDishToKdsModal}
+        onClose={() => setShowAddDishToKdsModal(false)}
+        host={connectedHost || searchParams.get('host') || selectedRestaurant?.ip || ''}
+        port={27017}
+        places={kdsPlaces}
+        initialPlaceId={
+          kdsQuayFilter !== 'ALL'
+            ? (kdsPlaces.find(p => p.name === kdsQuayFilter || (p.account_names && p.account_names.includes(kdsQuayFilter)))?.id ?? null)
+            : null
+        }
+        onSuccess={() => {
+          const hostToUse = connectedHost || searchParams.get('host') || selectedRestaurant?.ip;
+          if (hostToUse) {
+            fetchKdsItems(hostToUse);
+            fetchKdsPlaces(hostToUse);
+          }
         }}
         showToast={showToast}
       />

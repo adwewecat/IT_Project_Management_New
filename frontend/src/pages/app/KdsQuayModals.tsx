@@ -21,7 +21,8 @@ import {
   ArrowRightLeft,
   Layers,
   History,
-  Database
+  Database,
+  Sparkles
 } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
@@ -32,7 +33,9 @@ import {
   KdsItemDish,
   KdsLogItem,
   KdsDishHistoryResponse,
-  KdsItemsResponse
+  KdsItemsResponse,
+  KdsDishLookupResponse,
+  KdsAddDishItem
 } from '../../services/mongoService';
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -4886,7 +4889,731 @@ export function KdsKitchenAccountsModal({
       </div>
     </Modal>
   );
+};
+
+// ══════════════════════════════════════════════════════════════════════════
+// 10. MODAL THÊM MÓN VÀO BẾP KDS (CONFIG_COOKING)
+// ══════════════════════════════════════════════════════════════════════════
+export interface KdsAddDishModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  host: string;
+  port?: number;
+  places: KdsPlaceItem[];
+  initialPlaceId?: number | null;
+  onSuccess: () => void;
+  showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
+
+export const KdsAddDishModal: React.FC<KdsAddDishModalProps> = ({
+  isOpen,
+  onClose,
+  host,
+  port = 27017,
+  places,
+  initialPlaceId,
+  onSuccess,
+  showToast
+}) => {
+  const [targetPlaceId, setTargetPlaceId] = useState<number | null>(null);
+  const [groupTypeKds, setGroupTypeKds] = useState<string>('');
+  const [cookMins, setCookMins] = useState<number>(10);
+  const [activeTab, setActiveTab] = useState<'SINGLE' | 'BATCH'>('SINGLE');
+
+  // Single mode state
+  const [dishCode, setDishCode] = useState<string>('');
+  const [dishName, setDishName] = useState<string>('');
+  const [sapCode, setSapCode] = useState<string>('');
+  const [lookingUp, setLookingUp] = useState<boolean>(false);
+  const [lookupResult, setLookupResult] = useState<KdsDishLookupResponse | null>(null);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+
+  // Batch mode state
+  const [batchText, setBatchText] = useState<string>('');
+  const [batchAnalyzing, setBatchAnalyzing] = useState<boolean>(false);
+  const [batchDishes, setBatchDishes] = useState<Array<{
+    code: string;
+    name: string;
+    sap: string;
+    price: number;
+    in_kds: boolean;
+    current_place: string;
+    valid: boolean;
+  }>>([]);
+
+  const [submitting, setSubmitting] = useState<boolean>(false);
+
+  // Helper chuyển đổi tiếng Việt không dấu thành mã nhóm KDS
+  const toGroupCode = (name: string): string => {
+    return (name || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[đĐ]/g, (m) => (m === 'đ' ? 'd' : 'D'))
+      .trim()
+      .replace(/\s+/g, '_')
+      .replace(/[^a-zA-Z0-9_]/g, '');
+  };
+
+  // Khởi tạo quầy đích và nhóm bếp
+  useEffect(() => {
+    if (!isOpen) return;
+    const defaultId = initialPlaceId && places.some((p) => p.id === initialPlaceId)
+      ? initialPlaceId
+      : places.length > 0 ? places[0].id : null;
+    setTargetPlaceId(defaultId);
+
+    if (defaultId) {
+      const pl = places.find((p) => p.id === defaultId);
+      if (pl && pl.name) {
+        setGroupTypeKds(toGroupCode(pl.name));
+      }
+    }
+    setCookMins(10);
+    setDishCode('');
+    setDishName('');
+    setSapCode('');
+    setLookupResult(null);
+    setLookupError(null);
+    setBatchText('');
+    setBatchDishes([]);
+  }, [isOpen, initialPlaceId, places]);
+
+  // Khi người dùng chọn quầy đích khác, tự động gợi ý Nhóm bếp KDS tương ứng
+  const handleSelectPlace = (placeId: number) => {
+    setTargetPlaceId(placeId);
+    const pl = places.find((p) => p.id === placeId);
+    if (pl && pl.name) {
+      setGroupTypeKds(toGroupCode(pl.name));
+    }
+  };
+
+  // Tra cứu thông tin món ăn từ G_ORDER & CONFIG_COOKING
+  const handleLookup = async (codeToLookup?: string) => {
+    const code = (codeToLookup !== undefined ? codeToLookup : dishCode).trim();
+    if (!code) {
+      setLookupResult(null);
+      setLookupError(null);
+      return;
+    }
+    setLookingUp(true);
+    setLookupError(null);
+    try {
+      const res = await mongoService.lookupDishForKds(host, code, port);
+      setLookupResult(res);
+      if (res.found) {
+        if (res.name) setDishName(res.name);
+        if (res.sap_code) setSapCode(res.sap_code);
+      } else {
+        setLookupError('Không tìm thấy thông tin món với mã này trong GPOS. Bạn có thể tự điền tên món.');
+      }
+    } catch (err: any) {
+      setLookupError('Lỗi tra cứu: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setLookingUp(false);
+    }
+  };
+
+  // Phân tích danh sách mã món hàng loạt
+  const handleAnalyzeBatch = async () => {
+    const tokens = Array.from(
+      new Set(
+        batchText
+          .split(/[\s,;\n\r]+/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+      )
+    );
+    if (tokens.length === 0) {
+      showToast('Vui lòng dán danh sách mã món ăn cần kiểm tra!', 'error');
+      return;
+    }
+
+    setBatchAnalyzing(true);
+    try {
+      const results = await Promise.all(
+        tokens.map(async (code) => {
+          try {
+            const res = await mongoService.lookupDishForKds(host, code, port);
+            return {
+              code,
+              name: res.name || `Món ${code}`,
+              sap: res.sap_code || '',
+              price: res.price || 0,
+              in_kds: res.in_kds,
+              current_place: res.kds_place_names.join(', ') || 'Chưa có',
+              valid: true
+            };
+          } catch {
+            return {
+              code,
+              name: `Món ${code}`,
+              sap: '',
+              price: 0,
+              in_kds: false,
+              current_place: 'Chưa có',
+              valid: true
+            };
+          }
+        })
+      );
+      setBatchDishes(results);
+    } catch (err: any) {
+      showToast('Lỗi phân tích mã hàng loạt: ' + (err.message || 'Không xác định'), 'error');
+    } finally {
+      setBatchAnalyzing(false);
+    }
+  };
+
+  // Thực thi thêm món vào KDS
+  const handleSave = async () => {
+    if (!targetPlaceId) {
+      showToast('Vui lòng chọn quầy bếp cần thêm món vào!', 'error');
+      return;
+    }
+
+    const cookingTimeSecs = Math.max(0, (cookMins || 0) * 60);
+
+    let itemsToAdd: KdsAddDishItem[] = [];
+
+    if (activeTab === 'SINGLE') {
+      const code = dishCode.trim();
+      if (!code) {
+        showToast('Vui lòng nhập Mã Món / Mã RK7!', 'error');
+        return;
+      }
+      itemsToAdd = [
+        {
+          menu_item_code: code,
+          menu_item_name: dishName.trim() || (lookupResult?.name || `Món ${code}`),
+          place_ids: [targetPlaceId],
+          single_cooking_time: cookingTimeSecs,
+          group_type_kds: groupTypeKds.trim() || 'ALL',
+          sap_code: sapCode.trim() || (lookupResult?.sap_code || '')
+        }
+      ];
+    } else {
+      if (batchDishes.length === 0) {
+        showToast('Vui lòng nhấn "Phân Tích & Đối Soát" danh sách mã trước khi lưu!', 'error');
+        return;
+      }
+      itemsToAdd = batchDishes.map((b) => ({
+        menu_item_code: b.code,
+        menu_item_name: b.name,
+        place_ids: [targetPlaceId],
+        single_cooking_time: cookingTimeSecs,
+        group_type_kds: groupTypeKds.trim() || 'ALL',
+        sap_code: b.sap
+      }));
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await mongoService.addDishesToKds({
+        host,
+        port,
+        dishes: itemsToAdd,
+        overwrite_if_exists: true
+      });
+      showToast(res.message, 'success');
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      showToast('Lỗi khi thêm món vào KDS: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const selectedPlace = places.find((p) => p.id === targetPlaceId);
+  const commonGroupSuggestions = ['Thit', 'Rau', 'Nong', 'Bar', 'Nuong', 'Khai_Vi', 'Nuoc', 'Trang_Mieng', 'Lau'];
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="➕ Thêm Món Vào Bếp KDS (CONFIG_COOKING)"
+      maxWidth="780px"
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <div style={{ fontSize: '12px', color: '#64748B' }}>
+            {selectedPlace ? (
+              <span>
+                Đang gán vào quầy: <strong style={{ color: '#047857' }}>{selectedPlace.name}</strong> (Mã #{selectedPlace.id})
+              </span>
+            ) : (
+              <span style={{ color: '#EF4444' }}>⚠️ Chưa chọn quầy bếp đích</span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Button variant="secondary" size="sm" onClick={onClose} disabled={submitting}>
+              Hủy
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSave}
+              disabled={submitting || !targetPlaceId || (activeTab === 'SINGLE' && !dishCode.trim()) || (activeTab === 'BATCH' && batchDishes.length === 0)}
+              style={{
+                backgroundColor: '#059669',
+                borderColor: '#047857',
+                color: '#fff',
+                fontWeight: 700,
+                boxShadow: '0 1px 2px rgba(5, 150, 105, 0.2)'
+              }}
+              leftIcon={submitting ? <RefreshCw size={14} className="animate-spin" /> : <PlusCircle size={14} />}
+            >
+              {submitting ? 'Đang Lưu...' : '+ Lưu Món Vào Bếp KDS'}
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* KHỐI 1: CHỌN QUẦY BẾP ĐÍCH & THỜI GIAN NẤU */}
+        <div
+          style={{
+            backgroundColor: '#F8FAFC',
+            border: '1px solid #E2E8F0',
+            borderRadius: '10px',
+            padding: '14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          }}
+        >
+          {/* Chọn Quầy Bếp */}
+          <div>
+            <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+              🎯 1. Chọn Quầy Bếp Đích (Nấu tại bếp nào): <span style={{ color: '#EF4444' }}>*</span>
+            </label>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {places.map((p) => {
+                const isSelected = p.id === targetPlaceId;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => handleSelectPlace(p.id)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      border: isSelected ? '2px solid #059669' : '1px solid #CBD5E1',
+                      backgroundColor: isSelected ? '#ECFDF5' : '#FFFFFF',
+                      color: isSelected ? '#065F46' : '#334155',
+                      fontWeight: isSelected ? 800 : 600,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: isSelected ? '0 1px 3px rgba(5, 150, 105, 0.2)' : 'none',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <span>{isSelected ? '✓ ' : ''}{p.name}</span>
+                    <span style={{ fontSize: '10px', color: isSelected ? '#047857' : '#94A3B8' }}>
+                      (#{p.id})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {selectedPlace && (
+              <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748B', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <span>Tài khoản trạm: <strong>{selectedPlace.account_names?.join(', ') || 'Chưa gán account'}</strong></span>
+                <span>• Máy in: <strong>{selectedPlace.printer || 'Chưa gán máy in'}</strong></span>
+                <span>• Số món đang có: <strong>{selectedPlace.dish_count || 0} món</strong></span>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+            {/* Nhóm Bếp KDS (groupTypeKds) */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                🏷️ Nhóm Bếp KDS (groupTypeKds):
+              </label>
+              <input
+                type="text"
+                value={groupTypeKds}
+                onChange={(e) => setGroupTypeKds(e.target.value)}
+                placeholder="VD: Thit, Rau, Nong, Bar..."
+                style={{
+                  width: '100%',
+                  padding: '7px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid #CBD5E1',
+                  fontSize: '12.5px',
+                  boxSizing: 'border-box'
+                }}
+              />
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '6px' }}>
+                {commonGroupSuggestions.map((sug) => (
+                  <button
+                    key={sug}
+                    type="button"
+                    onClick={() => setGroupTypeKds(sug)}
+                    style={{
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      border: '1px solid #E2E8F0',
+                      backgroundColor: groupTypeKds === sug ? '#DBEAFE' : '#F1F5F9',
+                      color: groupTypeKds === sug ? '#1E40AF' : '#475569',
+                      fontSize: '10.5px',
+                      cursor: 'pointer',
+                      fontWeight: groupTypeKds === sug ? 700 : 500
+                    }}
+                  >
+                    {sug}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Thời gian nấu KDS */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                ⏱️ Thời Gian Chế Biến Chuẩn:
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="number"
+                  min="0"
+                  max="120"
+                  value={cookMins}
+                  onChange={(e) => setCookMins(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                  style={{
+                    width: '80px',
+                    padding: '7px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    textAlign: 'center'
+                  }}
+                />
+                <span style={{ fontSize: '12px', color: '#475569', fontWeight: 600 }}>phút ({cookMins * 60}s)</span>
+              </div>
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '6px' }}>
+                {[0, 5, 10, 15, 20].map((mins) => (
+                  <button
+                    key={mins}
+                    type="button"
+                    onClick={() => setCookMins(mins)}
+                    style={{
+                      padding: '2px 7px',
+                      borderRadius: '4px',
+                      border: '1px solid #E2E8F0',
+                      backgroundColor: cookMins === mins ? '#FEF3C7' : '#F1F5F9',
+                      color: cookMins === mins ? '#92400E' : '#475569',
+                      fontSize: '10.5px',
+                      cursor: 'pointer',
+                      fontWeight: cookMins === mins ? 700 : 500
+                    }}
+                  >
+                    {mins === 0 ? '0s' : `${mins}p`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* TABS CHỌN CHẾ ĐỘ THÊM */}
+        <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', gap: '4px' }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('SINGLE')}
+            style={{
+              padding: '8px 16px',
+              fontSize: '13px',
+              fontWeight: activeTab === 'SINGLE' ? 800 : 600,
+              color: activeTab === 'SINGLE' ? '#059669' : '#64748B',
+              borderBottom: activeTab === 'SINGLE' ? '2.5px solid #059669' : '2.5px solid transparent',
+              backgroundColor: 'transparent',
+              borderTop: 'none',
+              borderLeft: 'none',
+              borderRight: 'none',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Sparkles size={14} />
+            Thêm Từng Món (Tra Cứu Nhanh)
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('BATCH')}
+            style={{
+              padding: '8px 16px',
+              fontSize: '13px',
+              fontWeight: activeTab === 'BATCH' ? 800 : 600,
+              color: activeTab === 'BATCH' ? '#059669' : '#64748B',
+              borderBottom: activeTab === 'BATCH' ? '2.5px solid #059669' : '2.5px solid transparent',
+              backgroundColor: 'transparent',
+              borderTop: 'none',
+              borderLeft: 'none',
+              borderRight: 'none',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Layers size={14} />
+            Thêm Hàng Loạt (Dán Nhiều Mã)
+          </button>
+        </div>
+
+        {/* TAB 1: THÊM TỪNG MÓN */}
+        {activeTab === 'SINGLE' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Nhập mã món */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+                🔍 Mã Món / Mã RK7: <span style={{ color: '#EF4444' }}>*</span>
+              </label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  value={dishCode}
+                  onChange={(e) => {
+                    setDishCode(e.target.value);
+                    if (lookupResult) setLookupResult(null);
+                    if (lookupError) setLookupError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleLookup();
+                    }
+                  }}
+                  placeholder="Gõ mã món (VD: 1467, 11259, 2041, 26890...)"
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1.5px solid #94A3B8',
+                    fontSize: '13px',
+                    fontFamily: 'Consolas, monospace',
+                    fontWeight: 700
+                  }}
+                />
+                <Button
+                  size="sm"
+                  onClick={() => handleLookup()}
+                  disabled={lookingUp || !dishCode.trim()}
+                  leftIcon={lookingUp ? <RefreshCw size={13} className="animate-spin" /> : <Search size={13} />}
+                  style={{ minWidth: '100px' }}
+                >
+                  {lookingUp ? 'Đang tìm...' : 'Tra Cứu'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Banner kết quả tra cứu */}
+            {lookupResult && (
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  backgroundColor: lookupResult.in_kds ? '#FFFBEB' : '#F0FDF4',
+                  border: lookupResult.in_kds ? '1.5px solid #FCD34D' : '1.5px solid #86EFAC',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {lookupResult.in_kds ? (
+                    <AlertTriangle size={18} color="#D97706" style={{ flexShrink: 0 }} />
+                  ) : (
+                    <CheckCircle2 size={18} color="#059669" style={{ flexShrink: 0 }} />
+                  )}
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: lookupResult.in_kds ? '#92400E' : '#065F46' }}>
+                    {lookupResult.in_kds
+                      ? `⚠️ Món đã có trong KDS tại quầy [${lookupResult.kds_place_names.join(', ')}]`
+                      : '✓ Món mới hợp lệ từ thực đơn GPOS'}
+                  </span>
+                </div>
+
+                <div style={{ fontSize: '12px', color: '#334155', lineHeight: 1.5, marginLeft: '26px' }}>
+                  {lookupResult.in_kds ? (
+                    <div>
+                      Món <strong>{lookupResult.name}</strong> hiện đang được nấu tại quầy <strong>{lookupResult.kds_place_names.join(', ')}</strong> (Nhóm: {lookupResult.kds_group_type || 'ALL'}, TG: {lookupResult.kds_cooking_time_str}).
+                      <div style={{ marginTop: '3px', color: '#B45309', fontWeight: 600 }}>
+                        👉 Nhấn nút <strong>"+ Lưu Món Vào Bếp KDS"</strong> bên dưới sẽ chuyển quầy sang <strong>{selectedPlace?.name}</strong>.
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      Tên món: <strong>{lookupResult.name || 'Chưa rõ tên'}</strong> • Mã SAP: <strong>{lookupResult.sap_code || '—'}</strong> • Giá: <strong>{lookupResult.price ? `${lookupResult.price.toLocaleString('vi-VN')} đ` : '0 đ'}</strong>
+                      {lookupResult.menu_name && <span> • Thuộc: {lookupResult.menu_name} ({lookupResult.group_name})</span>}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {lookupError && (
+              <div
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '6px',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  color: '#B91C1C',
+                  fontSize: '12px'
+                }}
+              >
+                {lookupError}
+              </div>
+            )}
+
+            {/* Chi tiết tên món & SAP */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                  Tên Món Ăn Hiển Thị: <span style={{ color: '#EF4444' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={dishName}
+                  onChange={(e) => setDishName(e.target.value)}
+                  placeholder="Tên món ăn (sẽ hiện trên KDS)"
+                  style={{
+                    width: '100%',
+                    padding: '7px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '12.5px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                  Mã SAP (Nếu có):
+                </label>
+                <input
+                  type="text"
+                  value={sapCode}
+                  onChange={(e) => setSapCode(e.target.value)}
+                  placeholder="VD: 60003025"
+                  style={{
+                    width: '100%',
+                    padding: '7px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '12.5px',
+                    fontFamily: 'Consolas, monospace',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: THÊM HÀNG LOẠT */}
+        {activeTab === 'BATCH' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+                📋 Dán danh sách mã món ăn (ngăn cách bằng dấu phẩy, khoảng trắng hoặc xuống dòng):
+              </label>
+              <textarea
+                rows={4}
+                value={batchText}
+                onChange={(e) => setBatchText(e.target.value)}
+                placeholder="Ví dụ:&#10;1467, 11259, 2041&#10;26890&#10;32194"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1.5px solid #CBD5E1',
+                  fontSize: '12.5px',
+                  fontFamily: 'Consolas, monospace',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+              <Button
+                size="sm"
+                onClick={handleAnalyzeBatch}
+                disabled={batchAnalyzing || !batchText.trim()}
+                leftIcon={batchAnalyzing ? <RefreshCw size={13} className="animate-spin" /> : <Search size={13} />}
+                style={{
+                  backgroundColor: '#2563EB',
+                  borderColor: '#1D4ED8',
+                  color: '#fff',
+                  fontWeight: 700
+                }}
+              >
+                {batchAnalyzing ? 'Đang phân tích...' : '🔍 Phân Tích & Đối Soát Mã'}
+              </Button>
+            </div>
+
+            {/* Bảng preview kết quả đối soát */}
+            {batchDishes.length > 0 && (
+              <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', overflow: 'hidden' }}>
+                <div style={{ padding: '8px 12px', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                  Danh sách {batchDishes.length} món sẽ được thêm vào quầy [{selectedPlace?.name}]:
+                </div>
+                <div style={{ maxHeight: '220px', overflowY: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#F1F5F9', borderBottom: '1px solid #CBD5E1', color: '#475569', textAlign: 'left' }}>
+                        <th style={{ padding: '6px 10px', width: '40px' }}>STT</th>
+                        <th style={{ padding: '6px 10px', width: '90px' }}>Mã Món</th>
+                        <th style={{ padding: '6px 10px' }}>Tên Món Ăn</th>
+                        <th style={{ padding: '6px 10px', width: '90px' }}>Mã SAP</th>
+                        <th style={{ padding: '6px 10px', width: '130px' }}>Trạng Thái KDS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {batchDishes.map((b, idx) => (
+                        <tr key={b.code} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                          <td style={{ padding: '6px 10px', color: '#94A3B8' }}>{idx + 1}</td>
+                          <td style={{ padding: '6px 10px', fontFamily: 'Consolas, monospace', fontWeight: 700, color: '#0F172A' }}>
+                            {b.code}
+                          </td>
+                          <td style={{ padding: '6px 10px', fontWeight: 600, color: '#1E293B' }}>{b.name}</td>
+                          <td style={{ padding: '6px 10px', fontFamily: 'Consolas, monospace', color: '#64748B' }}>
+                            {b.sap || '—'}
+                          </td>
+                          <td style={{ padding: '6px 10px' }}>
+                            {b.in_kds ? (
+                              <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#B45309', backgroundColor: '#FEF3C7', padding: '1px 6px', borderRadius: '4px' }}>
+                                Đang ở: {b.current_place}
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#047857', backgroundColor: '#D1FAE5', padding: '1px 6px', borderRadius: '4px' }}>
+                                ✓ Món mới
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+};
 
 
 
