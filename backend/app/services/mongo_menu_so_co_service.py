@@ -1,6 +1,5 @@
-from __future__ import annotations
-
 import os
+import re
 import json
 import logging
 import time
@@ -30,10 +29,10 @@ def get_mongo_client(host: str, port: int = 27017, timeout_ms: int = 3500) -> Mo
     return MongoClient(host, port, serverSelectionTimeoutMS=timeout_ms, socketTimeoutMS=12000)
 
 
-def _flatten_group_items(g: Dict[str, Any]) -> List[Tuple[Dict[str, Any], str, str, int, int]]:
+def _flatten_group_items(g: Dict[str, Any]) -> List[Tuple[Dict[str, Any], str, str, int, int, str]]:
     """
     Duyệt danh sách món trong group, hỗ trợ cấu trúc lồng nhau (Sub-groups đồ uống level: 0).
-    Trả về danh sách tuple: (dish_it, group_code, group_name, level, sort_order).
+    Trả về danh sách tuple: (dish_it, group_code, group_name, level, sort_order, parent_group_code).
     Bỏ qua hoàn toàn các món bị null/trống mã RK7 và trống tên để tránh lỗi bảng rỗng.
     """
     g_code = str(g.get("code", "")).strip()
@@ -45,7 +44,7 @@ def _flatten_group_items(g: Dict[str, Any]) -> List[Tuple[Dict[str, Any], str, s
     for idx, it in enumerate(dish_list):
         mi = it.get("menu-item")
         if mi and (str(mi.get("code", "")).strip() or str(mi.get("name", "")).strip()):
-            result.append((it, g_code, g_name, g_level, int(it.get("priority", 0) or (idx + 1))))
+            result.append((it, g_code, g_name, g_level, int(it.get("priority", 0) or (idx + 1)), g_code))
         elif it.get("items"):
             # Sub-group lồng nhau (phổ biến ở Đồ Uống level 0)
             sub_code = str(it.get("code", "")).strip() or g_code
@@ -55,7 +54,7 @@ def _flatten_group_items(g: Dict[str, Any]) -> List[Tuple[Dict[str, Any], str, s
             for sub_idx, sub_it in enumerate(it.get("items", [])):
                 sub_mi = sub_it.get("menu-item")
                 if sub_mi and (str(sub_mi.get("code", "")).strip() or str(sub_mi.get("name", "")).strip()):
-                    result.append((sub_it, sub_code, display_group_name, sub_level, int(sub_it.get("priority", 0) or (sub_idx + 1))))
+                    result.append((sub_it, sub_code, display_group_name, sub_level, int(sub_it.get("priority", 0) or (sub_idx + 1)), g_code))
         else:
             # Item trống rỗng không có menu-item và không có sub-items -> bỏ qua, không để bị null trên bảng
             continue
@@ -63,16 +62,81 @@ def _flatten_group_items(g: Dict[str, Any]) -> List[Tuple[Dict[str, Any], str, s
     return result
 
 
+def _build_menu_name_map(db) -> Dict[str, str]:
+    """
+    Xác định tên chuẩn của các Menu (ví dụ: 'Alacarte' thay vì 'Main menu').
+    Ưu tiên:
+    1. CO_ORDER_CATEGORY (nameVn hoặc nameEn) -> Tên hiển thị chuẩn trên tablet khách hàng CO.
+    2. ORDER_CATEGORY (name loại bỏ ngoặc mã SAP, ví dụ 'Alacarte (AFHCM_oc_ALC)' -> 'Alacarte').
+    3. RESTAURANT_CATEGORY (name nếu có và không phải 'Main menu').
+    Tuyệt đối KHÔNG gán 'Main menu' nếu tìm thấy tên kinh doanh chuẩn.
+    """
+    name_map: Dict[str, str] = {}
+
+    # 1. Quét ORDER_CATEGORY
+    try:
+        for oc in db["ORDER_CATEGORY"].find():
+            code = str(oc.get("code") or "").strip()
+            raw_name = str(oc.get("name") or "").strip()
+            if code and raw_name and raw_name.lower() != "main menu":
+                clean_name = re.sub(r"\s*\(.*?\)$", "", raw_name).strip()
+                name_map[code] = clean_name or raw_name
+    except Exception:
+        pass
+
+    # 2. Quét RESTAURANT_CATEGORY
+    try:
+        for rc in db["RESTAURANT_CATEGORY"].find():
+            code = str(rc.get("code") or "").strip()
+            raw_name = str(rc.get("name") or "").strip()
+            if code and raw_name and raw_name.lower() != "main menu":
+                clean_name = re.sub(r"\s*\(.*?\)$", "", raw_name).strip()
+                if clean_name:
+                    name_map[code] = clean_name
+    except Exception:
+        pass
+
+    # 3. Quét CO_ORDER_CATEGORY (Ưu tiên cao nhất vì đây là tên khách nhìn thấy trên tablet)
+    try:
+        for co in db["CO_ORDER_CATEGORY"].find():
+            code = str(co.get("code") or "").strip()
+            name_vn = str(co.get("nameVn") or "").strip()
+            name_en = str(co.get("nameEn") or "").strip()
+            best = name_vn or name_en
+            if code and best and best.lower() != "main menu":
+                clean_best = re.sub(r"\s*\(.*?\)$", "", best).strip()
+                name_map[code] = clean_best or best
+    except Exception:
+        pass
+
+    return name_map
+
+
 def get_menu_categories(host: str, port: int = 27017) -> List[Dict[str, Any]]:
     """
-    Lấy danh sách các Menu trong nhà hàng từ RESTAURANT_CATEGORY
-    kèm số lượng nhóm món và số lượng món ăn trong từng menu từ ORDER_MENU_CACHE_CATEGORY.
+    Lấy danh sách các Menu trong nhà hàng kèm số lượng nhóm món và số lượng món ăn trong từng menu từ ORDER_MENU_CACHE_CATEGORY.
+    Phân loại rõ từng nhóm món:
+    - is_co: True nếu nhóm nằm trong CO_ORDER_CATEGORY.menuGroupCodes (Khách thấy trên tablet CO).
+    - is_co: False nếu nhóm chỉ có trên POS/SO (Chưa đưa lên CO).
     """
     client = get_mongo_client(host, port)
     try:
         db = client["G_ORDER"]
         rc_cursor = db["RESTAURANT_CATEGORY"].find().sort("id", 1)
         results = []
+
+        # Bản đồ tên Menu chuẩn (ưu tiên Alacarte thay vì Main menu)
+        menu_name_map = _build_menu_name_map(db)
+
+        # Lấy danh sách nhóm CO theo từng mã Menu từ CO_ORDER_CATEGORY
+        co_group_codes_map: Dict[str, Set[str]] = {}
+        try:
+            for co in db["CO_ORDER_CATEGORY"].find({}, {"code": 1, "menuGroupCodes": 1}):
+                c = str(co.get("code") or "").strip()
+                if c:
+                    co_group_codes_map[c] = {str(g).strip() for g in co.get("menuGroupCodes", []) if str(g).strip()}
+        except Exception as e:
+            logger.warning("Lỗi đọc CO_ORDER_CATEGORY.menuGroupCodes: %s", e)
 
         # Đọc trước tất cả documents trong ORDER_MENU_CACHE_CATEGORY để tính tổng nhóm, món và trích xuất danh sách nhóm
         cache_map = {}
@@ -83,6 +147,8 @@ def get_menu_categories(host: str, port: int = 27017) -> List[Dict[str, Any]]:
                 total_dishes = 0
                 menu_groups = []
                 seen_g_codes = set()
+                co_codes = co_group_codes_map.get(cc, set())
+
                 for g in raw_groups:
                     flattened = _flatten_group_items(g)
                     total_dishes += len(flattened)
@@ -91,12 +157,16 @@ def get_menu_categories(host: str, port: int = 27017) -> List[Dict[str, Any]]:
                     g_level = int(g.get("level", -1))
 
                     sub_map = {}
-                    for it, it_g_code, it_g_name, it_g_lvl, _ in flattened:
+                    for it, it_g_code, it_g_name, it_g_lvl, _, p_code in flattened:
                         if it_g_code not in sub_map:
+                            is_grp_co = (it_g_code in co_codes) or (p_code in co_codes)
                             sub_map[it_g_code] = {
                                 "code": it_g_code,
                                 "name": it_g_name,
                                 "level": it_g_lvl,
+                                "parent_code": p_code,
+                                "is_co": is_grp_co,
+                                "channel": "CO" if is_grp_co else "SO_ONLY",
                                 "count": 0
                             }
                         sub_map[it_g_code]["count"] += 1
@@ -110,15 +180,24 @@ def get_menu_categories(host: str, port: int = 27017) -> List[Dict[str, Any]]:
                         fallback_code = g_code or f"{cc}_{len(menu_groups)+1}"
                         if fallback_code not in seen_g_codes:
                             seen_g_codes.add(fallback_code)
+                            is_fallback_co = (fallback_code in co_codes) or (g_code in co_codes)
                             menu_groups.append({
                                 "code": fallback_code,
                                 "name": g_name or f"Nhóm {len(menu_groups)+1}",
                                 "level": g_level,
+                                "parent_code": g_code,
+                                "is_co": is_fallback_co,
+                                "channel": "CO" if is_fallback_co else "SO_ONLY",
                                 "count": 0
                             })
 
+                co_group_count = sum(1 for g in menu_groups if g.get("is_co"))
+                so_only_group_count = len(menu_groups) - co_group_count
+
                 cache_map[cc] = {
                     "group_count": len(menu_groups),
+                    "co_group_count": co_group_count,
+                    "so_only_group_count": so_only_group_count,
                     "dish_count": total_dishes,
                     "groups": menu_groups
                 }
@@ -126,16 +205,20 @@ def get_menu_categories(host: str, port: int = 27017) -> List[Dict[str, Any]]:
         for rc in rc_cursor:
             code = str(rc.get("code", "")).strip()
             name = rc.get("name", "")
-            stats = cache_map.get(code, {"group_count": 0, "dish_count": 0, "groups": []})
+            # Lấy tên kinh doanh thực tế, bỏ qua nếu tên là "Main menu"
+            resolved_name = menu_name_map.get(code) or name
+            stats = cache_map.get(code, {"group_count": 0, "co_group_count": 0, "so_only_group_count": 0, "dish_count": 0, "groups": []})
             results.append({
                 "code": code,
                 "id": rc.get("id"),
-                "name": name,
+                "name": resolved_name,
                 "show_in_so": bool(rc.get("showInSo", False)),
                 "show_in_co": bool(rc.get("showInCo", False)),
                 "show_in_qr_order": bool(rc.get("showInQrOrder", False)),
                 "auto_delivery_in_so": bool(rc.get("autoDeliveryInSo", False)),
                 "group_count": stats["group_count"],
+                "co_group_count": stats.get("co_group_count", 0),
+                "so_only_group_count": stats.get("so_only_group_count", 0),
                 "dish_count": stats["dish_count"],
                 "groups": stats.get("groups", []),
             })
@@ -144,16 +227,19 @@ def get_menu_categories(host: str, port: int = 27017) -> List[Dict[str, Any]]:
         seen_codes = {r["code"] for r in results if r.get("code")}
         for cc, stats in cache_map.items():
             if cc and cc not in seen_codes:
-                # Tìm tên menu nếu có trong doc ORDER_MENU_CACHE_CATEGORY
-                doc_omc = db["ORDER_MENU_CACHE_CATEGORY"].find_one({"category-code": cc}, {"name": 1, "category-name": 1, "main-menu.name": 1})
-                menu_name = ""
-                if doc_omc:
-                    menu_name = (
-                        doc_omc.get("name")
-                        or doc_omc.get("category-name")
-                        or doc_omc.get("main-menu", {}).get("name")
-                        or ""
-                    )
+                # Tìm tên menu chuẩn: ưu tiên menu_name_map (Alacarte)
+                menu_name = menu_name_map.get(cc, "")
+                if not menu_name:
+                    doc_omc = db["ORDER_MENU_CACHE_CATEGORY"].find_one({"category-code": cc}, {"name": 1, "category-name": 1, "main-menu.name": 1})
+                    if doc_omc:
+                        candidate = (
+                            doc_omc.get("name")
+                            or doc_omc.get("category-name")
+                            or doc_omc.get("main-menu", {}).get("name")
+                            or ""
+                        )
+                        if candidate and candidate.lower() != "main menu":
+                            menu_name = candidate
                 if not menu_name:
                     menu_name = f"Menu {cc}"
 
@@ -166,6 +252,8 @@ def get_menu_categories(host: str, port: int = 27017) -> List[Dict[str, Any]]:
                     "show_in_qr_order": True,
                     "auto_delivery_in_so": False,
                     "group_count": stats["group_count"],
+                    "co_group_count": stats.get("co_group_count", 0),
+                    "so_only_group_count": stats.get("so_only_group_count", 0),
                     "dish_count": stats["dish_count"],
                     "groups": stats.get("groups", []),
                 })
@@ -219,12 +307,18 @@ def load_menu_items(
                     "kalo": kalo,
                 }
 
-        # 2. Tạo lookup tên menu từ RESTAURANT_CATEGORY
-        menu_name_map: Dict[str, str] = {}
-        for rc in db["RESTAURANT_CATEGORY"].find({}, {"code": 1, "name": 1}):
-            c = str(rc.get("code", "")).strip()
-            if c:
-                menu_name_map[c] = rc.get("name", "")
+        # 2. Tạo lookup tên menu chuẩn (Alacarte thay vì Main menu)
+        menu_name_map: Dict[str, str] = _build_menu_name_map(db)
+
+        # Lấy danh sách nhóm CO theo từng mã Menu từ CO_ORDER_CATEGORY
+        co_group_codes_map: Dict[str, Set[str]] = {}
+        try:
+            for co in db["CO_ORDER_CATEGORY"].find({}, {"code": 1, "menuGroupCodes": 1}):
+                c = str(co.get("code") or "").strip()
+                if c:
+                    co_group_codes_map[c] = {str(g).strip() for g in co.get("menuGroupCodes", []) if str(g).strip()}
+        except Exception as e:
+            logger.warning("Lỗi đọc CO_ORDER_CATEGORY trong load_menu_items: %s", e)
 
         # 3. Xác định danh sách category_codes cần quét
         target_codes: Set[str] = set()
@@ -254,9 +348,10 @@ def load_menu_items(
             menus_loaded.add(cat_code)
             menu_title = menu_name_map.get(cat_code, f"Menu {cat_code}")
             groups = omc.get("main-menu", {}).get("items", []) or []
+            co_codes = co_group_codes_map.get(cat_code, set())
 
             for g in groups:
-                for it, g_code, g_name, g_level, sort_order in _flatten_group_items(g):
+                for it, g_code, g_name, g_level, sort_order, parent_g_code in _flatten_group_items(g):
                     mi = it.get("menu-item", {}) or {}
                     rk7 = str(mi.get("code", "")).strip()
                     dish_name = mi.get("name", "")
@@ -291,6 +386,10 @@ def load_menu_items(
                         if not match_any_name:
                             continue
 
+                    # Phân loại nhóm CO vs SO-only
+                    is_group_co = (g_code in co_codes) or (parent_g_code in co_codes)
+                    group_channel = "CO" if is_group_co else "SO_ONLY"
+
                     # Đối chiếu CO
                     co_info = co_lookup.get(rk7)
                     is_co = co_info is not None
@@ -298,6 +397,11 @@ def load_menu_items(
                     raw_src_img = co_info.get("srcImg", "") if co_info else ""
                     raw_url_qr = co_info.get("urlImgQr", "") if co_info else ""
                     co_kalo = co_info.get("kalo", 100.0) if co_info else None
+
+                    # Xác định chi tiết trạng thái CO
+                    co_status_detail = "NOT_IN_CO"
+                    if is_co:
+                        co_status_detail = "ACTIVE_ON_CO" if is_group_co else "DISH_IN_CO_BUT_GROUP_NOT_IN_CO"
 
                     # Nếu không có sap trong cache nhưng CO có thì bổ sung
                     if not sap and co_info and co_info.get("sapCode"):
@@ -308,6 +412,9 @@ def load_menu_items(
                         "menu_name": f"{menu_title} - {cat_code}",
                         "group_code": g_code,
                         "group_name": g_name,
+                        "parent_group_code": parent_g_code,
+                        "group_is_co": is_group_co,
+                        "group_channel": group_channel,
                         "level": g_level,  # -1: Thường (Món ăn), 0: Đồ uống
                         "rk7_code": rk7,
                         "name": dish_name,
@@ -320,6 +427,7 @@ def load_menu_items(
                         "url_img_qr": raw_url_qr,
                         "is_so": True,
                         "is_co": is_co,
+                        "co_status_detail": co_status_detail,
                         "co_kalo": co_kalo,
                     })
 
@@ -350,12 +458,8 @@ def check_dish_conflicts(host: str, port: int = 27017, menu_codes: Optional[List
         if menu_codes:
             query_filter["category-code"] = {"$in": [str(c).strip() for c in menu_codes]}
 
-        # Map tên menu từ RESTAURANT_CATEGORY
-        menu_name_map: Dict[str, str] = {}
-        for rc in db["RESTAURANT_CATEGORY"].find({}, {"code": 1, "name": 1}):
-            c = str(rc.get("code", "")).strip()
-            if c:
-                menu_name_map[c] = rc.get("name", "")
+        # Map tên menu chuẩn (Alacarte thay vì Main menu)
+        menu_name_map: Dict[str, str] = _build_menu_name_map(db)
 
         rk7_map: Dict[str, Dict[str, Any]] = {}
         name_map: Dict[str, Dict[str, Any]] = {}
@@ -366,7 +470,7 @@ def check_dish_conflicts(host: str, port: int = 27017, menu_codes: Optional[List
             groups = omc.get("main-menu", {}).get("items", []) or []
 
             for g in groups:
-                for it, g_code, g_name, g_level, sort_order in _flatten_group_items(g):
+                for it, g_code, g_name, g_level, sort_order, _ in _flatten_group_items(g):
                     mi = it.get("menu-item", {}) or {}
                     rk7 = str(mi.get("code", "")).strip()
                     name = mi.get("name", "").strip()
@@ -1486,7 +1590,7 @@ def sync_all_so_co(
             db_kitchen = client["G_KITCHEN"]
             for omc in db_order["ORDER_MENU_CACHE_CATEGORY"].find():
                 for g in omc.get("main-menu", {}).get("items", []) or []:
-                    for it, _, _, _, _ in _flatten_group_items(g):
+                    for it, _, _, _, _, _ in _flatten_group_items(g):
                         mi = it.get("menu-item", {}) or {}
                         rk7 = str(mi.get("code", "")).strip()
                         name = mi.get("name", "").strip()
@@ -1961,7 +2065,7 @@ def lookup_dish_info(host: str, rk7_code: str, port: int = 27017) -> Dict[str, A
                 for omc in db_order["ORDER_MENU_CACHE_CATEGORY"].find():
                     groups = omc.get("main-menu", {}).get("items", []) or []
                     for g in groups:
-                        for it, _, _, _, _ in _flatten_group_items(g):
+                        for it, _, _, _, _, _ in _flatten_group_items(g):
                             mi = it.get("menu-item") or {}
                             if str(mi.get("code") or "").strip() == clean_code:
                                 if not dish_name:
@@ -2071,5 +2175,79 @@ def lookup_dish_info(host: str, rk7_code: str, port: int = 27017) -> Dict[str, A
         "source": None,
         "message": f"Không tìm thấy món với mã RK7 '{clean_code}' trong MID/GPOS và CSDL Master RK7"
     }
+
+
+def toggle_group_co(
+    host: str,
+    port: int = 27017,
+    menu_code: str = "",
+    group_code: str = "",
+    action: str = "ADD"
+) -> Dict[str, Any]:
+    """
+    Thêm hoặc gỡ mã nhóm món (group_code) vào trường menuGroupCodes của CO_ORDER_CATEGORY.
+    - action == 'ADD': Đưa nhóm lên CO ($addToSet) để khách thấy và đặt được trên tablet.
+    - action == 'REMOVE': Gỡ nhóm khỏi CO ($pull) để ẩn nhóm khỏi tablet.
+    """
+    client = get_mongo_client(host, port)
+    try:
+        db = client["G_ORDER"]
+        menu_code_clean = str(menu_code).strip()
+        group_code_clean = str(group_code).strip()
+        action_clean = str(action).strip().upper()
+
+        if not menu_code_clean or not group_code_clean:
+            return {
+                "success": False,
+                "message": "Thiếu mã menu hoặc mã nhóm món.",
+                "menu_code": menu_code_clean,
+                "group_code": group_code_clean,
+                "action": action_clean,
+                "menuGroupCodes": []
+            }
+
+        co_cat = db["CO_ORDER_CATEGORY"].find_one({"code": menu_code_clean})
+        if not co_cat and menu_code_clean.isdigit():
+            co_cat = db["CO_ORDER_CATEGORY"].find_one({"code": int(menu_code_clean)})
+
+        if not co_cat:
+            return {
+                "success": False,
+                "message": f"Không tìm thấy Menu '{menu_code_clean}' trong CO_ORDER_CATEGORY.",
+                "menu_code": menu_code_clean,
+                "group_code": group_code_clean,
+                "action": action_clean,
+                "menuGroupCodes": []
+            }
+
+        target_code_field = co_cat.get("code")
+
+        if action_clean == "ADD":
+            db["CO_ORDER_CATEGORY"].update_one(
+                {"code": target_code_field},
+                {"$addToSet": {"menuGroupCodes": group_code_clean}}
+            )
+            msg = f"Đã đưa nhóm món '{group_code_clean}' lên CO (Menu {menu_code_clean}) thành công!"
+        else:
+            db["CO_ORDER_CATEGORY"].update_one(
+                {"code": target_code_field},
+                {"$pull": {"menuGroupCodes": group_code_clean}}
+            )
+            msg = f"Đã gỡ nhóm món '{group_code_clean}' khỏi CO (Menu {menu_code_clean}) thành công!"
+
+        # Lấy lại danh sách mới nhất
+        updated_cat = db["CO_ORDER_CATEGORY"].find_one({"code": target_code_field})
+        current_groups = updated_cat.get("menuGroupCodes", []) if updated_cat else []
+
+        return {
+            "success": True,
+            "message": msg,
+            "menu_code": menu_code_clean,
+            "group_code": group_code_clean,
+            "action": action_clean,
+            "menuGroupCodes": [str(x) for x in current_groups]
+        }
+    finally:
+        client.close()
 
 

@@ -120,7 +120,9 @@ from app.schemas.mongodb import (
     DeployMenuSnapshotResponse,
     DirectSyncMenuRequest,
     DirectSyncMenuResponse,
-    DishLookupResponse
+    DishLookupResponse,
+    ToggleGroupCoRequest,
+    ToggleGroupCoResponse
 )
 from app.services.mongodb_service import (
     MongoDBService,
@@ -2009,6 +2011,40 @@ def deactivate_dishes_from_co(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Lỗi khi tắt kích hoạt món khỏi CO: {str(e)}"
+        )
+
+
+@router.post("/menu-so-co/toggle-group-co", response_model=ToggleGroupCoResponse)
+def toggle_menu_group_co(
+    payload: ToggleGroupCoRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """Đưa nhóm món lên CO hoặc gỡ nhóm món khỏi CO (menuGroupCodes trong CO_ORDER_CATEGORY)"""
+    try:
+        res = mongo_menu_so_co_service.toggle_group_co(
+            host=payload.host,
+            port=payload.port,
+            menu_code=payload.menu_code,
+            group_code=payload.group_code,
+            action=payload.action
+        )
+        if res.get("success"):
+            action_desc = "Đưa nhóm lên CO" if payload.action.upper() == "ADD" else "Gỡ nhóm khỏi CO"
+            LogService.record_log(
+                db=db,
+                nhom_quyen="APP",
+                man_hinh="GPOS_MENU_SO_CO",
+                hanh_dong="UPDATE",
+                noi_dung=f"{action_desc}: Nhóm '{payload.group_code}' (Menu {payload.menu_code}) trên {payload.host}",
+                user_thuchien=current_user.username,
+                current_user=current_user
+            )
+        return ToggleGroupCoResponse(**res)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi cập nhật nhóm CO: {str(e)}"
         )
 
 

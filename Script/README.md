@@ -5208,3 +5208,45 @@ estaurant_service.py).
 - **Kiểm thử & Đóng gói**:
   - Backend compileall sạch lỗi 100%, Backend Smoke Test `PASSED 100%`.
   - Frontend `npm run build` exit code 0 (`frontend/dist/` kèm `web.config` IIS).
+
+---
+
+### [2026-10-27] - Chuẩn Hóa Hiển Thị Tên Menu Alacarte & Phân Nhóm Rõ Ràng Nhóm CO (Khách Thấy Trên Tablet) vs Nhóm SO (Chỉ Có Trên POS)
+- **Bối cảnh & Yêu cầu người dùng**:
+  1. Menu "ALACARTE" (Mã 187) tại nhà hàng [5096] Ashima Forest Thiso Mai Chí Thọ bị hiển thị là "Main menu" trên giao diện Tác vụ 3 (Xử lý SO/CO) và Tab 3 (Sơ đồ bàn / Android Emulator).
+  2. Cần phân chia danh sách nhóm món làm 2 nhóm rõ ràng:
+     - **1 là Nhóm CO** (Nhóm đã được cấu hình trong `CO_ORDER_CATEGORY.menuGroupCodes`: khách thấy và gọi món được trên tablet CO).
+     - **2 là Nhóm SO** (Nhóm chỉ có trên POS/SO, chưa đưa lên CO: khách không thể thấy trên tablet).
+  3. Khi tìm kiếm, một số món ăn (ví dụ: `11259` Paste Nấm Sò Điệp, `26890` Cá Vược Áp Chảo...) vẫn hiển thị nhãn "✓ Có CO" gây hiểu lầm, nhưng thực tế món đó nằm trong nhóm món chưa có trên CO (chỉ mới là nhóm SO như `AF003 - KHÁC`), nên khách hàng trên tablet không thể nhìn thấy hay gọi món này.
+- **Nguyên nhân gốc rễ (Root Cause)**:
+  1. *Tên Menu "Main menu"*: Khi bảng `RESTAURANT_CATEGORY` trong MongoDB nhà hàng bị trống, GPOS mặc định lưu chuỗi hardcoded `"main-menu": {"name": "Main menu"}` trong bảng `ORDER_MENU_CACHE_CATEGORY`. Code cũ ưu tiên lấy trường này thay vì đọc tên kinh doanh thực tế `"Alacarte"` trong `CO_ORDER_CATEGORY.nameVn` hoặc `ORDER_CATEGORY.name`.
+  2. *Món có CO_MENU_ITEM nhưng Nhóm cha không có trong `menuGroupCodes`*: Trong kiến trúc MongoDB GPOS, một món có thể đã có document trong `CO_MENU_ITEM`, nhưng nếu mã nhóm món (`group_code`, ví dụ `AF003`) chưa được thêm vào mảng `menuGroupCodes` của `CO_ORDER_CATEGORY` (menu 187 chỉ có 20 nhóm CO trong tổng số 43 nhóm), thì toàn bộ nhóm đó và các món bên trong hoàn toàn không hiển thị trên tablet CO của khách hàng!
+- **Giải pháp & Khắc phục triệt để**:
+  1. **Backend (`backend/app/services/mongo_menu_so_co_service.py`)**:
+     - Bổ sung hàm `_build_menu_name_map(db)`: Quét và ưu tiên lấy tên menu từ `CO_ORDER_CATEGORY` (`nameVn`) hoặc `ORDER_CATEGORY` (`name`), loại bỏ triệt để chuỗi mặc định `"Main menu"`.
+     - Phân loại rõ ràng từng nhóm món: So khớp với tập `co_group_codes = set(co_cat.get("menuGroupCodes", []))` để gán `is_co: bool` và `channel: 'CO' | 'SO_ONLY'`.
+     - Bổ sung đếm số lượng nhóm: `co_group_count` (số nhóm khách thấy) và `so_only_group_count` (số nhóm chỉ có trên SO).
+     - Gán trạng thái chi tiết cho từng món ăn `co_status_detail`:
+       + `'ACTIVE_ON_CO'`: Món có CO VÀ Nhóm món đã có trên tablet CO (Khách thấy và đặt được).
+       + `'DISH_IN_CO_BUT_GROUP_NOT_IN_CO'`: Món có dữ liệu CO nhưng Nhóm món chưa đưa lên CO (Khách KHÔNG thấy trên tablet).
+       + `'NOT_IN_CO'`: Món chưa có dữ liệu CO.
+     - Viết mới API endpoint `POST /api/v1/mongodb/menu-so-co/toggle-group-co`: Hỗ trợ thao tác nhanh 1-chạm đưa nhóm món lên CO (`$addToSet`) hoặc gỡ nhóm món khỏi CO (`$pull`).
+  2. **Frontend Service & API Schema (`mongoService.ts`, `mongodb.py`)**:
+     - Cập nhật interface `MenuGroupBrief`, `MenuCategoryItem`, `DishMenuItem`.
+     - Bổ sung `mongoService.toggleGroupCo()`.
+  3. **Giao diện Tác vụ 3 Quản lý Menu SO/CO (`ManageMenuSoCoTask.tsx`)**:
+     - Bổ sung bộ lọc chuyển đổi 3 trạng thái (Segmented Control):
+       `[Tất Cả ({totalGroups})]` | `[🍽️ Nhóm CO ({coGroupsCount})]` | `[🖥️ Nhóm Chỉ Có SO ({soOnlyGroupsCount})]`.
+     - Tiêu đề Menu tự động thay thế `Main menu` thành tên thực tế `Alacarte` và hiển thị 2 badge: `🍽️ 24 nhóm CO` và `🖥️ 19 nhóm chỉ SO`.
+     - Trên từng thanh tiêu đề nhóm (Group Header): Hiển thị badge rõ ràng `🍽️ Nhóm CO (Khách thấy)` hoặc `🖥️ Nhóm chỉ có SO (Chưa có trên CO)`, kèm nút thao tác nhanh `[⚡ + Đưa Nhóm Lên CO]` / `[Gỡ khỏi CO]`.
+     - Tại cột CO của từng dòng món ăn (Cả Grouped View và Flat View):
+       + Nếu món thuộc trường hợp `DISH_IN_CO_BUT_GROUP_NOT_IN_CO`: Hiển thị badge cảnh báo nổi bật màu vàng `⚠️ Nhóm chưa lên CO` kèm tooltip giải thích chi tiết và nút 1-chạm `[⚡ + Đưa nhóm lên CO]`.
+     - Tại chế độ xem phẳng (Flat View): Cột "Nhóm Món" hiển thị kèm nhãn `🍽️ CO` hoặc `🖥️ Chỉ SO` cho từng dòng.
+  4. **Giao diện Tab 3 (Sơ Đồ Bàn & Android Emulator - `AndroidEmulatorTab.tsx`)**:
+     - Chuẩn hóa tên menu hiển thị `Alacarte (187)`.
+     - Thẻ thông tin mô tả chi tiết: `24 nhóm CO (43 tổng) • 594 món`.
+- **Kiểm thử & Đóng gói**:
+  - Frontend `npm run build` exit code 0 (`dist/` kèm `web.config` IIS).
+  - Backend compileall sạch lỗi 100%, Backend Smoke Test `PASSED 100%`.
+  - Tiến trình Backend daemon port 8000 đang hoạt động ổn định.
+  - Đồng bộ ngay lên GitHub repository (`main`).

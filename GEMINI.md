@@ -582,6 +582,12 @@
 > 2. **Sửa Lỗi Đè/Tràn Chữ Trên Header Phân Tích MongoDB (`RestaurantMongoAnalysisPage.tsx`)**:
 >    - Điều chỉnh thanh tác vụ chọn việc với flex co giãn linh hoạt (`flex: 1 1 360px`, `maxWidth: 680px`). Nút "Đồng Bộ SO ➔ CO" chỉ xuất hiện khi chọn tác vụ Quản lý SO/CO, ghim cố định khung email bên phải.
 > 3. **Quản Lý Thực Đơn SO/CO (`ManageMenuSoCoTask.tsx`)**:
+>    - **Chuẩn Hóa Tên Menu Alacarte**: Quét và ưu tiên lấy tên menu kinh doanh thực tế từ `CO_ORDER_CATEGORY.nameVn` hoặc `ORDER_CATEGORY.name`, triệt tiêu hoàn toàn chuỗi fallback mặc định `"Main menu"` khi `RESTAURANT_CATEGORY` bị trống.
+>    - **Phân Loại 2 Nhóm Rõ Ràng: Nhóm CO vs Nhóm Chỉ Có SO**:
+>      + Phân biệt nhóm theo `CO_ORDER_CATEGORY.menuGroupCodes`: **Nhóm CO** (khách thấy và đặt được trên tablet) vs **Nhóm SO** (chỉ có trên POS/SO, chưa đưa lên CO, khách KHÔNG THẤY trên tablet).
+>      + Bộ lọc 3 trạng thái Segmented Control: `[Tất Cả ({totalGroups})]` | `[🍽️ Nhóm CO ({coGroupsCount})]` | `[🖥️ Nhóm Chỉ Có SO ({soOnlyGroupsCount})]`.
+>      + Cảnh báo món thuộc nhóm chưa lên CO: Nếu món có document trong `CO_MENU_ITEM` nhưng nhóm món cha chưa có trong `menuGroupCodes`, hiển thị badge cảnh báo nổi bật màu vàng `⚠️ Nhóm chưa lên CO` kèm nút 1-chạm `[⚡ + Đưa nhóm lên CO]`.
+>      + Thao tác nhanh nhóm: Nút `+ Đưa Nhóm Lên CO` (`$addToSet`) hoặc `Gỡ khỏi CO` (`$pull`) ngay trên từng thanh tiêu đề nhóm.
 >    - **Thêm món trực tiếp vào nhóm**: Bổ sung nút `+ Thêm Món Vào Nhóm` ngay trên thanh tiêu đề của từng Nhóm món khi mở rộng. Người dùng có thể điền mã RK7, tên món, SAP, giá, thứ tự và tùy chọn tự động kích hoạt CO.
 >    - **Tắt kích hoạt CO ("Tắt CO")**: Bổ sung nút "Tắt CO" (đơn lẻ và hàng loạt) cho phép gỡ món khỏi phần mềm gọi món CO (`CO_MENU_ITEM` và `CO_MENU_GROUP.details`), tự động tăng `VERSION_MENU_CO`.
 >    - **Thêm món hàng loạt dạng Sheets**: Sắp xếp lại danh sách Menu theo chiều dọc, khi tích chọn menu nào sẽ mở danh sách các nhóm hiện có của menu đó để chọn nhóm gán tương ứng trước khi dán dữ liệu.

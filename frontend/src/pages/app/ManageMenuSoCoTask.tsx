@@ -17,7 +17,8 @@ import {
   Package,
   Globe,
   Upload,
-  X
+  X,
+  AlertTriangle
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -80,6 +81,8 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   const [searchAllMenus, setSearchAllMenus] = useState<boolean>(false);
   const [filterLevel, setFilterLevel] = useState<string>('ALL'); // 'ALL' | '-1' (Thường) | '0' (Đồ uống)
   const [filterCoStatus, setFilterCoStatus] = useState<string>('ALL'); // 'ALL' | 'HAS_CO' | 'NO_CO'
+  // Bộ lọc phân loại 2 nhóm: Nhóm CO (Khách thấy trên tablet) vs Nhóm SO (Chưa có trên CO)
+  const [groupChannelFilter, setGroupChannelFilter] = useState<'ALL' | 'CO' | 'SO_ONLY'>('ALL');
 
   // Selected dish rows (checkboxes)
   const [selectedDishKeys, setSelectedDishKeys] = useState<Set<string>>(new Set());
@@ -284,15 +287,45 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
       result = result.filter((it) => it.level === lvl);
     }
 
-    // Lọc theo trạng thái CO
+    // Lọc theo trạng thái CO của món
     if (filterCoStatus === 'HAS_CO') {
       result = result.filter((it) => it.is_co);
     } else if (filterCoStatus === 'NO_CO') {
       result = result.filter((it) => !it.is_co);
     }
 
+    // Lọc theo Phân Nhóm: 1 là Nhóm CO (Khách thấy trên tablet), 2 là Nhóm SO (Chưa có trên CO)
+    if (groupChannelFilter === 'CO') {
+      result = result.filter((it) => it.group_is_co === true);
+    } else if (groupChannelFilter === 'SO_ONLY') {
+      result = result.filter((it) => it.group_is_co !== true);
+    }
+
     return result;
-  }, [dishItems, searchTokens, filterLevel, filterCoStatus]);
+  }, [dishItems, searchTokens, filterLevel, filterCoStatus, groupChannelFilter]);
+
+  // Thống kê số lượng nhóm CO vs nhóm chỉ có SO
+  const groupChannelStats = useMemo(() => {
+    const coGroups = new Set<string>();
+    const soGroups = new Set<string>();
+    const allGroups = new Set<string>();
+
+    dishItems.forEach((d) => {
+      const key = `${d.menu_code}___${d.group_code}`;
+      allGroups.add(key);
+      if (d.group_is_co) {
+        coGroups.add(key);
+      } else {
+        soGroups.add(key);
+      }
+    });
+
+    return {
+      totalGroups: allGroups.size,
+      coGroupsCount: coGroups.size,
+      soOnlyGroupsCount: soGroups.size
+    };
+  }, [dishItems]);
 
   // Thống kê đối chiếu các từ khóa tìm kiếm hàng loạt
   const bulkSearchSummary = useMemo(() => {
@@ -365,7 +398,10 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   interface GroupHierarchyItem {
     group_code: string;
     group_name: string;
+    parent_group_code?: string;
     level: number;
+    is_co: boolean;
+    channel: 'CO' | 'SO_ONLY';
     dishes: DishMenuItem[];
   }
 
@@ -373,6 +409,8 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     menu_code: string;
     menu_name: string;
     total_dishes: number;
+    co_group_count: number;
+    so_only_group_count: number;
     groups: GroupHierarchyItem[];
   }
 
@@ -390,14 +428,21 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
       groupMap: Map<string, {
         group_code: string;
         group_name: string;
+        parent_group_code?: string;
         level: number;
+        is_co: boolean;
+        channel: 'CO' | 'SO_ONLY';
         dishes: DishMenuItem[];
       }>;
     }>();
 
     filteredDishes.forEach((d) => {
       const mCode = d.menu_code || 'DEFAULT';
-      const mName = d.menu_name || (menus.find((m) => m.code === mCode)?.name) || `Menu ${mCode}`;
+      let mName = d.menu_name || (menus.find((m) => m.code === mCode)?.name) || `Menu ${mCode}`;
+      // Chuẩn hóa loại bỏ chữ Main menu nếu có
+      if (mName.toLowerCase().includes('main menu')) {
+        mName = mName.replace(/main menu/gi, 'Alacarte');
+      }
 
       if (!menuMap.has(mCode)) {
         menuMap.set(mCode, {
@@ -415,7 +460,10 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
         mEntry.groupMap.set(gCode, {
           group_code: gCode,
           group_name: gName,
+          parent_group_code: d.parent_group_code,
           level: d.level !== undefined ? d.level : -1,
+          is_co: d.group_is_co === true,
+          channel: (d.group_channel as 'CO' | 'SO_ONLY') || (d.group_is_co ? 'CO' : 'SO_ONLY'),
           dishes: [],
         });
       }
@@ -427,10 +475,14 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     menuMap.forEach((mEntry) => {
       const groups: GroupHierarchyItem[] = Array.from(mEntry.groupMap.values());
       const total_dishes = groups.reduce((acc, g) => acc + g.dishes.length, 0);
+      const co_group_count = groups.filter((g) => g.is_co).length;
+      const so_only_group_count = groups.length - co_group_count;
       result.push({
         menu_code: mEntry.menu_code,
         menu_name: mEntry.menu_name,
         total_dishes,
+        co_group_count,
+        so_only_group_count,
         groups,
       });
     });
@@ -638,6 +690,33 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   };
 
   // ══════════════════════════════════════════════════════════════════════════
+  // ĐƯA NHÓM MÓN LÊN CO HOẶC GỠ NHÓM MÓN KHỎI CO (CO_ORDER_CATEGORY)
+  // ══════════════════════════════════════════════════════════════════════════
+  const [togglingGroupCo, setTogglingGroupCo] = useState<boolean>(false);
+
+  const handleToggleGroupCo = async (menuCode: string, groupCode: string, action: 'ADD' | 'REMOVE') => {
+    if (!activeHost) return;
+    const actionText = action === 'ADD' ? 'đưa lên CO (Khách thấy trên tablet)' : 'gỡ khỏi CO (ẩn trên tablet)';
+    if (!confirm(`Bạn có chắc muốn ${actionText} cho nhóm món "${groupCode}" (Menu: ${menuCode})?`)) return;
+
+    setTogglingGroupCo(true);
+    try {
+      const res = await mongoService.toggleGroupCo({
+        host: activeHost,
+        menu_code: menuCode,
+        group_code: groupCode,
+        action
+      });
+      showToast(res.message, 'success');
+      // Tải lại Menu và Món ăn để cập nhật trạng thái mới nhất
+      fetchMenus();
+      fetchDishItems();
+    } catch (err: any) {
+      showToast('Lỗi cập nhật nhóm CO: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setTogglingGroupCo(false);
+    }
+  };
   // THÊM THẲNG MÓN MỚI VÀO NHÓM MÓN ĐANG MỞ
   // ══════════════════════════════════════════════════════════════════════════
   const [isAddDishToGroupOpen, setIsAddDishToGroupOpen] = useState<boolean>(false);
@@ -2093,6 +2172,69 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
               <Badge variant="neutral">
                 {groupedMenuHierarchy.length} Menu &bull; {groupedMenuHierarchy.reduce((acc, m) => acc + m.groups.length, 0)} Nhóm Món
               </Badge>
+
+              {/* BỘ LỌC 2 PHÂN NHÓM: 1 là Nhóm CO (Khách thấy trên tablet), 2 là Nhóm SO (Chưa có trên CO) */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', backgroundColor: '#F1F5F9', borderRadius: '8px', padding: '3px', border: '1px solid #CBD5E1', gap: '3px', marginLeft: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setGroupChannelFilter('ALL')}
+                  style={{
+                    padding: '3px 8px',
+                    fontSize: '11px',
+                    fontWeight: groupChannelFilter === 'ALL' ? 700 : 500,
+                    borderRadius: '5px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    backgroundColor: groupChannelFilter === 'ALL' ? '#FFFFFF' : 'transparent',
+                    color: groupChannelFilter === 'ALL' ? '#0F172A' : '#64748B',
+                    boxShadow: groupChannelFilter === 'ALL' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'
+                  }}
+                >
+                  Tất Cả ({groupChannelStats.totalGroups})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGroupChannelFilter('CO')}
+                  title="Chỉ hiển thị các nhóm món đã có trong CO_ORDER_CATEGORY.menuGroupCodes (Khách thấy và đặt được trên tablet)"
+                  style={{
+                    padding: '3px 8px',
+                    fontSize: '11px',
+                    fontWeight: groupChannelFilter === 'CO' ? 700 : 500,
+                    borderRadius: '5px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    backgroundColor: groupChannelFilter === 'CO' ? '#EFF6FF' : 'transparent',
+                    color: groupChannelFilter === 'CO' ? '#1D4ED8' : '#64748B',
+                    boxShadow: groupChannelFilter === 'CO' ? '0 1px 2px rgba(37,99,235,0.2)' : 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  🍽️ Nhóm CO ({groupChannelStats.coGroupsCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGroupChannelFilter('SO_ONLY')}
+                  title="Chỉ hiển thị các nhóm món chưa đưa lên CO (Chỉ có trên POS/SO, khách KHÔNG thấy trên tablet)"
+                  style={{
+                    padding: '3px 8px',
+                    fontSize: '11px',
+                    fontWeight: groupChannelFilter === 'SO_ONLY' ? 700 : 500,
+                    borderRadius: '5px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    backgroundColor: groupChannelFilter === 'SO_ONLY' ? '#FEF3C7' : 'transparent',
+                    color: groupChannelFilter === 'SO_ONLY' ? '#B45309' : '#64748B',
+                    boxShadow: groupChannelFilter === 'SO_ONLY' ? '0 1px 2px rgba(217,119,6,0.2)' : 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  🖥️ Nhóm Chỉ Có SO ({groupChannelStats.soOnlyGroupsCount})
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -2328,15 +2470,19 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                         />
 
                         <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '13px' }}>
-                          📋 Menu: {m.menu_name}
+                          📋 Menu: {m.menu_name.toLowerCase().includes('main menu') ? m.menu_name.replace(/main menu/gi, 'Alacarte') : m.menu_name}
                         </span>
 
                         <span style={{ fontSize: '11px', color: '#475569', backgroundColor: '#E2E8F0', padding: '2px 6px', borderRadius: '4px', fontFamily: 'Consolas, monospace', fontWeight: 600 }}>
                           Mã: {m.menu_code}
                         </span>
 
-                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#4338CA', backgroundColor: '#EEF2FF', padding: '2px 8px', borderRadius: '10px', border: '1px solid #C7D2FE' }}>
-                          {m.groups.length} nhóm món
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#1D4ED8', backgroundColor: '#DBEAFE', padding: '2px 8px', borderRadius: '10px', border: '1px solid #93C5FD' }} title="Số lượng nhóm món đã được đưa lên CO (Khách thấy trên tablet)">
+                          🍽️ {m.co_group_count} nhóm CO
+                        </span>
+
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#B45309', backgroundColor: '#FEF3C7', padding: '2px 8px', borderRadius: '10px', border: '1px solid #FCD34D' }} title="Số lượng nhóm món chỉ có trên POS/SO (Chưa đưa lên CO)">
+                          🖥️ {m.so_only_group_count} nhóm chỉ SO
                         </span>
 
                         <span style={{ fontSize: '11px', fontWeight: 700, color: '#047857', backgroundColor: '#D1FAE5', padding: '2px 8px', borderRadius: '10px', border: '1px solid #A7F3D0' }}>
@@ -2427,6 +2573,17 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                                     ({g.group_code})
                                   </span>
 
+                                  {/* Nhãn phân loại CO vs SO-only */}
+                                  {g.is_co ? (
+                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#1D4ED8', backgroundColor: '#DBEAFE', padding: '2px 6px', borderRadius: '4px', border: '1px solid #93C5FD' }} title="Nhóm này đã có trong CO_ORDER_CATEGORY.menuGroupCodes: Khách thấy và đặt được trên tablet CO">
+                                      🍽️ Nhóm CO (Khách thấy)
+                                    </span>
+                                  ) : (
+                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#92400E', backgroundColor: '#FEF3C7', padding: '2px 6px', borderRadius: '4px', border: '1px solid #FCD34D' }} title="Nhóm này CHƯA có trong CO: Chỉ có trên POS/SO, khách KHÔNG THẤY trên tablet">
+                                      🖥️ Nhóm chỉ có SO (Chưa có trên CO)
+                                    </span>
+                                  )}
+
                                   {g.level === 0 ? (
                                     <span style={{ fontSize: '10px', fontWeight: 700, color: '#7E22CE', backgroundColor: '#F3E8FF', padding: '1px 6px', borderRadius: '4px' }}>
                                       Đồ uống (0)
@@ -2440,6 +2597,50 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                                   <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563EB', backgroundColor: '#EFF6FF', padding: '1px 8px', borderRadius: '10px', border: '1px solid #BFDBFE' }}>
                                     {g.dishes.length} món
                                   </span>
+
+                                  {/* Nút thao tác nhanh Đưa Nhóm Lên CO / Gỡ Khỏi CO */}
+                                  {!g.is_co ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleGroupCo(m.menu_code, g.group_code, 'ADD')}
+                                      disabled={togglingGroupCo}
+                                      title={`Đưa nhóm "${g.group_name}" lên menu CO để hiển thị cho khách trên tablet`}
+                                      style={{
+                                        fontSize: '10.5px',
+                                        fontWeight: 700,
+                                        color: '#B45309',
+                                        backgroundColor: '#FFFBEB',
+                                        border: '1px solid #F59E0B',
+                                        borderRadius: '4px',
+                                        padding: '2px 8px',
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '3px'
+                                      }}
+                                    >
+                                      <Zap size={11} color="#D97706" />
+                                      + Đưa Nhóm Lên CO
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleGroupCo(m.menu_code, g.group_code, 'REMOVE')}
+                                      disabled={togglingGroupCo}
+                                      title={`Gỡ nhóm "${g.group_name}" khỏi menu CO (ẩn khỏi tablet)`}
+                                      style={{
+                                        fontSize: '10px',
+                                        color: '#6B7280',
+                                        backgroundColor: '#F3F4F6',
+                                        border: '1px solid #D1D5DB',
+                                        borderRadius: '4px',
+                                        padding: '2px 6px',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      Gỡ khỏi CO
+                                    </button>
+                                  )}
                                 </div>
 
                                 <button
@@ -2638,33 +2839,98 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                                             {/* Cột CO */}
                                             <td style={{ padding: '7px 10px', textAlign: 'center' }}>
                                               {it.is_co ? (
-                                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#1D4ED8', backgroundColor: '#DBEAFE', padding: '2px 5px', borderRadius: '4px' }}>
-                                                    ✓ Có CO
-                                                  </span>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => handleDeactivateCoSingle(it)}
-                                                    disabled={deactivatingCo}
-                                                    title="Tắt kích hoạt món này khỏi CO (ẩn khỏi menu online CO)"
-                                                    style={{
-                                                      fontSize: '10px',
-                                                      fontWeight: 600,
-                                                      color: '#DC2626',
-                                                      backgroundColor: '#FEF2F2',
-                                                      border: '1px solid #FECACA',
-                                                      padding: '2px 5px',
-                                                      borderRadius: '4px',
-                                                      cursor: 'pointer',
-                                                      display: 'inline-flex',
-                                                      alignItems: 'center',
-                                                      gap: '2px'
-                                                    }}
-                                                  >
-                                                    <X size={10} color="#DC2626" />
-                                                    Tắt CO
-                                                  </button>
-                                                </div>
+                                                it.group_is_co ? (
+                                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#1D4ED8', backgroundColor: '#DBEAFE', padding: '2px 5px', borderRadius: '4px' }} title="Món đang hoạt động trên CO và Nhóm món đã có trên tablet CO (Khách thấy được)">
+                                                      ✓ Có CO
+                                                    </span>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleDeactivateCoSingle(it)}
+                                                      disabled={deactivatingCo}
+                                                      title="Tắt kích hoạt món này khỏi CO (ẩn khỏi menu online CO)"
+                                                      style={{
+                                                        fontSize: '10px',
+                                                        fontWeight: 600,
+                                                        color: '#DC2626',
+                                                        backgroundColor: '#FEF2F2',
+                                                        border: '1px solid #FECACA',
+                                                        padding: '2px 5px',
+                                                        borderRadius: '4px',
+                                                        cursor: 'pointer',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '2px'
+                                                      }}
+                                                    >
+                                                      <X size={10} color="#DC2626" />
+                                                      Tắt CO
+                                                    </button>
+                                                  </div>
+                                                ) : (
+                                                  <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                                      <span
+                                                        style={{
+                                                          fontSize: '10.5px',
+                                                          fontWeight: 700,
+                                                          color: '#B45309',
+                                                          backgroundColor: '#FEF3C7',
+                                                          border: '1px solid #FCD34D',
+                                                          padding: '2px 5px',
+                                                          borderRadius: '4px',
+                                                          display: 'inline-flex',
+                                                          alignItems: 'center',
+                                                          gap: '3px'
+                                                        }}
+                                                        title={`Món có dữ liệu CO nhưng Nhóm [${it.group_name}] chưa được gán vào tablet CO (menuGroupCodes), do đó khách KHÔNG THẤY món này trên tablet!`}
+                                                      >
+                                                        <AlertTriangle size={11} color="#D97706" />
+                                                        ⚠️ Nhóm chưa lên CO
+                                                      </span>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => handleDeactivateCoSingle(it)}
+                                                        disabled={deactivatingCo}
+                                                        title="Tắt CO món này"
+                                                        style={{
+                                                          fontSize: '9.5px',
+                                                          fontWeight: 600,
+                                                          color: '#DC2626',
+                                                          backgroundColor: '#FEF2F2',
+                                                          border: '1px solid #FECACA',
+                                                          padding: '1px 4px',
+                                                          borderRadius: '3px',
+                                                          cursor: 'pointer'
+                                                        }}
+                                                      >
+                                                        Tắt
+                                                      </button>
+                                                    </div>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleToggleGroupCo(it.menu_code, it.group_code, 'ADD')}
+                                                      disabled={togglingGroupCo}
+                                                      title={`Bấm để đưa cả nhóm [${it.group_name}] lên CO để khách thấy món này`}
+                                                      style={{
+                                                        fontSize: '10px',
+                                                        fontWeight: 700,
+                                                        color: '#2563EB',
+                                                        backgroundColor: '#EFF6FF',
+                                                        border: '1px solid #BFDBFE',
+                                                        padding: '1px 6px',
+                                                        borderRadius: '3px',
+                                                        cursor: 'pointer',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '2px'
+                                                      }}
+                                                    >
+                                                      <Zap size={10} color="#2563EB" />
+                                                      + Đưa nhóm lên CO
+                                                    </button>
+                                                  </div>
+                                                )
                                               ) : (
                                                 <button
                                                   type="button"
@@ -2815,8 +3081,19 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
 
                         {/* Nhóm Món */}
                         <td style={{ padding: '8px 10px' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontWeight: 600, color: '#1F2937' }}>{it.group_name}</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 600, color: '#1F2937' }}>{it.group_name}</span>
+                              {it.group_is_co ? (
+                                <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#1D4ED8', backgroundColor: '#DBEAFE', padding: '1px 5px', borderRadius: '3px', border: '1px solid #93C5FD' }} title="Nhóm này đã có trên tablet CO">
+                                  🍽️ CO
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#92400E', backgroundColor: '#FEF3C7', padding: '1px 5px', borderRadius: '3px', border: '1px solid #FCD34D' }} title="Nhóm này chỉ có trên POS/SO, chưa có trên tablet CO">
+                                  🖥️ Chỉ SO
+                                </span>
+                              )}
+                            </div>
                             <span style={{ fontSize: '10px', color: '#9CA3AF', fontFamily: 'Consolas, monospace' }}>
                               {it.group_code}
                             </span>
@@ -2924,29 +3201,94 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                         {/* Cột CO */}
                         <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                           {it.is_co ? (
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              <span style={{ fontSize: '11px', fontWeight: 700, color: '#1D4ED8', backgroundColor: '#DBEAFE', padding: '2px 6px', borderRadius: '4px' }}>
-                                ✓ Có CO (100)
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleDeactivateCoSingle(it)}
-                                disabled={deactivatingCo}
-                                title="Tắt kích hoạt: Gỡ món này khỏi phần mềm CO"
-                                style={{
-                                  fontSize: '10px',
-                                  fontWeight: 600,
-                                  color: '#DC2626',
-                                  backgroundColor: '#FEE2E2',
-                                  border: '1px solid #FCA5A5',
-                                  padding: '1px 5px',
-                                  borderRadius: '4px',
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                Tắt CO
-                              </button>
-                            </div>
+                            it.group_is_co ? (
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <span style={{ fontSize: '11px', fontWeight: 700, color: '#1D4ED8', backgroundColor: '#DBEAFE', padding: '2px 6px', borderRadius: '4px' }} title="Món đang hoạt động trên CO và Nhóm món đã có trên tablet CO (Khách thấy được)">
+                                  ✓ Có CO (100)
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeactivateCoSingle(it)}
+                                  disabled={deactivatingCo}
+                                  title="Tắt kích hoạt: Gỡ món này khỏi phần mềm CO"
+                                  style={{
+                                    fontSize: '10px',
+                                    fontWeight: 600,
+                                    color: '#DC2626',
+                                    backgroundColor: '#FEE2E2',
+                                    border: '1px solid #FCA5A5',
+                                    padding: '1px 5px',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Tắt CO
+                                </button>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                  <span
+                                    style={{
+                                      fontSize: '10.5px',
+                                      fontWeight: 700,
+                                      color: '#B45309',
+                                      backgroundColor: '#FEF3C7',
+                                      border: '1px solid #FCD34D',
+                                      padding: '2px 5px',
+                                      borderRadius: '4px',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px'
+                                    }}
+                                    title={`Món có dữ liệu CO nhưng Nhóm [${it.group_name}] chưa được gán vào tablet CO (menuGroupCodes), do đó khách KHÔNG THẤY món này trên tablet!`}
+                                  >
+                                    <AlertTriangle size={11} color="#D97706" />
+                                    ⚠️ Nhóm chưa lên CO
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeactivateCoSingle(it)}
+                                    disabled={deactivatingCo}
+                                    title="Tắt CO món này"
+                                    style={{
+                                      fontSize: '9.5px',
+                                      fontWeight: 600,
+                                      color: '#DC2626',
+                                      backgroundColor: '#FEF2F2',
+                                      border: '1px solid #FECACA',
+                                      padding: '1px 4px',
+                                      borderRadius: '3px',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    Tắt
+                                  </button>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleGroupCo(it.menu_code, it.group_code, 'ADD')}
+                                  disabled={togglingGroupCo}
+                                  title={`Bấm để đưa cả nhóm [${it.group_name}] lên CO để khách thấy món này`}
+                                  style={{
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    color: '#2563EB',
+                                    backgroundColor: '#EFF6FF',
+                                    border: '1px solid #BFDBFE',
+                                    padding: '1px 6px',
+                                    borderRadius: '3px',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '2px'
+                                  }}
+                                >
+                                  <Zap size={10} color="#2563EB" />
+                                  + Đưa nhóm lên CO
+                                </button>
+                              </div>
+                            )
                           ) : (
                             <button
                               type="button"

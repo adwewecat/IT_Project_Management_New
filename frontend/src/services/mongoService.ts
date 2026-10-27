@@ -1222,6 +1222,11 @@ export const mongoService = {
     return res.data;
   },
 
+  toggleGroupCo: async (payload: ToggleGroupCoRequest): Promise<ToggleGroupCoResponse> => {
+    const res = await api.post<ToggleGroupCoResponse>('/mongodb/menu-so-co/toggle-group-co', payload);
+    return res.data;
+  },
+
   bulkAddMenuDishes: async (payload: BulkAddDishesRequest): Promise<BulkAddDishesResponse> => {
     const res = await api.post<BulkAddDishesResponse>('/mongodb/menu-so-co/bulk-add', payload);
     return res.data;
@@ -1923,6 +1928,26 @@ export interface MenuGroupBrief {
   name: string;
   level: number;
   count: number;
+  parent_code?: string;
+  is_co?: boolean;
+  channel?: 'CO' | 'SO_ONLY';
+}
+
+export interface ToggleGroupCoRequest {
+  host: string;
+  port?: number;
+  menu_code: string;
+  group_code: string;
+  action: 'ADD' | 'REMOVE';
+}
+
+export interface ToggleGroupCoResponse {
+  success: boolean;
+  message: string;
+  menu_code: string;
+  group_code: string;
+  action: string;
+  menuGroupCodes: string[];
 }
 
 export interface DishLookupResponse {
@@ -1945,6 +1970,8 @@ export interface MenuCategoryItem {
   show_in_qr_order: boolean;
   auto_delivery_in_so: boolean;
   group_count: number;
+  co_group_count?: number;
+  so_only_group_count?: number;
   dish_count: number;
   groups?: MenuGroupBrief[];
 }
@@ -1960,6 +1987,10 @@ export interface DishMenuItem {
   menu_name: string;
   group_code: string;
   group_name: string;
+  parent_group_code?: string;
+  group_is_co?: boolean;
+  group_channel?: 'CO' | 'SO_ONLY';
+  co_status_detail?: 'ACTIVE_ON_CO' | 'DISH_IN_CO_BUT_GROUP_NOT_IN_CO' | 'NOT_IN_CO' | string;
   level: number; // -1: Food/Thường, 0: Drink/Nước
   rk7_code: string;
   name: string;

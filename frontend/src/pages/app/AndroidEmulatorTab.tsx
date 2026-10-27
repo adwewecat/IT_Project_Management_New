@@ -299,11 +299,19 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
             if (match) {
               displayName = match[1].trim();
             }
+            if (!displayName || displayName.toLowerCase() === 'main menu') {
+              displayName = 'Alacarte';
+            }
+            const coCount = m.co_group_count ?? m.group_count ?? 0;
+            const totalCount = m.group_count || 0;
+            const groupDesc = coCount > 0 && coCount < totalCount
+              ? `${coCount} nhóm CO (${totalCount} tổng)`
+              : `${totalCount} nhóm món`;
             return {
               id: String(m.id || m.code),
               name: displayName,
               code: m.code,
-              description: `Mã menu: ${m.code} • ${m.group_count || 0} nhóm món • ${m.dish_count || 0} món`
+              description: `Mã menu: ${m.code} • ${groupDesc} • ${m.dish_count || 0} món`
             };
           });
           if (mapped.length > 0) {

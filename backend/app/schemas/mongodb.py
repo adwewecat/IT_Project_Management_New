@@ -1271,6 +1271,9 @@ class MenuGroupBrief(BaseModel):
     name: str
     level: int = -1
     count: int = 0
+    parent_code: Optional[str] = None
+    is_co: bool = False
+    channel: str = "SO_ONLY"  # "CO" hoặc "SO_ONLY"
 
 
 class MenuCategoryItem(BaseModel):
@@ -1282,6 +1285,8 @@ class MenuCategoryItem(BaseModel):
     show_in_qr_order: bool = False
     auto_delivery_in_so: bool = False
     group_count: int = 0
+    co_group_count: int = 0
+    so_only_group_count: int = 0
     dish_count: int = 0
     groups: Optional[List[MenuGroupBrief]] = None
 
@@ -1297,6 +1302,10 @@ class DishMenuItem(BaseModel):
     menu_name: str
     group_code: str
     group_name: str
+    parent_group_code: Optional[str] = None
+    group_is_co: bool = False
+    group_channel: str = "SO_ONLY"  # "CO" hoặc "SO_ONLY"
+    co_status_detail: Optional[str] = None  # "ACTIVE_ON_CO", "DISH_IN_CO_BUT_GROUP_NOT_IN_CO", "NOT_IN_CO"
     level: int = -1  # -1: Food/Thường, 0: Drink/Nước
     rk7_code: str
     name: str
@@ -1310,6 +1319,23 @@ class DishMenuItem(BaseModel):
     is_so: bool = True
     is_co: bool = False
     co_kalo: Optional[float] = None
+
+
+class ToggleGroupCoRequest(BaseModel):
+    host: str
+    port: int = 27017
+    menu_code: str
+    group_code: str
+    action: str = "ADD"  # "ADD" hoặc "REMOVE"
+
+
+class ToggleGroupCoResponse(BaseModel):
+    success: bool
+    message: str
+    menu_code: str
+    group_code: str
+    action: str
+    menuGroupCodes: List[str] = []
 
 
 class LoadMenuItemsRequest(BaseModel):
