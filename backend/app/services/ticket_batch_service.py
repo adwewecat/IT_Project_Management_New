@@ -1438,7 +1438,7 @@ async def _close_gprocess_mission(page, context, mission: Dict[str, Any]) -> Dic
     Xử lý 1 nhiệm vụ G-Process:
     - Mở chi tiết nhiệm vụ (qua URL trực tiếp hoặc click từ bảng my-mission)
     - Check 'Không đạt' ở ô Phản hồi xác nhận thông tin
-    - Điền feedback_message: 'Dear NH, Với xác nhận lỗi hạ tầng NH vui lòng gửi tới huy.ld để được hỗ trợ nhé'
+    - Điền feedback_message: 'Dear NH, Với xác nhận lỗi hạ tầng, Nhà Hàng vui lòng gửi ticket tới huy.ld nhé'
     - Check 'Không phê duyệt' và 'Kết thúc quy trình'
     - Click 'Xác nhận'
     - Xử lý các popup liên tiếp (Xác nhận, Khai báo Timesheet...)
@@ -1446,7 +1446,7 @@ async def _close_gprocess_mission(page, context, mission: Dict[str, Any]) -> Dic
     """
     mission_id = str(mission.get("ticket_id", "")).strip()
     target_url = mission.get("url") or f"https://gpms.ggg.com.vn/g-process/my-mission/{mission_id}"
-    feedback_message = "Dear NH, Với xác nhận lỗi hạ tầng NH vui lòng gửi tới huy.ld để được hỗ trợ nhé"
+    feedback_message = "Dear NH, Với xác nhận lỗi hạ tầng, Nhà Hàng vui lòng gửi ticket tới huy.ld nhé"
     
     logger.info(f"[GPROCESS] Bắt đầu xử lý nhiệm vụ G-Process #{mission_id} ({target_url})...")
     detail_page = page

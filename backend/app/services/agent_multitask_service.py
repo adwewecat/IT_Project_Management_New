@@ -1101,35 +1101,78 @@ class AgentMultitaskService:
 
     @staticmethod
     def poll_pending_tasks(restaurant_code: str, ip_lan: Optional[str] = None, db: Session = None) -> List[Dict[str, Any]]:
-        """Quét và lấy các lệnh điều khiển PENDING dành cho nhà hàng tương ứng (theo mã hoặc IP)."""
+        """
+        Quét và lấy các lệnh điều khiển PENDING dành cho nhà hàng tương ứng:
+        - Tự động nhận diện mã nhà hàng chuẩn xác từ IP LAN nếu client gửi mã generic ('AUTO', 'TEST_NH'...).
+        - Khớp lệnh linh hoạt: khớp theo IP chính xác, dải IP subnet (.x, .*), hoặc theo mã nhà hàng.
+        - Khóa trạng thái task thành 'RUNNING' ngay khi Agent nhận việc để tránh trùng lặp thực thi giữa các máy.
+        """
         clean_code = (restaurant_code or "").strip()
         clean_ip = (ip_lan or "").strip()
 
+        # Trích xuất dải subnet (VD: 10.8.153.)
+        ip_parts = clean_ip.split('.') if clean_ip else []
+        subnet = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}." if len(ip_parts) >= 3 else ""
+
+        # Nếu mã nhà hàng gửi lên là AUTO / TEST_NH / rỗng, tự động tra cứu mã nhà hàng thật từ IP LAN
+        if clean_ip and (clean_code in ("AUTO", "TEST_NH", "", "UNKNOWN", "NONE", "DEFAULT") or not clean_code):
+            # 1. Tìm trong AgentMultitaskEndpoint theo đúng IP LAN
+            ep = db.query(AgentMultitaskEndpoint).filter(AgentMultitaskEndpoint.ip_lan == clean_ip).first()
+            if ep and ep.restaurant_code and ep.restaurant_code not in ("AUTO", "TEST_NH", "", "UNKNOWN"):
+                clean_code = ep.restaurant_code
+            elif subnet:
+                # 2. Tìm trong bảng Restaurant theo Subnet IP
+                matched_rest = db.query(Restaurant).filter(Restaurant.ip.like(f"{subnet}%")).first()
+                if matched_rest:
+                    clean_code = str(matched_rest.rk7 or matched_rest.sap or matched_rest.id).strip()
+                else:
+                    # 3. Tìm trong Endpoint khác cùng Subnet
+                    matched_ep = db.query(AgentMultitaskEndpoint).filter(AgentMultitaskEndpoint.ip_lan.like(f"{subnet}%")).first()
+                    if matched_ep and matched_ep.restaurant_code and matched_ep.restaurant_code not in ("AUTO", "TEST_NH", "", "UNKNOWN"):
+                        clean_code = matched_ep.restaurant_code
+
         query = db.query(AgentMultitaskLog).filter(AgentMultitaskLog.result_status == "PENDING")
-        if clean_ip and clean_code:
-            # Nếu task chỉ định đích danh machine_ip -> CHỈ máy có đúng IP đó mới được nhận!
-            # Nếu task không chỉ định IP (rỗng hoặc NULL) -> Bất kỳ máy nào cùng mã nhà hàng đều được nhận
-            query = query.filter(
-                (AgentMultitaskLog.machine_ip == clean_ip) |
+
+        conditions = []
+        # Điều kiện 1: Khớp theo IP LAN chính xác
+        if clean_ip:
+            conditions.append(AgentMultitaskLog.machine_ip == clean_ip)
+
+        # Điều kiện 2: Khớp theo subnet IP (nếu lệnh phát tới 10.8.xxx.x hoặc 10.8.xxx.*)
+        if subnet:
+            conditions.append(AgentMultitaskLog.machine_ip == f"{subnet}x")
+            conditions.append(AgentMultitaskLog.machine_ip == f"{subnet}X")
+            conditions.append(AgentMultitaskLog.machine_ip == f"{subnet}*")
+            conditions.append(AgentMultitaskLog.machine_ip.like(f"{subnet}%"))
+
+        # Điều kiện 3: Khớp theo mã nhà hàng (cho các task phát toàn nhà hàng không gán IP cụ thể)
+        if clean_code and clean_code not in ("AUTO", "TEST_NH", "", "UNKNOWN"):
+            conditions.append(
+                (AgentMultitaskLog.restaurant_code == clean_code) &
                 (
-                    ((AgentMultitaskLog.machine_ip == "") | (AgentMultitaskLog.machine_ip.is_(None))) &
-                    (AgentMultitaskLog.restaurant_code == clean_code)
+                    (AgentMultitaskLog.machine_ip == "") |
+                    (AgentMultitaskLog.machine_ip.is_(None)) |
+                    (AgentMultitaskLog.machine_ip == "AUTO") |
+                    (AgentMultitaskLog.machine_ip == clean_ip) |
+                    (AgentMultitaskLog.machine_ip.like(f"{subnet}%") if subnet else False)
                 )
             )
-        elif clean_ip:
-            query = query.filter(AgentMultitaskLog.machine_ip == clean_ip)
-        elif clean_code:
-            query = query.filter(
-                (AgentMultitaskLog.restaurant_code == clean_code) &
-                ((AgentMultitaskLog.machine_ip == "") | (AgentMultitaskLog.machine_ip.is_(None)))
-            )
-        else:
+
+        if not conditions:
             return []
 
-        pending_logs = query.order_by(AgentMultitaskLog.created_at.asc()).limit(5).all()
+        pending_logs = query.filter(or_(*conditions)).order_by(AgentMultitaskLog.created_at.asc()).limit(5).all()
 
         results = []
         for pl in pending_logs:
+            # Cập nhật trạng thái thành RUNNING để các máy khác hoặc lượt poll sau không nhận trùng
+            pl.result_status = "RUNNING"
+            if clean_ip and (not pl.machine_ip or pl.machine_ip.lower().endswith(('.x', '.*')) or pl.machine_ip in ('', 'AUTO')):
+                pl.machine_ip = clean_ip
+            if clean_code and pl.restaurant_code in ("AUTO", "TEST_NH", "", "UNKNOWN"):
+                pl.restaurant_code = clean_code
+            db.add(pl)
+
             results.append({
                 "id": pl.id,
                 "task_id": pl.id,
@@ -1138,6 +1181,10 @@ class AgentMultitaskService:
                 "command_payload": pl.command_payload,
                 "created_at": pl.created_at.isoformat() if pl.created_at else None
             })
+
+        if pending_logs:
+            db.commit()
+
         return results
 
     @staticmethod
@@ -1608,6 +1655,10 @@ class AgentMultitaskService:
         clean_code = (restaurant_code or "").strip()
         clean_ip = (ip_lan or "").strip()
 
+        # Chuẩn hóa dải subnet (.x, .*) thành IP máy POS 1 / Server (.11)
+        if clean_ip.lower().endswith(".x") or clean_ip.lower().endswith(".*"):
+            clean_ip = clean_ip[:-2] + ".11"
+
         if not clean_ip:
             raise HTTPException(status_code=400, detail="Thiếu IP LAN máy trạm cần quét máy in.")
 
@@ -1685,6 +1736,10 @@ class AgentMultitaskService:
         """
         clean_code = (restaurant_code or "").strip()
         clean_ip = (ip_lan or "").strip()
+
+        # Chuẩn hóa dải subnet (.x, .*) thành IP máy POS 1 / Server (.11)
+        if clean_ip.lower().endswith(".x") or clean_ip.lower().endswith(".*"):
+            clean_ip = clean_ip[:-2] + ".11"
 
         if not clean_ip:
             raise HTTPException(status_code=400, detail="Thiếu IP LAN máy trạm cần giải phóng hàng đợi in.")

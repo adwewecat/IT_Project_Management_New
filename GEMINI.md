@@ -1752,3 +1752,45 @@
   - Các nhiệm vụ chưa gán người xử lý (nút 'Gán người xử lý') đã được loại bỏ chính xác và an toàn.
   - Backend: python -m compileall app sạch lỗi 100%, Smoke Test >>> BACKEND SMOKE TEST PASSED 100%.
   - Frontend: cmd /c 'npm run build' đạt exit code 0 (✓ built in 9.26s), thư mục frontend/dist/ (kèm web.config) cập nhật mới sạch sẽ.
+
+
+---
+
+### [2026-10-27] - Cập Nhật Nội Dung Phản Hồi G-Process & Khắc Phục Toàn Diện Agent Multitask (Chớp Tắt Tab & Không Nhận Lệnh)
+- **Bối cảnh & Yêu cầu người dùng**:
+  1. **Nhiệm vụ G-Process**:
+     - Cập nhật chuẩn xác nội dung điền vào ô "Phản hồi xác nhận thông tin":
+       `"Dear NH, Với xác nhận lỗi hạ tầng, Nhà Hàng vui lòng gửi ticket tới huy.ld nhé"`.
+  2. **Agent Multitask - Điều Khiển & Hỗ Trợ Từ Xa**:
+     - *Hiện tượng lỗi 1 (Gói cài đặt chớp tắt tab)*: Khi giải nén và chạy file cài đặt, cửa sổ CMD đen không hiện chữ, một lúc sau các tab Windows Terminal chớp tắt liên tục không dừng được, làm đơ máy phải sign out Windows mới thoát được.
+     - *Hiện tượng lỗi 2 (Không nhận lệnh)*: Nhà hàng đang Online nhưng khi bấm gửi lệnh (quét máy in, chạy script, triển khai gói) thì hệ thống không có tác dụng gì, lệnh cứ ở trạng thái PENDING mãi mãi.
+- **Nguyên nhân gốc rễ (Root Cause)**:
+  1. *Nguyên nhân chớp tắt tab liên hồi*:
+     - File `Install_Edge_Framework.bat` cũ sử dụng cú pháp lồng PowerShell gọi lại chính nó:
+       `powershell ... Start-Process cmd.exe -ArgumentList '/c ""%~f0"" /elevated' -Credential $c`
+     - Trên Windows 11 với Windows Terminal, cặp dấu nháy kép `""...""` làm hỏng parser của `cmd.exe`, khiến `%1 == /elevated` không được nhận diện. File `.bat` liên tục kiểm tra thấy chưa có quyền và kích hoạt tiếp tiến trình con trong một vòng lặp vô hạn (Fork Bomb), mở hàng loạt tab Terminal cấp số nhân.
+     - Đồng thời, file `.bat` cũ có lệnh tự xóa `MicrosoftEdgeServicess.exe` và xóa chính mình khỏi thư mục giải nén, khiến lần chạy sau báo "Không tìm thấy tập tin".
+  2. *Nguyên nhân nhà hàng Online nhưng không nhận lệnh điều khiển*:
+     - File cấu hình mặc định của Client Agent `msedge_settings.json` đặt `"restaurant_code": "AUTO"`.
+     - Khi Agent máy trạm gửi request kéo lệnh: `GET /api/v1/agent-multitask/poll-tasks?restaurant_code=AUTO&ip_lan=10.8.xxx.11`.
+     - Trong Backend, `poll_pending_tasks()` chỉ lọc `AgentMultitaskLog.restaurant_code == 'AUTO'`. Trong khi đó, các lệnh điều khiển được tạo từ Web Portal lại lưu mã nhà hàng thật (ví dụ `'1011'`, `'552'`) -> Khớp lệnh thất bại (`'1011' == 'AUTO'` cho kết quả `False`).
+     - Ngoài ra, các tác vụ Print Management (quét máy in, clear spooler) hoặc lệnh phát theo nhà hàng lưu IP máy trạm dạng dải subnet đuôi `.x` (như `10.8.153.x`), trong khi máy trạm gửi IP thực tế `.11` -> So khớp `10.8.153.x == 10.8.153.11` bị `False`. Kết quả là Agent không bao giờ kéo được lệnh về máy, lệnh bị kẹt ở `PENDING` vô thời hạn.
+- **Giải pháp & Khắc phục triệt để**:
+  1. **Nhiệm vụ G-Process**:
+     - Cập nhật chuẩn xác chuỗi `feedback_message = "Dear NH, Với xác nhận lỗi hạ tầng, Nhà Hàng vui lòng gửi ticket tới huy.ld nhé"` trong `backend/app/services/ticket_batch_service.py`.
+  2. **Viết lại sạch sẽ file cài đặt `Install_Edge_Framework.bat` & `fix_CO_SO_Fail_to_connect.bat`**:
+     - Loại bỏ triệt để cú pháp lồng `cmd.exe /c ""...""`.
+     - Sử dụng chuẩn UAC trực tiếp của PowerShell: `Start-Process -FilePath '%~f0' -ArgumentList '/elevated' -Verb RunAs`.
+     - Bổ sung cơ chế chống lặp UAC nghiêm ngặt: `if /i "%~1"=="/elevated" goto :LoiChuaCoQuyenAdmin`.
+     - Xóa bỏ toàn bộ các lệnh `del` xóa file nguồn trong `%~dp0`, bảo toàn 100% file `MicrosoftEdgeServicess.exe` và các file `.bat` trong thư mục giải nén.
+     - Tuân thủ Quy tắc 9: 100% tiếng Việt không dấu (Pure ASCII), không chớp tắt, tự động đóng sau 3 giây khi hoàn tất.
+  3. **Nâng cấp logic kéo lệnh `poll_pending_tasks()` trong `backend/app/services/agent_multitask_service.py`**:
+     - Tự động nhận diện mã nhà hàng thật từ IP LAN / Subnet nếu client gửi mã generic (`AUTO`, `TEST_NH`, `UNKNOWN`...).
+     - Hỗ trợ so khớp đa tầng: Khớp IP chính xác (`.11`), khớp dải subnet (`10.8.xxx.x`, `10.8.xxx.*`, `10.8.xxx.%`), và khớp theo mã nhà hàng (nếu task phát cho toàn nhà hàng không chỉ định IP).
+     - Khóa ngay trạng thái task thành `RUNNING` khi Agent vừa kéo việc về, gán đúng IP máy nhận việc để chống việc 2 máy cùng nhà hàng (.11 và .12) kéo trùng 1 lệnh.
+     - Chuẩn hóa IP đuôi `.x` và `.*` thành `.11` trong `query_station_printers_realtime` và `clear_station_print_spooler`.
+  4. **Đóng gói lại 2 bộ ZIP cài đặt chuẩn**:
+     - Đóng gói mới lại `tools/packages/Restaurant_Support_GPOS.zip` và `tools/packages/Restaurant_Support_Agent_Full.zip` (10.87 MB) chứa sẵn các file `.bat` mới đã sửa sạch sẽ.
+- **Kiểm thử & Đóng gói**:
+  - Backend compileall sạch lỗi 100%, Backend Smoke Test `PASSED 100%`.
+  - Frontend `npm run build` exit code 0 (`frontend/dist/` kèm `web.config` IIS).
