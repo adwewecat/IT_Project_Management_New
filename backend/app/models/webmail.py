@@ -10,7 +10,7 @@ Bao gồm:
 from __future__ import annotations
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import Integer, Unicode, DateTime, Boolean, String, Text
+from sqlalchemy import Integer, Unicode, UnicodeText, DateTime, Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
@@ -69,7 +69,7 @@ class UserEmailSignature(Base):
     mobile: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
     email: Mapped[Optional[str]] = mapped_column(Unicode(255), nullable=True)
     website: Mapped[Optional[str]] = mapped_column(Unicode(255), default="www.ggg.com.vn", nullable=True)
-    signature_html: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    signature_html: Mapped[Optional[str]] = mapped_column(UnicodeText, nullable=True)
     use_custom_html: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
 
@@ -82,11 +82,11 @@ class WebmailSentLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     sender_username: Mapped[str] = mapped_column(Unicode(100), nullable=False, index=True)
     from_email: Mapped[str] = mapped_column(Unicode(255), nullable=False)
-    to_emails: Mapped[str] = mapped_column(Text, nullable=False)
-    cc_emails: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    to_emails: Mapped[str] = mapped_column(UnicodeText, nullable=False)
+    cc_emails: Mapped[Optional[str]] = mapped_column(UnicodeText, nullable=True)
     subject: Mapped[Optional[str]] = mapped_column(Unicode(500), nullable=True)
     body_preview: Mapped[Optional[str]] = mapped_column(Unicode(1000), nullable=True)
-    attachments_info: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    attachments_info: Mapped[Optional[str]] = mapped_column(UnicodeText, nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="SUCCESS", nullable=False)
-    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(UnicodeText, nullable=True)
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)

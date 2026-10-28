@@ -19,6 +19,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
+from email.header import Header
+from email.utils import formataddr
 from typing import List, Dict, Any, Optional, Tuple
 import httpx
 from sqlalchemy import select, desc
@@ -735,23 +737,34 @@ class WebmailService:
 
         full_html = body_html
         if sig_html and sig_html.strip() not in full_html:
-            full_html = f"""
-{full_html}
+            full_html = f"""{full_html}
 <br /><br />
 <div class="email-signature-container">
   {sig_html}
-</div>
-"""
+</div>"""
 
-        # Xây dựng MIME Message
+        # Bọc toàn bộ nội dung email vào cấu trúc HTML hoàn chỉnh có meta charset=utf-8
+        if "<html" not in full_html.lower():
+            full_html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta charset="utf-8" />
+</head>
+<body style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 13.5px; color: #111827; line-height: 1.5;">
+  {full_html}
+</body>
+</html>"""
+
+        # Xây dựng MIME Message với tiêu chuẩn UTF-8 đầy đủ cho From và Subject
         msg = MIMEMultipart("mixed")
-        msg["From"] = f"{sender_name} <{cfg.email_address}>"
+        msg["From"] = formataddr((str(Header(sender_name, "utf-8")), cfg.email_address))
         msg["To"] = ", ".join(clean_to)
         if clean_cc:
             msg["Cc"] = ", ".join(clean_cc)
-        msg["Subject"] = subject.strip() if subject else "(Không có chủ đề)"
+        msg["Subject"] = Header(subject.strip() if subject else "(Không có chủ đề)", "utf-8")
 
-        # Phần thân HTML
+        # Phần thân HTML với bộ mã UTF-8
         body_part = MIMEText(full_html, "html", "utf-8")
         msg.attach(body_part)
 
@@ -764,7 +777,8 @@ class WebmailService:
                 # Xử lý tên file có dấu theo chuẩn RFC 2231
                 part.add_header(
                     "Content-Disposition",
-                    f"attachment; filename=\"{fname}\""
+                    "attachment",
+                    filename=("utf-8", "", fname)
                 )
                 msg.attach(part)
 

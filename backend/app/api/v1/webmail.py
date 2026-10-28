@@ -196,7 +196,7 @@ def get_user_signature(
     return WebmailService.get_user_signature(
         db,
         current_user.username,
-        user_display_name=current_user.hoten or current_user.username
+        user_display_name=current_user.full_name or current_user.username
     )
 
 
