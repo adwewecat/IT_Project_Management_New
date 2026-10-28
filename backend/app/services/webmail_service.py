@@ -805,23 +805,23 @@ class WebmailService:
                                 "isInline": bool(a.get("isInline"))
                             })
 
-                sender = data.get("from", {}).get("emailAddress", {})
+                sender = (data.get("from") or {}).get("emailAddress") or {}
                 to_list = [
-                    {"name": r.get("emailAddress", {}).get("name"), "email": r.get("emailAddress", {}).get("address")}
-                    for r in data.get("toRecipients", [])
+                    {"name": (r.get("emailAddress") or {}).get("name"), "email": (r.get("emailAddress") or {}).get("address")}
+                    for r in (data.get("toRecipients") or [])
                 ]
                 cc_list = [
-                    {"name": r.get("emailAddress", {}).get("name"), "email": r.get("emailAddress", {}).get("address")}
-                    for r in data.get("ccRecipients", [])
+                    {"name": (r.get("emailAddress") or {}).get("name"), "email": (r.get("emailAddress") or {}).get("address")}
+                    for r in (data.get("ccRecipients") or [])
                 ]
 
-                body_info = data.get("body", {})
+                body_info = data.get("body") or {}
                 time_raw = data.get("sentDateTime") or data.get("receivedDateTime")
 
                 # Tra cứu người gửi thực tế từ Webmail nếu đây là email gửi đi từ hòm thư chính
                 sent_by_user = ""
                 sender_email = sender.get("address") or ""
-                cfg = cls.get_config(db)
+                cfg = cls.get_or_create_config(db)
                 if sender_email.lower() == (cfg.email_address or "").lower():
                     try:
                         sent_logs = db.execute(

@@ -2008,3 +2008,25 @@
   - Frontend `cmd /c "npm run build"` đạt exit code 0 (`dist/` kèm `web.config` IIS).
   - Backend `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
   - Backend daemon restarted và hoạt động ổn định trên port 8000.
+
+
+---
+
+### [2026-10-28] - Khắc Phục Lỗi Không Load Được Chi Tiết Email Trong Tab "Thư Đã Gửi" (Webmail Sent Items)
+- **Bối cảnh & Triệu chứng lỗi**:
+  - Khi người dùng ở tab **"Thư Đã Gửi"** (`sent`), danh sách email đã gửi hiển thị đầy đủ, nhưng khi click vào một email bất kỳ thì khung đọc chi tiết bên phải không load được nội dung (vẫn giữ nguyên trạng thái "Chọn Một Thư Để Đọc").
+- **Nguyên nhân kỹ thuật**:
+  - Trong phương thức `get_message_detail` (`backend/app/services/webmail_service.py`), đoạn logic tra cứu người gửi thực tế từ Webmail gọi `cfg = cls.get_config(db)`.
+  - Trên lớp `WebmailService`, phương thức lấy cấu hình hệ thống là `get_or_create_config(db)`, không có phương thức `get_config(db)`. Lỗi này dẫn đến ngoại lệ `AttributeError: type object 'WebmailService' has no attribute 'get_config'` khiến API trả về HTTP 500 khi người dùng xem bất kỳ email nào trong tab Thư Đã Gửi.
+- **Giải pháp xử lý**:
+  1. **Backend (`backend/app/services/webmail_service.py`)**:
+     - Đổi lệnh gọi sang `cfg = cls.get_or_create_config(db)`.
+     - Bổ sung phòng vệ kiểu dữ liệu an toàn `(data.get("from") or {}).get("emailAddress") or {}`, `(data.get("toRecipients") or [])`, `(data.get("body") or {})` để tránh lỗi `NoneType` khi Microsoft Graph trả về các trường rỗng đối với thư đã gửi hoặc thư nháp.
+  2. **Frontend (`frontend/src/pages/webmail/WebmailPage.tsx`)**:
+     - Bổ sung thông báo lỗi trực quan (`alert`) trong khối `catch` của `handleSelectMessage` để tránh tình trạng nuốt lỗi âm thầm.
+  3. **Khởi động lại Backend Daemon**:
+     - Khởi động lại daemon backend trên port 8000 để nạp mã nguồn Python mới nhất.
+- **Kiểm thử & Đóng gói**:
+  - Chạy test thực tế: Lấy thành công 100% nội dung chi tiết (HTML Body 2608 bytes) của email đã gửi mà không phát sinh bất kỳ lỗi nào.
+  - Frontend `npm run build` thành công exit code 0 (`dist/` kèm `web.config` IIS).
+  - Backend `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.

@@ -115,8 +115,9 @@ export const WebmailPage: React.FC = () => {
         }
         return prev.map((m) => (m.id === messageId ? { ...m, is_read: true } : m));
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Lỗi tải chi tiết thư:', err);
+      alert('Không thể tải nội dung email: ' + (err.response?.data?.detail || err.message || 'Lỗi không xác định'));
     } finally {
       setLoadingDetail(false);
     }
