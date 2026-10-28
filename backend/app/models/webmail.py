@@ -90,3 +90,15 @@ class WebmailSentLog(Base):
     status: Mapped[str] = mapped_column(String(50), default="SUCCESS", nullable=False)
     error_message: Mapped[Optional[str]] = mapped_column(UnicodeText, nullable=True)
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+
+
+class WebmailUserRead(Base):
+    """Bảng lưu vết trạng thái ĐÃ ĐỌC của từng user đối với từng email trong hòm thư dùng chung."""
+    __tablename__ = "WEBMAIL_USER_READ"
+    __table_args__ = {"schema": "dbo"}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(Unicode(100), nullable=False, index=True)
+    message_id: Mapped[str] = mapped_column(Unicode(255), nullable=False, index=True)
+    read_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+

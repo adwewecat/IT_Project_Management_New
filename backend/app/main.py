@@ -58,7 +58,7 @@ async def lifespan(app: FastAPI):
             AgentMultitaskScriptTemplate,
             AgentMultitaskPackageTemplate
         )
-        from app.models.webmail import SystemEmailConfig, UserEmailSignature, WebmailSentLog
+        from app.models.webmail import SystemEmailConfig, UserEmailSignature, WebmailSentLog, WebmailUserRead
         from sqlalchemy import text
         Base.metadata.create_all(engine, tables=[
             OvernightDeviceLog.__table__,
@@ -76,6 +76,7 @@ async def lifespan(app: FastAPI):
             SystemEmailConfig.__table__,
             UserEmailSignature.__table__,
             WebmailSentLog.__table__,
+            WebmailUserRead.__table__,
         ], checkfirst=True)
 
         # Tự động nạp mẫu kịch bản mặc định nếu bảng trống
@@ -110,6 +111,23 @@ async def lifespan(app: FastAPI):
                             updated_by NVARCHAR(100) NULL,
                             updated_at DATETIME NULL DEFAULT GETDATE()
                         );
+                    END
+                """))
+                _tc.commit()
+
+                # Kiểm tra phòng vệ bảng WEBMAIL_USER_READ
+                _tc.execute(text("""
+                    IF OBJECT_ID('dbo.WEBMAIL_USER_READ', 'U') IS NULL
+                    BEGIN
+                        CREATE TABLE dbo.WEBMAIL_USER_READ (
+                            id INT IDENTITY(1,1) PRIMARY KEY,
+                            username NVARCHAR(100) NOT NULL,
+                            message_id NVARCHAR(255) NOT NULL,
+                            read_at DATETIME NOT NULL DEFAULT GETDATE(),
+                            CONSTRAINT UQ_WEBMAIL_USER_READ UNIQUE (username, message_id)
+                        );
+                        CREATE INDEX IX_WEBMAIL_USER_READ_USER ON dbo.WEBMAIL_USER_READ(username);
+                        CREATE INDEX IX_WEBMAIL_USER_READ_MSG ON dbo.WEBMAIL_USER_READ(message_id);
                     END
                 """))
                 _tc.commit()

@@ -1791,3 +1791,22 @@ BEGIN
 END
 GO
 
+-- ----------------------------------------------------------------------------
+-- BẢNG: WEBMAIL_USER_READ (Lưu Vết Trạng Thái Đã Đọc Email Theo Từng User Đăng Nhập)
+-- ----------------------------------------------------------------------------
+IF OBJECT_ID(N'[dbo].[WEBMAIL_USER_READ]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[WEBMAIL_USER_READ] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [username] NVARCHAR(100) NOT NULL,
+        [message_id] NVARCHAR(255) NOT NULL,
+        [read_at] DATETIME NOT NULL DEFAULT GETDATE(),
+        CONSTRAINT [UQ_WEBMAIL_USER_READ] UNIQUE ([username], [message_id])
+    );
+    CREATE INDEX [IX_WEBMAIL_USER_READ_USER] ON [dbo].[WEBMAIL_USER_READ]([username]);
+    CREATE INDEX [IX_WEBMAIL_USER_READ_MSG] ON [dbo].[WEBMAIL_USER_READ]([message_id]);
+    PRINT N'Table [dbo].[WEBMAIL_USER_READ] created successfully.';
+END
+GO
+
+

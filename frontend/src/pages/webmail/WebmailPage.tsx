@@ -89,12 +89,7 @@ export const WebmailPage: React.FC = () => {
       setMessages(data.messages);
       setUnreadCount(data.unread_count);
 
-      // Tự động chọn thư đầu tiên trên desktop nếu có danh sách thư
-      if (data.messages.length > 0) {
-        if (window.innerWidth >= 768) {
-          handleSelectMessage(data.messages[0].id);
-        }
-      }
+      // Không tự động chọn thư đầu tiên để đảm bảo user chỉ đánh dấu đã đọc khi thực sự bấm vào thư xem
     } catch (err) {
       console.error('Lỗi khi tải danh sách email:', err);
     } finally {
@@ -144,6 +139,24 @@ export const WebmailPage: React.FC = () => {
     } catch (err) {
       console.error('Lỗi đánh dấu tất cả email:', err);
       alert('Không thể đánh dấu tất cả email là đã đọc.');
+    }
+  };
+
+  // Đánh dấu thư đang chọn thành chưa đọc riêng cho tài khoản này
+  const handleToggleUnread = async () => {
+    if (!selectedMessageId) return;
+    try {
+      await webmailService.markAsRead(selectedMessageId, false);
+      setUnreadCount((c) => c + 1);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === selectedMessageId ? { ...m, is_read: false } : m))
+      );
+      if (selectedDetail) {
+        setSelectedDetail({ ...selectedDetail, is_read: false });
+      }
+    } catch (err) {
+      console.error('Lỗi khi đánh dấu chưa đọc:', err);
+      alert('Không thể cập nhật trạng thái chưa đọc.');
     }
   };
 
@@ -874,6 +887,18 @@ export const WebmailPage: React.FC = () => {
                     <ArrowRight size={14} />
                     <span>Chuyển tiếp</span>
                   </Button>
+
+                  {activeTab !== 'sent' && (
+                    <Button
+                      variant="outline"
+                      onClick={handleToggleUnread}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 12px' }}
+                      title="Đánh dấu thư này là chưa đọc đối với tài khoản của bạn"
+                    >
+                      <Mail size={14} style={{ color: '#0284C7' }} />
+                      <span>Đánh dấu chưa đọc</span>
+                    </Button>
+                  )}
                 </div>
 
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>

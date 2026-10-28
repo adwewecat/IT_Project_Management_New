@@ -26,11 +26,11 @@ from email.header import Header
 from email.utils import formataddr
 from typing import List, Dict, Any, Optional, Tuple
 import httpx
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, delete
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
-from app.models.webmail import SystemEmailConfig, UserEmailSignature, WebmailSentLog
+from app.models.webmail import SystemEmailConfig, UserEmailSignature, WebmailSentLog, WebmailUserRead
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -407,6 +407,7 @@ class WebmailService:
     def get_messages(
         cls,
         db: Session,
+        current_username: str = "",
         filter_type: str = "unread",
         search_query: str = "",
         top: int = 50,
@@ -414,12 +415,24 @@ class WebmailService:
     ) -> Dict[str, Any]:
         """
         Lấy danh sách email từ Microsoft Graph API:
-        - 'unread': Tải TOÀN BỘ email chưa đọc trong hòm thư (lặp qua các trang đến khi hết).
-        - 'all': Chỉ tải tối đa 50 email gần nhất trong Hộp thư đến (Inbox).
+        - 'unread': Tải TOÀN BỘ email chưa đọc đối với user hiện tại (lặp qua các trang đến khi hết).
+        - 'all': Chỉ tải tối đa 50 email gần nhất trong Hộp thư đến (Inbox), trạng thái is_read tính theo user hiện tại.
         - 'sent': Chỉ tải tối đa 50 email gần nhất trong Hộp thư đã gửi (SentItems).
         """
         token = cls.get_graph_token(db)
         
+        # Lấy danh sách ID các email mà user hiện tại đã đọc trong hệ thống
+        user_read_ids = set()
+        if current_username:
+            try:
+                user_read_ids = set(
+                    db.execute(
+                        select(WebmailUserRead.message_id).where(WebmailUserRead.username == current_username)
+                    ).scalars().all()
+                )
+            except Exception as e:
+                logger.warning(f"Lỗi lấy danh sách email đã đọc của {current_username}: {e}")
+
         # Chọn thư mục theo filter_type: sentitems hoặc inbox
         if filter_type == "sent":
             url = "https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages"
@@ -435,7 +448,7 @@ class WebmailService:
             params = {
                 "$top": str(top_limit),
                 "$skip": str(max(skip, 0)),
-                "$select": "id,subject,from,toRecipients,ccRecipients,receivedDateTime,isRead,hasAttachments,bodyPreview,importance",
+                "$select": "id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,bodyPreview,importance",
                 "$orderby": "receivedDateTime desc"
             }
             if filter_type == "unread":
@@ -459,7 +472,7 @@ class WebmailService:
                 data = res.json()
                 raw_messages = list(data.get("value", []))
 
-                # Đối với thư chưa đọc: Nếu có nhiều hơn 1 trang, load HẾT toàn bộ email chưa đọc
+                # Đối với thư chưa đọc: Nếu có nhiều hơn 1 trang, load HẾT toàn bộ email chưa đọc trên M365
                 if filter_type == "unread":
                     next_link = data.get("@odata.nextLink")
                     while next_link and len(raw_messages) < 500:
@@ -478,16 +491,22 @@ class WebmailService:
                             logger.warning(f"Lỗi khi tải trang tiếp theo của email chưa đọc: {page_err}")
                             break
 
-                # Lấy số lượng email chưa đọc trong Inbox để hiển thị badge
+                    # Lọc bỏ các email mà user hiện tại ĐÃ BẤM ĐỌC trong cơ sở dữ liệu
+                    raw_messages = [m for m in raw_messages if m.get("id") not in user_read_ids]
+
+                # Lấy số lượng email chưa đọc riêng cho user hiện tại để hiển thị badge
                 unread_count = 0
                 try:
-                    folder_res = client.get(
-                        "https://graph.microsoft.com/v1.0/me/mailFolders/inbox?$select=unreadItemCount,totalItemCount",
-                        headers={"Authorization": f"Bearer {token}"}
-                    )
-                    if folder_res.status_code == 200:
-                        f_info = folder_res.json()
-                        unread_count = f_info.get("unreadItemCount", 0)
+                    if filter_type == "unread":
+                        unread_count = len(raw_messages)
+                    else:
+                        unr_res = client.get(
+                            "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$filter=isRead eq false&$select=id&$top=100",
+                            headers={"Authorization": f"Bearer {token}"}
+                        )
+                        if unr_res.status_code == 200:
+                            unr_items = unr_res.json().get("value", [])
+                            unread_count = len([it for it in unr_items if it.get("id") not in user_read_ids])
                 except Exception:
                     pass
 
@@ -502,11 +521,19 @@ class WebmailService:
                         sender_name = f"Tới: {to_str}"
                         sender_email = m.get("from", {}).get("emailAddress", {}).get("address") or ""
                         time_raw = m.get("sentDateTime") or m.get("receivedDateTime")
+                        is_read = True
                     else:
                         sender = m.get("from", {}).get("emailAddress", {})
                         sender_name = sender.get("name") or sender.get("address") or "Không rõ người gửi"
                         sender_email = sender.get("address") or ""
                         time_raw = m.get("receivedDateTime")
+                        if filter_type == "unread":
+                            is_read = False
+                        else:
+                            # Email được coi là đã đọc đối với user này nếu:
+                            # 1. user đã đọc email này (có trong user_read_ids), HOẶC
+                            # 2. Email đã là isRead trên M365 (thư cũ từ trước)
+                            is_read = (m.get("id") in user_read_ids) or bool(m.get("isRead"))
 
                     formatted.append({
                         "id": m.get("id"),
@@ -515,7 +542,7 @@ class WebmailService:
                         "sender_email": sender_email,
                         "received_time_vn": format_iso_to_vn(time_raw),
                         "received_time_raw": time_raw,
-                        "is_read": bool(m.get("isRead")),
+                        "is_read": is_read,
                         "has_attachments": bool(m.get("hasAttachments")),
                         "preview": m.get("bodyPreview") or "",
                         "importance": m.get("importance") or "normal"
@@ -533,10 +560,10 @@ class WebmailService:
             raise HTTPException(status_code=504, detail=f"Lỗi kết nối khi tải danh sách email: {exc}")
 
     @classmethod
-    def get_message_detail(cls, db: Session, message_id: str) -> Dict[str, Any]:
+    def get_message_detail(cls, db: Session, message_id: str, current_username: str = "") -> Dict[str, Any]:
         """
         Lấy chi tiết toàn bộ nội dung của một email (bao gồm nội dung HTML, danh sách file đính kèm).
-        Tự động đánh dấu email này là ĐÃ ĐỌC (isRead: true) để tránh load lại lần 2 theo đúng yêu cầu người dùng!
+        Ghi nhận trạng thái ĐÃ ĐỌC riêng cho user hiện tại trong SQL Server (không ghi đè lên các user khác).
         """
         token = cls.get_graph_token(db)
         url = f"https://graph.microsoft.com/v1.0/me/messages/{message_id}"
@@ -554,17 +581,25 @@ class WebmailService:
                     raise HTTPException(status_code=res.status_code, detail=f"Không thể tải chi tiết email: {res.text[:200]}")
                 data = res.json()
 
-                # Tự động đánh dấu là đã đọc trên máy chủ nếu email đang ở trạng thái chưa đọc
-                if not data.get("isRead"):
+                # Ghi nhận trạng thái ĐÃ ĐỌC riêng cho user hiện tại trong database (không patch M365)
+                if current_username:
                     try:
-                        client.patch(
-                            url,
-                            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                            json={"isRead": True}
-                        )
-                        logger.info(f"Đã tự động đánh dấu email {message_id} là ĐÃ ĐỌC trên máy chủ mail.")
-                    except Exception as pe:
-                        logger.warning(f"Không thể cập nhật isRead cho email {message_id}: {pe}")
+                        existing = db.execute(
+                            select(WebmailUserRead).where(
+                                WebmailUserRead.username == current_username,
+                                WebmailUserRead.message_id == message_id
+                            )
+                        ).scalar_one_or_none()
+                        if not existing:
+                            db.add(WebmailUserRead(
+                                username=current_username,
+                                message_id=message_id,
+                                read_at=datetime.now()
+                            ))
+                            db.commit()
+                            logger.info(f"Đã lưu trạng thái ĐÃ ĐỌC email {message_id} cho user {current_username}.")
+                    except Exception as re:
+                        logger.warning(f"Lỗi lưu trạng thái đã đọc cho user {current_username}: {re}")
 
                 # Lấy danh sách file đính kèm nếu email có file
                 attachments = []
@@ -605,7 +640,7 @@ class WebmailService:
                     "cc_recipients": cc_list,
                     "received_time_vn": format_iso_to_vn(time_raw),
                     "received_time_raw": time_raw,
-                    "is_read": True,  # Sau khi load đã là True
+                    "is_read": True,  # Sau khi mở xem đã là True đối với user hiện tại
                     "has_attachments": bool(data.get("hasAttachments")),
                     "attachments": attachments,
                     "body_type": body_info.get("contentType", "html"),
@@ -617,29 +652,48 @@ class WebmailService:
             raise HTTPException(status_code=504, detail=f"Lỗi kết nối máy chủ: {exc}")
 
     @classmethod
-    def mark_as_read(cls, db: Session, message_id: str, is_read: bool = True) -> Dict[str, Any]:
-        """Đánh dấu một email là ĐÃ ĐỌC hoặc CHƯA ĐỌC."""
-        token = cls.get_graph_token(db)
-        url = f"https://graph.microsoft.com/v1.0/me/messages/{message_id}"
+    def mark_as_read(cls, db: Session, message_id: str, is_read: bool = True, current_username: str = "") -> Dict[str, Any]:
+        """Đánh dấu một email là ĐÃ ĐỌC hoặc CHƯA ĐỌC riêng cho user hiện tại."""
+        if not current_username:
+            return {"status": "SUCCESS", "message_id": message_id, "is_read": is_read}
 
         try:
-            with httpx.Client(timeout=20.0) as client:
-                res = client.patch(
-                    url,
-                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                    json={"isRead": is_read}
+            if is_read:
+                existing = db.execute(
+                    select(WebmailUserRead).where(
+                        WebmailUserRead.username == current_username,
+                        WebmailUserRead.message_id == message_id
+                    )
+                ).scalar_one_or_none()
+                if not existing:
+                    db.add(WebmailUserRead(
+                        username=current_username,
+                        message_id=message_id,
+                        read_at=datetime.now()
+                    ))
+                    db.commit()
+            else:
+                db.execute(
+                    delete(WebmailUserRead).where(
+                        WebmailUserRead.username == current_username,
+                        WebmailUserRead.message_id == message_id
+                    )
                 )
-                if res.status_code not in (200, 204):
-                    raise HTTPException(status_code=res.status_code, detail=f"Lỗi cập nhật trạng thái: {res.text[:200]}")
-                return {"status": "SUCCESS", "message_id": message_id, "is_read": is_read}
-        except httpx.RequestError as exc:
-            raise HTTPException(status_code=504, detail=f"Lỗi mạng: {exc}")
+                db.commit()
+            return {"status": "SUCCESS", "message_id": message_id, "is_read": is_read}
+        except Exception as e:
+            logger.error(f"Lỗi cập nhật trạng thái đã đọc cho user {current_username}: {e}")
+            raise HTTPException(status_code=500, detail=f"Lỗi cập nhật trạng thái đã đọc: {e}")
 
     @classmethod
-    def mark_all_as_read(cls, db: Session) -> Dict[str, Any]:
+    def mark_all_as_read(cls, db: Session, current_username: str = "") -> Dict[str, Any]:
         """
-        Đánh dấu TẤT CẢ email chưa đọc trong Hộp thư đến là ĐÃ ĐỌC (tương tự nút trong Outlook).
+        Đánh dấu TẤT CẢ email chưa đọc là ĐÃ ĐỌC riêng cho user hiện tại.
+        Tuyệt đối không ảnh hưởng tới trạng thái chưa đọc của các tài khoản khác!
         """
+        if not current_username:
+            return {"status": "SUCCESS", "marked_count": 0}
+
         token = cls.get_graph_token(db)
         fetch_url = "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages"
         params = {
@@ -654,21 +708,26 @@ class WebmailService:
                 res = client.get(fetch_url, headers={"Authorization": f"Bearer {token}"}, params=params)
                 if res.status_code == 200:
                     items = res.json().get("value", [])
+                    user_read_ids = set(
+                        db.execute(
+                            select(WebmailUserRead.message_id).where(WebmailUserRead.username == current_username)
+                        ).scalars().all()
+                    )
                     for it in items:
                         mid = it.get("id")
-                        try:
-                            client.patch(
-                                f"https://graph.microsoft.com/v1.0/me/messages/{mid}",
-                                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                                json={"isRead": True}
-                            )
+                        if mid and mid not in user_read_ids:
+                            db.add(WebmailUserRead(
+                                username=current_username,
+                                message_id=mid,
+                                read_at=datetime.now()
+                            ))
                             marked_count += 1
-                        except Exception:
-                            pass
-            logger.info(f"Đã đánh dấu {marked_count} email chưa đọc thành ĐÃ ĐỌC.")
+                    if marked_count > 0:
+                        db.commit()
+            logger.info(f"Đã đánh dấu {marked_count} email chưa đọc thành ĐÃ ĐỌC riêng cho user {current_username}.")
             return {"status": "SUCCESS", "marked_count": marked_count}
         except Exception as e:
-            logger.error(f"Lỗi đánh dấu tất cả email là đã đọc: {e}")
+            logger.error(f"Lỗi đánh dấu tất cả email là đã đọc cho user {current_username}: {e}")
             raise HTTPException(status_code=500, detail=f"Lỗi đánh dấu tất cả email: {e}")
 
     @classmethod

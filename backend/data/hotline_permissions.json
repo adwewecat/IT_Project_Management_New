@@ -1,8 +1,7 @@
 {
   "enabled_roles": [
     "helpdesk",
-    "admin",
-    "app"
+    "admin"
   ],
   "allowed_users": [
     "dung.nguyenanh",

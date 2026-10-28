@@ -1882,3 +1882,31 @@
   - Frontend `npm run build` đạt exit code 0 (`dist/` kèm `web.config` IIS).
   - Backend `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
   - Khởi động lại backend server daemon trên cổng 8000.
+
+---
+
+### [2026-10-28] - Tách Biệt Trạng Thái "Đã Đọc / Chưa Đọc" Webmail Theo Từng Tài Khoản Người Dùng (Per-User Read Tracking)
+- **Bối cảnh & Yêu cầu người dùng**:
+  - Hộp thư chung `ss.it.application@ggg.com.vn` được dùng chung cho nhiều tài khoản (ví dụ: `dung.nguyenanh`, `test`...).
+  - Trước đây, khi một user (như `dung.nguyenanh`) đọc email, hệ thống gọi Graph API cập nhật `isRead: true` lên toàn bộ hòm thư M365, khiến email lập tức biến mất khỏi mục "Chưa Đọc" của các user khác (như `test`) dù người đó chưa hề mở ra xem.
+  - Yêu cầu: Khi có email mới đến, toàn bộ các tài khoản có quyền đều nhìn thấy ở mục "Chưa Đọc". Khi user nào bấm vào đọc thì chỉ đánh dấu đã đọc đối với user đó và không hiện ở mục "Chưa Đọc" của user đó nữa; các user khác chưa đọc thì email đó vẫn nằm ở mục "Chưa Đọc" cho đến khi họ bấm vào đọc. Hai tab "Tất Cả Thư" và "Thư Đã Gửi" giữ nguyên tính năng.
+- **Giải pháp Kiến trúc & Kỹ thuật**:
+  1. **Cơ sở dữ liệu MSSQL (`dbo.WEBMAIL_USER_READ`)**:
+     - Tạo bảng `dbo.WEBMAIL_USER_READ` lưu vết trạng thái đọc riêng cho từng tài khoản:
+       `id INT IDENTITY(1,1) PRIMARY KEY`, `username NVARCHAR(100) NOT NULL`, `message_id NVARCHAR(255) NOT NULL`, `read_at DATETIME NOT NULL DEFAULT GETDATE()`.
+       Ràng buộc duy nhất `UQ_WEBMAIL_USER_READ (username, message_id)` và đánh index kép cho `username` và `message_id`.
+     - Model SQLAlchemy `WebmailUserRead` trong `backend/app/models/webmail.py`, khai báo tự động trong `main.py` lifespan và thêm DDL vào `Script/Full_SCRIPT_SQL_TABLE.sql`.
+  2. **Backend Service (`backend/app/services/webmail_service.py` & `backend/app/api/v1/webmail.py`)**:
+     - Không bao giờ gửi lệnh patch `isRead: True` lên Microsoft Graph API hòm thư chung nữa, bảo toàn trạng thái nguyên bản của email trên M365 cho các tài khoản khác.
+     - `get_messages`: Truy vấn tập `user_read_ids` của `current_username` từ `WEBMAIL_USER_READ`.
+       + `filter_type == "unread"`: Lọc bỏ những email mà user hiện tại đã đọc (`m["id"] not in user_read_ids`), tính số lượng `unread_count` theo từng user.
+       + `filter_type == "all"`: Đánh dấu `is_read = True` nếu `m["id"] in user_read_ids` hoặc email cũ đã là isRead trên M365.
+     - `get_message_detail`: Nhận `current_username`, tự động ghi bản ghi vào `dbo.WEBMAIL_USER_READ` cho user hiện tại khi xem nội dung.
+     - `mark_as_read` & `mark_all_as_read`: Lưu hoặc xóa trạng thái đã đọc riêng của user trong `dbo.WEBMAIL_USER_READ`.
+  3. **Frontend UI (`frontend/src/pages/webmail/WebmailPage.tsx`)**:
+     - Bỏ việc tự động mở thư đầu tiên khi vừa tải trang (`loadMessages`), đảm bảo chỉ khi người dùng bấm vào một thư cụ thể thì mới tính là đã đọc.
+     - Bổ sung nút bấm `Đánh dấu chưa đọc` trong reading pane toolbar cho phép người dùng hoàn tác trạng thái chưa đọc cho tài khoản của mình bất cứ lúc nào.
+- **Kiểm thử & Đóng gói**:
+  - Đã chạy kiểm thử tự động xác nhận: user `dung.nguyenanh` đọc thư thì thư biến mất khỏi unread của `dung.nguyenanh` nhưng VẪN XUẤT HIỆN trong unread của `test` (100% khớp mong đợi).
+  - Frontend `npm run build` đạt exit code 0 (`dist/` kèm `web.config` IIS).
+  - Backend compileall 100% sạch lỗi, Smoke test `PASSED 100%`.

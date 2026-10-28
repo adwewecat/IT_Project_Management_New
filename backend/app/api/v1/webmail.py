@@ -123,6 +123,7 @@ def get_inbox_messages(
     """
     return WebmailService.get_messages(
         db=db,
+        current_username=current_user.username,
         filter_type=filter_type,
         search_query=search,
         top=top,
@@ -138,9 +139,9 @@ def get_message_detail(
 ):
     """
     Xem chi tiết một email.
-    Tự động đánh dấu email này là ĐÃ ĐỌC (isRead: true) để tránh load lại lần 2 theo đúng yêu cầu!
+    Tự động đánh dấu email này là ĐÃ ĐỌC riêng cho user hiện tại trong database.
     """
-    return WebmailService.get_message_detail(db, message_id)
+    return WebmailService.get_message_detail(db, message_id, current_username=current_user.username)
 
 
 @router.post("/messages/{message_id}/read")
@@ -150,8 +151,8 @@ def mark_message_read_state(
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(get_current_user)
 ):
-    """Đánh dấu một email là đã đọc hoặc chưa đọc."""
-    return WebmailService.mark_as_read(db, message_id, payload.is_read)
+    """Đánh dấu một email là đã đọc hoặc chưa đọc đối với user hiện tại."""
+    return WebmailService.mark_as_read(db, message_id, payload.is_read, current_username=current_user.username)
 
 
 @router.post("/mark-all-read")
@@ -159,8 +160,8 @@ def mark_all_messages_as_read(
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(get_current_user)
 ):
-    """Đánh dấu tất cả email chưa đọc trong hòm thư là ĐÃ ĐỌC."""
-    return WebmailService.mark_all_as_read(db)
+    """Đánh dấu tất cả email chưa đọc trong hòm thư là ĐÃ ĐỌC riêng cho user hiện tại."""
+    return WebmailService.mark_all_as_read(db, current_username=current_user.username)
 
 
 @router.get("/messages/{message_id}/attachments/{attachment_id}")
