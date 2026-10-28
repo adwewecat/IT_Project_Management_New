@@ -110,7 +110,7 @@ def test_system_email_connection(
 
 @router.get("/messages")
 def get_inbox_messages(
-    filter_type: str = Query("unread", pattern="^(unread|all)$"),
+    filter_type: str = Query("unread", pattern="^(unread|all|sent)$"),
     search: str = Query("", max_length=100),
     top: int = Query(50, ge=1, le=100),
     skip: int = Query(0, ge=0),

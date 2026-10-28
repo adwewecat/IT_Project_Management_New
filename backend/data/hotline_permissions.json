@@ -1,7 +1,7 @@
 {
   "enabled_roles": [
-    "admin",
     "helpdesk",
+    "admin",
     "app"
   ],
   "allowed_users": [

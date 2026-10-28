@@ -111,7 +111,7 @@ export const webmailService = {
   },
 
   // Danh sách email & Hộp thư đến
-  async getMessages(filterType: 'unread' | 'all' = 'unread', search = '', top = 50, skip = 0): Promise<{
+  async getMessages(filterType: 'unread' | 'all' | 'sent' = 'unread', search = '', top = 50, skip = 0): Promise<{
     messages: WebmailMessageItem[];
     total_returned: number;
     unread_count: number;

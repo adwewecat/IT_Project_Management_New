@@ -413,26 +413,36 @@ class WebmailService:
         skip: int = 0
     ) -> Dict[str, Any]:
         """
-        Lấy danh sách email từ Hộp thư đến (Inbox) qua Microsoft Graph API.
-        Hỗ trợ lọc 'unread' (chưa đọc) hoặc 'all' (tất cả).
+        Lấy danh sách email từ Microsoft Graph API:
+        - 'unread': Tải TOÀN BỘ email chưa đọc trong hòm thư (lặp qua các trang đến khi hết).
+        - 'all': Chỉ tải tối đa 50 email gần nhất trong Hộp thư đến (Inbox).
+        - 'sent': Chỉ tải tối đa 50 email gần nhất trong Hộp thư đã gửi (SentItems).
         """
         token = cls.get_graph_token(db)
-        url = "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages"
-
-        params: Dict[str, Any] = {
-            "$top": str(min(top, 100)),
-            "$skip": str(max(skip, 0)),
-            "$select": "id,subject,from,toRecipients,ccRecipients,receivedDateTime,isRead,hasAttachments,bodyPreview,importance",
-            "$orderby": "receivedDateTime desc"
-        }
-
-        # Áp dụng bộ lọc chưa đọc nếu chọn tab Chưa đọc
-        if filter_type == "unread":
-            params["$filter"] = "isRead eq false"
+        
+        # Chọn thư mục theo filter_type: sentitems hoặc inbox
+        if filter_type == "sent":
+            url = "https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages"
+            params: Dict[str, Any] = {
+                "$top": "50",
+                "$skip": str(max(skip, 0)),
+                "$select": "id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,bodyPreview,importance",
+                "$orderby": "sentDateTime desc"
+            }
+        else:
+            url = "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages"
+            top_limit = 100 if filter_type == "unread" else min(top, 50)
+            params = {
+                "$top": str(top_limit),
+                "$skip": str(max(skip, 0)),
+                "$select": "id,subject,from,toRecipients,ccRecipients,receivedDateTime,isRead,hasAttachments,bodyPreview,importance",
+                "$orderby": "receivedDateTime desc"
+            }
+            if filter_type == "unread":
+                params["$filter"] = "isRead eq false"
 
         # Tìm kiếm theo từ khóa nếu có
         if search_query and search_query.strip():
-            # Khi dùng $search của Graph API không được kết hợp đồng thời $orderby
             params.pop("$orderby", None)
             params["$search"] = f'"{search_query.strip()}"'
 
@@ -447,28 +457,64 @@ class WebmailService:
                         detail=f"Lỗi tải danh sách email: {err_msg[:200]}"
                     )
                 data = res.json()
-                raw_messages = data.get("value", [])
+                raw_messages = list(data.get("value", []))
+
+                # Đối với thư chưa đọc: Nếu có nhiều hơn 1 trang, load HẾT toàn bộ email chưa đọc
+                if filter_type == "unread":
+                    next_link = data.get("@odata.nextLink")
+                    while next_link and len(raw_messages) < 500:
+                        try:
+                            next_res = client.get(next_link, headers={"Authorization": f"Bearer {token}"})
+                            if next_res.status_code == 200:
+                                next_data = next_res.json()
+                                items = next_data.get("value", [])
+                                if not items:
+                                    break
+                                raw_messages.extend(items)
+                                next_link = next_data.get("@odata.nextLink")
+                            else:
+                                break
+                        except Exception as page_err:
+                            logger.warning(f"Lỗi khi tải trang tiếp theo của email chưa đọc: {page_err}")
+                            break
 
                 # Lấy số lượng email chưa đọc trong Inbox để hiển thị badge
                 unread_count = 0
-                folder_res = client.get(
-                    "https://graph.microsoft.com/v1.0/me/mailFolders/inbox?$select=unreadItemCount,totalItemCount",
-                    headers={"Authorization": f"Bearer {token}"}
-                )
-                if folder_res.status_code == 200:
-                    f_info = folder_res.json()
-                    unread_count = f_info.get("unreadItemCount", 0)
+                try:
+                    folder_res = client.get(
+                        "https://graph.microsoft.com/v1.0/me/mailFolders/inbox?$select=unreadItemCount,totalItemCount",
+                        headers={"Authorization": f"Bearer {token}"}
+                    )
+                    if folder_res.status_code == 200:
+                        f_info = folder_res.json()
+                        unread_count = f_info.get("unreadItemCount", 0)
+                except Exception:
+                    pass
 
                 formatted = []
                 for m in raw_messages:
-                    sender = m.get("from", {}).get("emailAddress", {})
+                    if filter_type == "sent":
+                        to_list = [
+                            r.get("emailAddress", {}).get("name") or r.get("emailAddress", {}).get("address")
+                            for r in m.get("toRecipients", [])
+                        ]
+                        to_str = ", ".join([t for t in to_list if t]) or "Không có người nhận"
+                        sender_name = f"Tới: {to_str}"
+                        sender_email = m.get("from", {}).get("emailAddress", {}).get("address") or ""
+                        time_raw = m.get("sentDateTime") or m.get("receivedDateTime")
+                    else:
+                        sender = m.get("from", {}).get("emailAddress", {})
+                        sender_name = sender.get("name") or sender.get("address") or "Không rõ người gửi"
+                        sender_email = sender.get("address") or ""
+                        time_raw = m.get("receivedDateTime")
+
                     formatted.append({
                         "id": m.get("id"),
                         "subject": m.get("subject") or "(Không có chủ đề)",
-                        "sender_name": sender.get("name") or sender.get("address") or "Không rõ người gửi",
-                        "sender_email": sender.get("address") or "",
-                        "received_time_vn": format_iso_to_vn(m.get("receivedDateTime")),
-                        "received_time_raw": m.get("receivedDateTime"),
+                        "sender_name": sender_name,
+                        "sender_email": sender_email,
+                        "received_time_vn": format_iso_to_vn(time_raw),
+                        "received_time_raw": time_raw,
                         "is_read": bool(m.get("isRead")),
                         "has_attachments": bool(m.get("hasAttachments")),
                         "preview": m.get("bodyPreview") or "",
@@ -501,7 +547,7 @@ class WebmailService:
                     url,
                     headers={"Authorization": f"Bearer {token}"},
                     params={
-                        "$select": "id,subject,from,toRecipients,ccRecipients,receivedDateTime,isRead,hasAttachments,body,importance"
+                        "$select": "id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,body,importance"
                     }
                 )
                 if res.status_code != 200:
@@ -548,6 +594,7 @@ class WebmailService:
                 ]
 
                 body_info = data.get("body", {})
+                time_raw = data.get("sentDateTime") or data.get("receivedDateTime")
 
                 return {
                     "id": data.get("id"),
@@ -556,8 +603,8 @@ class WebmailService:
                     "sender_email": sender.get("address") or "",
                     "to_recipients": to_list,
                     "cc_recipients": cc_list,
-                    "received_time_vn": format_iso_to_vn(data.get("receivedDateTime")),
-                    "received_time_raw": data.get("receivedDateTime"),
+                    "received_time_vn": format_iso_to_vn(time_raw),
+                    "received_time_raw": time_raw,
                     "is_read": True,  # Sau khi load đã là True
                     "has_attachments": bool(data.get("hasAttachments")),
                     "attachments": attachments,

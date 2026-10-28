@@ -5312,3 +5312,33 @@ estaurant_service.py).
 - **Kiểm thử & Đóng gói**:
   - Backend compileall 100% sạch lỗi, Smoke test `PASSED 100%`.
   - Frontend `cmd /c "npm run build"` đạt exit code 0 (`dist/` kèm `web.config` IIS).
+
+
+---
+
+### [2026-10-28] - Khắc Phục Lỗi Đọc Thư Đã Gửi & Chuẩn Hóa Số Lượng Tải Thư Webmail
+- **Bối cảnh & Yêu cầu người dùng**:
+  1. Thư đã gửi (`Thư Đã Gửi` / `sent`) hiện tại không đọc được, bấm vào không phản hồi, không load được nội dung chi tiết.
+  2. Tab `Tất Cả Thư` (`all`) chỉ tải tối đa 50 mail gần nhất.
+  3. Tab `Chưa Đọc` (`unread`) tải HẾT toàn bộ email chưa đọc có trong hòm thư (không giới hạn 50, phân trang `@odata.nextLink` đến hết).
+  4. Tab `Thư Đã Gửi` (`sent`) chỉ tải tối đa 50 mail đã gửi gần nhất.
+- **Nguyên nhân**:
+  - Giao diện `WebmailPage.tsx` trước đó tải thư đã gửi từ bảng nhật ký SQL local `sentLogs` (`WEBMAIL_SENT_LOG`) không có sự kiện `onClick` và không liên kết với Microsoft Graph API `getMessageDetail(messageId)`, đồng thời khi chuyển tab không reset selection dẫn đến pane chi tiết vẫn giữ mail cũ của tab trước.
+  - Microsoft Graph API `get_message_detail` thiếu trường `sentDateTime` trong `$select`, dẫn đến thời gian gửi của mail trong thư mục SentItems không hiển thị đúng.
+- **Giải pháp & Xử lý**:
+  1. **Backend (`backend/app/services/webmail_service.py`)**:
+     - `get_messages`: Hỗ trợ `filter_type == "sent"` truy vấn trực tiếp từ `mailFolders/sentitems/messages` với `$top=50&$orderby=sentDateTime desc`. Định dạng `sender_name: "Tới: {recipients}"`, lấy `sentDateTime`.
+     - `get_messages`: Với `filter_type == "unread"`, duyệt liên tục qua `@odata.nextLink` để tải toàn bộ email chưa đọc (safety cap 500).
+     - `get_messages`: Với `filter_type == "all"`, tải tối đa 50 email gần nhất từ `inbox`.
+     - `get_message_detail`: Bổ sung `sentDateTime` vào `$select` và tính `time_raw = data.get("sentDateTime") or data.get("receivedDateTime")`.
+  2. **Frontend Service (`frontend/src/services/webmailService.ts`)**:
+     - Chuẩn hóa `getMessages(filterType: 'unread' | 'all' | 'sent', search = '', top = 50, skip = 0)`.
+  3. **Frontend UI (`frontend/src/pages/webmail/WebmailPage.tsx`)**:
+     - Bỏ bảng `sentLogs` độc lập, đồng bộ cả 3 tab (`unread`, `all`, `sent`) sử dụng chung luồng `messages` và `groupedMessages`.
+     - Thêm xử lý `onClick={() => handleSelectMessage(m.id)}` cho tất cả các thư đã gửi, tự động chọn thư đầu tiên khi đổi tab trên desktop.
+     - Reading pane (khung đọc): Khi `activeTab === 'sent'`, hiển thị nhãn "Đã gửi: {thời_gian}", Avatar "B" (Bạn), "Từ: Bạn <ss.it.application@ggg.com.vn>", danh sách người nhận "Tới: ...", "Cc: ...", nội dung HTML iframe và tệp đính kèm kèm nút tải. Cung cấp nút "Gửi lại" và "Chuyển tiếp".
+     - Sửa callback `onEmailSent` gọi lại `loadMessages(activeTab)`.
+- **Kiểm thử & Đóng gói**:
+  - Frontend `npm run build` đạt exit code 0 (`dist/` kèm `web.config` IIS).
+  - Backend `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
+  - Khởi động lại backend server daemon trên cổng 8000.

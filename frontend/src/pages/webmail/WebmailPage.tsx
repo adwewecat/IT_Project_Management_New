@@ -28,7 +28,6 @@ import {
   webmailService,
   WebmailMessageItem,
   WebmailMessageDetail,
-  WebmailSentLogItem,
   WebmailAttachment
 } from '../../services/webmailService';
 import { WebmailComposeModal } from './WebmailComposeModal';
@@ -44,7 +43,6 @@ export const WebmailPage: React.FC = () => {
   // Trạng thái dữ liệu
   const [activeTab, setActiveTab] = useState<FilterTab>('unread');
   const [messages, setMessages] = useState<WebmailMessageItem[]>([]);
-  const [sentLogs, setSentLogs] = useState<WebmailSentLogItem[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [loadingList, setLoadingList] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -75,41 +73,30 @@ export const WebmailPage: React.FC = () => {
 
   // Load danh sách email khi chuyển tab hoặc vào trang
   useEffect(() => {
-    if (activeTab === 'sent') {
-      loadSentLogs();
-    } else {
-      loadMessages(activeTab);
-    }
+    setSelectedMessageId(null);
+    setSelectedDetail(null);
+    loadMessages(activeTab);
   }, [activeTab]);
 
-  const loadMessages = async (filter: 'unread' | 'all') => {
+  const loadMessages = async (filter: FilterTab) => {
     setLoadingList(true);
     try {
-      const data = await webmailService.getMessages(filter, searchQuery, 50, 0);
+      // Unread: load all unread messages (backend loops all pages)
+      // All: load maximum 50 most recent messages
+      // Sent: load maximum 50 most recent sent messages
+      const topLimit = filter === 'unread' ? 100 : 50;
+      const data = await webmailService.getMessages(filter, searchQuery, topLimit, 0);
       setMessages(data.messages);
       setUnreadCount(data.unread_count);
 
-      // Nếu đang chọn một thư, kiểm tra thư đó còn tồn tại không
-      if (data.messages.length > 0 && !selectedMessageId) {
-        // Tự động chọn thư đầu tiên trên desktop nếu chưa chọn
+      // Tự động chọn thư đầu tiên trên desktop nếu có danh sách thư
+      if (data.messages.length > 0) {
         if (window.innerWidth >= 768) {
           handleSelectMessage(data.messages[0].id);
         }
       }
     } catch (err) {
       console.error('Lỗi khi tải danh sách email:', err);
-    } finally {
-      setLoadingList(false);
-    }
-  };
-
-  const loadSentLogs = async () => {
-    setLoadingList(true);
-    try {
-      const data = await webmailService.getSentLogs(50);
-      setSentLogs(data);
-    } catch (err) {
-      console.error('Lỗi khi tải nhật ký gửi thư:', err);
     } finally {
       setLoadingList(false);
     }
@@ -126,11 +113,13 @@ export const WebmailPage: React.FC = () => {
       setSelectedDetail(detail);
 
       // Cập nhật trạng thái đã đọc trong danh sách hiển thị
-      setMessages((prev) =>
-        prev.map((m) => (m.id === messageId ? { ...m, is_read: true } : m))
-      );
-      // Giảm số lượng chưa đọc nếu cần
-      setUnreadCount((c) => Math.max(0, c - 1));
+      setMessages((prev) => {
+        const target = prev.find((m) => m.id === messageId);
+        if (target && !target.is_read) {
+          setUnreadCount((c) => Math.max(0, c - 1));
+        }
+        return prev.map((m) => (m.id === messageId ? { ...m, is_read: true } : m));
+      });
     } catch (err) {
       console.error('Lỗi tải chi tiết thư:', err);
     } finally {
@@ -424,10 +413,7 @@ export const WebmailPage: React.FC = () => {
           {/* Làm mới */}
           <Button
             variant="outline"
-            onClick={() => {
-              if (activeTab === 'sent') loadSentLogs();
-              else loadMessages(activeTab);
-            }}
+            onClick={() => loadMessages(activeTab)}
             isLoading={loadingList}
             title="Làm mới danh sách thư"
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -605,172 +591,139 @@ export const WebmailPage: React.FC = () => {
                 <RefreshCw size={24} className="spin" style={{ marginBottom: '8px' }} />
                 <div style={{ fontSize: '12.5px' }}>Đang tải danh sách email từ máy chủ...</div>
               </div>
-            ) : activeTab === 'sent' ? (
-              /* Danh sách thư đã gửi */
-              sentLogs.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-secondary)' }}>
+            ) : Object.values(groupedMessages).every((items) => items.length === 0) ? (
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-secondary)' }}>
+                {activeTab === 'sent' ? (
                   <Send size={32} style={{ opacity: 0.3, marginBottom: '8px' }} />
-                  <div>Chưa có nhật ký thư gửi từ web.</div>
+                ) : (
+                  <Inbox size={32} style={{ opacity: 0.3, marginBottom: '8px' }} />
+                )}
+                <div style={{ fontSize: '13px', marginTop: '6px' }}>
+                  {activeTab === 'unread'
+                    ? 'Hộp thư không có email nào chưa đọc.'
+                    : activeTab === 'sent'
+                    ? 'Chưa có thư đã gửi nào.'
+                    : 'Không có email nào trong hộp thư.'}
                 </div>
-              ) : (
-                sentLogs.map((log) => (
-                  <div
-                    key={log.id}
-                    style={{
-                      padding: '10px 14px',
-                      borderBottom: '1px solid var(--border-color)',
-                      cursor: 'pointer',
-                      backgroundColor: 'var(--bg-card)',
-                      transition: 'background 0.15s ease',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-                      <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-primary)' }}>
-                        Tới: {log.to_emails}
-                      </span>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{log.sent_at_vn}</span>
-                    </div>
-                    <div style={{ fontWeight: 600, fontSize: '12.5px', color: 'var(--text-primary)', marginBottom: '3px' }}>
-                      {log.subject}
-                    </div>
+              </div>
+            ) : (
+              /* Danh sách thư phân nhóm ngày (Outlook style) */
+              Object.entries(groupedMessages).map(([groupName, items]) => {
+                if (items.length === 0) return null;
+                return (
+                  <div key={groupName}>
+                    {/* Tiêu đề nhóm ngày */}
                     <div
                       style={{
-                        fontSize: '12px',
-                        color: 'var(--text-secondary)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
+                        padding: '6px 14px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        color: '#D97706',
+                        backgroundColor: 'var(--bg-secondary)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        borderBottom: '1px solid var(--border-color)',
                       }}
                     >
-                      {log.body_preview || '(Không có nội dung)'}
+                      {groupName} ({items.length})
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', fontSize: '11px' }}>
-                      <span style={{ color: log.status === 'SUCCESS' ? '#10B981' : '#EF4444', fontWeight: 600 }}>
-                        {log.status === 'SUCCESS' ? '✓ Đã gửi thành công' : '✕ Gửi thất bại'}
-                      </span>
-                      <span style={{ color: 'var(--text-secondary)' }}>Bởi: {log.sender_username}</span>
-                    </div>
-                  </div>
-                ))
-              )
-            ) : (
-              /* Danh sách thư Inbox phân nhóm ngày (Outlook style) */
-                Object.entries(groupedMessages).map(([groupName, items]) => {
-                  if (items.length === 0) return null;
-                  return (
-                    <div key={groupName}>
-                      {/* Tiêu đề nhóm ngày */}
-                      <div
-                        style={{
-                          padding: '6px 14px',
-                          fontSize: '11px',
-                          fontWeight: 800,
-                          color: '#D97706',
-                          backgroundColor: 'var(--bg-secondary)',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                          borderBottom: '1px solid var(--border-color)',
-                        }}
-                      >
-                        {groupName} ({items.length})
-                      </div>
 
-                      {/* Từng mục email trong nhóm */}
-                      {items.map((m) => {
-                        const isSelected = selectedMessageId === m.id;
-                        return (
-                          <div
-                            key={m.id}
-                            onClick={() => handleSelectMessage(m.id)}
-                            style={{
-                              padding: '11px 14px',
-                              borderBottom: '1px solid var(--border-color)',
-                              cursor: 'pointer',
-                              backgroundColor: isSelected
-                                ? 'rgba(217, 119, 6, 0.08)'
-                                : m.is_read
-                                ? 'var(--bg-card)'
-                                : 'rgba(2, 132, 199, 0.05)',
-                              borderLeft: isSelected
-                                ? '3px solid #D97706'
-                                : !m.is_read
-                                ? '3px solid #0284C7'
-                                : '3px solid transparent',
-                              transition: 'all 0.15s ease',
-                            }}
-                          >
-                            {/* Dòng 1: Người gửi & Thời gian */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', maxWidth: '75%' }}>
-                                {!m.is_read && (
-                                  <span
-                                    style={{
-                                      width: '7px',
-                                      height: '7px',
-                                      borderRadius: '50%',
-                                      backgroundColor: '#0284C7',
-                                      flexShrink: 0,
-                                    }}
-                                  />
-                                )}
+                    {/* Từng mục email trong nhóm */}
+                    {items.map((m) => {
+                      const isSelected = selectedMessageId === m.id;
+                      return (
+                        <div
+                          key={m.id}
+                          onClick={() => handleSelectMessage(m.id)}
+                          style={{
+                            padding: '11px 14px',
+                            borderBottom: '1px solid var(--border-color)',
+                            cursor: 'pointer',
+                            backgroundColor: isSelected
+                              ? 'rgba(217, 119, 6, 0.08)'
+                              : m.is_read || activeTab === 'sent'
+                              ? 'var(--bg-card)'
+                              : 'rgba(2, 132, 199, 0.05)',
+                            borderLeft: isSelected
+                              ? '3px solid #D97706'
+                              : !m.is_read && activeTab !== 'sent'
+                              ? '3px solid #0284C7'
+                              : '3px solid transparent',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          {/* Dòng 1: Người gửi / Người nhận & Thời gian */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', maxWidth: '75%' }}>
+                              {!m.is_read && activeTab !== 'sent' && (
                                 <span
                                   style={{
-                                    fontWeight: m.is_read ? 600 : 800,
-                                    fontSize: '13px',
-                                    color: 'var(--text-primary)',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
+                                    width: '7px',
+                                    height: '7px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#0284C7',
+                                    flexShrink: 0,
                                   }}
-                                >
-                                  {m.sender_name}
-                                </span>
-                              </div>
-                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', flexShrink: 0 }}>
-                                {m.received_time_vn.split(' ')[1] || m.received_time_vn}
-                              </span>
-                            </div>
-
-                            {/* Dòng 2: Tiêu đề Subject */}
-                            <div
-                              style={{
-                                fontWeight: m.is_read ? 500 : 700,
-                                fontSize: '12.5px',
-                                color: m.is_read ? 'var(--text-primary)' : '#0f172a',
-                                marginBottom: '3px',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {m.subject}
-                            </div>
-
-                            {/* Dòng 3: Preview tóm tắt & Icon đính kèm */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                />
+                              )}
                               <span
                                 style={{
-                                  fontSize: '11.5px',
-                                  color: 'var(--text-secondary)',
+                                  fontWeight: m.is_read || activeTab === 'sent' ? 600 : 800,
+                                  fontSize: '13px',
+                                  color: 'var(--text-primary)',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',
                                   whiteSpace: 'nowrap',
-                                  flex: 1,
                                 }}
                               >
-                                {m.preview || '(Không có nội dung xem trước)'}
+                                {m.sender_name}
                               </span>
-                              {m.has_attachments && (
-                                <Paperclip size={13} style={{ color: '#D97706', flexShrink: 0 }} />
-                              )}
                             </div>
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', flexShrink: 0 }}>
+                              {m.received_time_vn.split(' ')[1] || m.received_time_vn}
+                            </span>
                           </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })
-              )}
+
+                          {/* Dòng 2: Tiêu đề Subject */}
+                          <div
+                            style={{
+                              fontWeight: m.is_read || activeTab === 'sent' ? 500 : 700,
+                              fontSize: '12.5px',
+                              color: m.is_read || activeTab === 'sent' ? 'var(--text-primary)' : '#0f172a',
+                              marginBottom: '3px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {m.subject}
+                          </div>
+
+                          {/* Dòng 3: Preview tóm tắt & Icon đính kèm */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                            <span
+                              style={{
+                                fontSize: '11.5px',
+                                color: 'var(--text-secondary)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                flex: 1,
+                              }}
+                            >
+                              {m.preview || '(Không có nội dung xem trước)'}
+                            </span>
+                            {m.has_attachments && (
+                              <Paperclip size={13} style={{ color: '#D97706', flexShrink: 0 }} />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -874,23 +827,44 @@ export const WebmailPage: React.FC = () => {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Button
-                    variant="outline"
-                    onClick={() => handleReply(false)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 12px' }}
-                  >
-                    <CornerUpLeft size={14} />
-                    <span>Trả lời</span>
-                  </Button>
+                  {activeTab !== 'sent' ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => handleReply(false)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 12px' }}
+                      >
+                        <CornerUpLeft size={14} />
+                        <span>Trả lời</span>
+                      </Button>
 
-                  <Button
-                    variant="outline"
-                    onClick={() => handleReply(true)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 12px' }}
-                  >
-                    <CornerUpRight size={14} />
-                    <span>Trả lời tất cả</span>
-                  </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => handleReply(true)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 12px' }}
+                      >
+                        <CornerUpRight size={14} />
+                        <span>Trả lời tất cả</span>
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setComposeInit({
+                          to: selectedDetail.to_recipients.map((r) => r.email).join('; '),
+                          cc: selectedDetail.cc_recipients?.map((r) => r.email).join('; ') || '',
+                          subject: selectedDetail.subject,
+                          bodyHtml: selectedDetail.body_content,
+                        });
+                        setComposeOpen(true);
+                      }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 12px' }}
+                    >
+                      <CornerUpRight size={14} />
+                      <span>Gửi lại</span>
+                    </Button>
+                  )}
 
                   <Button
                     variant="outline"
@@ -904,7 +878,7 @@ export const WebmailPage: React.FC = () => {
 
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Clock size={13} />
-                  <span>Đã nhận: {selectedDetail.received_time_vn}</span>
+                  <span>{activeTab === 'sent' ? 'Đã gửi: ' : 'Đã nhận: '}{selectedDetail.received_time_vn}</span>
                 </div>
               </div>
 
@@ -922,7 +896,7 @@ export const WebmailPage: React.FC = () => {
                       width: '40px',
                       height: '40px',
                       borderRadius: '50%',
-                      backgroundColor: '#D97706',
+                      backgroundColor: activeTab === 'sent' ? '#0284C7' : '#D97706',
                       color: '#FFFFFF',
                       display: 'flex',
                       alignItems: 'center',
@@ -932,17 +906,21 @@ export const WebmailPage: React.FC = () => {
                       flexShrink: 0,
                     }}
                   >
-                    {selectedDetail.sender_name.charAt(0).toUpperCase() || 'U'}
+                    {activeTab === 'sent' ? 'B' : (selectedDetail.sender_name.charAt(0).toUpperCase() || 'U')}
                   </div>
 
                   <div style={{ flex: 1, minWidth: 0, fontSize: '12.5px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)' }}>
-                        {selectedDetail.sender_name}
+                        {activeTab === 'sent'
+                          ? `Từ: Bạn <${selectedDetail.sender_email || 'ss.it.application@ggg.com.vn'}>`
+                          : selectedDetail.sender_name}
                       </span>
-                      <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
-                        &lt;{selectedDetail.sender_email}&gt;
-                      </span>
+                      {activeTab !== 'sent' && (
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+                          &lt;{selectedDetail.sender_email}&gt;
+                        </span>
+                      )}
                     </div>
 
                     {/* Dòng Tới: */}
@@ -1051,11 +1029,7 @@ export const WebmailPage: React.FC = () => {
         initialSubject={composeInit.subject}
         initialBodyHtml={composeInit.bodyHtml}
         onEmailSent={() => {
-          if (activeTab === 'sent') {
-            loadSentLogs();
-          } else {
-            loadMessages(activeTab);
-          }
+          loadMessages(activeTab);
         }}
       />
 
