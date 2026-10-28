@@ -9,7 +9,9 @@ Tích hợp:
 """
 
 import os
+import re
 import json
+import base64
 import time
 import logging
 import smtplib
@@ -18,6 +20,7 @@ from datetime import datetime, timezone, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
+from email.mime.image import MIMEImage
 from email import encoders
 from email.header import Header
 from email.utils import formataddr
@@ -131,6 +134,83 @@ def get_default_golden_gate_signature_html(
   </table>
 </div>
 """
+
+
+def embed_inline_images(html_content: str) -> Tuple[str, List[Tuple[str, bytes, str, str]]]:
+    """
+    Xử lý tất cả các hình ảnh trong email (bao gồm logo Golden Gate và ảnh base64 hoặc URL):
+    - Chuyển đổi các hình ảnh sang dạng Inline Embedded CID Attachment (Content-ID).
+    - Giúp Outlook, Gmail, Apple Mail hiển thị ảnh trực tiếp 100% mà KHÔNG bị chặn bảo mật (không báo [X] download pictures).
+    Trả về: (html_mới, danh_sách_ảnh_inline [(cid, image_bytes, subtype, filename)])
+    """
+    inline_images: List[Tuple[str, bytes, str, str]] = []
+    cid_counter = 0
+
+    # 1. Xử lý logo Golden Gate ggg_logo.png
+    pattern_logo = re.compile(r'(https?://[^"\'>]*)?/ggg_logo\.png', re.IGNORECASE)
+    if pattern_logo.search(html_content):
+        html_content = pattern_logo.sub('cid:ggg_logo_img', html_content)
+
+    if 'cid:ggg_logo_img' in html_content:
+        # Tìm đường dẫn file ggg_logo.png thực tế trong dự án
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        logo_candidates = [
+            os.path.join(os.path.dirname(os.path.dirname(current_dir)), "static", "ggg_logo.png"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))), "frontend", "public", "ggg_logo.png"),
+            os.path.join(current_dir, "..", "..", "static", "ggg_logo.png"),
+        ]
+        for lp in logo_candidates:
+            if os.path.exists(lp):
+                try:
+                    with open(lp, "rb") as f:
+                        logo_data = f.read()
+                    inline_images.append(("ggg_logo_img", logo_data, "png", "ggg_logo.png"))
+                    break
+                except Exception as e:
+                    logger.warning(f"Không thể đọc file logo tại {lp}: {e}")
+
+    # 2. Xử lý ảnh base64 do người dùng dán vào từ clipboard
+    pattern_base64 = re.compile(r'src=["\']data:image/([a-zA-Z0-9]+);base64,([a-zA-Z0-9+/=]+)["\']', re.IGNORECASE)
+    def repl_b64(m):
+        nonlocal cid_counter
+        img_type = m.group(1).lower()
+        b64_str = m.group(2)
+        cid = f"inline_img_{cid_counter}"
+        cid_counter += 1
+        try:
+            raw_bytes = base64.b64decode(b64_str)
+            inline_images.append((cid, raw_bytes, img_type, f"{cid}.{img_type}"))
+            return f'src="cid:{cid}"'
+        except Exception:
+            return m.group(0)
+
+    html_content = pattern_base64.sub(repl_b64, html_content)
+
+    # 3. Xử lý ảnh URL http/https bên ngoài để tránh Outlook chặn tải ảnh từ Internet
+    pattern_http = re.compile(r'src=["\'](https?://[^"\']+\.(?:png|jpg|jpeg|gif|webp))["\']', re.IGNORECASE)
+    def repl_http(m):
+        nonlocal cid_counter
+        img_url = m.group(1)
+        if "ggg_logo.png" in img_url.lower():
+            return 'src="cid:ggg_logo_img"'
+        try:
+            with httpx.Client(timeout=4.0) as client:
+                resp = client.get(img_url)
+                if resp.status_code == 200 and len(resp.content) <= 3 * 1024 * 1024:
+                    cid = f"inline_img_{cid_counter}"
+                    cid_counter += 1
+                    ext = img_url.split(".")[-1].split("?")[0].lower()
+                    if ext == "jpg":
+                        ext = "jpeg"
+                    inline_images.append((cid, resp.content, ext, f"{cid}.{ext}"))
+                    return f'src="cid:{cid}"'
+        except Exception:
+            pass
+        return m.group(0)
+
+    html_content = pattern_http.sub(repl_http, html_content)
+
+    return html_content, inline_images
 
 
 class WebmailService:
@@ -756,6 +836,9 @@ class WebmailService:
 </body>
 </html>"""
 
+        # Xử lý toàn bộ hình ảnh sang dạng Inline Embedded Attachment (CID) tránh bị Outlook chặn tải
+        full_html, inline_images = embed_inline_images(full_html)
+
         # Xây dựng MIME Message với tiêu chuẩn UTF-8 đầy đủ cho From và Subject
         msg = MIMEMultipart("mixed")
         msg["From"] = formataddr((str(Header(sender_name, "utf-8")), cfg.email_address))
@@ -764,9 +847,26 @@ class WebmailService:
             msg["Cc"] = ", ".join(clean_cc)
         msg["Subject"] = Header(subject.strip() if subject else "(Không có chủ đề)", "utf-8")
 
+        # Tạo container multipart/related để chứa nội dung HTML và các hình ảnh inline (CID)
+        msg_related = MIMEMultipart("related")
+
         # Phần thân HTML với bộ mã UTF-8
         body_part = MIMEText(full_html, "html", "utf-8")
-        msg.attach(body_part)
+        msg_related.attach(body_part)
+
+        # Đính kèm tất cả các ảnh inline vào container related
+        for cid, img_data, img_subtype, img_filename in inline_images:
+            try:
+                img_part = MIMEImage(img_data, _subtype=img_subtype)
+                img_part.add_header("Content-ID", f"<{cid}>")
+                img_part.add_header("Content-Disposition", "inline", filename=img_filename)
+                msg_related.attach(img_part)
+                logger.info(f"Đã đính kèm ảnh inline CID <{cid}> ({img_filename}) vào email.")
+            except Exception as ie:
+                logger.warning(f"Lỗi khi đính kèm inline image {cid}: {ie}")
+
+        # Gắn container related vào thư gốc
+        msg.attach(msg_related)
 
         # Đính kèm file nếu có
         if files:
