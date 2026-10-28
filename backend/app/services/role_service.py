@@ -138,6 +138,9 @@ BASE_PERMISSION_DEFINITIONS = [
     {"chucnang": "mobile_dedicated_view", "module": "Màn Hình & Phân Hệ Mới", "action": "Quyền Sử Dụng Giao Diện Điện Thoại Riêng (Mobile Portal)"},
     {"chucnang": "view_mobile_dedicated_view", "module": "Màn Hình & Phân Hệ Mới", "action": "Xem Giao Diện Điện Thoại Riêng (Mobile Portal)"},
     {"chucnang": "update_mobile_dedicated_view", "module": "Màn Hình & Phân Hệ Mới", "action": "Thao Tác Giao Diện Điện Thoại Riêng (Mobile Portal)"},
+    {"chucnang": "webmail", "module": "Màn Hình & Phân Hệ Mới", "action": "Quyền Sử Dụng Hệ Thống Webmail Tập Trung"},
+    {"chucnang": "view_webmail", "module": "Màn Hình & Phân Hệ Mới", "action": "Xem Hộp Thư & Đọc Email Webmail"},
+    {"chucnang": "update_webmail", "module": "Màn Hình & Phân Hệ Mới", "action": "Soạn & Gửi Email Webmail (Kèm File Đính Kèm)"},
 ]
 
 

@@ -1686,3 +1686,108 @@ BEGIN
     PRINT N'Created table [dbo].[AGENT_MULTITASK_PACKAGE_TEMPLATES] successfully.';
 END
 GO
+
+-- ----------------------------------------------------------------------------
+-- BẢNG: [dbo].[SYSTEM_EMAIL_CONFIG] (Cấu Hình Hệ Thống Mail Chung & SMTP)
+-- ----------------------------------------------------------------------------
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[SYSTEM_EMAIL_CONFIG]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[SYSTEM_EMAIL_CONFIG] (
+        [id] int IDENTITY(1,1) NOT NULL,
+        [account_name] nvarchar(100) NOT NULL DEFAULT (N'Mail Chung IT Application'),
+        [email_address] nvarchar(255) NOT NULL DEFAULT ('ss.it.application@ggg.com.vn'),
+        [email_password] nvarchar(255) NOT NULL DEFAULT ('He110@app8888'),
+        [smtp_host] nvarchar(255) NOT NULL DEFAULT ('smtp.office365.com'),
+        [smtp_port] int NOT NULL DEFAULT (587),
+        [smtp_use_tls] bit NOT NULL DEFAULT (1),
+        [default_to] nvarchar(500) NULL,
+        [default_cc] nvarchar(500) NOT NULL DEFAULT ('hcm.it.appsupport@ggg.com.vn; tuan.pham@ggg.com.vn;'),
+        [client_id] nvarchar(255) NOT NULL DEFAULT ('d3590ed6-52b3-4102-aeff-aad2292ab01c'),
+        [updated_by] nvarchar(100) NULL,
+        [updated_at] datetime NOT NULL DEFAULT (getdate()),
+        CONSTRAINT [PK_SYSTEM_EMAIL_CONFIG] PRIMARY KEY CLUSTERED ([id] ASC)
+    );
+    INSERT INTO [dbo].[SYSTEM_EMAIL_CONFIG] 
+    ([account_name], [email_address], [email_password], [smtp_host], [smtp_port], [smtp_use_tls], [default_to], [default_cc], [updated_by])
+    VALUES 
+    (N'Mail Chung IT Application', 'ss.it.application@ggg.com.vn', 'He110@app8888', 'smtp.office365.com', 587, 1, '', 'hcm.it.appsupport@ggg.com.vn; tuan.pham@ggg.com.vn;', 'dung.nguyenanh');
+    PRINT N'Created and seeded table [dbo].[SYSTEM_EMAIL_CONFIG] successfully.';
+END
+GO
+
+-- ----------------------------------------------------------------------------
+-- BẢNG: [dbo].[USER_EMAIL_SIGNATURE] (Chữ Ký Email Theo Từng User Đăng Nhập)
+-- ----------------------------------------------------------------------------
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[USER_EMAIL_SIGNATURE]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[USER_EMAIL_SIGNATURE] (
+        [id] int IDENTITY(1,1) NOT NULL,
+        [username] nvarchar(100) NOT NULL,
+        [full_name] nvarchar(255) NULL,
+        [job_title] nvarchar(255) NULL,
+        [department] nvarchar(255) NULL DEFAULT (N'GOLDEN GATE GROUP – SOUTH BRANCH'),
+        [office_address] nvarchar(500) NULL DEFAULT (N'7th Floor Gigamall, 240-242 Pham Van Dong, Hiep Binh Chanh, Thu Duc, Ho Chi Minh'),
+        [office_phone] nvarchar(100) NULL DEFAULT ('028 7300 9000 (ext: 8740)'),
+        [mobile] nvarchar(100) NULL,
+        [email] nvarchar(255) NULL,
+        [website] nvarchar(255) NULL DEFAULT ('www.ggg.com.vn'),
+        [signature_html] nvarchar(max) NULL,
+        [use_custom_html] bit NOT NULL DEFAULT (0),
+        [updated_at] datetime NOT NULL DEFAULT (getdate()),
+        CONSTRAINT [PK_USER_EMAIL_SIGNATURE] PRIMARY KEY CLUSTERED ([id] ASC),
+        CONSTRAINT [UQ_USER_EMAIL_SIGNATURE_USERNAME] UNIQUE NONCLUSTERED ([username] ASC)
+    );
+    PRINT N'Created table [dbo].[USER_EMAIL_SIGNATURE] successfully.';
+END
+GO
+
+-- ----------------------------------------------------------------------------
+-- BẢNG: [dbo].[WEBMAIL_SENT_LOG] (Nhật Ký Thư Đã Gửi Từ Webmail Tập Trung)
+-- ----------------------------------------------------------------------------
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[WEBMAIL_SENT_LOG]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[WEBMAIL_SENT_LOG] (
+        [id] int IDENTITY(1,1) NOT NULL,
+        [sender_username] nvarchar(100) NOT NULL,
+        [from_email] nvarchar(255) NOT NULL,
+        [to_emails] nvarchar(max) NOT NULL,
+        [cc_emails] nvarchar(max) NULL,
+        [subject] nvarchar(500) NULL,
+        [body_preview] nvarchar(1000) NULL,
+        [attachments_info] nvarchar(max) NULL,
+        [status] nvarchar(50) NOT NULL DEFAULT ('SUCCESS'),
+        [error_message] nvarchar(max) NULL,
+        [sent_at] datetime NOT NULL DEFAULT (getdate()),
+        CONSTRAINT [PK_WEBMAIL_SENT_LOG] PRIMARY KEY CLUSTERED ([id] ASC)
+    );
+    CREATE NONCLUSTERED INDEX [IX_WEBMAIL_SENT_LOG_USER_DATE] ON [dbo].[WEBMAIL_SENT_LOG] ([sender_username] ASC, [sent_at] DESC);
+    PRINT N'Created table [dbo].[WEBMAIL_SENT_LOG] successfully.';
+END
+GO
+
+-- ----------------------------------------------------------------------------
+-- PHÂN QUYỀN: [dbo].[PHANQUYEN_DETAIL] (Quyền Sử Dụng Webmail Tập Trung)
+-- ----------------------------------------------------------------------------
+IF OBJECT_ID(N'[dbo].[PHANQUYEN_DETAIL]', N'U') IS NOT NULL
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM [dbo].[PHANQUYEN_DETAIL] WHERE [id_quyen] = '1' AND [chucnang] = 'webmail')
+        INSERT INTO [dbo].[PHANQUYEN_DETAIL] ([id_quyen], [chucnang], [active]) VALUES ('1', 'webmail', 1);
+    IF NOT EXISTS (SELECT 1 FROM [dbo].[PHANQUYEN_DETAIL] WHERE [id_quyen] = '1' AND [chucnang] = 'view_webmail')
+        INSERT INTO [dbo].[PHANQUYEN_DETAIL] ([id_quyen], [chucnang], [active]) VALUES ('1', 'view_webmail', 1);
+    IF NOT EXISTS (SELECT 1 FROM [dbo].[PHANQUYEN_DETAIL] WHERE [id_quyen] = '1' AND [chucnang] = 'update_webmail')
+        INSERT INTO [dbo].[PHANQUYEN_DETAIL] ([id_quyen], [chucnang], [active]) VALUES ('1', 'update_webmail', 1);
+
+    -- Seed cho các nhóm quyền khác (id_quyen <> 1) với trạng thái active = 0 (chỉ dung.nguyenanh / Super Admin mới thấy để phân quyền)
+    INSERT INTO [dbo].[PHANQUYEN_DETAIL] ([id_quyen], [chucnang], [active])
+    SELECT DISTINCT CAST(id AS nvarchar(50)), 'webmail', 0
+    FROM [dbo].[LV_QUYEN]
+    WHERE id <> 1
+      AND NOT EXISTS (
+          SELECT 1 FROM [dbo].[PHANQUYEN_DETAIL] 
+          WHERE [id_quyen] = CAST([dbo].[LV_QUYEN].id AS nvarchar(50)) 
+            AND [chucnang] = 'webmail'
+      );
+    PRINT N'Initialized webmail permissions in [dbo].[PHANQUYEN_DETAIL] successfully.';
+END
+GO
+

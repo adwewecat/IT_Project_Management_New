@@ -142,6 +142,18 @@ export const hasNewScreenAccess = (user?: UserInfo | null, screenKey?: string): 
     );
   }
 
+  // Riêng Phân Hệ Webmail & Soạn Email Tập Trung:
+  // Mặc định chỉ dung.nguyenanh và Super Admin mới có quyền truy cập và phân quyền.
+  // Các tài khoản khác (kể cả Admin khác) chỉ truy cập được khi đã được phân quyền.
+  if (cleanKey === 'webmail') {
+    if (checkIsDungOrSuperAdmin(user)) return true;
+    return Boolean(
+      perms['webmail'] ||
+      perms['view_webmail'] ||
+      perms['update_webmail']
+    );
+  }
+
   // Các màn hình mới thông thường khác: Admin có toàn quyền truy cập mặc định
   if (checkIsAdmin(user)) return true;
 

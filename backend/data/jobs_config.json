@@ -24,11 +24,11 @@
       "human_readable": "Hàng ngày lúc 05:45"
     },
     "status": "idle",
-    "last_run_at": "2026-10-26 05:45:48",
-    "last_duration": 31.0,
+    "last_run_at": "2026-10-28 05:45:36",
+    "last_duration": 20.89,
     "last_status": "success",
-    "total_runs": 18,
-    "success_runs": 18,
+    "total_runs": 19,
+    "success_runs": 19,
     "failed_runs": 0,
     "is_hidden": false,
     "restricted_to_dung": false
@@ -60,11 +60,11 @@
       "time_3": "16:30"
     },
     "status": "idle",
-    "last_run_at": "2026-10-26 03:00:11",
-    "last_duration": 32.24,
+    "last_run_at": "2026-10-28 03:00:10",
+    "last_duration": 29.94,
     "last_status": "success",
-    "total_runs": 53,
-    "success_runs": 53,
+    "total_runs": 54,
+    "success_runs": 54,
     "failed_runs": 0,
     "is_hidden": false,
     "restricted_to_dung": false
@@ -516,12 +516,12 @@
       "human_readable": "Hàng ngày lúc 09:30"
     },
     "status": "idle",
-    "last_run_at": "2026-10-25 09:30:36",
-    "last_duration": 34.11,
+    "last_run_at": "2026-10-28 09:30:35",
+    "last_duration": 34.53,
     "last_status": "failed",
-    "total_runs": 9,
+    "total_runs": 10,
     "success_runs": 1,
-    "failed_runs": 8,
+    "failed_runs": 9,
     "is_hidden": false,
     "restricted_to_dung": false
   }

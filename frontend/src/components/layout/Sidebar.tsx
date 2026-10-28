@@ -29,6 +29,7 @@ import {
   ScrollText,
   Cpu,
   Smartphone,
+  Mail,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { dashboardService, PendingSummaryResponse } from '../../services/dashboardService';
@@ -302,6 +303,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   }}
                 >
                   NEW
+                </span>
+              </div>
+            </NavLink>
+          </li>
+        )}
+
+        {/* 5. Hệ Thống Webmail & Soạn Mail Tập Trung (Phân quyền webmail) */}
+        {hasNewScreenAccess(user, 'webmail') && (
+          <li>
+            <NavLink
+              to="/webmail"
+              className="sidebar-interactive-item"
+              style={({ isActive }) => getLinkStyle(isActive)}
+            >
+              <Mail size={18} style={{ color: '#D97706' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>Webmail & Soạn Mail</span>
+                <span
+                  style={{
+                    backgroundColor: '#D97706',
+                    color: '#FFFFFF',
+                    fontSize: '9.5px',
+                    fontWeight: 700,
+                    padding: '1px 5px',
+                    borderRadius: '10px',
+                  }}
+                >
+                  MAIL
                 </span>
               </div>
             </NavLink>

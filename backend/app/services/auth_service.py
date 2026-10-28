@@ -36,6 +36,8 @@ ALL_PERMISSIONS = [
     "agent_multitask", "view_agent_multitask", "update_agent_multitask",
     # Mobile Dedicated View permissions
     "mobile_dedicated_view", "view_mobile_dedicated_view", "update_mobile_dedicated_view",
+    # Webmail permissions
+    "webmail", "view_webmail", "update_webmail",
 ]
 
 ROLE_MAP = {

@@ -26,6 +26,7 @@ import { RestaurantMongoAnalysisPage } from '../pages/app/RestaurantMongoAnalysi
 import { SsoManagementPage } from '../pages/app/SsoManagementPage';
 import { AgentMultitaskPage } from '../pages/app/AgentMultitaskPage';
 import { MobileRestaurantPage } from '../pages/mobile/MobileRestaurantPage';
+import { WebmailPage } from '../pages/webmail/WebmailPage';
 import { MainLayout } from '../components/layout/MainLayout';
 import { ProtectedRoute } from './ProtectedRoute';
 import { useAuth } from '../contexts/AuthContext';
@@ -155,6 +156,17 @@ export const AppRoutes: React.FC = () => {
         <Route path="agent-multitask" element={<Navigate to="/app/agent-multitask" replace />} />
         <Route path="app/multitask" element={<Navigate to="/app/agent-multitask" replace />} />
         <Route path="multitask" element={<Navigate to="/app/agent-multitask" replace />} />
+
+        {/* Màn hình mới: Webmail & Soạn Email Tập Trung (Phân quyền webmail) */}
+        <Route
+          path="webmail"
+          element={
+            <ProtectedRoute requiredPermission="webmail">
+              <WebmailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="app/webmail" element={<Navigate to="/webmail" replace />} />
 
 
         <Route path="inventory/pr-po-do" element={<TheodoiPrPoDoPage />} />

@@ -58,6 +58,7 @@ async def lifespan(app: FastAPI):
             AgentMultitaskScriptTemplate,
             AgentMultitaskPackageTemplate
         )
+        from app.models.webmail import SystemEmailConfig, UserEmailSignature, WebmailSentLog
         from sqlalchemy import text
         Base.metadata.create_all(engine, tables=[
             OvernightDeviceLog.__table__,
@@ -72,6 +73,9 @@ async def lifespan(app: FastAPI):
             AgentMultitaskLog.__table__,
             AgentMultitaskScriptTemplate.__table__,
             AgentMultitaskPackageTemplate.__table__,
+            SystemEmailConfig.__table__,
+            UserEmailSignature.__table__,
+            WebmailSentLog.__table__,
         ], checkfirst=True)
 
         # Tự động nạp mẫu kịch bản mặc định nếu bảng trống

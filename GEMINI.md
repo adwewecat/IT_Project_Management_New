@@ -424,6 +424,34 @@
     + `Go_Cai_Dat_Dich_Vu.bat`: Tự động nâng quyền UAC, dừng và gỡ bỏ hoàn toàn service khỏi SCM và Task Scheduler.
   - **Tải nhanh file nén hoàn chỉnh**: `tools/Restaurant_Support_Agent_Full.zip` (~10.3MB) hoặc nút "Tải Gói Cài (.ZIP)" trên web.
 
+### 6.8. Phân Hệ Webmail & Soạn Email Tập Trung (`WebmailPage.tsx`)
+- **Bối cảnh nghiệp vụ**: Công ty áp dụng chính sách chặn email cá nhân trên máy trạm nội bộ, toàn bộ bộ phận chuyển sang sử dụng tài khoản email chung (`ss.it.application@ggg.com.vn`). Hệ thống cung cấp cổng Webmail trực tiếp trên giao diện quản trị để người dùng có thể đọc hộp thư chung, soạn thảo và gửi email kèm file đính kèm mà không cần cấu hình Outlook riêng trên từng máy.
+- **Kiến trúc kỹ thuật & Giao thức kết nối song song**:
+  1. **Đọc Hộp Thư & Quản Lý Trạng Thái Thư (Microsoft Graph API)**:
+     - Do Microsoft 365 đã vô hiệu hóa Basic Auth cho IMAP/POP3, backend sử dụng cơ chế xác thực hiện đại OAuth2 ROPC (Resource Owner Password Credentials) thông qua Public Office Client (`d3590ed6-52b3-4102-aeff-aad2292ab01c`) để lấy Access Token Microsoft Graph.
+     - Tải danh sách thư chưa đọc (`isRead eq false`) hoặc tất cả thư với bộ lọc thời gian và phân trang.
+     - **Cơ chế chống đọc lặp**: Ngay khi người dùng nhấp vào đọc thư, hệ thống tự động phát lệnh `PATCH /v1.0/me/messages/{id}` đặt `isRead: true` trực tiếp trên máy chủ Exchange để đánh dấu đã đọc, loại bỏ thư khỏi danh sách chưa đọc trong các lần tải tiếp theo.
+     - Hỗ trợ tải tệp đính kèm trực tiếp thông qua endpoint `/me/messages/{id}/attachments/{att_id}`.
+  2. **Gửi Thư Trực Tiếp (SMTP Office 365 with TLS 1.2)**:
+     - Máy chủ: `smtp.office365.com`, Cổng `587`, Giao thức `STARTTLS` ép buộc `ssl.TLSVersion.TLSv1_2`.
+     - Tài khoản gửi mặc định: `ss.it.application@ggg.com.vn`.
+     - **Kiểm soát dung lượng file đính kèm khắt khe (Tối đa 4MB)**: Cả frontend và backend đều kiểm tra kích thước từng file và tổng dung lượng không được vượt quá `4 * 1024 * 1024 bytes` (4MB). Nếu vượt quá, báo lỗi rõ ràng và từ chối gửi.
+     - **Danh sách CC mặc định**: Tự động điền sẵn `hcm.it.appsupport@ggg.com.vn ; tuan.pham@ggg.com.vn ;` khi mở form soạn thư; người gửi có thể tùy ý thêm hoặc xóa bớt địa chỉ.
+     - Lưu vết toàn bộ lịch sử gửi thư vào bảng `dbo.WEBMAIL_SENT_LOG` để phục vụ đối soát và kiểm toán.
+  3. **Chữ Ký Email Cá Nhân Hóa (Per-User Signature)**:
+     - Lưu trữ tại bảng `dbo.USER_EMAIL_SIGNATURE` theo từng tài khoản (`username`).
+     - Tự động nạp mẫu chuẩn của Golden Gate Restaurant Group (Golden Gate South Branch) với Logo, Tên, Chức danh, Số máy nhánh, Di động, Địa chỉ văn phòng Gigamall và Website.
+     - Hỗ trợ xem trước thời gian thực (Live Preview) và chế độ sửa mã HTML trực tiếp.
+     - Mỗi lần người dùng mở modal "Soạn thư mới" hoặc Trả lời/Chuyển tiếp, chữ ký cá nhân của user đang đăng nhập sẽ được tự động gắn vào cuối nội dung thư.
+  4. **Phân Quyền & Quản Trị Cấu Hình Hệ Thống (Tuân thủ Quy tắc 10)**:
+     - **Mặc định Admin-Only**: Chỉ `dung.nguyenanh` và `Super Admin` (phanquyen = '0') mới nhìn thấy menu Webmail trên Sidebar và có quyền cấu hình tài khoản, mật khẩu hòm thư chung, SMTP và danh sách CC mặc định.
+     - **Phân quyền theo nhu cầu**: Khai báo quyền `webmail`, `view_webmail`, `update_webmail` trong ma trận phân quyền `RolesPage.tsx` và `role_service.py` để Admin có thể mở quyền cho các nhóm quyền khác (App, Helpdesk...) khi cần.
+  5. **Giao Diện UI/UX Phân Khung Độc Lập (Outlook Split-Pane Standard)**:
+     - Cột trái: Bộ lọc (Chưa đọc, Tất cả, Đã gửi), thanh tìm kiếm nhanh, danh sách email tự động phân nhóm theo mốc thời gian (**Hôm nay**, **Hôm qua**, **Tuần này**, **Cũ hơn**).
+     - Cột phải: Khung đọc thư (Reading Pane) hiển thị tiêu đề lớn, người gửi, To, CC, danh sách file đính kèm dạng chip kèm nút tải 1-chạm, nội dung HTML email được nhúng trong iframe an toàn không vỡ layout.
+     - Nút thao tác nhanh: `Soạn thư mới`, `Làm mới`, `Đánh dấu tất cả đã đọc`, `Trả lời`, `Trả lời tất cả`, `Chuyển tiếp`, `Chữ ký của tôi`, `Cấu hình hệ thống`.
+     - Tuân thủ Rule 8: Toàn màn hình trong 1 khung nhìn (Single-Screen Viewport), danh sách thư và khung đọc thư có thanh cuộn riêng (`overflowY: 'auto'`), không phát sinh scrollbar dọc toàn trang.
+
 ---
 
 ## 7. QUY CHUẨN VIẾT CODE BACKEND

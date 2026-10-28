@@ -79,6 +79,8 @@ const BASE_LABELS: Record<string, { label: string; module: string }> = {
 
   // Màn Hình & Phân Hệ Mới: Giao diện điện thoại riêng (Mobile Portal)
   mobile_dedicated_view: { label: 'Quyền Sử Dụng Giao Diện Điện Thoại Riêng (Mobile Portal)', module: 'Màn Hình & Phân Hệ Mới' },
+  // Màn Hình & Phân Hệ Mới: Hệ Thống Webmail Tập Trung
+  webmail: { label: 'Hệ Thống Webmail & Soạn Email Tập Trung', module: 'Màn Hình & Phân Hệ Mới' },
 };
 
 const PRESET_MODULE_OPTIONS = [

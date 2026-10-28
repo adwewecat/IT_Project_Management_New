@@ -1200,3 +1200,41 @@
 - **Kiểm thử & Đóng gói**:
   - Frontend `npm run build` đạt exit code 0 (`dist/` kèm `web.config` IIS).
   - Backend compileall 100% sạch lỗi, Smoke test `PASSED 100%`.
+
+
+---
+
+### [2026-10-28] - Triển Khai Phân Hệ Webmail & Soạn Email Tập Trung Kèm Chữ Ký Cá Nhân Hóa (Outlook Standard)
+- **Bối cảnh & Yêu cầu người dùng**:
+  1. Do chính sách công ty chặn sử dụng email cá nhân trên máy trạm, toàn bộ bộ phận chuyển sang sử dụng tài khoản email chung (`ss.it.application@ggg.com.vn`).
+  2. Người dùng cần một phân hệ Webmail trực tiếp trên giao diện web để:
+     - Đọc danh sách email chưa đọc và tất cả thư trong hòm thư chung.
+     - Sau khi người dùng mở đọc thư, hệ thống tự động đánh dấu thư là ĐÃ ĐỌC trên máy chủ để không load lại lần 2.
+     - Soạn thảo và gửi email trực tiếp trên web kèm tệp đính kèm (tối đa 4MB).
+     - Trường `To`: nhập danh sách người nhận.
+     - Trường `Cc`: mặc định điền sẵn `hcm.it.appsupport@ggg.com.vn ; tuan.pham@ggg.com.vn ;`, có thể thêm hoặc xóa bớt.
+     - Trường `Subject`: tiêu đề thư.
+     - Thân thư (`Body`): hỗ trợ thanh công cụ định dạng phong phú (in đậm, in nghiêng, gạch chân, highlight màu, màu chữ, danh sách, bảng dữ liệu, chèn link...).
+     - Chữ ký email (`Chữ ký mail`): nằm ở dưới cùng của email, được cấu hình riêng theo từng user đăng nhập. Mỗi lần soạn email mới, hệ thống tự động gắn chữ ký của user đó vào cuối nội dung thư theo mẫu chuẩn Golden Gate Restaurant Group (logo, phòng ban, tên, chức vụ, SĐT, địa chỉ Gigamall).
+     - Phân quyền & Quản trị: Mặc định chỉ `dung.nguyenanh` và `Super Admin` (phanquyen = '0') mới nhìn thấy màn hình này và có quyền cấu hình lại mail / pass mail mặc định (`ss.it.application@ggg.com.vn` / `He110@app8888`), chỉnh To/Cc mặc định, và phân quyền cho các nhóm quyền khác thấy màn hình này thông qua Quản Trị Nhóm Quyền.
+- **Kiến trúc Kỹ thuật & Triển khai**:
+  1. **Cơ sở dữ liệu SQL Server**:
+     - Bảng `dbo.SYSTEM_EMAIL_CONFIG`: Lưu thông tin hòm thư chung, mật khẩu, máy chủ SMTP (`smtp.office365.com:587`, TLS 1.2), To mặc định, CC mặc định.
+     - Bảng `dbo.USER_EMAIL_SIGNATURE`: Lưu trữ thông tin chữ ký cá nhân hóa (họ tên, chức danh, di động, máy bàn, phòng ban, HTML chữ ký) theo từng tài khoản (`username`).
+     - Bảng `dbo.WEBMAIL_SENT_LOG`: Lưu vết lịch sử gửi email từ web để phục vụ kiểm toán và đối soát.
+     - Tự động tạo bảng trong `lifespan` (`main.py`) và cập nhật DDL vào `Script/Full_SCRIPT_SQL_TABLE.sql`.
+  2. **Backend API (Python / FastAPI / Microsoft Graph API / SMTP)**:
+     - `app/services/webmail_service.py` & `app/api/v1/webmail.py`.
+     - Microsoft Graph API (OAuth2 ROPC với Office Client `d3590ed6-52b3-4102-aeff-aad2292ab01c`): Lấy token, đọc danh sách email Inbox, lọc chưa đọc (`isRead eq false`), tự động đánh dấu đã đọc (`PATCH /me/messages/{id}` với `isRead: true`), đánh dấu tất cả đã đọc, tải file đính kèm.
+     - SMTP Office 365 (`smtp.office365.com:587`, TLS 1.2): Gửi email kèm file đính kèm với kiểm tra kích thước tối đa 4MB.
+     - Phân quyền: Đăng ký `webmail`, `view_webmail`, `update_webmail` trong `role_service.py` và `auth_service.py`. Chỉ `dung.nguyenanh` và Super Admin được phép sửa cấu hình hệ thống.
+  3. **Frontend (React 18 / TypeScript / Vite)**:
+     - `WebmailPage.tsx`: Giao diện chia 2 cột chuẩn Outlook Web (Cột trái: Tab Chưa đọc, Tất cả, Đã gửi, phân nhóm mốc thời gian Hôm nay, Hôm qua, Tuần này, Cũ hơn. Cột phải: Khung đọc thư chi tiết, iframe hiển thị HTML an toàn, danh sách tệp đính kèm kèm nút tải 1-chạm, các nút Trả lời, Trả lời tất cả, Chuyển tiếp).
+     - `WebmailComposeModal.tsx`: Form soạn thảo phong phú với To, CC mặc định, Subject, thanh công cụ Rich Text (in đậm, highlight, màu sắc, bảng, bullet...), đính kèm file tối đa 4MB (báo lỗi ngay nếu vượt 4MB), tự động gắn chữ ký của user ở cuối.
+     - `WebmailSignatureModal.tsx`: Form cài đặt chữ ký cá nhân hóa theo từng user kèm xem trước thời gian thực (Live Preview).
+     - `WebmailConfigModal.tsx`: Modal cấu hình email hệ thống, mật khẩu, SMTP và nút kiểm tra kết nối trực tiếp (chỉ `dung.nguyenanh` và Super Admin).
+     - Menu Sidebar: Hiển thị mục `Webmail & Soạn Mail` kiểm soát bởi `hasNewScreenAccess(user, 'webmail')`.
+     - Route Guard: `/webmail` được bảo vệ bởi `<ProtectedRoute requiredPermission="webmail">`.
+- **Kiểm thử & Đóng gói**:
+  - Backend compileall 100% sạch lỗi, Smoke test `PASSED 100%`.
+  - Frontend `cmd /c "npm run build"` đạt exit code 0 (`dist/` kèm `web.config` IIS).
