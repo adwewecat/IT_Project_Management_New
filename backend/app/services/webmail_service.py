@@ -507,6 +507,50 @@ class WebmailService:
             logger.error(f"Lỗi khi sync_inbox_from_graph: {e}")
 
     @classmethod
+    def match_sent_log_user(
+        cls,
+        subject: str,
+        sent_time_raw: Optional[str],
+        recipient_emails: List[str],
+        sent_logs: List[WebmailSentLog]
+    ) -> str:
+        """Tra cứu và khớp thông tin người gửi email thực tế từ bảng WEBMAIL_SENT_LOG."""
+        if not sent_logs or not sent_time_raw:
+            return ""
+
+        subj = (subject or "").strip().lower()
+        clean_recipients = [r.lower().strip() for r in recipient_emails if r]
+
+        m_dt = None
+        try:
+            clean_t = sent_time_raw.replace("Z", "+00:00")
+            m_dt = datetime.fromisoformat(clean_t).astimezone(VN_TZ).replace(tzinfo=None)
+        except Exception:
+            return ""
+
+        matched_user = ""
+        min_diff = 300.0  # Cho phép chênh lệch thời gian tối đa 5 phút
+
+        for l in sent_logs:
+            if not l.sent_at:
+                continue
+            diff = abs((l.sent_at - m_dt).total_seconds())
+            if diff >= min_diff:
+                continue
+
+            l_subj = (l.subject or "").strip().lower()
+            if subj and l_subj and subj == l_subj:
+                min_diff = diff
+                matched_user = l.sender_username
+            elif (not subj or subj == "(không có chủ đề)") and (not l_subj or l_subj == "(không có chủ đề)"):
+                l_to = (l.to_emails or "").lower()
+                if any(r in l_to for r in clean_recipients):
+                    min_diff = diff
+                    matched_user = l.sender_username
+
+        return matched_user
+
+    @classmethod
     def get_messages(
         cls,
         db: Session,
@@ -633,18 +677,42 @@ class WebmailService:
                 data = res.json()
                 raw_messages = list(data.get("value", []))
 
+                # Tra cứu nhật ký gửi từ WEBMAIL_SENT_LOG nếu đang xem thư đã gửi
+                sent_logs: List[WebmailSentLog] = []
+                if filter_type == "sent":
+                    try:
+                        sent_logs = db.execute(
+                            select(WebmailSentLog).order_by(desc(WebmailSentLog.sent_at)).limit(200)
+                        ).scalars().all()
+                    except Exception as le:
+                        logger.warning(f"Lỗi truy vấn WEBMAIL_SENT_LOG: {le}")
+
                 formatted = []
                 for m in raw_messages:
+                    sent_by_user = ""
                     if filter_type == "sent":
                         to_list = [
                             r.get("emailAddress", {}).get("name") or r.get("emailAddress", {}).get("address")
                             for r in m.get("toRecipients", [])
+                        ]
+                        to_emails = [
+                            r.get("emailAddress", {}).get("address")
+                            for r in m.get("toRecipients", [])
+                            if r.get("emailAddress", {}).get("address")
                         ]
                         to_str = ", ".join([t for t in to_list if t]) or "Không có người nhận"
                         sender_name = f"Tới: {to_str}"
                         sender_email = m.get("from", {}).get("emailAddress", {}).get("address") or ""
                         time_raw = m.get("sentDateTime") or m.get("receivedDateTime")
                         is_read = True
+
+                        # Khớp người gửi thực tế từ Webmail
+                        sent_by_user = cls.match_sent_log_user(
+                            subject=m.get("subject") or "",
+                            sent_time_raw=time_raw,
+                            recipient_emails=to_emails,
+                            sent_logs=sent_logs
+                        )
                     else:
                         sender = m.get("from", {}).get("emailAddress", {})
                         sender_name = sender.get("name") or sender.get("address") or "Không rõ người gửi"
@@ -663,7 +731,8 @@ class WebmailService:
                         "is_read": is_read,
                         "has_attachments": bool(m.get("hasAttachments")),
                         "preview": m.get("bodyPreview") or "",
-                        "importance": m.get("importance") or "normal"
+                        "importance": m.get("importance") or "normal",
+                        "sent_by_user": sent_by_user
                     })
 
                 return {
@@ -749,11 +818,30 @@ class WebmailService:
                 body_info = data.get("body", {})
                 time_raw = data.get("sentDateTime") or data.get("receivedDateTime")
 
+                # Tra cứu người gửi thực tế từ Webmail nếu đây là email gửi đi từ hòm thư chính
+                sent_by_user = ""
+                sender_email = sender.get("address") or ""
+                cfg = cls.get_config(db)
+                if sender_email.lower() == (cfg.email_address or "").lower():
+                    try:
+                        sent_logs = db.execute(
+                            select(WebmailSentLog).order_by(desc(WebmailSentLog.sent_at)).limit(200)
+                        ).scalars().all()
+                        to_emails = [r.get("email") for r in to_list if r.get("email")]
+                        sent_by_user = cls.match_sent_log_user(
+                            subject=data.get("subject") or "",
+                            sent_time_raw=time_raw,
+                            recipient_emails=to_emails,
+                            sent_logs=sent_logs
+                        )
+                    except Exception as le:
+                        logger.warning(f"Lỗi tìm người gửi trong sent_logs ở get_message_detail: {le}")
+
                 return {
                     "id": data.get("id"),
                     "subject": data.get("subject") or "(Không có chủ đề)",
                     "sender_name": sender.get("name") or sender.get("address") or "",
-                    "sender_email": sender.get("address") or "",
+                    "sender_email": sender_email,
                     "to_recipients": to_list,
                     "cc_recipients": cc_list,
                     "received_time_vn": format_iso_to_vn(time_raw),
@@ -763,7 +851,8 @@ class WebmailService:
                     "attachments": attachments,
                     "body_type": body_info.get("contentType", "html"),
                     "body_content": body_info.get("content", ""),
-                    "importance": data.get("importance", "normal")
+                    "importance": data.get("importance", "normal"),
+                    "sent_by_user": sent_by_user
                 }
         except httpx.RequestError as exc:
             logger.error(f"Lỗi mạng khi tải chi tiết email: {exc}")

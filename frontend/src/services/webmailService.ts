@@ -40,6 +40,7 @@ export interface WebmailMessageItem {
   has_attachments: boolean;
   preview: string;
   importance: string;
+  sent_by_user?: string;
 }
 
 export interface WebmailMessageDetail {
@@ -57,6 +58,7 @@ export interface WebmailMessageDetail {
   body_type: string;
   body_content: string;
   importance: string;
+  sent_by_user?: string;
 }
 
 export interface UserEmailSignature {

@@ -665,9 +665,9 @@ export const WebmailPage: React.FC = () => {
                             transition: 'all 0.15s ease',
                           }}
                         >
-                          {/* Dòng 1: Người gửi / Người nhận & Thời gian */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', maxWidth: '75%' }}>
+                          {/* Dòng 1: Người gửi / Người nhận & Thời gian + Người gửi Webmail */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '3px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', maxWidth: activeTab === 'sent' ? '62%' : '75%' }}>
                               {!m.is_read && activeTab !== 'sent' && (
                                 <span
                                   style={{
@@ -692,9 +692,33 @@ export const WebmailPage: React.FC = () => {
                                 {m.sender_name}
                               </span>
                             </div>
-                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', flexShrink: 0 }}>
-                              {m.received_time_vn.split(' ')[1] || m.received_time_vn}
-                            </span>
+
+                            {/* Cột phải: Thời gian & Nhãn người gửi (đối với Thư Đã Gửi) */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', flexShrink: 0 }}>
+                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                {m.received_time_vn.split(' ')[1] || m.received_time_vn}
+                              </span>
+                              {activeTab === 'sent' && (
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    color: m.sent_by_user ? '#0284C7' : '#64748B',
+                                    backgroundColor: m.sent_by_user ? 'rgba(2, 132, 199, 0.1)' : 'rgba(100, 116, 139, 0.08)',
+                                    border: m.sent_by_user ? '1px solid rgba(2, 132, 199, 0.25)' : '1px solid rgba(100, 116, 139, 0.2)',
+                                    padding: '1px 5px',
+                                    borderRadius: '4px',
+                                    maxWidth: '120px',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                  title={m.sent_by_user ? `Email này do tài khoản ${m.sent_by_user} gửi đi từ Webmail` : 'Gửi ngoài Webmail / từ Outlook'}
+                                >
+                                  {m.sent_by_user ? `👤 ${m.sent_by_user}` : 'Outlook'}
+                                </span>
+                              )}
+                            </div>
                           </div>
 
                           {/* Dòng 2: Tiêu đề Subject */}
@@ -901,9 +925,27 @@ export const WebmailPage: React.FC = () => {
                   )}
                 </div>
 
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Clock size={13} />
-                  <span>{activeTab === 'sent' ? 'Đã gửi: ' : 'Đã nhận: '}{selectedDetail.received_time_vn}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {activeTab === 'sent' && selectedDetail.sent_by_user && (
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        color: '#0369A1',
+                        backgroundColor: '#E0F2FE',
+                        border: '1px solid #BAE6FD',
+                        padding: '1px 7px',
+                        borderRadius: '4px',
+                      }}
+                      title={`Tài khoản gửi đi: ${selectedDetail.sent_by_user}`}
+                    >
+                      👤 {selectedDetail.sent_by_user}
+                    </span>
+                  )}
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Clock size={13} />
+                    <span>{activeTab === 'sent' ? 'Đã gửi: ' : 'Đã nhận: '}{selectedDetail.received_time_vn}</span>
+                  </div>
                 </div>
               </div>
 
@@ -944,6 +986,23 @@ export const WebmailPage: React.FC = () => {
                       {activeTab !== 'sent' && (
                         <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
                           &lt;{selectedDetail.sender_email}&gt;
+                        </span>
+                      )}
+                      {activeTab === 'sent' && (
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            color: selectedDetail.sent_by_user ? '#0284C7' : '#64748B',
+                            backgroundColor: selectedDetail.sent_by_user ? 'rgba(2, 132, 199, 0.1)' : 'rgba(100, 116, 139, 0.1)',
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            border: selectedDetail.sent_by_user ? '1px solid rgba(2, 132, 199, 0.3)' : '1px solid rgba(100, 116, 139, 0.25)',
+                          }}
+                        >
+                          {selectedDetail.sent_by_user
+                            ? `Email này do tài khoản [ ${selectedDetail.sent_by_user} ] gửi đi`
+                            : 'Gửi trực tiếp từ Outlook'}
                         </span>
                       )}
                     </div>

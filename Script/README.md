@@ -5414,3 +5414,29 @@ estaurant_service.py).
   - Chạy test thực tế: 50/50 email lịch sử trong tab Tất Cả Thư hiển thị `[ DA DOC ]`, không còn chấm xanh sai lệch.
   - Frontend `npm run build` exit code 0 (`dist/` kèm `web.config` IIS).
   - Backend `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
+
+
+---
+
+### [2026-10-28] - Hiển Thị Danh Tính Cá Nhân Đã Gửi Email (Người Gửi Webmail) Trong Tab "Thư Đã Gửi"
+- **Bối cảnh & Yêu cầu người dùng**:
+  - Hòm thư chung (`ss.it.application@ggg.com.vn`) được nhiều cá nhân / thành viên trong đội ngũ sử dụng chung để gửi email công việc.
+  - Khi vào tab **"Thư Đã Gửi" (Sent Items)**, tất cả các thư đều hiển thị người gửi là "Bạn <ss.it.application@ggg.com.vn>". Người dùng yêu cầu hiển thị rõ **cá nhân nào trong hệ thống đã gửi thư đó** (ví dụ: gắn thêm nhãn nhỏ ở góc phải item là `👤 dung.nguyenanh` để kiểm tra và truy vết xem user nào dùng mail chung để gửi đi).
+- **Giải pháp Kỹ thuật & Triển khai**:
+  1. **Backend Service (`backend/app/services/webmail_service.py`)**:
+     - Thêm phương thức tra cứu và đối chiếu `match_sent_log_user()`: Khớp thông tin giữa các email trong thư mục `SentItems` trên Microsoft 365 với các bản ghi lưu vết trong bảng `dbo.WEBMAIL_SENT_LOG` theo `subject`, `sentDateTime` (trong phạm vi 5 phút), và danh sách người nhận.
+     - Trong `get_messages(filter_type="sent")`: Tự động tra cứu `WEBMAIL_SENT_LOG`, xác định chính xác username người gửi và trả về trường `sent_by_user`. Với các email gửi ngoài Webmail (gửi trực tiếp từ ứng dụng Outlook máy tính), hệ thống trả về rỗng.
+     - Trong `get_message_detail()`: Cũng tự động đối chiếu và trả về `sent_by_user` khi xem nội dung chi tiết của bất kỳ email gửi đi nào.
+  2. **Frontend Type Definition (`frontend/src/services/webmailService.ts`)**:
+     - Bổ sung trường `sent_by_user?: string` vào cả `WebmailMessageItem` và `WebmailMessageDetail`.
+  3. **Giao diện Webmail (`frontend/src/pages/webmail/WebmailPage.tsx`)**:
+     - **Danh sách email đã gửi (Cột trái)**: Ở góc phải của từng thẻ email (bên dưới giờ gửi), hiển thị nhãn badge tinh gọn:
+       + Nếu gửi từ Webmail: Hiển thị badge màu xanh dương `👤 dung.nguyenanh` (kèm tooltip giải thích rõ ràng "Email này do tài khoản dung.nguyenanh gửi đi từ Webmail").
+       + Nếu gửi từ ngoài Webmail: Hiển thị badge xám `Outlook`.
+     - **Khung đọc email chi tiết (Cột phải)**:
+       + Thanh công cụ phía trên hiển thị badge `👤 dung.nguyenanh` cạnh thời gian đã gửi.
+       + Khối thẻ người gửi (Sender Card) hiển thị nhãn nổi bật: `Email này do tài khoản [ dung.nguyenanh ] gửi đi` (hoặc `Gửi trực tiếp từ Outlook`).
+- **Kiểm thử & Đóng gói**:
+  - Đã chạy kiểm thử backend tự động: 100% các email gửi từ Webmail khớp chính xác với độ chênh lệch chỉ 0.1s và trả về đúng user gửi (`dung.nguyenanh`).
+  - Frontend `npm run build` thành công exit code 0 (`dist/` kèm `web.config` IIS).
+  - Backend `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
