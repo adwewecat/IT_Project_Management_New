@@ -584,15 +584,22 @@ class WebmailService:
                         "search_query": search_query
                     }
 
-                # Đếm số lượng email chưa đọc riêng cho user hiện tại để hiển thị badge
-                unread_badge_items = db.execute(
-                    select(WebmailInboxCache.id).where(
-                        ~WebmailInboxCache.id.in_(
-                            select(WebmailUserRead.message_id).where(WebmailUserRead.username == current_username)
+                # Đếm số lượng email chưa đọc riêng cho user hiện tại để hiển thị badge và xác định trạng thái đọc
+                user_unread_ids = set()
+                if current_username:
+                    try:
+                        user_unread_ids = set(
+                            db.execute(
+                                select(WebmailInboxCache.id).where(
+                                    ~WebmailInboxCache.id.in_(
+                                        select(WebmailUserRead.message_id).where(WebmailUserRead.username == current_username)
+                                    )
+                                )
+                            ).scalars().all()
                         )
-                    )
-                ).scalars().all()
-                unread_count = len(unread_badge_items)
+                    except Exception as e:
+                        logger.warning(f"Lỗi lấy user_unread_ids cho {current_username}: {e}")
+                unread_count = len(user_unread_ids)
 
                 if filter_type == "sent":
                     url = "https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages"
@@ -643,8 +650,8 @@ class WebmailService:
                         sender_name = sender.get("name") or sender.get("address") or "Không rõ người gửi"
                         sender_email = sender.get("address") or ""
                         time_raw = m.get("receivedDateTime")
-                        # Thư được coi là đã đọc đối với user này nếu có trong user_read_ids
-                        is_read = (m.get("id") in user_read_ids)
+                        # Thư được coi là đã đọc nếu nó KHÔNG nằm trong danh sách thư chưa đọc của user này
+                        is_read = (m.get("id") not in user_unread_ids)
 
                     formatted.append({
                         "id": m.get("id"),

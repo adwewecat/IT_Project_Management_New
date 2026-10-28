@@ -1289,3 +1289,23 @@
   - Đã chạy kiểm thử thực tế: M365 unread remaining = 0 (hộp thư chính đã đánh dấu đã đọc), `dung.nguyenanh` đọc 1 thư thì còn 5, `test` chưa đọc vẫn còn nguyên 6 thư chưa đọc (100% khớp mong muốn).
   - Frontend `npm run build` exit code 0 (`dist/` kèm `web.config` IIS).
   - Backend `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
+
+---
+
+### [2026-10-28] - Khắc Phục Lỗi Hiển Thị Chấm Xanh Chưa Đọc Toàn Bộ Email Cũ Trong Tab "Tất Cả Thư"
+- **Bối cảnh & Phản hồi người dùng**:
+  - Người dùng gửi ảnh đối chiếu giữa Outlook trên Web và màn hình Webmail trong hệ thống.
+  - Trên Outlook: Toàn bộ thư trong Hộp thư đến đều đã đọc hết (không in đậm, không có vệt xanh).
+  - Nhưng trên tab "Tất Cả Thư" của Webmail: Toàn bộ các email cũ từ hôm qua, tuần trước (TRUYEN THONG NOI BO, HCM OPS, ITS Notifications...) đều bị gắn chấm xanh và vệt xanh báo "Chưa Đọc".
+- **Nguyên nhân cốt lõi**:
+  - Tại hàm `get_messages` khi `filter_type == "all"`, logic cũ gán `is_read = (m["id"] in user_read_ids)`.
+  - Vì `user_read_ids` chỉ chứa những email mà user vừa mới bấm đọc trong webapp, nên 50 email lịch sử cũ trên Outlook hiển nhiên không có trong `user_read_ids`, dẫn đến toàn bộ 50 thư bị gán `is_read = False` (hiển thị chấm xanh chưa đọc).
+- **Giải pháp & Xử lý**:
+  - Chuẩn hóa lại công thức xác định trạng thái đọc:
+    `user_unread_ids = set(...)` (tập hợp tất cả các email đang thực sự CHƯA ĐỌC của user hiện tại từ `dbo.WEBMAIL_INBOX_CACHE` loại trừ `dbo.WEBMAIL_USER_READ`).
+    Và gán `is_read = (m.get("id") not in user_unread_ids)`.
+  - Kết quả: Chỉ những email nào thực sự nằm trong danh sách chưa đọc của user mới có chấm xanh. Toàn bộ các email lịch sử cũ đã đọc trên Outlook hiển thị đúng là ĐÃ ĐỌC (không có chấm xanh), khớp 100% với giao diện Outlook thực tế.
+- **Kiểm thử & Đóng gói**:
+  - Chạy test thực tế: 50/50 email lịch sử trong tab Tất Cả Thư hiển thị `[ DA DOC ]`, không còn chấm xanh sai lệch.
+  - Frontend `npm run build` exit code 0 (`dist/` kèm `web.config` IIS).
+  - Backend `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
