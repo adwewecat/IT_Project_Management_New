@@ -28,7 +28,6 @@ import {
   KeyRound,
   ScrollText,
   Cpu,
-  Smartphone,
   Mail,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -277,39 +276,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </NavLink>
         </li>
 
-        {/* 4. Giao diện Điện Thoại (Mobile Portal - Phân quyền mobile_dedicated_view) */}
-        {hasNewScreenAccess(user, 'mobile_dedicated_view') && (
-          <li>
-            <NavLink
-              to="/mobile"
-              className="sidebar-interactive-item"
-              style={({ isActive }) => getLinkStyle(isActive)}
-              onClick={() => {
-                sessionStorage.removeItem('prefer_desktop');
-                if (onCloseMobile) onCloseMobile();
-              }}
-            >
-              <Smartphone size={18} style={{ color: '#0284C7' }} />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span>Mobile Portal</span>
-                <span
-                  style={{
-                    backgroundColor: '#0284C7',
-                    color: '#FFFFFF',
-                    fontSize: '9.5px',
-                    fontWeight: 700,
-                    padding: '1px 5px',
-                    borderRadius: '10px',
-                  }}
-                >
-                  NEW
-                </span>
-              </div>
-            </NavLink>
-          </li>
-        )}
-
-        {/* 5. Hệ Thống Webmail & Soạn Mail Tập Trung (Phân quyền webmail) */}
+        {/* 4. Hệ Thống Webmail & Soạn Mail Tập Trung (Phân quyền webmail) */}
         {hasNewScreenAccess(user, 'webmail') && (
           <li>
             <NavLink
