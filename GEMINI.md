@@ -1910,3 +1910,26 @@
   - Đã chạy kiểm thử tự động xác nhận: user `dung.nguyenanh` đọc thư thì thư biến mất khỏi unread của `dung.nguyenanh` nhưng VẪN XUẤT HIỆN trong unread của `test` (100% khớp mong đợi).
   - Frontend `npm run build` đạt exit code 0 (`dist/` kèm `web.config` IIS).
   - Backend compileall 100% sạch lỗi, Smoke test `PASSED 100%`.
+
+---
+
+### [2026-10-28] - Tự Động Đánh Dấu Đã Đọc Trên Hòm Thư Chính (M365) Ngay Khi Tải & Lưu Bộ Đệm WEBMAIL_INBOX_CACHE Tránh Load Trùng
+- **Bối cảnh & Yêu cầu người dùng**:
+  - Khi hòm thư chính (`ss.it.application@ggg.com.vn` trên Microsoft 365) tải xong danh sách email thì cũng phải đánh dấu luôn là ĐÃ ĐỌC trên M365 để tránh trường hợp load trùng lại lần sau.
+  - Đồng thời, đối với các user trong hệ thống (`dung.nguyenanh`, `test`...), các tài khoản này vẫn phải thấy email ở mục "Chưa Đọc" cho đến khi họ tự bấm vào đọc thì mới mất.
+- **Giải pháp Kiến trúc & Kỹ thuật**:
+  1. **Bảng CSDL `dbo.WEBMAIL_INBOX_CACHE` (MSSQL Production .25)**:
+     - Lưu trữ metadata email tải về: `id NVARCHAR(255) PRIMARY KEY`, `subject`, `sender_name`, `sender_email`, `received_time_vn`, `received_time_raw`, `received_datetime`, `has_attachments`, `preview`, `importance`, `created_at`.
+     - Đánh index `IX_WEBMAIL_INBOX_CACHE_TIME (received_datetime DESC)`.
+     - Cập nhật DDL vào `Script/Full_SCRIPT_SQL_TABLE.sql`, model `WebmailInboxCache` trong `webmail.py`, và kiểm tra phòng vệ trong `main.py` lifespan.
+  2. **Cơ chế Đồng Bộ & Đánh Dấu M365 Tức Thì (`sync_inbox_from_graph`)**:
+     - Khi hệ thống tải email từ M365 (`$filter=isRead eq false`), backend lưu email vào `dbo.WEBMAIL_INBOX_CACHE`.
+     - Gửi ngay lệnh `PATCH /me/messages/{id}` với `{"isRead": true}` lên Microsoft 365. Nhờ đó, M365 đánh dấu email là đã đọc ngay lập tức, triệt tiêu nguy cơ load trùng ở các lần gọi API tiếp theo ("tránh load trùng lần sau").
+  3. **Truy Vấn Chưa Đọc Theo Từng User (Zero Collision)**:
+     - Tab "Chưa Đọc" (`unread`) truy vấn từ `dbo.WEBMAIL_INBOX_CACHE` loại trừ các thư mà user hiện tại đã đọc (`id NOT IN (SELECT message_id FROM dbo.WEBMAIL_USER_READ WHERE username = current_username)`).
+     - User `dung.nguyenanh` đọc $ightarrow$ Lưu vào `dbo.WEBMAIL_USER_READ` $ightarrow$ Biến mất khỏi unread của `dung.nguyenanh`.
+     - User `test` chưa đọc $ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm số đếm Badge chuẩn xác.
+- **Kiểm thử & Đóng gói**:
+  - Đã chạy kiểm thử thực tế: M365 unread remaining = 0 (hộp thư chính đã đánh dấu đã đọc), `dung.nguyenanh` đọc 1 thư thì còn 5, `test` chưa đọc vẫn còn nguyên 6 thư chưa đọc (100% khớp mong muốn).
+  - Frontend `npm run build` exit code 0 (`dist/` kèm `web.config` IIS).
+  - Backend `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.

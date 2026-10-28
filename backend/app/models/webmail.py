@@ -102,3 +102,22 @@ class WebmailUserRead(Base):
     message_id: Mapped[str] = mapped_column(Unicode(255), nullable=False, index=True)
     read_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
 
+
+class WebmailInboxCache(Base):
+    """Bảng lưu trữ thông tin email tải từ hòm thư chính Microsoft 365, cho phép đánh dấu đã đọc trên M365 ngay khi tải."""
+    __tablename__ = "WEBMAIL_INBOX_CACHE"
+    __table_args__ = {"schema": "dbo"}
+
+    id: Mapped[str] = mapped_column(Unicode(255), primary_key=True)
+    subject: Mapped[Optional[str]] = mapped_column(Unicode(500), nullable=True)
+    sender_name: Mapped[Optional[str]] = mapped_column(Unicode(255), nullable=True)
+    sender_email: Mapped[Optional[str]] = mapped_column(Unicode(255), nullable=True)
+    received_time_vn: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
+    received_time_raw: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
+    received_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    has_attachments: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    preview: Mapped[Optional[str]] = mapped_column(UnicodeText, nullable=True)
+    importance: Mapped[str] = mapped_column(String(50), default="normal", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+
+

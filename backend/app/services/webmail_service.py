@@ -30,7 +30,7 @@ from sqlalchemy import select, desc, delete
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
-from app.models.webmail import SystemEmailConfig, UserEmailSignature, WebmailSentLog, WebmailUserRead
+from app.models.webmail import SystemEmailConfig, UserEmailSignature, WebmailSentLog, WebmailUserRead, WebmailInboxCache
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -404,6 +404,109 @@ class WebmailService:
         return results
 
     @classmethod
+    def sync_inbox_from_graph(cls, db: Session, client: httpx.Client, token: str) -> None:
+        """
+        Đồng bộ các email mới đang ở trạng thái CHƯA ĐỌC từ Microsoft 365 hòm thư chính:
+        1. Quét toàn bộ email chưa đọc trên M365 ($filter=isRead eq false).
+        2. Lưu vào bảng dbo.WEBMAIL_INBOX_CACHE (nếu chưa có trong hệ thống).
+        3. Đánh dấu ĐÃ ĐỌC (isRead: true) trên Microsoft 365 ngay lập tức để hòm thư chính
+           hoàn toàn sạch sẽ và không bao giờ bị load trùng lại lần sau theo đúng yêu cầu!
+        """
+        fetch_url = "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages"
+        params = {
+            "$top": "100",
+            "$filter": "isRead eq false",
+            "$select": "id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,bodyPreview,importance",
+            "$orderby": "receivedDateTime desc"
+        }
+
+        try:
+            res = client.get(fetch_url, headers={"Authorization": f"Bearer {token}"}, params=params)
+            if res.status_code != 200:
+                logger.warning(f"Lỗi khi quét email chưa đọc từ M365 (HTTP {res.status_code}): {res.text[:200]}")
+                return
+
+            data = res.json()
+            raw_items = list(data.get("value", []))
+            next_link = data.get("@odata.nextLink")
+            while next_link and len(raw_items) < 500:
+                try:
+                    nr = client.get(next_link, headers={"Authorization": f"Bearer {token}"})
+                    if nr.status_code == 200:
+                        nd = nr.json()
+                        items = nd.get("value", [])
+                        if not items:
+                            break
+                        raw_items.extend(items)
+                        next_link = nd.get("@odata.nextLink")
+                    else:
+                        break
+                except Exception as pe:
+                    logger.warning(f"Lỗi phân trang khi sync M365: {pe}")
+                    break
+
+            if not raw_items:
+                return
+
+            new_count = 0
+            for it in raw_items:
+                mid = it.get("id")
+                if not mid:
+                    continue
+
+                exists = db.execute(
+                    select(WebmailInboxCache.id).where(WebmailInboxCache.id == mid)
+                ).scalar_one_or_none()
+
+                time_raw = it.get("receivedDateTime")
+                rec_dt = None
+                if time_raw:
+                    try:
+                        clean_t = time_raw.replace("Z", "+00:00")
+                        rec_dt = datetime.fromisoformat(clean_t).astimezone(VN_TZ).replace(tzinfo=None)
+                    except Exception:
+                        pass
+
+                sender = it.get("from", {}).get("emailAddress", {})
+                sender_name = sender.get("name") or sender.get("address") or "Không rõ người gửi"
+                sender_email = sender.get("address") or ""
+
+                if not exists:
+                    cache_item = WebmailInboxCache(
+                        id=mid,
+                        subject=it.get("subject") or "(Không có chủ đề)",
+                        sender_name=sender_name,
+                        sender_email=sender_email,
+                        received_time_vn=format_iso_to_vn(time_raw),
+                        received_time_raw=time_raw,
+                        received_datetime=rec_dt or datetime.now(),
+                        has_attachments=bool(it.get("hasAttachments")),
+                        preview=it.get("bodyPreview") or "",
+                        importance=it.get("importance") or "normal",
+                        created_at=datetime.now()
+                    )
+                    db.add(cache_item)
+                    new_count += 1
+
+                # Đánh dấu ĐÃ ĐỌC trên Microsoft 365 ngay lập tức để hòm thư chính không load trùng lần sau
+                try:
+                    patch_res = client.patch(
+                        f"https://graph.microsoft.com/v1.0/me/messages/{mid}",
+                        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                        json={"isRead": True}
+                    )
+                    if patch_res.status_code not in (200, 204):
+                        logger.warning(f"Lỗi patch isRead trên M365 cho mail {mid}: {patch_res.status_code}")
+                except Exception as patch_err:
+                    logger.warning(f"Lỗi kết nối patch isRead trên M365: {patch_err}")
+
+            db.commit()
+            if new_count > 0:
+                logger.info(f"Đã đồng bộ {new_count} email mới từ M365 vào WEBMAIL_INBOX_CACHE và đánh dấu đã đọc trên M365.")
+        except Exception as e:
+            logger.error(f"Lỗi khi sync_inbox_from_graph: {e}")
+
+    @classmethod
     def get_messages(
         cls,
         db: Session,
@@ -414,13 +517,14 @@ class WebmailService:
         skip: int = 0
     ) -> Dict[str, Any]:
         """
-        Lấy danh sách email từ Microsoft Graph API:
-        - 'unread': Tải TOÀN BỘ email chưa đọc đối với user hiện tại (lặp qua các trang đến khi hết).
-        - 'all': Chỉ tải tối đa 50 email gần nhất trong Hộp thư đến (Inbox), trạng thái is_read tính theo user hiện tại.
-        - 'sent': Chỉ tải tối đa 50 email gần nhất trong Hộp thư đã gửi (SentItems).
+        Lấy danh sách email:
+        - 'unread': Tải TOÀN BỘ email chưa đọc đối với user hiện tại từ bộ đệm WEBMAIL_INBOX_CACHE.
+          Mỗi lần tải, hệ thống đồng bộ các thư mới từ M365 và đánh dấu đã đọc ngay trên M365 để tránh load trùng.
+        - 'all': Tải tối đa 50 email gần nhất trong Hộp thư đến (Inbox) từ M365, trạng thái is_read tính theo user hiện tại.
+        - 'sent': Tải tối đa 50 email gần nhất trong Hộp thư đã gửi (SentItems) từ M365.
         """
         token = cls.get_graph_token(db)
-        
+
         # Lấy danh sách ID các email mà user hiện tại đã đọc trong hệ thống
         user_read_ids = set()
         if current_username:
@@ -433,34 +537,84 @@ class WebmailService:
             except Exception as e:
                 logger.warning(f"Lỗi lấy danh sách email đã đọc của {current_username}: {e}")
 
-        # Chọn thư mục theo filter_type: sentitems hoặc inbox
-        if filter_type == "sent":
-            url = "https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages"
-            params: Dict[str, Any] = {
-                "$top": "50",
-                "$skip": str(max(skip, 0)),
-                "$select": "id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,bodyPreview,importance",
-                "$orderby": "sentDateTime desc"
-            }
-        else:
-            url = "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages"
-            top_limit = 100 if filter_type == "unread" else min(top, 50)
-            params = {
-                "$top": str(top_limit),
-                "$skip": str(max(skip, 0)),
-                "$select": "id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,bodyPreview,importance",
-                "$orderby": "receivedDateTime desc"
-            }
-            if filter_type == "unread":
-                params["$filter"] = "isRead eq false"
-
-        # Tìm kiếm theo từ khóa nếu có
-        if search_query and search_query.strip():
-            params.pop("$orderby", None)
-            params["$search"] = f'"{search_query.strip()}"'
-
         try:
             with httpx.Client(timeout=35.0) as client:
+                # 1. Luôn đồng bộ email mới từ Microsoft 365 và tự động đánh dấu đã đọc trên M365
+                cls.sync_inbox_from_graph(db, client, token)
+
+                # 2. Xử lý theo filter_type:
+                if filter_type == "unread":
+                    # Lấy từ WEBMAIL_INBOX_CACHE các thư mà user hiện tại CHƯA ĐỌC
+                    q = select(WebmailInboxCache).where(
+                        ~WebmailInboxCache.id.in_(
+                            select(WebmailUserRead.message_id).where(WebmailUserRead.username == current_username)
+                        )
+                    )
+                    if search_query and search_query.strip():
+                        sq = f"%{search_query.strip()}%"
+                        q = q.where(
+                            (WebmailInboxCache.subject.ilike(sq)) |
+                            (WebmailInboxCache.sender_name.ilike(sq)) |
+                            (WebmailInboxCache.sender_email.ilike(sq)) |
+                            (WebmailInboxCache.preview.ilike(sq))
+                        )
+                    q = q.order_by(desc(WebmailInboxCache.received_datetime), desc(WebmailInboxCache.created_at))
+                    cached_unreads = db.execute(q).scalars().all()
+
+                    formatted = []
+                    for it in cached_unreads:
+                        formatted.append({
+                            "id": it.id,
+                            "subject": it.subject or "(Không có chủ đề)",
+                            "sender_name": it.sender_name or "Không rõ người gửi",
+                            "sender_email": it.sender_email or "",
+                            "received_time_vn": it.received_time_vn or "",
+                            "received_time_raw": it.received_time_raw or "",
+                            "is_read": False,
+                            "has_attachments": bool(it.has_attachments),
+                            "preview": it.preview or "",
+                            "importance": it.importance or "normal"
+                        })
+
+                    return {
+                        "messages": formatted,
+                        "total_returned": len(formatted),
+                        "unread_count": len(formatted),
+                        "filter_type": filter_type,
+                        "search_query": search_query
+                    }
+
+                # Đếm số lượng email chưa đọc riêng cho user hiện tại để hiển thị badge
+                unread_badge_items = db.execute(
+                    select(WebmailInboxCache.id).where(
+                        ~WebmailInboxCache.id.in_(
+                            select(WebmailUserRead.message_id).where(WebmailUserRead.username == current_username)
+                        )
+                    )
+                ).scalars().all()
+                unread_count = len(unread_badge_items)
+
+                if filter_type == "sent":
+                    url = "https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages"
+                    params: Dict[str, Any] = {
+                        "$top": "50",
+                        "$skip": str(max(skip, 0)),
+                        "$select": "id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,bodyPreview,importance",
+                        "$orderby": "sentDateTime desc"
+                    }
+                else:
+                    url = "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages"
+                    params = {
+                        "$top": str(min(top, 50)),
+                        "$skip": str(max(skip, 0)),
+                        "$select": "id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,bodyPreview,importance",
+                        "$orderby": "receivedDateTime desc"
+                    }
+
+                if search_query and search_query.strip():
+                    params.pop("$orderby", None)
+                    params["$search"] = f'"{search_query.strip()}"'
+
                 res = client.get(url, headers={"Authorization": f"Bearer {token}"}, params=params)
                 if res.status_code != 200:
                     err_msg = res.text
@@ -471,44 +625,6 @@ class WebmailService:
                     )
                 data = res.json()
                 raw_messages = list(data.get("value", []))
-
-                # Đối với thư chưa đọc: Nếu có nhiều hơn 1 trang, load HẾT toàn bộ email chưa đọc trên M365
-                if filter_type == "unread":
-                    next_link = data.get("@odata.nextLink")
-                    while next_link and len(raw_messages) < 500:
-                        try:
-                            next_res = client.get(next_link, headers={"Authorization": f"Bearer {token}"})
-                            if next_res.status_code == 200:
-                                next_data = next_res.json()
-                                items = next_data.get("value", [])
-                                if not items:
-                                    break
-                                raw_messages.extend(items)
-                                next_link = next_data.get("@odata.nextLink")
-                            else:
-                                break
-                        except Exception as page_err:
-                            logger.warning(f"Lỗi khi tải trang tiếp theo của email chưa đọc: {page_err}")
-                            break
-
-                    # Lọc bỏ các email mà user hiện tại ĐÃ BẤM ĐỌC trong cơ sở dữ liệu
-                    raw_messages = [m for m in raw_messages if m.get("id") not in user_read_ids]
-
-                # Lấy số lượng email chưa đọc riêng cho user hiện tại để hiển thị badge
-                unread_count = 0
-                try:
-                    if filter_type == "unread":
-                        unread_count = len(raw_messages)
-                    else:
-                        unr_res = client.get(
-                            "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$filter=isRead eq false&$select=id&$top=100",
-                            headers={"Authorization": f"Bearer {token}"}
-                        )
-                        if unr_res.status_code == 200:
-                            unr_items = unr_res.json().get("value", [])
-                            unread_count = len([it for it in unr_items if it.get("id") not in user_read_ids])
-                except Exception:
-                    pass
 
                 formatted = []
                 for m in raw_messages:
@@ -527,13 +643,8 @@ class WebmailService:
                         sender_name = sender.get("name") or sender.get("address") or "Không rõ người gửi"
                         sender_email = sender.get("address") or ""
                         time_raw = m.get("receivedDateTime")
-                        if filter_type == "unread":
-                            is_read = False
-                        else:
-                            # Email được coi là đã đọc đối với user này nếu:
-                            # 1. user đã đọc email này (có trong user_read_ids), HOẶC
-                            # 2. Email đã là isRead trên M365 (thư cũ từ trước)
-                            is_read = (m.get("id") in user_read_ids) or bool(m.get("isRead"))
+                        # Thư được coi là đã đọc đối với user này nếu có trong user_read_ids
+                        is_read = (m.get("id") in user_read_ids)
 
                     formatted.append({
                         "id": m.get("id"),
@@ -694,36 +805,36 @@ class WebmailService:
         if not current_username:
             return {"status": "SUCCESS", "marked_count": 0}
 
-        token = cls.get_graph_token(db)
-        fetch_url = "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages"
-        params = {
-            "$top": "100",
-            "$filter": "isRead eq false",
-            "$select": "id"
-        }
-
-        marked_count = 0
         try:
-            with httpx.Client(timeout=45.0) as client:
-                res = client.get(fetch_url, headers={"Authorization": f"Bearer {token}"}, params=params)
-                if res.status_code == 200:
-                    items = res.json().get("value", [])
-                    user_read_ids = set(
-                        db.execute(
-                            select(WebmailUserRead.message_id).where(WebmailUserRead.username == current_username)
-                        ).scalars().all()
-                    )
-                    for it in items:
-                        mid = it.get("id")
-                        if mid and mid not in user_read_ids:
-                            db.add(WebmailUserRead(
-                                username=current_username,
-                                message_id=mid,
-                                read_at=datetime.now()
-                            ))
-                            marked_count += 1
-                    if marked_count > 0:
-                        db.commit()
+            # 1. Đồng bộ mọi thư mới từ M365 trước nếu có
+            try:
+                token = cls.get_graph_token(db)
+                with httpx.Client(timeout=25.0) as client:
+                    cls.sync_inbox_from_graph(db, client, token)
+            except Exception as se:
+                logger.warning(f"Lỗi sync khi mark_all_as_read: {se}")
+
+            # 2. Thêm tất cả ID trong cache mà user này chưa đọc vào WebmailUserRead
+            user_read_ids = set(
+                db.execute(
+                    select(WebmailUserRead.message_id).where(WebmailUserRead.username == current_username)
+                ).scalars().all()
+            )
+            cached_ids = db.execute(select(WebmailInboxCache.id)).scalars().all()
+
+            marked_count = 0
+            for mid in cached_ids:
+                if mid and mid not in user_read_ids:
+                    db.add(WebmailUserRead(
+                        username=current_username,
+                        message_id=mid,
+                        read_at=datetime.now()
+                    ))
+                    marked_count += 1
+
+            if marked_count > 0:
+                db.commit()
+
             logger.info(f"Đã đánh dấu {marked_count} email chưa đọc thành ĐÃ ĐỌC riêng cho user {current_username}.")
             return {"status": "SUCCESS", "marked_count": marked_count}
         except Exception as e:

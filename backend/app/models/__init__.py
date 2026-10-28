@@ -5,13 +5,13 @@ from app.models.logs_new import LogsNew
 from app.models.pim import PIMRequest, PIMUserThucHien, PIMLog, PIMConfig, PIMSchedule
 from app.models.sales import CheckSalesDaily, TotalSalesDaily
 from app.models.scheduled_param_job import ScheduledParamPushJob
-from app.models.webmail import SystemEmailConfig, UserEmailSignature, WebmailSentLog, WebmailUserRead
+from app.models.webmail import SystemEmailConfig, UserEmailSignature, WebmailSentLog, WebmailUserRead, WebmailInboxCache
 
 __all__ = [
     "Base", "User", "PermissionDetail", "RoleLevel", "AuditLog", "LogsNew",
     "PIMRequest", "PIMUserThucHien", "PIMLog", "PIMConfig", "PIMSchedule",
     "CheckSalesDaily", "TotalSalesDaily", "ScheduledParamPushJob",
-    "SystemEmailConfig", "UserEmailSignature", "WebmailSentLog", "WebmailUserRead"
+    "SystemEmailConfig", "UserEmailSignature", "WebmailSentLog", "WebmailUserRead", "WebmailInboxCache"
 ]
 
 

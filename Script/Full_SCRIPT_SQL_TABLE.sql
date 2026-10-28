@@ -1809,4 +1809,28 @@ BEGIN
 END
 GO
 
+-- ----------------------------------------------------------------------------
+-- BẢNG: WEBMAIL_INBOX_CACHE (Bộ Đệm Hộp Thư Đến Cho Phép Đánh Dấu Đã Đọc M365 Ngay Khi Tải)
+-- ----------------------------------------------------------------------------
+IF OBJECT_ID(N'[dbo].[WEBMAIL_INBOX_CACHE]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[WEBMAIL_INBOX_CACHE] (
+        [id] NVARCHAR(255) PRIMARY KEY,
+        [subject] NVARCHAR(500) NULL,
+        [sender_name] NVARCHAR(255) NULL,
+        [sender_email] NVARCHAR(255) NULL,
+        [received_time_vn] NVARCHAR(100) NULL,
+        [received_time_raw] NVARCHAR(100) NULL,
+        [received_datetime] DATETIME NULL,
+        [has_attachments] BIT NOT NULL DEFAULT 0,
+        [preview] NVARCHAR(MAX) NULL,
+        [importance] NVARCHAR(50) NOT NULL DEFAULT 'normal',
+        [created_at] DATETIME NOT NULL DEFAULT GETDATE()
+    );
+    CREATE INDEX [IX_WEBMAIL_INBOX_CACHE_TIME] ON [dbo].[WEBMAIL_INBOX_CACHE] ([received_datetime] DESC);
+    PRINT N'Table [dbo].[WEBMAIL_INBOX_CACHE] created successfully.';
+END
+GO
+
+
 

@@ -131,6 +131,28 @@ async def lifespan(app: FastAPI):
                     END
                 """))
                 _tc.commit()
+
+                # Kiểm tra phòng vệ bảng WEBMAIL_INBOX_CACHE
+                _tc.execute(text("""
+                    IF OBJECT_ID('dbo.WEBMAIL_INBOX_CACHE', 'U') IS NULL
+                    BEGIN
+                        CREATE TABLE dbo.WEBMAIL_INBOX_CACHE (
+                            id NVARCHAR(255) PRIMARY KEY,
+                            subject NVARCHAR(500) NULL,
+                            sender_name NVARCHAR(255) NULL,
+                            sender_email NVARCHAR(255) NULL,
+                            received_time_vn NVARCHAR(100) NULL,
+                            received_time_raw NVARCHAR(100) NULL,
+                            received_datetime DATETIME NULL,
+                            has_attachments BIT NOT NULL DEFAULT 0,
+                            preview NVARCHAR(MAX) NULL,
+                            importance NVARCHAR(50) NOT NULL DEFAULT 'normal',
+                            created_at DATETIME NOT NULL DEFAULT GETDATE()
+                        );
+                        CREATE INDEX IX_WEBMAIL_INBOX_CACHE_TIME ON dbo.WEBMAIL_INBOX_CACHE (received_datetime DESC);
+                    END
+                """))
+                _tc.commit()
         except Exception as _ex_tmpl:
             logger.warning("Lỗi tự động seed mẫu script hoặc tạo bảng package templates: %s", _ex_tmpl)
         # Đảm bảo các cột cần thiết tồn tại trong MEMO, SOFTWARE_VERSIONS và GHINHAN_SAIPHAM
