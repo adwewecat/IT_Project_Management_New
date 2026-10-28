@@ -230,37 +230,17 @@ export const KNOWN_APP_PARAMS: Record<string, KnownParamMeta> = {
 };
 
 export const getParamDisplayName = (param: AppParamItem): string => {
-  if (param.paramName && param.paramName.trim() && param.paramName.trim() !== param.paramCode) {
-    return param.paramName.trim();
-  }
-  const known = KNOWN_APP_PARAMS[param.paramCode];
-  if (known) {
-    return known.paramName;
-  }
-  if (param.note && param.note.trim() && param.note.trim() !== param.paramCode) {
-    return param.note.trim();
-  }
-  return param.paramCode;
+  return (param.paramCode || '').trim();
 };
 
 export const getStandardParamDisplay = (std: { param_code: string; param_name?: string; note?: string }) => {
   const pCode = (std.param_code || '').trim().toUpperCase();
-  const rawName = (std.param_name || '').trim();
   const rawNote = (std.note || '').trim();
-
-  let displayName = pCode;
   const known = KNOWN_APP_PARAMS[pCode];
 
-  if (known) {
-    displayName = known.paramName;
-  } else if (rawName && rawName.toUpperCase() !== pCode) {
-    displayName = rawName;
-  } else if (rawNote && rawNote.toUpperCase() !== pCode) {
-    displayName = rawNote;
-  }
-
+  const displayName = pCode;
   let displayNote = '—';
-  if (rawNote && rawNote.toUpperCase() !== pCode && rawNote !== displayName) {
+  if (rawNote && rawNote.toUpperCase() !== pCode) {
     displayNote = rawNote;
   } else if (known?.defaultNote) {
     displayNote = known.defaultNote;
@@ -474,7 +454,6 @@ export const RestaurantMongoPage: React.FC = () => {
 
   // Modal Edit Param
   const [editingParam, setEditingParam] = useState<AppParamItem | null>(null);
-  const [editFormName, setEditFormName] = useState<string>('');
   const [editFormType, setEditFormType] = useState<'FUNCTION' | 'CONFIG'>('FUNCTION');
   const [editFormStatus, setEditFormStatus] = useState<number>(1);
   const [editFormValue, setEditFormValue] = useState<string>('');
@@ -484,7 +463,6 @@ export const RestaurantMongoPage: React.FC = () => {
   // Modal Create Param
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [newParamCode, setNewParamCode] = useState<string>('');
-  const [newParamName, setNewParamName] = useState<string>('');
   const [newParamType, setNewParamType] = useState<'FUNCTION' | 'CONFIG'>('FUNCTION');
   const [newParamStatus, setNewParamStatus] = useState<number>(1);
   const [newParamValue, setNewParamValue] = useState<string>('');
@@ -806,7 +784,6 @@ export const RestaurantMongoPage: React.FC = () => {
   // Open Edit Modal
   const openEditModal = (param: AppParamItem) => {
     setEditingParam(param);
-    setEditFormName(getParamDisplayName(param));
     setEditFormType(param.paramType === 'CONFIG' ? 'CONFIG' : 'FUNCTION');
     setEditFormStatus(param.status);
     setEditFormValue(param.value || '');
@@ -821,7 +798,7 @@ export const RestaurantMongoPage: React.FC = () => {
       await mongoService.updateAppParam(editingParam.paramCode, {
         host: currentHost,
         port: currentPort,
-        paramName: editFormName.trim() || undefined,
+        paramName: editingParam.paramCode, // Mã tham số và tên tham số luôn giống nhau
         paramType: editFormType,
         status: editFormStatus,
         value: editFormValue,
@@ -849,7 +826,7 @@ export const RestaurantMongoPage: React.FC = () => {
         host: currentHost,
         port: currentPort,
         paramCode: newParamCode.trim().toUpperCase(),
-        paramName: newParamName.trim() || undefined,
+        paramName: newParamCode.trim().toUpperCase(), // Tự động điền giống hệt mã tham số
         paramType: newParamType,
         status: newParamStatus,
         value: newParamValue,
@@ -858,7 +835,6 @@ export const RestaurantMongoPage: React.FC = () => {
       showToast(`Đã thêm mới tham số '${newParamCode.trim().toUpperCase()}' thành công`, 'success');
       setShowCreateModal(false);
       setNewParamCode('');
-      setNewParamName('');
       setNewParamValue('');
       setNewParamNote('');
       loadParams(currentHost);
@@ -1655,7 +1631,7 @@ export const RestaurantMongoPage: React.FC = () => {
                       />
                       <input
                         type="text"
-                        placeholder="Tìm kiếm Param Code, Tên Param, Diễn giải, Giá trị..."
+                        placeholder="Tìm kiếm Param Code, Diễn giải, Giá trị..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         style={{
@@ -1815,8 +1791,7 @@ export const RestaurantMongoPage: React.FC = () => {
                           <th style={{ padding: '10px 8px', width: '44px', textAlign: 'center', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }} title="Đánh sao để ưu tiên dòng lên trên đầu">
                             <Star size={15} fill="#F59E0B" color="#D97706" style={{ verticalAlign: 'middle' }} />
                           </th>
-                          <th style={{ padding: '10px 12px', width: '210px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Param Code</th>
-                          <th style={{ padding: '10px 12px', width: '210px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Tên Param</th>
+                          <th style={{ padding: '10px 12px', width: '280px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Param Code</th>
                           <th style={{ padding: '10px 12px', width: '110px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Kiểu</th>
                           <th style={{ padding: '10px 12px', width: '110px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Trạng Thái</th>
                           <th style={{ padding: '10px 12px', width: '240px', position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>Giá Trị Cấu Hình</th>
@@ -1827,14 +1802,14 @@ export const RestaurantMongoPage: React.FC = () => {
                       <tbody>
                         {loadingParams ? (
                           <tr>
-                            <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                            <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
                               <RefreshCw size={24} className="spin-animation" style={{ margin: '0 auto 10px' }} />
                               <div>Đang tải dữ liệu từ MongoDB {currentHost}:27017...</div>
                             </td>
                           </tr>
                         ) : filteredParams.length === 0 ? (
                           <tr>
-                            <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                            <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
                               Không tìm thấy tham số nào phù hợp với bộ lọc.
                             </td>
                           </tr>
@@ -1842,7 +1817,6 @@ export const RestaurantMongoPage: React.FC = () => {
                         filteredParams.map((p) => {
                           const isStarred = starredParams.includes(p.paramCode);
                           const isEssential = getParamPriority(p.paramCode) === 1;
-                          const displayName = getParamDisplayName(p);
                           const categoryName = getParamCategory(p.paramCode);
                           return (
                             <tr
@@ -1889,6 +1863,22 @@ export const RestaurantMongoPage: React.FC = () => {
                                   <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--color-primary-text)' }}>
                                     {p.paramCode}
                                   </span>
+                                  {categoryName !== 'Khác' && (
+                                    <span
+                                      style={{
+                                        display: 'inline-block',
+                                        fontSize: '10px',
+                                        fontWeight: 500,
+                                        color: 'var(--text-muted)',
+                                        backgroundColor: 'var(--bg-secondary)',
+                                        padding: '1px 5px',
+                                        borderRadius: '3px',
+                                        border: '1px solid var(--border-color)',
+                                      }}
+                                    >
+                                      {categoryName}
+                                    </span>
+                                  )}
                                   {isStarred && (
                                     <span
                                       style={{
@@ -1938,30 +1928,6 @@ export const RestaurantMongoPage: React.FC = () => {
                                     {copiedCode === p.paramCode ? <Check size={13} color="#10B981" /> : <Copy size={13} />}
                                   </button>
                                 </div>
-                              </td>
-
-                              {/* Cột Tên Param (Mới) */}
-                              <td style={{ padding: '10px 12px' }}>
-                                <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '13px' }}>
-                                  {displayName}
-                                </div>
-                                {categoryName !== 'Khác' && (
-                                  <span
-                                    style={{
-                                      display: 'inline-block',
-                                      fontSize: '10px',
-                                      fontWeight: 500,
-                                      color: 'var(--text-muted)',
-                                      backgroundColor: 'var(--bg-secondary)',
-                                      padding: '1px 5px',
-                                      borderRadius: '3px',
-                                      marginTop: '2px',
-                                      border: '1px solid var(--border-color)',
-                                    }}
-                                  >
-                                    {categoryName}
-                                  </span>
-                                )}
                               </td>
 
                             {/* Kiểu (FUNCTION / CONFIG) */}
@@ -3306,29 +3272,6 @@ export const RestaurantMongoPage: React.FC = () => {
               />
             </div>
 
-            {/* Tên Param */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: 'var(--text-primary)' }}>
-                Tên Param (Tên gọi tiếng Việt dễ hiểu)
-              </label>
-              <input
-                type="text"
-                value={editFormName}
-                onChange={(e) => setEditFormName(e.target.value)}
-                placeholder="VD: Hiển thị KDS Bếp, Tự động in QR Code..."
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1.5px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-primary)',
-                  color: 'var(--text-primary)',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                }}
-              />
-            </div>
-
             {/* Kiểu (Chỉ FUNCTION hoặc CONFIG) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
@@ -3470,29 +3413,6 @@ export const RestaurantMongoPage: React.FC = () => {
                   fontWeight: 700,
                   fontSize: '13px',
                   textTransform: 'uppercase',
-                }}
-              />
-            </div>
-
-            {/* Tên Param */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: 'var(--text-primary)' }}>
-                Tên Param (Tên gọi tiếng Việt dễ hiểu)
-              </label>
-              <input
-                type="text"
-                value={newParamName}
-                onChange={(e) => setNewParamName(e.target.value)}
-                placeholder="VD: Hiển thị KDS Bếp, Tự động in QR Code..."
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1.5px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-primary)',
-                  color: 'var(--text-primary)',
-                  fontSize: '13px',
-                  fontWeight: 500,
                 }}
               />
             </div>

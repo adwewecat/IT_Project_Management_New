@@ -32,8 +32,7 @@ import { checkIsAdmin } from '../../utils/authUtils';
 import {
   getParamDisplayName,
   getParamCategory,
-  getParamPriority,
-  getStandardParamDisplay
+  getParamPriority
 } from './RestaurantMongoPage';
 
 interface MongoDbParamManagementTaskProps {
@@ -71,7 +70,6 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
 
   // Modal Sửa
   const [editingParam, setEditingParam] = useState<AppParamItem | null>(null);
-  const [editFormName, setEditFormName] = useState<string>('');
   const [editFormType, setEditFormType] = useState<'FUNCTION' | 'CONFIG'>('FUNCTION');
   const [editFormStatus, setEditFormStatus] = useState<number>(1);
   const [editFormValue, setEditFormValue] = useState<string>('');
@@ -81,7 +79,6 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
   // Modal Thêm Mới
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [newParamCode, setNewParamCode] = useState<string>('');
-  const [newParamName, setNewParamName] = useState<string>('');
   const [newParamType, setNewParamType] = useState<'FUNCTION' | 'CONFIG'>('FUNCTION');
   const [newParamStatus, setNewParamStatus] = useState<number>(1);
   const [newParamValue, setNewParamValue] = useState<string>('1');
@@ -110,7 +107,6 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
   const [editingStdParam, setEditingStdParam] = useState<StandardAppParamItem | null>(null);
   const [showCreateStdModal, setShowCreateStdModal] = useState<boolean>(false);
   const [stdFormCode, setStdFormCode] = useState<string>('');
-  const [stdFormName, setStdFormName] = useState<string>('');
   const [stdFormType, setStdFormType] = useState<'FUNCTION' | 'CONFIG'>('FUNCTION');
   const [stdFormStatus, setStdFormStatus] = useState<number>(1);
   const [stdFormValue, setStdFormValue] = useState<string>('1');
@@ -387,7 +383,6 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
   // Mở modal sửa
   const openEditModal = (param: AppParamItem) => {
     setEditingParam(param);
-    setEditFormName(param.paramName || '');
     setEditFormType(param.paramType === 'CONFIG' ? 'CONFIG' : 'FUNCTION');
     setEditFormStatus(param.status ?? 1);
     setEditFormValue(String(param.value ?? ''));
@@ -404,7 +399,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
         {
           host: currentHost,
           port: currentPort,
-          paramName: editFormName.trim(),
+          paramName: editingParam.paramCode, // Mã tham số và tên tham số luôn giống nhau
           paramType: editFormType,
           status: editFormStatus,
           value: editFormValue,
@@ -435,7 +430,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
         host: currentHost,
         port: currentPort,
         paramCode: code,
-        paramName: newParamName.trim(),
+        paramName: code, // Tự động điền tên tham số giống hệt mã tham số
         paramType: newParamType,
         status: newParamStatus,
         value: newParamValue,
@@ -444,7 +439,6 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
       showToast(`Đã thêm tham số '${code}' thành công!`, 'success');
       setShowCreateModal(false);
       setNewParamCode('');
-      setNewParamName('');
       setNewParamValue('1');
       setNewParamNote('');
       await loadParams();
@@ -515,7 +509,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
     try {
       await mongoService.createStandardAppParam({
         param_code: code,
-        param_name: stdFormName.trim() || code,
+        param_name: code, // Tên tham số luôn tự động điền giống hệt mã tham số
         param_type: stdFormType,
         status: stdFormStatus,
         param_value: stdFormValue,
@@ -537,7 +531,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
     setIsSavingStd(true);
     try {
       await mongoService.updateStandardAppParam(editingStdParam.param_code, {
-        param_name: stdFormName.trim(),
+        param_name: editingStdParam.param_code, // Tên tham số luôn tự động điền giống hệt mã tham số
         param_type: stdFormType,
         status: stdFormStatus,
         param_value: stdFormValue,
@@ -1129,8 +1123,8 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ backgroundColor: '#F1F5F9', borderBottom: '2px solid #CBD5E1', textAlign: 'left', color: '#334155' }}>
-                <th style={{ padding: '8px 12px', minWidth: '280px', position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F1F5F9' }}>
-                  Tham Số (Tên & Param Code)
+                <th style={{ padding: '8px 12px', minWidth: '240px', position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F1F5F9' }}>
+                  Mã Param (Param Code)
                 </th>
                 <th style={{ padding: '8px 10px', width: '90px', position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F1F5F9' }}>
                   Kiểu
@@ -1166,7 +1160,6 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
               ) : (
                 filteredParams.map((p) => {
                   const isEssential = getParamPriority(p.paramCode) === 1;
-                  const displayName = getParamDisplayName(p);
                   const categoryName = getParamCategory(p.paramCode);
                   const isToggling = togglingCode === p.paramCode;
                   const isSavingSingle = savingSingleCode === p.paramCode;
@@ -1182,57 +1175,50 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#FFFFFF')}
                     >
-                      {/* Tham số: Gộp Tên và Param Code */}
+                      {/* Mã Tham Số (Param Code) */}
                       <td style={{ padding: '8px 12px', verticalAlign: 'middle' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                            <span style={{ fontWeight: 700, color: '#0F172A', fontSize: '12.5px' }}>
-                              {displayName !== p.paramCode ? displayName : p.paramCode}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <code style={{ fontFamily: 'Consolas, monospace', fontSize: '12px', fontWeight: 700, color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 6px', borderRadius: '4px' }}>
+                            {p.paramCode}
+                          </code>
+                          {categoryName && categoryName !== 'Khác' && (
+                            <span style={{ fontSize: '10px', fontWeight: 600, color: '#475569', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', padding: '1px 5px', borderRadius: '4px' }}>
+                              {categoryName}
                             </span>
-                            {categoryName && categoryName !== 'Khác' && (
-                              <span style={{ fontSize: '10px', fontWeight: 600, color: '#475569', backgroundColor: '#F1F5F9', border: '1px solid #E2E8F0', padding: '1px 5px', borderRadius: '4px' }}>
-                                {categoryName}
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <code style={{ fontFamily: 'Consolas, monospace', fontSize: '11.5px', fontWeight: 600, color: '#2563EB', backgroundColor: '#EFF6FF', padding: '1px 5px', borderRadius: '3px' }}>
-                              {p.paramCode}
-                            </code>
-                            {isEssential && (
-                              <span
-                                style={{
-                                  fontSize: '10px',
-                                  fontWeight: 700,
-                                  backgroundColor: '#FEF3C7',
-                                  color: '#B45309',
-                                  border: '1px solid #FCD34D',
-                                  borderRadius: '4px',
-                                  padding: '0 4px',
-                                  lineHeight: 1.3
-                                }}
-                                title="Tham số trọng yếu thường dùng"
-                              >
-                                ★ Cần thiết
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleCopy(p.paramCode, p.paramCode)}
+                          )}
+                          {isEssential && (
+                            <span
                               style={{
-                                border: 'none',
-                                background: 'transparent',
-                                cursor: 'pointer',
-                                color: copiedCode === p.paramCode ? '#10B981' : '#94A3B8',
-                                padding: '1px 3px',
-                                display: 'inline-flex',
-                                alignItems: 'center'
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                backgroundColor: '#FEF3C7',
+                                color: '#B45309',
+                                border: '1px solid #FCD34D',
+                                borderRadius: '4px',
+                                padding: '0 4px',
+                                lineHeight: 1.3
                               }}
-                              title="Sao chép Param Code"
+                              title="Tham số trọng yếu thường dùng"
                             >
-                              {copiedCode === p.paramCode ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
-                            </button>
-                          </div>
+                              ★ Cần thiết
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(p.paramCode, p.paramCode)}
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                              color: copiedCode === p.paramCode ? '#10B981' : '#94A3B8',
+                              padding: '1px 3px',
+                              display: 'inline-flex',
+                              alignItems: 'center'
+                            }}
+                            title="Sao chép Mã Tham Số"
+                          >
+                            {copiedCode === p.paramCode ? <Check size={12} color="#10B981" /> : <Copy size={12} />}
+                          </button>
                         </div>
                       </td>
 
@@ -1437,27 +1423,6 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
               />
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                Tên Tham Số (Mô Tả Tiếng Việt)
-              </label>
-              <input
-                type="text"
-                value={editFormName}
-                onChange={(e) => setEditFormName(e.target.value)}
-                placeholder="Nhập tên mô tả tham số..."
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-primary)',
-                  color: 'var(--text-primary)',
-                  fontSize: '13px'
-                }}
-              />
-            </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
@@ -1589,7 +1554,10 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
               <input
                 type="text"
                 value={newParamCode}
-                onChange={(e) => setNewParamCode(e.target.value.toUpperCase().replace(/\s+/g, '_'))}
+                onChange={(e) => {
+                  const code = e.target.value.toUpperCase().replace(/\s+/g, '_');
+                  setNewParamCode(code);
+                }}
                 placeholder="Ví dụ: AUTO_PRINT_BILL, CONFIG_QR_ORDER..."
                 autoFocus
                 style={{
@@ -1605,29 +1573,8 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                 }}
               />
               <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', display: 'block' }}>
-                Mã viết hoa, không dấu, cách nhau bởi dấu gạch dưới (_).
+                Mã viết hoa, không dấu, cách nhau bởi dấu gạch dưới (_). Tên tham số sẽ tự động điền giống hệt mã.
               </span>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                Tên Tham Số (Mô Tả Tiếng Việt)
-              </label>
-              <input
-                type="text"
-                value={newParamName}
-                onChange={(e) => setNewParamName(e.target.value)}
-                placeholder="Tên gợi nhớ cho tham số..."
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-primary)',
-                  color: 'var(--text-primary)',
-                  fontSize: '13px'
-                }}
-              />
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -1950,7 +1897,6 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                       size="sm"
                       onClick={() => {
                         setStdFormCode('');
-                        setStdFormName('');
                         setStdFormType('FUNCTION');
                         setStdFormStatus(1);
                         setStdFormValue('1');
@@ -1987,12 +1933,11 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                     <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-secondary)', zIndex: 1, borderBottom: '1px solid var(--border-color)' }}>
                       <tr>
                         <th style={{ padding: '8px 10px', textAlign: 'center', width: '45px' }}>#</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', width: '220px' }}>Mã Param</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'left' }}>Tên / Ý Nghĩa</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', width: '220px' }}>Mã Param (Param Code)</th>
                         <th style={{ padding: '8px 10px', textAlign: 'center', width: '90px' }}>Kiểu</th>
                         <th style={{ padding: '8px 10px', textAlign: 'center', width: '90px' }}>Trạng Thái</th>
                         <th style={{ padding: '8px 12px', textAlign: 'left', width: '130px' }}>Giá Trị</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'left' }}>Ghi Chú</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left' }}>Diễn Giải / Ghi Chú (Note)</th>
                         <th style={{ padding: '8px 10px', textAlign: 'center', width: '90px' }}>Thao Tác</th>
                       </tr>
                     </thead>
@@ -2004,10 +1949,9 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                           if (standardSearchQuery.trim()) {
                             const q = standardSearchQuery.trim().toLowerCase();
                             const matchCode = s.param_code.toLowerCase().includes(q);
-                            const matchName = (s.param_name || '').toLowerCase().includes(q);
                             const matchVal = (s.param_value || '').toLowerCase().includes(q);
                             const matchNote = (s.note || '').toLowerCase().includes(q);
-                            if (!matchCode && !matchName && !matchVal && !matchNote) return false;
+                            if (!matchCode && !matchVal && !matchNote) return false;
                           }
                           return true;
                         });
@@ -2015,7 +1959,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                         if (loadingStandardParams) {
                           return (
                             <tr>
-                              <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                              <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                                 <RefreshCw size={20} className="spin-animation" style={{ margin: '0 auto 8px' }} />
                                 <div>Đang tải kho tham số chuẩn...</div>
                               </td>
@@ -2026,7 +1970,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                         if (filtered.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                              <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                                 Chưa có tham số chuẩn nào phù hợp.
                               </td>
                             </tr>
@@ -2034,7 +1978,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                         }
 
                         return filtered.map((std, idx) => {
-                          const { displayName, displayNote } = getStandardParamDisplay(std);
+                          const displayNote = std.note || '—';
                           return (
                             <tr
                               key={std.param_code}
@@ -2047,9 +1991,6 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                               </td>
                               <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontWeight: 700, color: '#1D4ED8' }}>
                                 {std.param_code}
-                              </td>
-                              <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                                {displayName}
                               </td>
                               <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                                 <span
@@ -2093,11 +2034,10 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                                       onClick={() => {
                                         setEditingStdParam(std);
                                         setStdFormCode(std.param_code);
-                                        setStdFormName(displayName !== std.param_code ? displayName : (std.param_name || ''));
                                         setStdFormType(std.param_type === 'CONFIG' ? 'CONFIG' : 'FUNCTION');
                                         setStdFormStatus(std.status);
                                         setStdFormValue(std.param_value || '');
-                                        setStdFormNote(displayNote !== '—' ? displayNote : (std.note || ''));
+                                        setStdFormNote(std.note || '');
                                       }}
                                       title="Chỉnh sửa thông tin tham số chuẩn này (Chỉ Admin)"
                                       style={{
@@ -2613,27 +2553,6 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                   color: 'var(--text-primary)',
                   fontWeight: 600,
                   fontFamily: 'monospace',
-                  fontSize: '13px'
-                }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                Tên Tham Số (Mô Tả Tiếng Việt)
-              </label>
-              <input
-                type="text"
-                value={stdFormName}
-                onChange={(e) => setStdFormName(e.target.value)}
-                placeholder="Tên tham số chuẩn..."
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-primary)',
-                  color: 'var(--text-primary)',
                   fontSize: '13px'
                 }}
               />

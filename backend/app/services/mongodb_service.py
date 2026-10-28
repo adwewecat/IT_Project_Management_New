@@ -95,32 +95,13 @@ KNOWN_PARAM_NAMES: Dict[str, str] = {
 
 def normalize_param_name_and_note(param_code: str, raw_name: Optional[str] = None, raw_note: Optional[str] = None):
     """
-    Chuẩn hóa tên tham số tiếng Việt và ghi chú hướng dẫn:
-    - Tên tham số: Phải là mô tả tiếng Việt có ý nghĩa, không để trùng thô với mã tham số.
-    - Ghi chú: Chỉ là note bổ sung hướng dẫn nghiệp vụ, không trùng mã tham số hay lặp lại tên.
+    Quy định chuẩn hệ thống:
+    - Mã Tham Số (Param Code) và Tên Tham Số (Param Name) luôn đồng nhất và bằng param_code.
+    - Diễn Giải Nghiệp Vụ (Note) là phần ghi chú giải thích cách dùng.
     """
     p_code = (param_code or "").strip().upper()
-    name = (raw_name or "").strip()
     note = (raw_note or "").strip()
-
-    # 1. Tìm tên tiếng Việt chuẩn
-    if p_code in KNOWN_PARAM_NAMES:
-        final_name = KNOWN_PARAM_NAMES[p_code]
-    elif name and name.upper() != p_code:
-        final_name = name
-    elif note and note.upper() != p_code:
-        final_name = note
-        note = ""
-    else:
-        final_name = p_code
-
-    # 2. Làm sạch ghi chú: không được trùng mã hoặc trùng tên
-    if note.upper() == p_code or note == final_name:
-        final_note = ""
-    else:
-        final_note = note
-
-    return final_name, final_note
+    return p_code, note
     return clean_tails
 
 def get_transfer_default_tails() -> List[str]:
@@ -1021,9 +1002,8 @@ class MongoDBService:
         old_status = item.status
         old_val = item.param_value
 
-        if payload.param_name is not None:
-            p_name_candidate = payload.param_name.strip()
-            item.param_name = p_name_candidate if p_name_candidate else KNOWN_PARAM_NAMES.get(p_code, p_code)
+        # Tên tham số luôn đồng nhất với mã tham số
+        item.param_name = p_code
         if payload.param_type is not None:
             pt = payload.param_type.strip().upper()
             if pt not in ["FUNCTION", "CONFIG"]:
@@ -1034,8 +1014,7 @@ class MongoDBService:
         if payload.param_value is not None:
             item.param_value = str(payload.param_value)
         if payload.note is not None:
-            n_candidate = str(payload.note).strip()
-            item.note = "" if (n_candidate.upper() == p_code or n_candidate == item.param_name) else n_candidate
+            item.note = str(payload.note).strip()
         if payload.category is not None:
             item.category = payload.category
         if payload.priority is not None:

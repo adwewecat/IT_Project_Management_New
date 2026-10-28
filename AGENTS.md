@@ -1335,3 +1335,32 @@
   - Đã chạy kiểm thử backend tự động: 100% các email gửi từ Webmail khớp chính xác với độ chênh lệch chỉ 0.1s và trả về đúng user gửi (`dung.nguyenanh`).
   - Frontend `npm run build` thành công exit code 0 (`dist/` kèm `web.config` IIS).
   - Backend `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
+
+
+---
+
+### [2026-10-28] - Đồng Nhất Param Code & Param Name, Tối Giản Bỏ Cột & Ô Nhập "Tên Tham Số (Mô Tả Tiếng Việt)"
+- **Bối cảnh & Yêu cầu người dùng**:
+  - Tại bảng Tham Số Chuẩn (Standard Params) và bảng Tham Số Nhà Hàng (MongoDB APP_PARAM):
+    + Trước đây tham số `VISIBLE_MENU_BY_WEEKDAYS` hiển thị ở cột "Tên / Ý Nghĩa" là `Low entry`, khi bấm nút Sửa thì ô "Tên Tham Số (Mô Tả Tiếng Việt)" bị điền nhầm thành `Low entry` thay vì mã tham số chuẩn.
+    + Quy tắc chuẩn nghiệp vụ: **Mã Tham Số (Param Code) và Tên Tham Số (Param Name) bắt buộc luôn phải giống hệt nhau 100%**. Còn phần mô tả/ghi chú ý nghĩa nghiệp vụ (ví dụ `Low entry`, `Ẩn hiện thanh toán...`) là thuộc về trường **Diễn Giải Nghiệp Vụ (Note)**.
+    + Yêu cầu cải tiến UI/UX: Loại bỏ hoàn toàn cột "Tên Tham Số (Mô Tả Tiếng Việt)" trên bảng và bỏ ô nhập này trên tất cả các modal (Thêm/Sửa tham số nhà hàng, Thêm/Sửa tham số chuẩn). Khi người dùng nhập `Mã Tham Số (Param Code)`, hệ thống sẽ tự động điền giá trị đó vào `Param Name` mà không bắt người dùng phải nhập 2 lần.
+- **Giải pháp Kỹ thuật & Triển khai**:
+  1. **Cơ Sở Dữ Liệu SQL Server (`dbo.STANDARD_APP_PARAMS` trên Production .25 & Localhost)**:
+     - Chuẩn hóa dữ liệu: Cập nhật dòng `VISIBLE_MENU_BY_WEEKDAYS` với `param_name = 'VISIBLE_MENU_BY_WEEKDAYS'` và `note = 'Low entry'`.
+     - Đồng bộ toàn bộ 17 tham số chuẩn sao cho `param_name = param_code` 100%.
+  2. **Backend Service (`backend/app/services/mongodb_service.py`)**:
+     - Sửa hàm `normalize_param_name_and_note`: Bỏ đoạn logic cũ từng chuyển nhầm `note` sang `param_name`. Hàm chuẩn trả về `(p_code, note)` đảm bảo `param_name` luôn bằng `param_code`.
+     - Trong `update_standard_app_param` & `create_standard_app_param`: Luôn gán `param_name = param_code` và lưu giữ nguyên vẹn `note`.
+  3. **Frontend Giao Diện (`MongoDbParamManagementTask.tsx` & `RestaurantMongoPage.tsx`)**:
+     - **Bảng Tham Số Chuẩn**: Đã bỏ cột "Tên / Ý Nghĩa", tiêu đề hiển thị rõ: `#`, `Mã Param (Param Code)`, `Kiểu`, `Trạng Thái`, `Giá Trị`, `Diễn Giải / Ghi Chú (Note)`, `Thao Tác`.
+     - **Bảng Tham Số Nhà Hàng**: Bỏ cột "Tên Param", Param Code hiển thị monospace kèm badge danh mục và badge "Cần thiết" tinh gọn, có nút copy 1-chạm.
+     - **Các Modal Sửa / Thêm Mới**:
+       + Bỏ hẳn trường nhập liệu "Tên Tham Số (Mô Tả Tiếng Việt)".
+       + Khi người dùng nhập "Mã Tham Số (Param Code)", hệ thống tự động gán `paramName = paramCode` và gửi lên API.
+       + Ghi chú / Ý nghĩa nghiệp vụ được nhập vào trường "Diễn Giải Nghiệp Vụ (Note)".
+- **Kiểm thử & Đóng gói**:
+  - Dữ liệu `VISIBLE_MENU_BY_WEEKDAYS` hiển thị đúng mã tham số, note là `Low entry`.
+  - Frontend `cmd /c "npm run build"` đạt exit code 0 (`dist/` kèm `web.config` IIS).
+  - Backend `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
+  - Backend daemon restarted và hoạt động ổn định trên port 8000.
