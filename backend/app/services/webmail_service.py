@@ -74,45 +74,54 @@ def get_default_golden_gate_signature_html(
   
   <table cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse; font-family: Arial, Helvetica, sans-serif;">
     <tr>
-      <td style="padding-bottom: 12px;">
+      <td style="padding-bottom: 12px;" colspan="5">
         <img src="https://itdept.ggg.com.vn/ggg_logo.png" alt="Golden Gate Restaurant Group" width="160" style="display: block; border: 0;" onerror="this.src='/ggg_logo.png';" />
       </td>
     </tr>
     <tr>
-      <td>
+      <td colspan="5">
         <div style="font-weight: 800; color: #c58315; font-size: 13.5px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
           {department}
         </div>
         <div style="font-weight: 700; color: #222222; font-size: 14px; margin-bottom: 2px;">
           {full_name}
         </div>
-        <div style="color: #666666; font-size: 12.5px; margin-bottom: 12px;">
+        <div style="color: #666666; font-size: 12.5px; margin-bottom: 14px;">
           {job_title}
         </div>
       </td>
     </tr>
     <tr>
-      <td style="border-top: 1px solid #e0e0e0; padding-top: 10px;">
-        <table cellpadding="2" cellspacing="0" border="0" style="font-size: 12px; color: #444444;">
+      <td style="border-top: 1px solid #e0e0e0; padding-top: 10px;" colspan="5">
+        <table cellpadding="3" cellspacing="0" border="0" style="font-size: 12px; color: #333333; border-collapse: collapse;">
           <tr>
-            <td style="font-weight: 700; color: #c58315; width: 20px; vertical-align: top;">A</td>
-            <td style="color: #444444;">{address}</td>
+            <td style="font-weight: 700; color: #c58315; width: 22px; vertical-align: top;">A</td>
+            <td style="color: #444444; vertical-align: top; max-width: 320px; line-height: 1.4;">
+              7th Floor Gigamall, 240-242 Pham Van Dong<br />Hiep Binh Chanh, Thu Duc, Ho Chi Minh
+            </td>
+            <td style="width: 35px;">&nbsp;</td>
+            <td style="font-weight: 700; color: #c58315; width: 22px; vertical-align: top;">M</td>
+            <td style="color: #444444; vertical-align: top;">
+              <a href="tel:{mobile}" style="color: #333333; text-decoration: none;">{mobile}</a>
+            </td>
           </tr>
           <tr>
             <td style="font-weight: 700; color: #c58315; vertical-align: top;">T</td>
-            <td style="color: #444444;">{office_phone}</td>
-          </tr>
-          <tr>
-            <td style="font-weight: 700; color: #c58315; vertical-align: top;">M</td>
-            <td style="color: #444444;"><a href="tel:{mobile}" style="color: #444444; text-decoration: none;">{mobile}</a></td>
-          </tr>
-          <tr>
+            <td style="color: #444444; vertical-align: top;">{office_phone}</td>
+            <td>&nbsp;</td>
             <td style="font-weight: 700; color: #c58315; vertical-align: top;">E</td>
-            <td><a href="mailto:{email}" style="color: #0066cc; text-decoration: underline;">{email}</a></td>
+            <td style="vertical-align: top;">
+              <a href="mailto:{email}" style="color: #0066cc; text-decoration: underline;">{email}</a>
+            </td>
           </tr>
           <tr>
+            <td>&nbsp;</td>
+            <td>&nbsp;</td>
+            <td>&nbsp;</td>
             <td style="font-weight: 700; color: #c58315; vertical-align: top;">W</td>
-            <td><a href="http://{website}" target="_blank" style="color: #0066cc; text-decoration: underline;">{website}</a></td>
+            <td style="vertical-align: top;">
+              <a href="http://{website}" target="_blank" style="color: #0066cc; text-decoration: underline;">{website}</a>
+            </td>
           </tr>
         </table>
       </td>
@@ -643,10 +652,12 @@ class WebmailService:
         if "use_custom_html" in data:
             sig.use_custom_html = bool(data["use_custom_html"])
 
-        if sig.use_custom_html and "signature_html" in data:
+        # Nếu người dùng gửi mã HTML chữ ký (từ việc copy/paste hoặc sửa trực tiếp trong trình soạn thảo)
+        if "signature_html" in data and data["signature_html"] is not None:
             sig.signature_html = data["signature_html"]
-        else:
-            # Tự sinh lại HTML chuẩn theo các trường thông tin cập nhật
+            sig.use_custom_html = True
+        elif not sig.signature_html:
+            # Tự sinh lại HTML chuẩn theo các trường thông tin cập nhật nếu chưa có
             sig.signature_html = get_default_golden_gate_signature_html(
                 full_name=sig.full_name or username,
                 job_title=sig.job_title or "IT Application Specialist",
