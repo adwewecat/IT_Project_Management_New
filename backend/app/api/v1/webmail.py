@@ -5,6 +5,7 @@ Prefix: /webmail
 """
 
 import base64
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
 from fastapi.responses import Response
@@ -14,6 +15,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db, get_current_user, is_super_admin_user
 from app.schemas.auth import UserInfo
 from app.services.webmail_service import WebmailService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webmail", tags=["Webmail"])
 
@@ -141,7 +144,16 @@ def get_message_detail(
     Xem chi tiết một email.
     Tự động đánh dấu email này là ĐÃ ĐỌC riêng cho user hiện tại trong database.
     """
-    return WebmailService.get_message_detail(db, message_id, current_username=current_user.username)
+    try:
+        return WebmailService.get_message_detail(db, message_id, current_username=current_user.username)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Lỗi không mong muốn khi tải chi tiết email {message_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Lỗi đọc email: {str(e)}"
+        )
 
 
 @router.post("/messages/{message_id}/read")

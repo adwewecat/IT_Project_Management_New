@@ -5628,3 +5628,34 @@ estaurant_service.py).
 - **Kiểm thử & Đóng gói**:
   - Backend `compileall app` sạch lỗi 100%.
   - Frontend `npm run build` thành công exit code 0 (`✓ built in 4.40s`).
+
+
+---
+
+### [2026-10-29] - Khắc Phục Lỗi 500 Khi Mở Đọc Email Có File Đính Kèm Rời (TheCoffeeHouse)
+- **Bối cảnh & Phản ánh của người dùng**:
+  - Khi người dùng ở tab "Chưa Đọc" bấm vào mở một email gửi đến từ khách hàng/đối tác (ví dụ email: `TheCoffeeHouse, Cu Xa Binh Thoi ( HCM |... Re: HỖ TRỢ DUYỆT BÙ BILL HỦY NGÀY 14.10.2026`), trình duyệt bật popup cảnh báo lỗi:
+    `14.161.33.122:5001 says: Không thể tải nội dung email: Request failed with status code 500`
+- **Nguyên nhân kỹ thuật gốc rễ**:
+  1. **Lệnh truy vấn attachments không dùng `$select`**:
+     - Trong bản cập nhật trước, câu lệnh gọi `client.get(f".../messages/{message_id}/attachments")` không truyền `$select`.
+     - Đối với email có tệp đính kèm rời dung lượng lớn (hoặc định dạng itemAttachment từ đối tác ngoài gửi đến), Microsoft Graph API cố gắng trả về toàn bộ payload nhị phân cùng một lúc dẫn đến lỗi quá tải / serialization failure hoặc timeout từ Exchange.
+  2. **Rủi ro `re.PatternError` do chuỗi thay thế chứa ký tự thoát backslash**:
+     - Trong hàm `resolve_inline_cids`, việc truyền trực tiếp chuỗi `data_uri` (hoặc `uri`) vào `pattern.sub(data_uri, html_content)` khiến bộ phân tích regex của Python diễn giải các ký tự `\` như một mã escape hoặc nhóm tham chiếu regex, gây văng ngoại lệ `re.PatternError: bad escape` làm crash API với mã HTTP 500.
+  3. **Khả năng `body.content` trả về `None`**:
+     - Một số email thuần văn bản hoặc email đặc thù có `body.content` là `None` khiến `re.search(r'cid:', raw_body_content)` văng `TypeError: expected string or bytes-like object, got 'NoneType'`.
+  4. **Thiếu cơ chế phòng vệ try-catch fallback**:
+     - Quá trình phân giải CID trước đây chưa được bọc khối try/catch an toàn, khiến bất kỳ ngoại lệ nào phát sinh đều làm hỏng toàn bộ quá trình tải email thay vì fallback hiển thị nội dung gốc.
+- **Giải pháp xử lý**:
+  1. **Nâng cấp truy vấn attachments an toàn (`$select=id,name,contentType,size,isInline,contentId`)**:
+     - Luôn truy vấn metadata gọn nhẹ trước, chỉ tải `contentBytes` riêng lẻ cho các ảnh thực sự được nhúng hiển thị trong body.
+  2. **Dùng hàm lambda trong `sub` (`pattern.sub(lambda _: data_uri, html_content)`)**:
+     - Thay thế toàn bộ các lời gọi `re.sub` bằng lambda function để Python coi chuỗi data URI là chuỗi thuần (literal string), triệt tiêu hoàn toàn khả năng phát sinh `re.PatternError`.
+  3. **Bảo vệ kiểu dữ liệu chuỗi `raw_body_content`**:
+     - Đảm bảo `raw_body_content` luôn là kiểu `str` hợp lệ (`raw_body_content = body_info.get("content") or ""`), kiểm tra `isinstance(raw_body_content, str)`.
+  4. **Bọc khối phòng vệ 2 lớp (Service & Router)**:
+     - Bọc try-catch quanh `resolve_inline_cids`: Nếu có bất kỳ lỗi phân giải CID nào, hệ thống tự động ghi log cảnh báo và fallback hiển thị nội dung gốc, tuyệt đối không làm gãy luồng tải thư.
+     - Bọc try-catch quanh router endpoint `/messages/{message_id}` để ghi log chi tiết lỗi thay vì trả về 500 chung chung.
+- **Kiểm thử & Đóng gói**:
+  - Backend `compileall app` sạch lỗi 100%.
+  - Frontend `npm run build` thành công exit code 0 (`✓ built in 4.72s`).
