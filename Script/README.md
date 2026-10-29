@@ -5604,3 +5604,27 @@ estaurant_service.py).
 - **Kiểm thử & Đóng gói**:
   - Backend: `python -m compileall app` đạt exit code 0, kiểm thử unit test `resolve_inline_cids` thay thế thành công 100%.
   - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.14s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.
+
+
+---
+
+### [2026-10-29] - Khắc Phục Lỗi Bị Nhân Đôi (2 Lần) Chữ Ký Khi Soạn Mail Mới
+- **Bối cảnh & Phản ánh của người dùng**:
+  - Người dùng gửi ảnh phản ánh khi soạn mail mới (gõ nội dung "a" và bấm gửi), trong email người nhận nhận được xuất hiện 2 khối chữ ký giống hệt nhau xếp chồng lên nhau (`Nguyễn Anh Dũng (Mr) - IT Application Team Leader`).
+- **Nguyên nhân kỹ thuật**:
+  - Khi mở modal soạn thư (`WebmailComposeModal.tsx`), Frontend đã nạp chữ ký cá nhân hóa của user và chèn vào trong trình soạn thảo `editorRef.current.innerHTML` dưới dạng `<div class="email-signature-container">${sigHtml}</div>`.
+  - Khi người dùng bấm gửi, chuỗi HTML gửi lên backend (`body_html`) đã chứa sẵn khối chữ ký này.
+  - Tuy nhiên, tại Backend (`webmail_service.py`), điều kiện kiểm tra cũ là:
+    `if sig_html and sig_html.strip() not in full_html:`
+  - Do trình duyệt (DOM / contentEditable) khi parse HTML đã tự động chuẩn hóa dấu ngoặc kép, khoảng trắng và thứ tự các thuộc tính CSS, nên chuỗi `sig_html.strip()` gốc từ database không khớp từng ký tự với chuỗi HTML mà trình duyệt gửi lên.
+  - Hệ quả là `sig_html.strip() not in full_html` trả về `True`, khiến backend tự động nối thêm một chữ ký thứ hai vào cuối email (`full_html = f"{full_html}<br/><br/><div class=\"email-signature-container\">{sig_html}</div>"`).
+- **Giải pháp xử lý**:
+  - Tại `WebmailService.send_email` (`webmail_service.py`):
+    Nâng cấp cơ chế nhận diện chữ ký thông minh 3 lớp:
+    1. Kiểm tra `if "email-signature-container" in full_html:`: Nếu trong HTML đã có class container chữ ký do Frontend chèn thì xác nhận email đã có chữ ký, tuyệt đối không chèn thêm.
+    2. Kiểm tra `sig_html.strip() in full_html`.
+    3. Kiểm tra email của user và thương hiệu `"golden gate" in full_html.lower()`.
+    Chỉ khi `not has_signature` (ví dụ gửi tự động qua script / API ngoài không qua giao diện web) thì backend mới chèn chữ ký.
+- **Kiểm thử & Đóng gói**:
+  - Backend `compileall app` sạch lỗi 100%.
+  - Frontend `npm run build` thành công exit code 0 (`✓ built in 4.40s`).

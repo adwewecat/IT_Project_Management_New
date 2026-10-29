@@ -1301,7 +1301,19 @@ class WebmailService:
         sig_html = user_sig.get("signature_html", "")
 
         full_html = body_html
-        if sig_html and sig_html.strip() not in full_html:
+
+        # Kiểm tra xem chữ ký đã có trong nội dung email hay chưa:
+        # 1. Khung chữ ký chuẩn 'email-signature-container' do Frontend chèn trong trình soạn thảo
+        # 2. Hoặc chuỗi HTML chữ ký / tên / email của user đã tồn tại trong body
+        has_signature = False
+        if "email-signature-container" in full_html:
+            has_signature = True
+        elif sig_html and sig_html.strip() in full_html:
+            has_signature = True
+        elif user_sig.get("email") and user_sig["email"].lower() in full_html.lower() and "golden gate" in full_html.lower():
+            has_signature = True
+
+        if sig_html and not has_signature:
             # Nếu trong body có khối nội dung cũ (reply/forward), chữ ký BẮT BUỘC phải nằm Ở TRÊN nội dung cũ!
             if '<div class="quoted-original-email"' in full_html:
                 idx = full_html.find('<div class="quoted-original-email"')
