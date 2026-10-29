@@ -2030,3 +2030,24 @@
   - Chạy test thực tế: Lấy thành công 100% nội dung chi tiết (HTML Body 2608 bytes) của email đã gửi mà không phát sinh bất kỳ lỗi nào.
   - Frontend `npm run build` thành công exit code 0 (`dist/` kèm `web.config` IIS).
   - Backend `python -m compileall app` sạch lỗi 100%, Smoke test `PASSED 100%`.
+
+
+---
+
+### [2026-10-29] - Tối Ưu Bảng Tham Số Chuẩn Trong Modal & Khắc Phục Bể Giao Diện (Compact Table & Text Ellipsis)
+- **Bối cảnh & Triệu chứng**:
+  - Trong Modal "⭐ Quản Lý & Áp Dụng Bộ Param Chuẩn Dùng Chung" (`MongoDbParamManagementTask.tsx`), khi tham số có giá trị dài (như đường link URL `CONFIG_LINK_CTKM`: `https://nhahang.ggg.com.vn/...`) hoặc ghi chú / diễn giải nhiều dòng, bảng bị kéo giãn bề ngang vượt khỏi khung nhìn modal, đẩy cột "Ghi chú" và "Thao tác" ra ngoài biên phải; đồng thời chiều cao của từng hàng bị phình to (khoảng trắng dọc hàng trăm pixel giữa các dòng).
+- **Nguyên nhân kỹ thuật**:
+  - Bảng HTML `<table>` chưa được thiết lập `tableLayout: 'fixed'`, dẫn đến việc trình duyệt tự động co giãn cột dựa trên nội dung dài nhất của từng ô mà không tuân theo độ rộng `width` trên thẻ `<th>`.
+  - Các ô "Mã Param", "Giá Trị" và "Diễn Giải / Ghi Chú (Note)" chưa có cấu hình cắt ngắn bằng dấu ba chấm `...` (`whiteSpace: 'nowrap'`, `overflow: 'hidden'`, `textOverflow: 'ellipsis'`).
+  - Nội dung ghi chú có chứa ký tự xuống dòng (`\r\n`) làm phình to chiều cao hàng của toàn bộ các cột liên quan.
+- **Giải pháp xử lý**:
+  1. **Frontend (`frontend/src/pages/app/MongoDbParamManagementTask.tsx`)**:
+     - Thiết lập thuộc tính `tableLayout: 'fixed'` và thẻ `<colgroup>` cố định tỷ lệ các cột: `#` (40px), `Mã Param` (220px), `Kiểu` (85px), `Trạng Thái` (85px), `Giá Trị` (150px), `Diễn Giải / Ghi Chú` (tự động co giãn theo khoảng trống còn lại ~330px), `Thao Tác` (95px).
+     - Toàn bộ bảng vừa vặn 100% trong khung nhìn modal 1050px, hiển thị đầy đủ cả 7 cột mà không bị cuộn ngang.
+     - Xử lý ô "Giá Trị" và "Diễn Giải / Ghi Chú": Đặt `whiteSpace: 'nowrap'`, `overflow: 'hidden'`, `textOverflow: 'ellipsis'` để hiển thị dấu ba chấm `...` khi nội dung dài, kèm `title` hiển thị đầy đủ thông tin gốc khi rê chuột (hover tooltip).
+     - Khử ký tự xuống dòng trên giao diện dòng đơn: Dùng `.replace(/[\r\n]+/g, ' ')` giúp hàng luôn giữ chiều cao cố định siêu gọn gàng (36px).
+     - Tối ưu thêm cột "Diễn Giải Nghiệp Vụ" trong bảng tham số chính ngoài trang để bảo đảm tính nhất quán và không làm vỡ giao diện.
+- **Kiểm thử & Đóng gói**:
+  - Frontend `npm run build` thành công exit code 0 (`frontend/dist/` sạch sẽ, kèm `web.config` cho IIS).
+  - Backend `python -m compileall app` sạch lỗi 100%.
