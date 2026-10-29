@@ -1130,7 +1130,15 @@ class WebmailService:
 
         full_html = body_html
         if sig_html and sig_html.strip() not in full_html:
-            full_html = f"""{full_html}
+            # Nếu trong body có khối nội dung cũ (reply/forward), chữ ký BẮT BUỘC phải nằm Ở TRÊN nội dung cũ!
+            if '<div class="quoted-original-email"' in full_html:
+                idx = full_html.find('<div class="quoted-original-email"')
+                full_html = f"{full_html[:idx]}<br /><div class=\"email-signature-container\">{sig_html}</div><br />{full_html[idx:]}"
+            elif '<hr' in full_html:
+                idx = full_html.find('<hr')
+                full_html = f"{full_html[:idx]}<br /><div class=\"email-signature-container\">{sig_html}</div><br />{full_html[idx:]}"
+            else:
+                full_html = f"""{full_html}
 <br /><br />
 <div class="email-signature-container">
   {sig_html}

@@ -65,6 +65,17 @@ export const WebmailPage: React.FC = () => {
     bodyHtml?: string;
   }>({});
 
+  // Email hộp thư dùng chung
+  const [sharedEmail, setSharedEmail] = useState<string>('ss.it.application@ggg.com.vn');
+
+  useEffect(() => {
+    webmailService.getConfig().then((cfg) => {
+      if (cfg.email_address) {
+        setSharedEmail(cfg.email_address);
+      }
+    }).catch(() => {});
+  }, []);
+
   // Mobile navigation state
   const [mobileShowDetail, setMobileShowDetail] = useState<boolean>(false);
 
@@ -161,26 +172,62 @@ export const WebmailPage: React.FC = () => {
     }
   };
 
-  // Trả lời thư (Reply)
+  // Trả lời thư (Reply / Reply All)
   const handleReply = (replyAll = false) => {
     if (!selectedDetail) return;
     const to = selectedDetail.sender_email;
     let cc = '';
-    if (replyAll && selectedDetail.cc_recipients?.length > 0) {
-      cc = selectedDetail.cc_recipients.map((r) => r.email).join('; ');
+
+    if (replyAll) {
+      const senderEmail = (selectedDetail.sender_email || '').toLowerCase().trim();
+      const currentMailbox = (sharedEmail || 'ss.it.application@ggg.com.vn').toLowerCase().trim();
+      const userEmail = (user?.email || '').toLowerCase().trim();
+      const userMail = user?.username ? `${user.username.toLowerCase().trim()}@ggg.com.vn` : '';
+
+      // Quy tắc Reply All: To tới người gửi; tất cả các email To và Cc cũ được gom hết xuống Cc
+      const allRecipients = [
+        ...(selectedDetail.to_recipients || []),
+        ...(selectedDetail.cc_recipients || []),
+      ];
+
+      const seen = new Set<string>();
+      const ccList: string[] = [];
+
+      for (const r of allRecipients) {
+        const rawEmail = (r.email || '').trim();
+        const lower = rawEmail.toLowerCase();
+        if (!lower || !lower.includes('@')) continue;
+
+        // Bỏ qua người gửi (vì người gửi đã nằm ở trường To)
+        if (lower === senderEmail) continue;
+
+        // Bỏ qua tài khoản người gửi hiện tại (không tự CC chính mình)
+        if (lower === currentMailbox || (userEmail && lower === userEmail) || (userMail && lower === userMail)) continue;
+
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          ccList.push(rawEmail);
+        }
+      }
+
+      cc = ccList.join('; ');
     }
 
     const cleanSubj = selectedDetail.subject.startsWith('Re:')
       ? selectedDetail.subject
       : `Re: ${selectedDetail.subject}`;
 
+    const ccHeader = selectedDetail.cc_recipients && selectedDetail.cc_recipients.length > 0
+      ? `<b>Cc:</b> ${selectedDetail.cc_recipients.map((r) => `${r.name || r.email} &lt;${r.email}&gt;`).join(', ')}<br/>`
+      : '';
+
     const quoteHtml = `
-      <p><br></p>
       <hr style="border: 0; border-top: 1px solid #cbd5e1; margin: 16px 0;" />
       <div style="font-size: 12px; color: #64748b; line-height: 1.4;">
         <b>Từ:</b> ${selectedDetail.sender_name} &lt;${selectedDetail.sender_email}&gt;<br/>
         <b>Ngày:</b> ${selectedDetail.received_time_vn}<br/>
         <b>Tới:</b> ${selectedDetail.to_recipients.map((r) => `${r.name || r.email} &lt;${r.email}&gt;`).join(', ')}<br/>
+        ${ccHeader}
         <b>Chủ đề:</b> ${selectedDetail.subject}
       </div>
       <div style="margin-top: 10px; padding-left: 10px; border-left: 2px solid #cbd5e1;">
@@ -205,7 +252,6 @@ export const WebmailPage: React.FC = () => {
       : `Fwd: ${selectedDetail.subject}`;
 
     const quoteHtml = `
-      <p><br></p>
       <hr style="border: 0; border-top: 1px solid #cbd5e1; margin: 16px 0;" />
       <div style="font-size: 12px; color: #64748b; line-height: 1.4;">
         <b>---------- Thư được chuyển tiếp ----------</b><br/>

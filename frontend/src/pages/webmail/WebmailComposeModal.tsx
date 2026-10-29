@@ -48,7 +48,6 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
   const [to, setTo] = useState(initialTo);
   const [cc, setCc] = useState(initialCc);
   const [subject, setSubject] = useState(initialSubject);
-  const [userSignatureHtml, setUserSignatureHtml] = useState<string>('');
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -82,20 +81,36 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
 
       // Tải chữ ký cá nhân hóa của user đang đăng nhập
       webmailService.getSignature().then((sig) => {
-        if (sig.signature_html) {
-          setUserSignatureHtml(sig.signature_html);
-        }
+        const sigHtml = sig.signature_html || '';
+
+        setTimeout(() => {
+          if (editorRef.current) {
+            const signatureBlock = sigHtml
+              ? `<div class="email-signature-container" style="margin-top: 20px; margin-bottom: 20px;">${sigHtml}</div>`
+              : '';
+
+            if (initialBodyHtml) {
+              // Trường hợp Reply/Forward: Chữ ký BẮT BUỘC nằm Ở TRÊN phần nội dung cũ!
+              // Cấu trúc: [Dòng gõ phản hồi của user] -> [Chữ ký] -> [Khối email cũ]
+              editorRef.current.innerHTML = `<p><br></p>${signatureBlock}<div class="quoted-original-email">${initialBodyHtml}</div>`;
+            } else {
+              // Trường hợp Soạn thư mới hoàn toàn:
+              editorRef.current.innerHTML = `<p><br></p>${signatureBlock}`;
+            }
+            editorRef.current.focus();
+          }
+        }, 50);
       }).catch((e) => {
         console.error('Không thể nạp chữ ký:', e);
+        setTimeout(() => {
+          if (editorRef.current) {
+            editorRef.current.innerHTML = initialBodyHtml
+              ? `<p><br></p><div class="quoted-original-email">${initialBodyHtml}</div>`
+              : '<p><br></p>';
+            editorRef.current.focus();
+          }
+        }, 50);
       });
-
-      // Gán nội dung soạn thảo
-      setTimeout(() => {
-        if (editorRef.current) {
-          editorRef.current.innerHTML = initialBodyHtml || '<p><br></p>';
-          editorRef.current.focus();
-        }
-      }, 100);
     }
   }, [isOpen, initialTo, initialCc, initialSubject, initialBodyHtml]);
 
@@ -613,31 +628,7 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
             }}
           />
 
-          {/* Phần chữ ký email ở dưới cùng theo từng user đăng nhập */}
-          {userSignatureHtml && (
-            <div
-              style={{
-                marginTop: '30px',
-                paddingTop: '16px',
-                borderTop: '1px dashed #d1d5db',
-                userSelect: 'none',
-              }}
-            >
-              <div
-                style={{
-                  fontSize: '10.5px',
-                  color: '#9ca3af',
-                  marginBottom: '8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <span>Chữ ký email của bạn (tự động gắn vào cuối mail):</span>
-              </div>
-              <div dangerouslySetInnerHTML={{ __html: userSignatureHtml }} />
-            </div>
-          )}
+
         </div>
 
         {/* Danh sách tệp đính kèm đã chọn */}

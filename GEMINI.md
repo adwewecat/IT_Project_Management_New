@@ -2077,3 +2077,31 @@
 - **Kiểm thử & Đóng gói**:
   - Frontend `npm run build` thành công exit code 0 (`frontend/dist/` sạch sẽ, kèm `web.config` cho IIS).
   - Backend `python -m compileall app` sạch lỗi 100%.
+
+
+---
+
+### [2026-10-29] - Tối Ưu Tính Năng Trả Lời Tất Cả (Reply All) & Vị Trí Chữ Ký Email Nằm Trên Nội Dung Cũ
+- **Bối cảnh & Yêu cầu người dùng**:
+  1. Khi người dùng bấm **"Trả lời tất cả"** (Reply All), hệ thống chưa lấy được toàn bộ danh sách `To` cũ mà chỉ lấy mỗi `Cc`. Người dùng yêu cầu: khi Reply All thì người nhận `Tới` (To) và `Cc` của email cũ đều phải được gom hết xuống trường `Cc`, còn trường `To` sẽ chỉ gửi tới Người gửi (Sender) của email đó.
+  2. Về nội dung email khi Reply / Forward: Chữ ký của người gửi phải nằm **Ở TRÊN** phần nội dung cũ (ngay dưới dòng nhập nội dung phản hồi của người dùng), không được để chữ ký nằm ở dưới đáy cùng sau toàn bộ chuỗi email cũ.
+- **Nguyên nhân kỹ thuật**:
+  - Trong `handleReply` (`WebmailPage.tsx`), khi `replyAll` bật, logic cũ chỉ lấy `selectedDetail.cc_recipients` mà bỏ quên toàn bộ danh sách `selectedDetail.to_recipients`.
+  - Trong `WebmailComposeModal.tsx`, chữ ký được render trong một thẻ `div` tĩnh ở bên dưới khung `editorRef` (nằm ở đáy cùng modal). Đồng thời ở backend, `WebmailService.send_email` tự động nối chuỗi `sig_html` vào cuối cùng của `body_html` (`full_html = f"{full_html}<br/><br/>{sig_html}"`), khiến chữ ký luôn bị đẩy xuống sau phần email được trích dẫn (quoted content).
+- **Giải pháp xử lý**:
+  1. **Gom toàn bộ người nhận To và Cc xuống trường Cc khi Reply All (`WebmailPage.tsx`)**:
+     - Khi `replyAll = true`:
+       + Trường `To`: Gán đúng địa chỉ người gửi ban đầu (`selectedDetail.sender_email`).
+       + Trường `Cc`: Hợp nhất toàn bộ `to_recipients` và `cc_recipients`. Lọc bỏ địa chỉ người gửi (đã có ở To), lọc bỏ hòm thư gửi hiện tại (`ss.it.application@ggg.com.vn` hoặc email của user đang đăng nhập) để tránh tự CC chính mình, đồng thời khử trùng lặp (deduplicate).
+       + Trong phần trích dẫn email cũ (`quoteHtml`): Bổ sung dòng hiển thị `Cc` nếu email ban đầu có danh sách CC.
+  2. **Đưa chữ ký lên trên phần nội dung cũ (WYSIWYG chuẩn Outlook / Gmail)**:
+     - **Frontend (`WebmailComposeModal.tsx`)**:
+       + Khi mở modal trả lời/chuyển tiếp có `initialBodyHtml`: Nạp chữ ký cá nhân hóa của user và chèn trực tiếp vào bên trong trình soạn thảo theo thứ tự chuẩn:
+         `[Dòng trống gõ nội dung mới] -> [Chữ ký của user] -> [Khối trích dẫn email cũ]`.
+       + Bỏ khối preview tĩnh ở đáy modal để giao diện soạn thảo đồng nhất, trực quan.
+     - **Backend (`webmail_service.py`)**:
+       + Phòng vệ nếu `sig_html` chưa có trong `body_html`: Kiểm tra sự tồn tại của khối email cũ (`quoted-original-email` hoặc `<hr`), nếu có thì chèn `sig_html` lên ngay TRƯỚC khối nội dung cũ thay vì gắn ở đáy mail.
+- **Kiểm thử & Đóng gói**:
+  - Frontend `npm run build` thành công exit code 0 (`frontend/dist/` sạch sẽ, kèm `web.config` cho IIS).
+  - Backend `python -m compileall app` sạch lỗi 100%.
+  - Smoke test service Webmail import thành công.
