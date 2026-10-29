@@ -2051,3 +2051,29 @@
 - **Kiểm thử & Đóng gói**:
   - Frontend `npm run build` thành công exit code 0 (`frontend/dist/` sạch sẽ, kèm `web.config` cho IIS).
   - Backend `python -m compileall app` sạch lỗi 100%.
+
+
+---
+
+### [2026-10-29] - Khắc Phục Lỗi Không Tự Load Lại Tham Số Khi Đổi Nhà Hàng & Bấm Nút Làm Mới Dữ Liệu
+- **Bối cảnh & Triệu chứng lỗi**:
+  - Khi đang ở tác vụ "9. [Xử Lý Param] (Cấu Hình Bảng APP_PARAM)" và chọn sang nhà hàng khác ở dropdown trên đỉnh trang, danh sách tham số không tự động tải lại cho nhà hàng mới (hoặc vẫn giữ nguyên bộ lọc tìm kiếm cũ dẫn đến hiển thị 0 tham số). Người dùng phải chuyển sang tác vụ khác rồi chọn lại tác vụ Param thì mới thấy tải lại. Bấm nút "Làm mới dữ liệu" cũng không thấy đổi mới.
+- **Nguyên nhân kỹ thuật**:
+  1. Component `<MongoDbParamManagementTask>` trước đây không có thuộc tính `key` phụ thuộc vào `selectedRestaurant.id`. Do đó khi đổi nhà hàng, React tái sử dụng instance cũ, giữ nguyên bộ lọc tìm kiếm cũ (`searchQuery = 'CONVEYOR_TABLES'`). Vì nhà hàng mới không có param này nên kết quả trả về `0 / 62 tham số`.
+  2. Biến `currentHost` fallback về `selectedRestaurant.ip` (địa chỉ IP Gateway 10.x.y.1). Trong khi MongoDB chỉ chạy trên các máy trạm POS/KDS (.11, .12, .41) được dò qua `connectedHost`. Khi đang chuyển nhà hàng, `connectedHost` tạm thời rỗng, component gửi request vô vọng tới port 27017 của gateway gây treo 4 giây rồi báo lỗi timeout.
+  3. Nút "Làm mới dữ liệu" gọi hàm nội bộ chưa có phản hồi toast xác nhận và chưa hiển thị trạng thái chờ kết nối nếu máy trạm chưa hoàn tất dò IP.
+- **Giải pháp xử lý**:
+  1. **Tự động làm mới khi đổi nhà hàng (`RestaurantMongoAnalysisPage.tsx`)**:
+     - Thêm `key={selectedRestaurant ? "res_" + selectedRestaurant.id : "no_res"}` vào component `<MongoDbParamManagementTask>`. Khi đổi nhà hàng, component được khởi tạo lại hoàn toàn tinh sạch.
+  2. **Tối ưu logic tải dữ liệu & kết nối (`MongoDbParamManagementTask.tsx`)**:
+     - Đặt `currentHost = connectedHost || ''`: Tuyệt đối không fallback sang IP Gateway 10.x.y.1.
+     - Khi `!currentHost`: Hiển thị giao diện chờ kết nối trang nhã kèm thông điệp rõ ràng "Đang kết nối MongoDB nhà hàng... Hệ thống đang tự động dò tìm máy trạm POS (.11, .12, .41)".
+     - Khi `connectedHost` được thiết lập sau khi dò máy trạm xong: Tự động gọi `loadParams(connectedHost)` và tải ngay bộ tham số mới.
+     - Tự động xóa bộ lọc tìm kiếm khi `selectedRestaurant.id` thay đổi.
+  3. **Tối ưu nút "Làm mới dữ liệu" & Xóa bộ lọc**:
+     - Nút "Làm mới dữ liệu" luôn gọi `mongoService.getAppParams(currentHost, 27017)` và hiển thị toast xác nhận số lượng tham số tải về thành công.
+     - Thêm nút `✕` trực tiếp trong ô tìm kiếm để người dùng xóa nhanh từ khóa bằng 1 chạm.
+     - Khi danh sách lọc ra 0 kết quả nhưng kho có dữ liệu: Hiển thị rõ dòng thông báo đang lọc theo từ khóa nào kèm nút `[✕ Xóa bộ lọc tìm kiếm để xem toàn bộ N tham số]`.
+- **Kiểm thử & Đóng gói**:
+  - Frontend `npm run build` thành công exit code 0 (`frontend/dist/` sạch sẽ, kèm `web.config` cho IIS).
+  - Backend `python -m compileall app` sạch lỗi 100%.
