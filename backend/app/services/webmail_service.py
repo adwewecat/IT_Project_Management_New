@@ -913,8 +913,8 @@ class WebmailService:
                             ))
                             db.commit()
                             logger.info(f"Đã lưu trạng thái ĐÃ ĐỌC email {message_id} cho user {current_username}.")
-                    except Exception as re:
-                        logger.warning(f"Lỗi lưu trạng thái đã đọc cho user {current_username}: {re}")
+                    except Exception as read_err:
+                        logger.warning(f"Lỗi lưu trạng thái đã đọc cho user {current_username}: {read_err}")
 
                 body_info = data.get("body") or {}
                 raw_body_content = body_info.get("content") or ""

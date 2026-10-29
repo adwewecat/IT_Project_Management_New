@@ -2198,3 +2198,28 @@
 - **Kiểm thử & Đóng gói**:
   - Backend `compileall app` sạch lỗi 100%.
   - Frontend `npm run build` thành công exit code 0 (`✓ built in 4.72s`).
+
+
+---
+
+### [2026-10-29] - Khắc Phục Lỗi "UnboundLocalError: local variable 're' referenced before assignment" Khi Đọc Email
+- **Bối cảnh & Phản ánh của người dùng**:
+  - Người dùng bấm vào đọc email trên server, giao diện hiện thông báo:
+    `Không thể tải nội dung email: Lỗi đọc email: local variable 're' referenced before assignment`
+- **Nguyên nhân kỹ thuật**:
+  - Trong phương thức `get_message_detail` (`backend/app/services/webmail_service.py`), tại khối lưu trạng thái đã đọc của người dùng có đoạn code:
+    `except Exception as re:`
+  - Trong cơ chế biên dịch scope của ngôn ngữ Python, khi một biến được gán ở bất kỳ đâu trong một hàm (kể cả trong mệnh đề `except ... as <var>`), Python coi tên đó là một **biến cục bộ (local variable)** cho toàn bộ hàm.
+  - Do biến lỗi mang tên `re`, nó vô tình che khuất (shadow) module thư viện chuẩn `import re` ở phạm vi toàn cục.
+  - Khi luồng thực thi chạy bình thường (không có lỗi ở khối trên), biến `re` chưa từng được gán giá trị. Khi code phía dưới gọi `has_cid = bool(re.search(...))` hoặc `re.escape(...)`, Python cố gắng truy cập biến cục bộ `re` chưa được khởi tạo và ngay lập tức văng ngoại lệ:
+    `UnboundLocalError: local variable 're' referenced before assignment`.
+- **Giải pháp xử lý**:
+  - Đổi tên biến lỗi `except Exception as re:` thành `except Exception as read_err:`.
+  - Kiểm tra toàn bộ codebase: xác nhận `'re'` đã được giải phóng hoàn toàn khỏi local `co_varnames` của `get_message_detail` và trở lại đúng module toàn cục `import re`.
+  - Viết kịch bản kiểm thử tự động toàn diện (`scratch/test_detail.py`) giả lập cả 2 trường hợp:
+    1. Email có tệp đính kèm rời và ảnh nhúng CID (TheCoffeeHouse).
+    2. Email trống không có attachments hoặc body rỗng.
+    Toàn bộ kịch bản chạy thành công 100%.
+- **Kiểm thử & Đóng gói**:
+  - Backend: `python -m compileall app` đạt exit code 0, test script chạy hoàn hảo không phát sinh ngoại lệ.
+  - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.71s`).
