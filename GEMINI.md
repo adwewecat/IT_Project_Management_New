@@ -2223,3 +2223,49 @@
 - **Kiểm thử & Đóng gói**:
   - Backend: `python -m compileall app` đạt exit code 0, test script chạy hoàn hảo không phát sinh ngoại lệ.
   - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.71s`).
+
+
+---
+
+### [2026-10-29] - Bổ Sung Quản Lý Chế Độ In & Ra Món KDS (Role 1 vs Role 3) Trong Modal "Cấu Hình Quầy Bếp & Driver Máy In KDS"
+- **Bối cảnh & Phản ánh của người dùng**:
+  - Tại nhà hàng `[4326] Hutong Aeon Mall Tân Phú`, các món ở quầy BAR đã được gán đúng `driverName` của máy in là `BAR`.
+  - Tuy nhiên, khi bấm **Done** món trên màn hình KDS thì máy in không in ra phiếu ra món, mặc dù in test trực tiếp từ máy in vẫn ra giấy bình thường.
+  - Người dùng kiểm tra cấu hình nhà hàng trong bảng `ACCOUNT` (database `G_KITCHEN`) và phát hiện:
+    + Quầy Thịt (102), Quầy Hải Sản (103), Quầy Rau (104), Quầy Lẩu (105) đều có `Role: 3` -> Bấm Done là máy in lập tức in phiếu ra món ngay tại quầy!
+    + Quầy BAR (106) có `Role: 1` -> Bấm Done thì KHÔNG in ra phiếu ra món ngay mà món chạy qua màn hình Bếp tổng Food Control (`Role: 2`), chỉ khi Food Control bấm Done thì máy in mới in phiếu ra món!
+- **Yêu cầu của người dùng**:
+  - Cập nhật modal **"Cấu Hình Quầy Bếp & Driver Máy In KDS"** để hiển thị rõ ràng Role của từng quầy: Quầy đó có in trực tiếp khi Done hay qua Food Control mới ra món.
+  - Thêm tính năng 1-chạm (Action button) cho phép người dùng chuyển đổi linh hoạt giữa 2 chế độ:
+    1. **Bấm Done ra món ngay (Role 3 - In trực tiếp tại quầy)**.
+    2. **Qua Food Control mới ra món (Role 1 - FC bấm Done mới in phiếu)**.
+- **Phân tích kỹ thuật & Triển khai**:
+  1. **Backend (`backend/app/services/mongodb_service.py` & `backend/app/schemas/mongodb.py`)**:
+     - Trong `get_kds_places`:
+       + Duyệt bảng `ACCOUNT` để map chính xác tài khoản trạm bếp (`role != 2`) của từng quầy theo `listPlace.id` hoặc tên quầy.
+       + Bổ sung các trường dữ liệu vào `KdsPlaceItem`: `role` (1, 2, 3), `role_desc`, `print_on_done` (True nếu Role 3, False nếu Role 1), `account_id`.
+     - Trong `toggle_kds_food_control`:
+       + Cho phép nhận `target_role` (1 hoặc 3) hoặc các action `to_role_1`, `to_role_3`, `role_1`, `role_3`, `direct`.
+       + **Khi chuyển sang Role 3**: Cập nhật `role: 3` cho tài khoản quầy con trong bảng `ACCOUNT` (không chạm vào Food Control), bảo đảm máy in in phiếu ra món ngay tại quầy khi bấm Done.
+       + **Khi chuyển sang Role 1**: Cập nhật `role: 1` và `placeParent = fc_acc_id` cho tài khoản quầy con; đồng thời tự động kiểm tra và thêm quầy vào `listPlace` của tài khoản Food Control (Role 2) nếu chưa có để Food Control hiển thị món và có quyền duyệt Done.
+       + Tự động tạo mới tài khoản nếu quầy trong `CONFIG_KDS` chưa có tài khoản trong `ACCOUNT`.
+       + Ghi nhật ký thao tác `AuditLog` với đầy đủ tham số.
+  2. **Frontend (`frontend/src/pages/app/KdsQuayModals.tsx` & `RestaurantMongoAnalysisPage.tsx` & `mongoService.ts`)**:
+     - Cập nhật interface `KdsPlaceItem` và `KdsToggleFoodControlResponse`.
+     - Tại modal **"Cấu Hình Quầy Bếp & Driver Máy In KDS"**:
+       + Bổ sung khối giải thích hướng dẫn trực quan trên đầu modal phân biệt rõ ràng: **Role 3 (Bấm Done ra món ngay)** vs **Role 1 (Qua Food Control mới ra)**.
+       + Đổi tiêu đề cột thành **"Chế Độ Ra Món Khi Done (Role & In Phiếu)"** với độ rộng tối ưu.
+       + Hiển thị Badge & Subtext trực quan theo từng trạng thái:
+         * Quầy Role 1: Badge màu cam `⚡ Qua Food Control Mới Ra Món (Role 1)` kèm subtext `Bếp Done không in ➔ FC Done mới in`, cùng nút bấm 1-chạm: `🖨️ Chuyển: Bấm Done Ra Món Ngay (Role 3)`.
+         * Quầy Role 3: Badge màu xanh lá `🟢 Bấm Done Ra Món Ngay (Role 3)` kèm subtext `In phiếu ra món trực tiếp tại quầy`, cùng nút bấm 1-chạm: `⚡ Chuyển: Qua Food Control Mới Ra (Role 1)`.
+         * Quầy Food Control: Badge `👑 Trạm Food Control (Role 2)`.
+     - Tại trang chính **Phân Tích MongoDB Nhà Hàng (Tab 1 - Xử Lý KDS)**:
+       + Bổ sung hiển thị `• Role 1 (Qua FC)` / `• Role 3 (In ngay)` ngay trên từng thẻ Quầy Bếp (ACCOUNT) để IT nắm bắt trạng thái tức thì không cần mở modal.
+- **Kiểm thử chất lượng (Verification)**:
+  - Viết kịch bản unit test tự động giả lập MongoDB trạm nhà hàng (`scratch/test_kds_role_toggle.py`):
+    * Kiểm tra mapping chính xác Role 3 cho Quầy Thịt và Role 1 cho Quầy BAR: PASSED.
+    * Kiểm tra chuyển BAR từ Role 1 sang Role 3: PASSED (`role: 3`, `print_on_done: True`).
+    * Kiểm tra chuyển BAR từ Role 3 về Role 1: PASSED (`role: 1`, `print_on_done: False`).
+  - Backend compile: `python -m compileall backend/app` sạch 100%.
+  - Backend smoke test: `IT Project Management API` khởi động thành công.
+  - Frontend build: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 5.04s`), bundle `frontend/dist` sẵn sàng triển khai.

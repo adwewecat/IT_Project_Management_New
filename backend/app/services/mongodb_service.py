@@ -2147,21 +2147,61 @@ class MongoDBService:
             kds_doc = db_kitchen["CONFIG_KDS"].find_one() or {}
             raw_places = kds_doc.get("places") or []
 
-            # Map accounts for each place
+            # Map accounts for each place and map primary non-FC account to get role
             acc_docs = list(db_kitchen["ACCOUNT"].find())
             place_accounts: Dict[int, List[str]] = {}
+            place_primary_account: Dict[int, dict] = {}
+
             for acc in acc_docs:
                 acc_name = str(acc.get("accName") or "").strip()
+                try:
+                    r_val = int(acc.get("role", 0))
+                except (ValueError, TypeError):
+                    r_val = 0
+                is_fc = (r_val == 2 or str(acc.get("accId")) == "101" or "food" in acc_name.lower())
+
                 for lp in (acc.get("listPlace") or []):
+                    pid_candidate = None
                     if isinstance(lp, dict) and lp.get("id") is not None:
                         try:
-                            pid = int(lp["id"])
-                            if pid not in place_accounts:
-                                place_accounts[pid] = []
-                            if acc_name and acc_name not in place_accounts[pid]:
-                                place_accounts[pid].append(acc_name)
+                            pid_candidate = int(lp["id"])
                         except (ValueError, TypeError):
                             pass
+                    else:
+                        try:
+                            pid_candidate = int(lp)
+                        except (ValueError, TypeError):
+                            pass
+
+                    if pid_candidate is not None:
+                        if pid_candidate not in place_accounts:
+                            place_accounts[pid_candidate] = []
+                        if acc_name and acc_name not in place_accounts[pid_candidate]:
+                            place_accounts[pid_candidate].append(acc_name)
+
+                        # Set primary station account (non-Food Control)
+                        if not is_fc and pid_candidate not in place_primary_account:
+                            place_primary_account[pid_candidate] = acc
+
+            # Fallback map primary account by name or placeCode if not matched by listPlace
+            for p in raw_places:
+                if not isinstance(p, dict):
+                    continue
+                pid = int(p.get("id", 0))
+                if pid not in place_primary_account and pid != 0:
+                    p_name_l = str(p.get("name") or "").strip().lower()
+                    p_code_l = str(p.get("placeCode") or "").strip().lower()
+                    for acc in acc_docs:
+                        try:
+                            r_val = int(acc.get("role", 0))
+                        except (ValueError, TypeError):
+                            r_val = 0
+                        if r_val == 2 or str(acc.get("accId")) == "101" or "food" in str(acc.get("accName") or "").lower():
+                            continue
+                        a_name_l = str(acc.get("accName") or "").strip().lower()
+                        if (p_name_l and a_name_l == p_name_l) or (p_code_l and a_name_l == p_code_l):
+                            place_primary_account[pid] = acc
+                            break
 
             # Count dishes per place in CONFIG_COOKING
             cooking_docs = list(db_kitchen["CONFIG_COOKING"].find({}, {"placeIds": 1}))
@@ -2214,6 +2254,36 @@ class MongoDBService:
                 driver_n = str(p.get("driverName") or p.get("driver_name") or prn).strip()
                 is_in_fc = True if pid == 0 else (pid in fc_place_ids)
 
+                # Determine Role and print_on_done
+                p_acc = place_primary_account.get(pid)
+                if pid == 0:
+                    role_val = 2
+                    role_desc = "Role 2: Trạm Bếp Tổng Food Control"
+                    print_on_done = False
+                    acc_id_str = "101"
+                    is_in_fc = True
+                else:
+                    if p_acc:
+                        try:
+                            role_val = int(p_acc.get("role", 3))
+                        except (ValueError, TypeError):
+                            role_val = 3
+                        acc_id_str = str(p_acc.get("accId") or "")
+                    else:
+                        role_val = 3
+                        acc_id_str = ""
+
+                    if role_val == 1:
+                        role_desc = "Role 1: Qua Food Control mới ra món (Bếp Done không in ➔ FC Done mới in)"
+                        print_on_done = False
+                        is_in_fc = True
+                    elif role_val == 3:
+                        role_desc = "Role 3: Bấm Done ra món ngay (In trực tiếp tại quầy)"
+                        print_on_done = True
+                    else:
+                        role_desc = f"Role {role_val}"
+                        print_on_done = (role_val == 3)
+
                 places_out.append(KdsPlaceItem(
                     id=pid,
                     name=str(p.get("name") or f"Quầy #{pid}"),
@@ -2225,7 +2295,11 @@ class MongoDBService:
                     account_names=place_accounts.get(pid, []),
                     dish_count=dish_counts.get(pid, 0),
                     is_in_food_control=is_in_fc,
-                    is_orphan=False
+                    is_orphan=False,
+                    role=role_val,
+                    role_desc=role_desc,
+                    print_on_done=print_on_done,
+                    account_id=acc_id_str
                 ))
 
             # Quét các placeId mồ côi (có món trong CONFIG_COOKING nhưng quầy đã bị xóa dưới nhà hàng / thiếu trong CONFIG_KDS)
@@ -2243,7 +2317,11 @@ class MongoDBService:
                         account_names=[],
                         dish_count=count,
                         is_in_food_control=False,
-                        is_orphan=True
+                        is_orphan=True,
+                        role=3,
+                        role_desc="Role 3 (Mồ côi)",
+                        print_on_done=True,
+                        account_id=""
                     ))
 
             return KdsPlaceListResponse(
@@ -4626,8 +4704,6 @@ class MongoDBService:
                     {"accName": {"$regex": "food.*control", "$options": "i"}}
                 ]
             })
-            if not food_control_acc:
-                raise ValueError("Nhà hàng này không cấu hình tài khoản quầy tổng Food Control trong bảng ACCOUNT!")
 
             # Lấy thông tin quầy trong CONFIG_KDS
             kds_doc = kds_col.find_one() or {}
@@ -4638,64 +4714,148 @@ class MongoDBService:
             printer = target_place.get("printer", "") if target_place else ""
             driver_name = target_place.get("driverName", printer) if target_place else printer
 
-            if payload.action == "exclude":
-                # Bỏ quầy ra khỏi listPlace của Food Control
-                acc_col.update_one(
-                    {"_id": food_control_acc["_id"]},
-                    {"$pull": {"listPlace": {"id": payload.place_id}}}
-                )
-                # Cập nhật placeParent = "" trên tài khoản quầy con (role 3)
-                acc_col.update_many(
-                    {"listPlace.id": payload.place_id, "role": 3},
-                    {"$set": {"placeParent": ""}}
-                )
-                msg = f"Đã chuyển quầy '{place_name}' (ID: {payload.place_id}) sang Chế độ Bếp đơn (1 bước - Không qua Food Control)!"
-                new_state = False
-            else:
-                # Thêm quầy vào listPlace của Food Control
-                fc_hall_plans = []
-                for p in food_control_acc.get("listPlace") or []:
-                    if isinstance(p, dict) and p.get("hallPlanIds"):
-                        fc_hall_plans = list(p["hallPlanIds"])
-                        break
-                if not fc_hall_plans:
-                    fc_hall_plans = target_place.get("hallPlanIds", []) if target_place else []
+            fc_acc_id = str(food_control_acc.get("accId", "101")) if food_control_acc else "101"
 
-                # Xóa bản cũ nếu có rồi push bản mới vào listPlace của Food Control
-                acc_col.update_one(
-                    {"_id": food_control_acc["_id"]},
-                    {"$pull": {"listPlace": {"id": payload.place_id}}}
+            # Xác định target_role mong muốn:
+            # 3 = Bấm Done ra món ngay (In trực tiếp tại quầy / Bếp độc lập)
+            # 1 = Bấm Done KHÔNG in, qua Food Control bấm Done mới ra phiếu ra món
+            if payload.target_role in (1, 3):
+                target_role = payload.target_role
+            elif payload.action in ("to_role_3", "role_3", "direct", "bep_don", "exclude"):
+                target_role = 3
+            elif payload.action in ("to_role_1", "role_1", "fc", "food_control", "include"):
+                target_role = 1
+            else:
+                # Đọc role hiện tại của quầy để toggle ngược lại
+                current_acc = acc_col.find_one({
+                    "$or": [
+                        {"listPlace.id": payload.place_id},
+                        {"listPlace": payload.place_id},
+                        {"listPlace": str(payload.place_id)},
+                        {"accName": {"$regex": f"^{re.escape(place_name)}$", "$options": "i"}}
+                    ],
+                    "role": {"$ne": 2}
+                })
+                current_role = 3
+                if current_acc:
+                    try:
+                        current_role = int(current_acc.get("role", 3))
+                    except (ValueError, TypeError):
+                        current_role = 3
+                target_role = 1 if current_role == 3 else 3
+
+            # Tìm và cập nhật tài khoản quầy con (loại trừ Food Control)
+            fc_id = food_control_acc["_id"] if food_control_acc else None
+            acc_filter = {
+                "$or": [
+                    {"listPlace.id": payload.place_id},
+                    {"listPlace": payload.place_id},
+                    {"listPlace": str(payload.place_id)},
+                    {"accName": {"$regex": f"^{re.escape(place_name)}$", "$options": "i"}}
+                ]
+            }
+            if fc_id:
+                acc_filter["_id"] = {"$ne": fc_id}
+            else:
+                acc_filter["role"] = {"$ne": 2}
+
+            if target_role == 3:
+                # Chuyển sang Role 3: Bấm Done ra món ngay tại quầy
+                update_set = {"role": 3}
+                if fc_acc_id:
+                    update_set["placeParent"] = fc_acc_id
+                up_res = acc_col.update_many(acc_filter, {"$set": update_set})
+                if up_res.matched_count == 0 and target_place:
+                    # Tự động tạo tài khoản cho quầy nếu chưa có trong ACCOUNT
+                    existing_acc_ids = []
+                    for a in acc_col.find({}, {"accId": 1}):
+                        aid = str(a.get("accId") or "")
+                        if aid.isdigit():
+                            existing_acc_ids.append(int(aid))
+                    new_acc_id = str((max(existing_acc_ids) + 1) if existing_acc_ids else (100 + payload.place_id))
+                    acc_col.insert_one({
+                        "id": 0,
+                        "accName": place_name,
+                        "accId": new_acc_id,
+                        "pass": "1",
+                        "placeParent": fc_acc_id,
+                        "listPlace": [target_place],
+                        "role": 3,
+                        "groupKds": place_name,
+                        "reorganizeTime": 0
+                    })
+
+                msg = f"Đã chuyển quầy '{place_name}' (ID: {payload.place_id}) sang Chế độ Bấm Done Ra Món Ngay (Role 3 - In trực tiếp tại quầy) thành công!"
+                new_state = False
+                print_on_done = True
+            else:
+                # Chuyển sang Role 1: Bấm Done không in, qua Food Control bấm Done mới ra phiếu
+                if not food_control_acc:
+                    raise ValueError("Nhà hàng chưa có tài khoản Food Control (Role 2) trong bảng ACCOUNT để duyệt ra món!")
+
+                update_set = {"role": 1, "placeParent": fc_acc_id}
+                up_res = acc_col.update_many(acc_filter, {"$set": update_set})
+                if up_res.matched_count == 0 and target_place:
+                    # Tự động tạo tài khoản cho quầy nếu chưa có trong ACCOUNT
+                    existing_acc_ids = []
+                    for a in acc_col.find({}, {"accId": 1}):
+                        aid = str(a.get("accId") or "")
+                        if aid.isdigit():
+                            existing_acc_ids.append(int(aid))
+                    new_acc_id = str((max(existing_acc_ids) + 1) if existing_acc_ids else (100 + payload.place_id))
+                    acc_col.insert_one({
+                        "id": 0,
+                        "accName": place_name,
+                        "accId": new_acc_id,
+                        "pass": "1",
+                        "placeParent": fc_acc_id,
+                        "listPlace": [target_place],
+                        "role": 1,
+                        "groupKds": place_name,
+                        "reorganizeTime": 0
+                    })
+
+                # Đảm bảo quầy này nằm trong listPlace của Food Control
+                fc_list_places = food_control_acc.get("listPlace") or []
+                has_place_in_fc = any(
+                    (isinstance(p, dict) and p.get("id") == payload.place_id) or str(p) == str(payload.place_id)
+                    for p in fc_list_places
                 )
-                fc_place_item = {
-                    "id": payload.place_id,
-                    "name": place_name,
-                    "type": target_place.get("type", "BEP") if target_place else "BEP",
-                    "hallPlanIds": fc_hall_plans,
-                    "printer": printer,
-                    "driverName": driver_name,
-                    "placeCode": place_code
-                }
-                acc_col.update_one(
-                    {"_id": food_control_acc["_id"]},
-                    {"$push": {"listPlace": fc_place_item}}
-                )
-                # Cập nhật placeParent = 101 trên tài khoản quầy con (role 3)
-                fc_acc_id = str(food_control_acc.get("accId", "101"))
-                acc_col.update_many(
-                    {"listPlace.id": payload.place_id, "role": 3},
-                    {"$set": {"placeParent": fc_acc_id}}
-                )
-                msg = f"Đã chuyển quầy '{place_name}' (ID: {payload.place_id}) sang Chế độ 2 bước (Liên kết Bếp Tổng Food Control) thành công!"
+                if not has_place_in_fc:
+                    fc_hall_plans = []
+                    for p in fc_list_places:
+                        if isinstance(p, dict) and p.get("hallPlanIds"):
+                            fc_hall_plans = list(p["hallPlanIds"])
+                            break
+                    if not fc_hall_plans and target_place:
+                        fc_hall_plans = target_place.get("hallPlanIds", [])
+
+                    fc_place_item = {
+                        "id": payload.place_id,
+                        "name": place_name,
+                        "type": target_place.get("type", "BEP") if target_place else "BEP",
+                        "hallPlanIds": fc_hall_plans,
+                        "printer": printer,
+                        "driverName": driver_name,
+                        "placeCode": place_code
+                    }
+                    acc_col.update_one(
+                        {"_id": food_control_acc["_id"]},
+                        {"$push": {"listPlace": fc_place_item}}
+                    )
+
+                msg = f"Đã chuyển quầy '{place_name}' (ID: {payload.place_id}) sang Chế độ Qua Food Control Mới Ra Món (Role 1 - FC bấm Done mới in phiếu) thành công!"
                 new_state = True
+                print_on_done = False
 
             if db:
                 try:
                     log_entry = AuditLog(
                         USER_ACTION=current_user.username,
                         ACTION_TYPE="TOGGLE_KDS_FOOD_CONTROL",
-                        TARGET_OBJECT=f"ACCOUNT:Food_Control_place_{payload.place_id}",
+                        TARGET_OBJECT=f"ACCOUNT:Place_{payload.place_id}_Role_{target_role}",
                         DESCRIPTION=f"{msg} trên {payload.host}:{payload.port}",
-                        DETAILS=f'{{"host": "{payload.host}", "place_id": {payload.place_id}, "action": "{payload.action}", "is_in_food_control": {str(new_state).lower()}}}',
+                        DETAILS=f'{{"host": "{payload.host}", "place_id": {payload.place_id}, "target_role": {target_role}, "print_on_done": {str(print_on_done).lower()}}}',
                         DATE_ACTION=datetime.datetime.now(),
                     )
                     db.add(log_entry)
@@ -4708,6 +4868,8 @@ class MongoDBService:
                 place_id=payload.place_id,
                 place_name=place_name,
                 is_in_food_control=new_state,
+                role=target_role,
+                print_on_done=print_on_done,
                 message=msg
             )
         finally:

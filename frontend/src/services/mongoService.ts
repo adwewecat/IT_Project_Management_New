@@ -1058,12 +1058,13 @@ export const mongoService = {
   toggleKdsFoodControl: async (
     host: string,
     placeId: number,
-    action: 'include' | 'exclude',
-    port: number = 27017
+    action: string,
+    port: number = 27017,
+    targetRole?: number
   ): Promise<KdsToggleFoodControlResponse> => {
     const res = await api.put<KdsToggleFoodControlResponse>(
       `/mongodb/kds-places/${placeId}/toggle-food-control`,
-      { host, port, place_id: placeId, action }
+      { host, port, place_id: placeId, action, target_role: targetRole }
     );
     return res.data;
   },
@@ -1419,6 +1420,10 @@ export interface KdsPlaceItem {
   dish_count: number;
   is_in_food_control?: boolean;
   is_orphan?: boolean;
+  role?: number;
+  role_desc?: string;
+  print_on_done?: boolean;
+  account_id?: string;
 }
 
 export interface KdsToggleFoodControlResponse {
@@ -1426,6 +1431,8 @@ export interface KdsToggleFoodControlResponse {
   place_id: number;
   place_name: string;
   is_in_food_control: boolean;
+  role?: number;
+  print_on_done?: boolean;
   message: string;
 }
 

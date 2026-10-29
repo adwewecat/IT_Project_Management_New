@@ -736,17 +736,17 @@ export const KdsQuayListModal: React.FC<KdsQuayListModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleToggleFoodControl = async (pl: KdsPlaceItem) => {
-    const currentInFc = !!pl.is_in_food_control;
-    const action = currentInFc ? 'exclude' : 'include';
+  const handleToggleFoodControl = async (pl: KdsPlaceItem, targetRole?: number) => {
+    const nextRole = targetRole !== undefined ? targetRole : (pl.role === 1 ? 3 : 1);
+    const action = nextRole === 3 ? 'to_role_3' : 'to_role_1';
     setTogglingFcId(pl.id);
     try {
-      const res = await mongoService.toggleKdsFoodControl(host, pl.id, action, port);
+      const res = await mongoService.toggleKdsFoodControl(host, pl.id, action, port, nextRole);
       showToast(res.message, 'success');
       onRefresh();
     } catch (err: any) {
       showToast(
-        'Lỗi khi cập nhật Food Control: ' + (err.response?.data?.detail || err.message),
+        'Lỗi khi cập nhật Chế độ Ra Món: ' + (err.response?.data?.detail || err.message),
         'error'
       );
     } finally {
@@ -860,21 +860,32 @@ export const KdsQuayListModal: React.FC<KdsQuayListModalProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '560px', overflowY: 'auto' }}>
           <div
             style={{
-              padding: '8px 12px',
-              borderRadius: '6px',
+              padding: '10px 14px',
+              borderRadius: '8px',
               backgroundColor: '#EFF6FF',
               border: '1px solid #BFDBFE',
               fontSize: '12px',
               color: '#1E40AF',
               display: 'flex',
-              alignItems: 'center',
+              flexDirection: 'column',
               gap: '6px'
             }}
           >
-            <Printer size={15} color="#2563EB" />
-            <span>
-              Bạn có thể <strong>đổi Tên Quầy</strong> (hệ thống tự động đổi Mã Quầy và đồng bộ các tài khoản/cấu hình liên quan) hoặc <strong>chỉnh sửa Driver Name máy in</strong> bằng cách nhấn vào biểu tượng <strong>Bút Chì</strong>. Để gỡ bỏ quầy, hãy nhấn nút <strong>Xóa Quầy</strong> (yêu cầu xác nhận kỹ 2 bước).
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Printer size={15} color="#2563EB" />
+              <span>
+                Bạn có thể <strong>đổi Tên Quầy</strong> hoặc <strong>chỉnh sửa Driver Name máy in</strong> bằng biểu tượng <strong>Bút Chì</strong>. Để gỡ bỏ quầy, nhấn nút <strong>Xóa Quầy</strong> (xác nhận 2 bước).
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '11.5px', color: '#1E3A8A', backgroundColor: '#DBEAFE', padding: '6px 10px', borderRadius: '6px' }}>
+              <span>
+                💡 <strong>Quy tắc In Phiếu &amp; Chế Độ Ra Món (Role):</strong>
+                <br />
+                • <strong style={{ color: '#047857' }}>Role 3 (Bấm Done ra món ngay):</strong> Khi quầy bấm Done trên màn hình KDS, máy in sẽ <strong>in phiếu ra món trực tiếp ngay tại quầy</strong>.
+                <br />
+                • <strong style={{ color: '#B45309' }}>Role 1 (Qua Food Control mới ra):</strong> Khi quầy bấm Done thì <strong>KHÔNG in phiếu ra món</strong>, món chuyển sang trạm <strong>Food Control</strong> (Role 2); chỉ khi Food Control bấm Done thì máy in mới in ra phiếu ra món.
+              </span>
+            </div>
           </div>
 
           <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -886,7 +897,7 @@ export const KdsQuayListModal: React.FC<KdsQuayListModalProps> = ({
                 <th style={{ padding: '8px 12px' }}>Mã Quầy</th>
                 <th style={{ padding: '8px 10px', width: '65px', textAlign: 'center' }}>Số Món</th>
                 <th style={{ padding: '8px 12px', minWidth: '180px' }}>Máy In / Driver Name</th>
-                <th style={{ padding: '8px 12px', minWidth: '190px', textAlign: 'center' }}>Chế Độ Ra Món (Done Mode)</th>
+                <th style={{ padding: '8px 12px', minWidth: '230px', textAlign: 'center' }}>Chế Độ Ra Món Khi Done (Role &amp; In Phiếu)</th>
                 <th style={{ padding: '8px 10px', width: '70px', textAlign: 'center' }}>Thao Tác</th>
               </tr>
             </thead>
@@ -1120,94 +1131,100 @@ export const KdsQuayListModal: React.FC<KdsQuayListModalProps> = ({
                               border: '1px solid #86EFAC'
                             }}
                           >
-                            👑 Trạm Bếp Tổng
+                            👑 Trạm Food Control (Role 2)
                           </span>
                           <span style={{ fontSize: '10px', color: '#166534', fontStyle: 'italic' }}>
-                            Điều phối / Hoàn tất tổng
+                            Bếp tổng điều phối &amp; Duyệt in cho Role 1
                           </span>
                         </div>
-                      ) : pl.is_in_food_control ? (
-                        <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                      ) : pl.role === 1 ? (
+                        <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                           <span
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '3px',
-                              padding: '2px 8px',
+                              padding: '3px 8px',
                               borderRadius: '4px',
                               fontSize: '11px',
                               fontWeight: 700,
-                              backgroundColor: '#ECFDF5',
-                              color: '#065F46',
-                              border: '1px solid #A7F3D0'
+                              backgroundColor: '#FEF3C7',
+                              color: '#B45309',
+                              border: '1px solid #FCD34D'
                             }}
-                            title="Bếp phụ bấm Done -> Bếp trưởng kiểm tra Food Control bấm Done lần 2 mới biến mất hoàn tất"
+                            title="Role 1: Quầy bấm Done KHÔNG in phiếu ra món, món chạy qua Food Control (Role 2); Food Control bấm Done mới in phiếu ra món"
                           >
-                            <CheckCircle2 size={12} color="#059669" /> ⚡ 2 Bước (Qua FC)
+                            ⚡ Qua Food Control Mới Ra Món (Role 1)
                           </span>
-                          <span style={{ fontSize: '10px', color: '#047857' }}>
-                            Quầy Done ➔ FC Done mới mất
+                          <span style={{ fontSize: '10px', color: '#92400E', fontWeight: 500 }}>
+                            Bếp Done không in ➔ FC Done mới in
                           </span>
                           <button
                             type="button"
                             disabled={togglingFcId === pl.id}
-                            onClick={() => handleToggleFoodControl(pl)}
-                            title="Chuyển sang chế độ Bếp đơn (1 bước): Bếp phụ bấm Done là món hoàn tất biến mất ngay"
+                            onClick={() => handleToggleFoodControl(pl, 3)}
+                            title="Bấm vào để chuyển sang Role 3: Quầy bấm Done là in phiếu ra món ngay tại quầy"
                             style={{
                               marginTop: '2px',
-                              fontSize: '10px',
-                              padding: '2px 8px',
+                              fontSize: '10.5px',
+                              padding: '3px 8px',
                               borderRadius: '4px',
-                              border: '1px solid #FCD34D',
-                              backgroundColor: '#FFFBEB',
-                              color: '#B45309',
-                              cursor: 'pointer',
-                              fontWeight: 600
+                              border: '1px solid #059669',
+                              backgroundColor: '#ECFDF5',
+                              color: '#065F46',
+                              cursor: togglingFcId === pl.id ? 'not-allowed' : 'pointer',
+                              fontWeight: 700,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px'
                             }}
                           >
-                            {togglingFcId === pl.id ? 'Đang chuyển...' : 'Chuyển Bếp Đơn (1 Bước)'}
+                            {togglingFcId === pl.id ? 'Đang chuyển...' : '🖨️ Chuyển: Bấm Done Ra Món Ngay (Role 3)'}
                           </button>
                         </div>
                       ) : (
-                        <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                        <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                           <span
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '3px',
-                              padding: '2px 8px',
+                              padding: '3px 8px',
                               borderRadius: '4px',
                               fontSize: '11px',
-                              fontWeight: 600,
-                              backgroundColor: '#F3F4F6',
-                              color: '#4B5563',
-                              border: '1px solid #E5E7EB'
+                              fontWeight: 700,
+                              backgroundColor: '#DCFCE7',
+                              color: '#15803D',
+                              border: '1px solid #86EFAC'
                             }}
-                            title="Quầy hoạt động độc lập: Bếp phụ bấm Done là hoàn tất và biến mất ngay lập tức"
+                            title="Role 3: Bếp hoạt động độc lập, khi bấm Done là máy in sẽ lập tức in phiếu ra món ngay tại quầy"
                           >
-                            🟢 1 Bước (Bếp Đơn)
+                            🟢 Bấm Done Ra Món Ngay (Role 3)
                           </span>
-                          <span style={{ fontSize: '10px', color: '#6B7280' }}>
-                            Quầy Done là hoàn tất luôn
+                          <span style={{ fontSize: '10px', color: '#166534', fontWeight: 500 }}>
+                            In phiếu ra món trực tiếp tại quầy
                           </span>
                           <button
                             type="button"
                             disabled={togglingFcId === pl.id}
-                            onClick={() => handleToggleFoodControl(pl)}
-                            title="Chuyển sang chế độ 2 bước: Liên kết với Bếp tổng Food Control để duyệt ra món"
+                            onClick={() => handleToggleFoodControl(pl, 1)}
+                            title="Bấm vào để chuyển sang Role 1: Bấm Done không in ra món mà qua Food Control bấm Done mới in"
                             style={{
                               marginTop: '2px',
-                              fontSize: '10px',
-                              padding: '2px 8px',
+                              fontSize: '10.5px',
+                              padding: '3px 8px',
                               borderRadius: '4px',
-                              border: '1px solid #86EFAC',
-                              backgroundColor: '#F0FDF4',
-                              color: '#15803D',
-                              cursor: 'pointer',
-                              fontWeight: 700
+                              border: '1px solid #F59E0B',
+                              backgroundColor: '#FFFBEB',
+                              color: '#B45309',
+                              cursor: togglingFcId === pl.id ? 'not-allowed' : 'pointer',
+                              fontWeight: 700,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px'
                             }}
                           >
-                            {togglingFcId === pl.id ? 'Đang chuyển...' : '⚡ Chuyển 2 Bước (Qua FC)'}
+                            {togglingFcId === pl.id ? 'Đang chuyển...' : '⚡ Chuyển: Qua Food Control Mới Ra (Role 1)'}
                           </button>
                         </div>
                       )}

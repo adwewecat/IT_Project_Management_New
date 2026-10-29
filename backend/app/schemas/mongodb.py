@@ -288,13 +288,18 @@ class KdsPlaceItem(BaseModel):
     dish_count: int = 0
     is_in_food_control: bool = False
     is_orphan: Optional[bool] = False
+    role: Optional[int] = 3
+    role_desc: Optional[str] = ""
+    print_on_done: Optional[bool] = True
+    account_id: Optional[str] = ""
 
 
 class KdsToggleFoodControlRequest(BaseModel):
     host: str
     port: int = 27017
     place_id: int
-    action: str = "include"  # "include" or "exclude"
+    action: str = "include"  # "include", "exclude", "to_role_1", "to_role_3", "role_1", "role_3", "direct"
+    target_role: Optional[int] = None
 
 
 class KdsToggleFoodControlResponse(BaseModel):
@@ -302,6 +307,8 @@ class KdsToggleFoodControlResponse(BaseModel):
     place_id: int
     place_name: str = ""
     is_in_food_control: bool
+    role: int = 3
+    print_on_done: bool = True
     message: str
 
 

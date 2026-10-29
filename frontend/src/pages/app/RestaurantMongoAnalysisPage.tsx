@@ -5394,7 +5394,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                                 fontFamily: 'monospace',
                                 letterSpacing: '0.02em',
                               }}>
-                                {acc.account_id} / pass: {acc.acc_pass || '(trống)'}
+                                {acc.account_id} / pass: {acc.acc_pass || '(trống)'}{acc.role === 1 ? ' • Role 1 (Qua FC)' : acc.role === 3 ? ' • Role 3 (In ngay)' : ''}
                               </span>
                             )
                           )}
