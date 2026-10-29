@@ -5566,3 +5566,41 @@ estaurant_service.py).
   - Frontend `npm run build` thành công exit code 0 (`frontend/dist/` sạch sẽ, kèm `web.config` cho IIS).
   - Backend `python -m compileall app` sạch lỗi 100%.
   - Smoke test service Webmail import thành công.
+
+
+---
+
+### [2026-10-29] - Khắc Phục Lỗi Không Hiển Thị Hình Ảnh Trong Email Đã Gửi (Sent Items) & Inline CID Images
+- **Bối cảnh & Phản ánh của người dùng**:
+  - Người dùng phản ánh trên giao diện Webmail & Soạn Mail, khi vào tab **"Thư Đã Gửi"** mở xem một email vừa gửi (có chèn ảnh screenshot phản hồi nghiệp vụ): Hình ảnh hiển thị dưới dạng ô vuông bị vỡ (broken image `[?]`), trong khi nếu mở email đó bằng Outlook bên ngoài thì thấy ảnh đầy đủ, người nhận email cũng xem được ảnh bình thường, duy nhất chỉ có trên giao diện web là không thấy hình.
+- **Nguyên nhân kỹ thuật gốc rễ**:
+  1. **Microsoft Exchange đánh dấu `hasAttachments: false` đối với thư chỉ chứa ảnh nội tuyến (Inline Images)**:
+     - Khi một email gửi đi từ Webmail hoặc Outlook có dán ảnh chụp màn hình từ clipboard hoặc logo, ảnh được đóng gói dưới dạng multipart/related Inline Attachment với `Content-ID: <cid>` và `Content-Disposition: inline`.
+     - Phía Exchange / Graph API không coi các ảnh inline này là file đính kèm rời (để tránh hiện biểu tượng kẹp ghim trong hộp thư Outlook), do đó trường `data.get("hasAttachments")` trả về `false`!
+     - Tại `get_message_detail` (`backend/app/services/webmail_service.py`), code cũ có điều kiện `if data.get("hasAttachments"):` nên khi trường này bằng `false`, backend bỏ qua hoàn toàn việc truy vấn API lấy danh sách attachments!
+  2. **Trình duyệt Web không hỗ trợ giao thức nội tuyến `cid:` (Content-ID URI Scheme)**:
+     - Nội dung HTML của email lưu trong Exchange chứa thẻ `<img src="cid:inline_img_0" />` hoặc `<img src="cid:image001.png@..." />`.
+     - Ứng dụng Outlook bên ngoài hoặc app mail trên điện thoại có cơ chế giải mã MIME nội bộ nên tự động map `cid:` sang MIME part tương ứng để vẽ ảnh.
+     - Trình duyệt web (Chrome, Edge, Firefox) chỉ hỗ trợ `http:`, `https:`, `data:`, `blob:`, `file:`. Khi gặp `src="cid:..."`, trình duyệt không thể phân giải và coi đó là ảnh lỗi (broken image).
+  3. **Hạn chế của câu lệnh truy vấn attachments cũ**:
+     - Lệnh cũ gọi `GET /messages/{message_id}/attachments?$select=id,name,contentType,size,isInline` không lấy trường `contentId` và `contentBytes` (chuỗi base64 của dữ liệu ảnh).
+- **Giải pháp kiến trúc & Triển khai toàn diện**:
+  1. **Hàm giải mã CID sang Base64 Data URI (`resolve_inline_cids` trong `webmail_service.py`)**:
+     - Quét nội dung HTML email, tìm tất cả các thẻ hình ảnh/background có tham chiếu `cid:...`.
+     - Thay thế trực tiếp `cid:{Content-ID}` bằng `data:{contentType};base64,{contentBytes}` tương ứng của attachment.
+     - Hỗ trợ toàn diện: Content-ID chuẩn có/không có ngoặc nhọn `<>`, prefix trước dấu `@` (chuẩn Outlook Desktop), mã hóa URL `%40`, và tên file.
+     - Dự phòng logo Golden Gate `ggg_logo_img` tự động nạp từ file static nội bộ nếu thiếu.
+  2. **Nâng cấp `get_message_detail` trong `webmail_service.py`**:
+     - Điều kiện truy vấn attachments mở rộng: `if has_attachments or has_cid:`. Bất kể Exchange trả về `hasAttachments` là True hay False, nếu trong HTML body có xuất hiện `cid:` thì hệ thống đều chủ động truy vấn endpoints attachments từ Microsoft Graph API.
+     - Lấy đầy đủ `contentBytes` và `contentId`. Nếu danh sách tổng chưa có `contentBytes` cho ảnh inline thì gọi endpoint chi tiết `/attachments/{att_id}` để lấy chuỗi base64.
+     - Gọi `resolve_inline_cids` để trả về HTML sạch có chứa ảnh base64 hoàn chỉnh cho Frontend.
+     - Lọc bỏ `ggg_logo.png` khỏi danh sách tệp đính kèm người dùng tải về để tránh làm rối mắt.
+  3. **Tối ưu hiển thị tại Frontend (`WebmailPage.tsx`)**:
+     - Bổ sung sự kiện lắng nghe `img.addEventListener('load', adjustHeight)` bên trong iframe để tự động giãn chiều cao iframe khớp với kích thước ảnh sau khi tải xong, tránh hiện thanh cuộn cục bộ bên trong iframe.
+     - Bộ lọc `displayAttachments`: Ẩn khối "Tệp đính kèm" nếu toàn bộ attachment là ảnh inline đã được nhúng hiển thị ngay trong nội dung thư HTML, chỉ hiển thị khối tải tệp khi có các file đính kèm rời thực tế (Word, Excel, PDF, Zip...).
+  4. **Nâng cấp trải nghiệm soạn thảo tại Frontend (`WebmailComposeModal.tsx`)**:
+     - Bổ sung bộ bắt sự kiện `onPaste={handleEditorPaste}` trên khung soạn thảo: Khi người dùng bấm Ctrl+V dán ảnh chụp màn hình từ Snipping Tool / Clipboard, ảnh được tự động nạp dạng base64 và chèn ngay tại vị trí con trỏ chuột.
+     - Bổ sung nút chọn ảnh từ máy tính `<ImageIcon size={14} />` trên thanh công cụ soạn thảo.
+- **Kiểm thử & Đóng gói**:
+  - Backend: `python -m compileall app` đạt exit code 0, kiểm thử unit test `resolve_inline_cids` thay thế thành công 100%.
+  - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.14s`), thư mục `frontend/dist/` (kèm `web.config`) cập nhật mới sạch sẽ.

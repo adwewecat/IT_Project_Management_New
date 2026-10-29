@@ -25,6 +25,7 @@ from email import encoders
 from email.header import Header
 from email.utils import formataddr
 from typing import List, Dict, Any, Optional, Tuple
+from urllib.parse import unquote
 import httpx
 from sqlalchemy import select, desc, delete
 from sqlalchemy.orm import Session
@@ -211,6 +212,120 @@ def embed_inline_images(html_content: str) -> Tuple[str, List[Tuple[str, bytes, 
     html_content = pattern_http.sub(repl_http, html_content)
 
     return html_content, inline_images
+
+
+def resolve_inline_cids(html_content: str, attachments_raw: List[Dict[str, Any]]) -> str:
+    """
+    Chuyển đổi các hình ảnh nội tuyến (Inline CID Images) trong email sang dạng Data URI base64.
+    Khắc phục triệt để lỗi trình duyệt web không đọc được scheme 'cid:' dẫn đến hiển thị icon ảnh vỡ (broken image).
+    Hỗ trợ:
+    - Ảnh chụp màn hình / ảnh dán từ clipboard trong email đã gửi hoặc email nhận được.
+    - Chữ ký email chứa logo Golden Gate (ggg_logo_img).
+    - Các biến thể CID có/không có dấu ngoặc nhọn <>, có đuôi @domain, mã hóa URL %40, v.v.
+    """
+    if not html_content or "cid:" not in html_content.lower():
+        return html_content
+
+    # Duyệt qua từng attachment để lấy base64 contentBytes và thay thế vào HTML
+    for a in attachments_raw:
+        content_bytes = a.get("contentBytes")
+        if not content_bytes:
+            continue
+
+        content_type = a.get("contentType") or "image/png"
+        if not content_type.startswith("image/"):
+            fn = (a.get("name") or "").lower()
+            if fn.endswith(".png"):
+                content_type = "image/png"
+            elif fn.endswith((".jpg", ".jpeg")):
+                content_type = "image/jpeg"
+            elif fn.endswith(".gif"):
+                content_type = "image/gif"
+            elif fn.endswith(".webp"):
+                content_type = "image/webp"
+            elif fn.endswith(".bmp"):
+                content_type = "image/bmp"
+
+        data_uri = f"data:{content_type};base64,{content_bytes}"
+
+        possible_cids = set()
+
+        # 1. Content-ID chuẩn từ MIME
+        cid = a.get("contentId")
+        if cid:
+            clean_cid = cid.strip("<>").strip()
+            if clean_cid:
+                possible_cids.add(clean_cid)
+                possible_cids.add(f"<{clean_cid}>")
+                if "@" in clean_cid:
+                    prefix = clean_cid.split("@")[0]
+                    possible_cids.add(prefix)
+                    possible_cids.add(f"<{prefix}>")
+                if "%40" in clean_cid:
+                    unq = unquote(clean_cid)
+                    possible_cids.add(unq)
+                    possible_cids.add(f"<{unq}>")
+
+        # 2. Tên tệp đính kèm (name)
+        name = a.get("name")
+        if name:
+            clean_name = name.strip()
+            possible_cids.add(clean_name)
+            possible_cids.add(f"<{clean_name}>")
+            if "." in clean_name:
+                base_name = clean_name.rsplit(".", 1)[0]
+                possible_cids.add(base_name)
+                possible_cids.add(f"<{base_name}>")
+
+        # 3. ID của attachment
+        att_id = a.get("id")
+        if att_id:
+            possible_cids.add(att_id)
+
+        # Thay thế từng CID vào html_content
+        for pc in possible_cids:
+            if not pc:
+                continue
+            # Regex match cid:key hoặc cid:<key> (không phân biệt hoa thường)
+            pattern = re.compile(rf'cid:\s*<?{re.escape(pc)}>?', re.IGNORECASE)
+            html_content = pattern.sub(data_uri, html_content)
+
+    # Dự phòng đặc biệt cho Golden Gate logo (ggg_logo_img) nếu vẫn còn trong HTML
+    if re.search(r'cid:\s*<?ggg_logo_img>?', html_content, re.IGNORECASE):
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        logo_candidates = [
+            os.path.join(os.path.dirname(os.path.dirname(current_dir)), "static", "ggg_logo.png"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))), "frontend", "public", "ggg_logo.png"),
+            os.path.join(current_dir, "..", "..", "static", "ggg_logo.png"),
+        ]
+        for lp in logo_candidates:
+            if os.path.exists(lp):
+                try:
+                    with open(lp, "rb") as f:
+                        logo_bytes = f.read()
+                    logo_uri = f"data:image/png;base64,{base64.b64encode(logo_bytes).decode('ascii')}"
+                    html_content = re.sub(r'cid:\s*<?ggg_logo_img>?', logo_uri, html_content, flags=re.IGNORECASE)
+                    break
+                except Exception as le:
+                    logger.warning(f"Lỗi đọc logo dự phòng {lp}: {le}")
+
+    # Dự phòng trường hợp còn lại 1 CID duy nhất và chỉ có 1 image attachment có contentBytes
+    remaining_cids = re.findall(r'cid:\s*<?([^\s"\'<>]+)>?', html_content, re.IGNORECASE)
+    if remaining_cids:
+        img_atts = [
+            a for a in attachments_raw
+            if a.get("contentBytes") and (
+                (a.get("contentType") or "").startswith("image/") or
+                any((a.get("name") or "").lower().endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"])
+            )
+        ]
+        if len(remaining_cids) == len(img_atts) == 1:
+            a = img_atts[0]
+            ctype = a.get("contentType") or "image/png"
+            uri = f"data:{ctype};base64,{a.get('contentBytes')}"
+            html_content = re.sub(rf'cid:\s*<?{re.escape(remaining_cids[0])}>?', uri, html_content, flags=re.IGNORECASE)
+
+    return html_content
 
 
 class WebmailService:
@@ -788,22 +903,80 @@ class WebmailService:
                     except Exception as re:
                         logger.warning(f"Lỗi lưu trạng thái đã đọc cho user {current_username}: {re}")
 
-                # Lấy danh sách file đính kèm nếu email có file
+                body_info = data.get("body") or {}
+                raw_body_content = body_info.get("content", "")
+                has_attachments = bool(data.get("hasAttachments"))
+                has_cid = bool(re.search(r'cid:', raw_body_content, re.IGNORECASE))
+
                 attachments = []
-                if data.get("hasAttachments"):
-                    att_res = client.get(
-                        f"https://graph.microsoft.com/v1.0/me/messages/{message_id}/attachments?$select=id,name,contentType,size,isInline",
-                        headers={"Authorization": f"Bearer {token}"}
-                    )
-                    if att_res.status_code == 200:
-                        for a in att_res.json().get("value", []):
-                            attachments.append({
-                                "id": a.get("id"),
-                                "name": a.get("name") or "attachment",
-                                "contentType": a.get("contentType") or "application/octet-stream",
-                                "size": a.get("size") or 0,
-                                "isInline": bool(a.get("isInline"))
-                            })
+                attachments_raw = []
+
+                # Microsoft Exchange thường trả về hasAttachments=False nếu thư chỉ chứa ảnh inline (không có file đính kèm rời).
+                # Do đó BẮT BUỘC phải truy vấn attachments nếu has_attachments=True HOẶC trong nội dung có tham chiếu cid:.
+                if has_attachments or has_cid:
+                    try:
+                        # 1. Truy vấn toàn bộ attachments từ Graph API (Graph trả về contentBytes cho fileAttachment)
+                        att_res = client.get(
+                            f"https://graph.microsoft.com/v1.0/me/messages/{message_id}/attachments",
+                            headers={"Authorization": f"Bearer {token}"}
+                        )
+                        if att_res.status_code == 200:
+                            attachments_raw = list(att_res.json().get("value", []))
+                        else:
+                            # Dự phòng truy vấn các trường cơ bản nếu Graph hạn chế
+                            att_res_alt = client.get(
+                                f"https://graph.microsoft.com/v1.0/me/messages/{message_id}/attachments?$select=id,name,contentType,size,isInline",
+                                headers={"Authorization": f"Bearer {token}"}
+                            )
+                            if att_res_alt.status_code == 200:
+                                attachments_raw = list(att_res_alt.json().get("value", []))
+                    except Exception as ae:
+                        logger.warning(f"Lỗi khi truy vấn attachments cho email {message_id}: {ae}")
+
+                # 2. Đối với các ảnh inline (hoặc attachment dạng ảnh), nếu Graph chưa trả về contentBytes trong list thì tải riêng lẻ
+                for a in attachments_raw:
+                    fn = (a.get("name") or "").lower()
+                    ctype = (a.get("contentType") or "").lower()
+                    cid = (a.get("contentId") or "").strip("<>").strip()
+                    is_img = ctype.startswith("image/") or any(fn.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"])
+                    is_referenced = False
+                    if cid and re.search(rf'cid:\s*<?{re.escape(cid)}>?', raw_body_content, re.IGNORECASE):
+                        is_referenced = True
+                    elif fn and re.search(rf'cid:\s*<?{re.escape(fn)}>?', raw_body_content, re.IGNORECASE):
+                        is_referenced = True
+
+                    if (a.get("isInline") or is_img or is_referenced) and not a.get("contentBytes") and a.get("id"):
+                        try:
+                            single_res = client.get(
+                                f"https://graph.microsoft.com/v1.0/me/messages/{message_id}/attachments/{a['id']}",
+                                headers={"Authorization": f"Bearer {token}"}
+                            )
+                            if single_res.status_code == 200:
+                                sdata = single_res.json()
+                                a["contentBytes"] = sdata.get("contentBytes", "")
+                                if not a.get("contentId") and sdata.get("contentId"):
+                                    a["contentId"] = sdata.get("contentId")
+                        except Exception as se:
+                            logger.warning(f"Lỗi tải contentBytes riêng lẻ cho attachment {a.get('id')}: {se}")
+
+                # 3. Phân giải toàn bộ ảnh CID trong nội dung HTML sang base64 data URI
+                resolved_body_content = resolve_inline_cids(raw_body_content, attachments_raw)
+
+                # 4. Chuẩn bị danh sách file đính kèm hiển thị ở thanh tải file
+                for a in attachments_raw:
+                    fn = (a.get("name") or "").lower()
+                    cid = (a.get("contentId") or "").lower()
+                    # Không hiển thị logo Golden Gate trong danh sách file đính kèm
+                    if fn in ["ggg_logo.png", "logo.png"] or "ggg_logo" in cid:
+                        continue
+
+                    attachments.append({
+                        "id": a.get("id"),
+                        "name": a.get("name") or "attachment",
+                        "contentType": a.get("contentType") or "application/octet-stream",
+                        "size": a.get("size") or 0,
+                        "isInline": bool(a.get("isInline"))
+                    })
 
                 sender = (data.get("from") or {}).get("emailAddress") or {}
                 to_list = [
@@ -815,7 +988,6 @@ class WebmailService:
                     for r in (data.get("ccRecipients") or [])
                 ]
 
-                body_info = data.get("body") or {}
                 time_raw = data.get("sentDateTime") or data.get("receivedDateTime")
 
                 # Tra cứu người gửi thực tế từ Webmail nếu đây là email gửi đi từ hòm thư chính
@@ -847,10 +1019,10 @@ class WebmailService:
                     "received_time_vn": format_iso_to_vn(time_raw),
                     "received_time_raw": time_raw,
                     "is_read": True,  # Sau khi mở xem đã là True đối với user hiện tại
-                    "has_attachments": bool(data.get("hasAttachments")),
+                    "has_attachments": bool(attachments),
                     "attachments": attachments,
                     "body_type": body_info.get("contentType", "html"),
-                    "body_content": body_info.get("content", ""),
+                    "body_content": resolved_body_content,
                     "importance": data.get("importance", "normal"),
                     "sent_by_user": sent_by_user
                 }

@@ -366,6 +366,12 @@ export const WebmailPage: React.FC = () => {
           }
         };
         setTimeout(adjustHeight, 150);
+
+        // Khi ảnh bên trong iframe load xong thì tính toán lại chiều cao
+        const imgs = doc.querySelectorAll('img');
+        imgs.forEach((img) => {
+          img.addEventListener('load', adjustHeight);
+        });
       }
     }
   }, [selectedDetail]);
@@ -1078,56 +1084,63 @@ export const WebmailPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Khối tệp đính kèm nếu email có file */}
-                {selectedDetail.attachments?.length > 0 && (
-                  <div
-                    style={{
-                      marginTop: '14px',
-                      padding: '10px 12px',
-                      backgroundColor: 'var(--bg-secondary)',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border-color)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-                      <Paperclip size={14} style={{ color: '#D97706' }} />
-                      <span>Tệp đính kèm ({selectedDetail.attachments.length}):</span>
-                    </div>
+                {/* Khối tệp đính kèm nếu email có file rời (bỏ qua các ảnh inline đã nhúng hiển thị trong body) */}
+                {(() => {
+                  const displayAttachments = (selectedDetail.attachments || []).filter(
+                    (att) => !att.isInline || !selectedDetail.body_content?.includes('data:')
+                  );
+                  if (displayAttachments.length === 0) return null;
 
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                      {selectedDetail.attachments.map((att) => (
-                        <div
-                          key={att.id}
-                          onClick={() => handleDownloadAttachment(att)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            backgroundColor: 'var(--bg-card)',
-                            border: '1px solid var(--border-color)',
-                            borderRadius: '6px',
-                            padding: '6px 10px',
-                            fontSize: '12px',
-                            cursor: 'pointer',
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                          }}
-                          title={`Tải xuống: ${att.name}`}
-                        >
-                          {getFileIcon(att.name)}
-                          <div>
-                            <div style={{ fontWeight: 600, color: 'var(--text-primary)', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {att.name}
+                  return (
+                    <div
+                      style={{
+                        marginTop: '14px',
+                        padding: '10px 12px',
+                        backgroundColor: 'var(--bg-secondary)',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                        <Paperclip size={14} style={{ color: '#D97706' }} />
+                        <span>Tệp đính kèm ({displayAttachments.length}):</span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {displayAttachments.map((att) => (
+                          <div
+                            key={att.id}
+                            onClick={() => handleDownloadAttachment(att)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              backgroundColor: 'var(--bg-card)',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: '6px',
+                              padding: '6px 10px',
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                            }}
+                            title={`Tải xuống: ${att.name}`}
+                          >
+                            {getFileIcon(att.name)}
+                            <div>
+                              <div style={{ fontWeight: 600, color: 'var(--text-primary)', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {att.name}
+                              </div>
+                              <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
+                                {(att.size / 1024).toFixed(0)} KB
+                              </div>
                             </div>
-                            <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
-                              {(att.size / 1024).toFixed(0)} KB
-                            </div>
+                            <Download size={14} style={{ color: '#0284C7', marginLeft: '4px' }} />
                           </div>
-                          <Download size={14} style={{ color: '#0284C7', marginLeft: '4px' }} />
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
 
               {/* Phần thân email cuộn độc lập */}

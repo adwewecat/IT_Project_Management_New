@@ -55,6 +55,7 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
 
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   // Load chữ ký & cấu hình CC mặc định khi mở modal
   useEffect(() => {
@@ -210,6 +211,50 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
     if (['xls', 'xlsx', 'csv'].includes(ext || '')) return <FileSpreadsheet size={14} style={{ color: '#16A34A' }} />;
     if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext || '')) return <FileArchive size={14} style={{ color: '#D97706' }} />;
     return <FileText size={14} style={{ color: '#64748B' }} />;
+  };
+
+  // Xử lý dán hình ảnh (clipboard screenshot) trực tiếp vào nội dung thư
+  const handleEditorPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.indexOf('image') !== -1) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+
+        const reader = new FileReader();
+        reader.onload = (loadEvt) => {
+          const base64 = loadEvt.target?.result as string;
+          if (base64) {
+            document.execCommand('insertImage', false, base64);
+          }
+        };
+        reader.readAsDataURL(file);
+        break;
+      }
+    }
+  };
+
+  // Xử lý chọn và chèn file ảnh từ máy tính vào nội dung thư
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (loadEvt) => {
+      const base64 = loadEvt.target?.result as string;
+      if (base64) {
+        if (editorRef.current) {
+          editorRef.current.focus();
+        }
+        document.execCommand('insertImage', false, base64);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const handleSend = async () => {
@@ -594,6 +639,21 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
           </button>
           <button
             type="button"
+            onClick={() => imageInputRef.current?.click()}
+            title="Chèn ảnh vào nội dung thư"
+            style={toolbarBtnStyle}
+          >
+            <ImageIcon size={14} />
+          </button>
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleImageFileChange}
+          />
+          <button
+            type="button"
             onClick={() => formatText('removeFormat')}
             title="Xóa định dạng"
             style={toolbarBtnStyle}
@@ -622,6 +682,7 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
           <div
             ref={editorRef}
             contentEditable
+            onPaste={handleEditorPaste}
             style={{
               outline: 'none',
               minHeight: '160px',
