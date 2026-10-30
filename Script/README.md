@@ -5730,3 +5730,37 @@ estaurant_service.py).
   - Backend compile: `python -m compileall backend/app` sạch 100%.
   - Backend smoke test: `IT Project Management API` khởi động thành công.
   - Frontend build: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 5.04s`), bundle `frontend/dist` sẵn sàng triển khai.
+
+
+---
+
+### [2026-10-30] - Nâng Cấp Modal Xem Ảnh Setup PIM: Hỗ Trợ Lướt Cuộn Xuống Xem Tất Cả Các Ảnh & Chuyển Nhanh
+- **Bối cảnh & Phản ánh của người dùng**:
+  - Tại trang **Quản Lý Yêu Cầu PIM** (`/pim`), khi một yêu cầu PIM có nhiều ảnh đính kèm (ví dụ: `📷 Ảnh setup (3)`):
+  - Người dùng bấm vào nút xem ảnh chỉ hiện duy nhất 1 ảnh đầu tiên, không thể cuộn (scroll) hoặc lướt xuống để xem các ảnh tiếp theo của yêu cầu đó.
+- **Nguyên nhân kỹ thuật**:
+  - State trước đây chỉ lưu duy nhất 1 chuỗi URL `previewImageUrl: string | null`.
+  - Khi người dùng click nút xem ảnh tại bảng yêu cầu (`imgs = parseSetupImages(...)`), code cũ gọi `setPreviewImageUrl(imgs[0])` chỉ lấy phần tử đầu tiên và render một thẻ `<img>` đơn chiếc bên trong modal.
+  - Người dùng không có cách nào cuộn dọc xem tiếp các ảnh khác trong cùng yêu cầu.
+- **Giải pháp xử lý**:
+  1. **Nâng cấp Quản lý State Modal Preview**:
+     - Thay thế state đơn `previewImageUrl` bằng bộ state đa ảnh:
+       + `previewImages: string[]`: Danh sách toàn bộ ảnh của yêu cầu đang xem.
+       + `previewInitialIndex: number`: Chỉ mục ảnh ban đầu được bấm.
+       + `previewTitle: string`: Tiêu đề mô tả yêu cầu PIM để người xem dễ định danh.
+  2. **Giao diện Modal Lướt Cuộn Dọc Xem Liên Tục (Continuous Vertical Scroll)**:
+     - Render danh sách các ảnh theo chiều dọc (`flexDirection: 'column'`, `gap: 20px`), bọc trong khung cuộn `maxHeight: '78vh', overflowY: 'auto'`.
+     - Người dùng chỉ cần lăn con chuột hoặc vuốt màn hình cảm ứng là lướt xem lần lượt từng ảnh chụp Excel setup cực kỳ mượt mà, trực quan.
+     - Mỗi ảnh đều có số thứ tự rõ ràng (`Ảnh X / N`), nút **Mở tab mới** và nút **Tải về** trực tiếp.
+  3. **Thanh Chuyển Nhanh Ảnh Ghim Trên Đỉnh (Sticky Thumbnail Strip)**:
+     - Với yêu cầu có từ 2 ảnh trở lên, modal hiển thị thêm một thanh điều hướng nhanh ghim cố định trên đỉnh (`position: 'sticky', top: 0`).
+     - Người dùng có thể bấm vào nút ảnh nhỏ bất kỳ để trang tự động cuộn mượt (`scrollIntoView({ behavior: 'smooth' })`) tới đúng vị trí của ảnh đó.
+  4. **Cải tiến trong Modal Cập Nhật Trạng Thái PIM**:
+     - Khi mở modal cập nhật trạng thái có đính kèm ảnh setup:
+       + Bấm vào bất kỳ thumbnail nào sẽ mở modal xem phóng to và tự động cuộn đến ảnh đó, đồng thời người dùng có thể lướt xem toàn bộ các ảnh còn lại.
+       + Bổ sung nút bấm nhanh `Xem & lướt tất cả (N)` tại nhãn đính kèm.
+  5. **Tối ưu hàm `parseSetupImages`**:
+     - Hỗ trợ thêm trường hợp chuỗi lưu phân tách bởi dấu phẩy `,` hoặc chấm phẩy `;` bên cạnh định dạng JSON mảng.
+- **Kiểm thử & Triển khai**:
+  - Frontend: Chạy `cmd /c "npm run build"` tại `frontend/` đạt exit code 0 (`✓ built in 10.30s`).
+  - Backend: `python -m compileall app` đạt exit code 0 sạch lỗi.

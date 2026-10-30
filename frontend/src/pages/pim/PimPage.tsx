@@ -17,6 +17,7 @@ import {
   Download,
   Upload,
   Image,
+  Layers,
   X
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -120,8 +121,35 @@ export const PimPage: React.FC = () => {
   const [modalAssignee, setModalAssignee] = useState<string>('');
   const [modalImages, setModalImages] = useState<string[]>([]);
   const [isUploadingImages, setIsUploadingImages] = useState<boolean>(false);
-  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [previewInitialIndex, setPreviewInitialIndex] = useState<number>(0);
+  const [previewTitle, setPreviewTitle] = useState<string>('');
   const setupFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleOpenImagePreview = (images: string[], initialIndex: number = 0, title: string = '') => {
+    if (!images || images.length === 0) return;
+    setPreviewImages(images);
+    setPreviewInitialIndex(initialIndex);
+    setPreviewTitle(title);
+  };
+
+  const handleCloseImagePreview = () => {
+    setPreviewImages([]);
+    setPreviewInitialIndex(0);
+    setPreviewTitle('');
+  };
+
+  useEffect(() => {
+    if (previewImages.length > 0 && previewInitialIndex >= 0) {
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`pim-preview-img-card-${previewInitialIndex}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [previewImages, previewInitialIndex]);
   const [isSavingStatus, setIsSavingStatus] = useState<boolean>(false);
 
   // Modal: Schedule settings (Admin & Super Admin)
@@ -616,6 +644,10 @@ export const PimPage: React.FC = () => {
     } catch {
       if (raw.trim().startsWith('/uploads/') || raw.trim().startsWith('http') || raw.trim().startsWith('data:image/')) {
         return [raw.trim()];
+      }
+      if (raw.includes(',') || raw.includes(';')) {
+        const split = raw.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+        if (split.length > 0) return split;
       }
     }
     return [];
@@ -1233,9 +1265,9 @@ export const PimPage: React.FC = () => {
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setPreviewImageUrl(imgs[0]);
+                                    handleOpenImagePreview(imgs, 0, `Yêu cầu #${item.id_yeu_cau} - ${item.chuoi || ''}: ${item.mo_ta || ''}`);
                                   }}
-                                  title="Nhấp để xem ảnh chụp file Excel setup món (kiểu MEMO)"
+                                  title="Nhấp để xem danh sách ảnh chụp file Excel setup món (cuộn dọc xem tất cả ảnh)"
                                   style={{
                                     display: 'inline-flex',
                                     alignItems: 'center',
@@ -1546,9 +1578,9 @@ export const PimPage: React.FC = () => {
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setPreviewImageUrl(imgs[0]);
+                                    handleOpenImagePreview(imgs, 0, `Yêu cầu #${item.id_yeu_cau} - ${item.chuoi || ''}: ${item.mo_ta || ''}`);
                                   }}
-                                  title="Nhấp để xem ảnh chụp file Excel setup món (kiểu MEMO)"
+                                  title="Nhấp để xem danh sách ảnh chụp file Excel setup món (cuộn dọc xem tất cả ảnh)"
                                   style={{
                                     display: 'inline-flex',
                                     alignItems: 'center',
@@ -2511,9 +2543,31 @@ export const PimPage: React.FC = () => {
                   4. Hình Ảnh Chụp File Excel Món Setup (Đính Kèm Hoặc Paste Ctrl+V)
                 </label>
                 {modalImages.length > 0 && (
-                  <span style={{ fontSize: '12px', color: '#7E22CE', fontWeight: 600 }}>
-                    Đã đính kèm: {modalImages.length} hình ảnh
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#7E22CE', fontWeight: 600 }}>
+                      Đã đính kèm: {modalImages.length} hình ảnh
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenImagePreview(modalImages, 0, selectedRequestForStatus ? `Yêu cầu #${selectedRequestForStatus.id_yeu_cau} - ${selectedRequestForStatus.chuoi || ''}` : 'Hình ảnh setup')}
+                      style={{
+                        fontSize: '11px',
+                        color: '#7E22CE',
+                        fontWeight: 700,
+                        backgroundColor: '#F3E8FF',
+                        border: '1px solid #D8B4FE',
+                        borderRadius: '4px',
+                        padding: '2px 8px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <Image size={11} />
+                      <span>Xem &amp; lướt tất cả ({modalImages.length})</span>
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -2635,8 +2689,8 @@ export const PimPage: React.FC = () => {
                       <img
                         src={imgUrl}
                         alt={`Ảnh setup ${idx + 1}`}
-                        onClick={() => setPreviewImageUrl(imgUrl)}
-                        title="Bấm để xem ảnh phóng to kiểu MEMO"
+                        onClick={() => handleOpenImagePreview(modalImages, idx, selectedRequestForStatus ? `Yêu cầu #${selectedRequestForStatus.id_yeu_cau} - ${selectedRequestForStatus.chuoi || ''}` : 'Hình ảnh setup')}
+                        title="Bấm để phóng to và lướt xem tất cả ảnh setup"
                         style={{
                           width: '100%',
                           height: '100%',
@@ -2721,59 +2775,240 @@ export const PimPage: React.FC = () => {
         )}
       </Modal>
 
-      {/* ================= MODAL PHÓNG TO HÌNH ẢNH SETUP (KIỂU MEMO) ================= */}
-      {previewImageUrl && (
+      {/* ================= MODAL XEM HÌNH ẢNH SETUP (LƯỚT CUỘN XEM TẤT CẢ ẢNH) ================= */}
+      {previewImages.length > 0 && (
         <Modal
-          isOpen={!!previewImageUrl}
-          onClose={() => setPreviewImageUrl(null)}
-          title="📷 Xem Phóng To Hình Ảnh Setup (File Excel Món)"
-          maxWidth="90vw"
+          isOpen={previewImages.length > 0}
+          onClose={handleCloseImagePreview}
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Image size={17} color="#7E22CE" />
+                <span>Danh Sách Hình Ảnh Setup ({previewImages.length} ảnh)</span>
+              </span>
+              {previewTitle && (
+                <span
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    color: 'var(--text-secondary)',
+                    maxWidth: '550px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title={previewTitle}
+                >
+                  • {previewTitle}
+                </span>
+              )}
+            </div>
+          }
+          maxWidth="1050px"
           footer={
-            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                💡 Nhấn phím <strong>Esc</strong> hoặc nút Đóng để thoát xem ảnh
+            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>💡 <strong>Hướng dẫn:</strong> Lăn chuột (hoặc vuốt màn hình) để <strong>lướt cuộn xuống xem lần lượt tất cả {previewImages.length} ảnh</strong>. Nhấn <strong>Esc</strong> hoặc nút Đóng để thoát.</span>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <a
-                  href={previewImageUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    textDecoration: 'none',
-                    padding: '6px 12px',
-                    borderRadius: 'var(--radius-sm)',
-                    backgroundColor: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border-color)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <ExternalLink size={13} />
-                  <span>Mở tab mới</span>
-                </a>
-                <Button variant="primary" size="sm" onClick={() => setPreviewImageUrl(null)}>
-                  Đóng
+                <Button variant="primary" size="sm" onClick={handleCloseImagePreview}>
+                  Đóng ({previewImages.length} ảnh)
                 </Button>
               </div>
             </div>
           }
         >
-          <div style={{ textAlign: 'center', maxHeight: '78vh', overflow: 'auto', padding: '6px' }}>
-            <img
-              src={previewImageUrl}
-              alt="Setup Excel Preview"
-              style={{
-                maxWidth: '100%',
-                maxHeight: '75vh',
-                objectFit: 'contain',
-                borderRadius: '8px',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
-              }}
-            />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '78vh', overflowY: 'auto', padding: '4px 6px' }}>
+            {/* Quick jump navigation strip if > 1 image */}
+            {previewImages.length > 1 && (
+              <div
+                style={{
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 10,
+                  display: 'flex',
+                  gap: '8px',
+                  overflowX: 'auto',
+                  padding: '8px 12px',
+                  backgroundColor: '#F8FAFC',
+                  borderRadius: '6px',
+                  border: '1px solid #CBD5E1',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.06)',
+                  alignItems: 'center'
+                }}
+              >
+                <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Layers size={13} color="#7C3AED" />
+                  <span>Chuyển nhanh ảnh ({previewImages.length}):</span>
+                </span>
+                <div style={{ display: 'flex', gap: '6px', overflowX: 'auto' }}>
+                  {previewImages.map((imgUrl, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById(`pim-preview-img-card-${idx}`);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }}
+                      title={`Cuộn nhanh đến Ảnh ${idx + 1}`}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid #CBD5E1',
+                        backgroundColor: '#FFFFFF',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: '#1E293B',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <img
+                        src={imgUrl}
+                        alt={`thumb-${idx + 1}`}
+                        style={{ width: '16px', height: '16px', objectFit: 'cover', borderRadius: '2px' }}
+                      />
+                      <span>Ảnh {idx + 1}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* List of images stacked vertically for continuous scrolling */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {previewImages.map((imgUrl, idx) => (
+                <div
+                  key={idx}
+                  id={`pim-preview-img-card-${idx}`}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '12px',
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: '8px',
+                    border: '1px solid #E2E8F0',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      width: '100%',
+                      padding: '2px 4px',
+                      flexWrap: 'wrap',
+                      gap: '8px'
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: '12.5px',
+                        fontWeight: 700,
+                        color: '#1E293B',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '22px',
+                          height: '22px',
+                          borderRadius: '50%',
+                          backgroundColor: '#7C3AED',
+                          color: '#FFFFFF',
+                          fontSize: '11px',
+                          fontWeight: 800
+                        }}
+                      >
+                        {idx + 1}
+                      </span>
+                      <span>Ảnh {idx + 1} / {previewImages.length}</span>
+                    </span>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <a
+                        href={imgUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          textDecoration: 'none',
+                          padding: '4px 10px',
+                          borderRadius: '4px',
+                          backgroundColor: '#EFF6FF',
+                          color: '#2563EB',
+                          border: '1px solid #BFDBFE',
+                          fontSize: '11.5px',
+                          fontWeight: 600,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <ExternalLink size={12} />
+                        <span>Mở tab mới</span>
+                      </a>
+                      <a
+                        href={imgUrl}
+                        download={`anh_setup_pim_${idx + 1}.png`}
+                        style={{
+                          textDecoration: 'none',
+                          padding: '4px 10px',
+                          borderRadius: '4px',
+                          backgroundColor: '#ECFDF5',
+                          color: '#059669',
+                          border: '1px solid #A7F3D0',
+                          fontSize: '11.5px',
+                          fontWeight: 600,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Download size={12} />
+                        <span>Tải về</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      backgroundColor: '#FFFFFF',
+                      padding: '10px',
+                      borderRadius: '6px',
+                      border: '1px solid #CBD5E1'
+                    }}
+                  >
+                    <img
+                      src={imgUrl}
+                      alt={`Ảnh setup ${idx + 1}`}
+                      loading="lazy"
+                      style={{
+                        maxWidth: '100%',
+                        height: 'auto',
+                        objectFit: 'contain',
+                        borderRadius: '4px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </Modal>
       )}
