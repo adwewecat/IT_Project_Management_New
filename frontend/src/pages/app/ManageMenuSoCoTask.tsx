@@ -18,8 +18,10 @@ import {
   Globe,
   Upload,
   X,
-  AlertTriangle
+  AlertTriangle,
+  FileSpreadsheet
 } from 'lucide-react';
+import { MenuGroupsCoModal } from './MenuGroupsCoModal';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
@@ -713,6 +715,51 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
       fetchDishItems();
     } catch (err: any) {
       showToast('Lỗi cập nhật nhóm CO: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setTogglingGroupCo(false);
+    }
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // QUẢN LÝ & ĐỐI SOÁT NHÓM HIỂN THỊ CO (FILE SỐ 2: CO_FILE_2.xlsx)
+  // ══════════════════════════════════════════════════════════════════════════
+  const [isMenuGroupsCoModalOpen, setIsMenuGroupsCoModalOpen] = useState<boolean>(false);
+  const [menuCodeForGroupsModal, setMenuCodeForGroupsModal] = useState<string>('');
+
+  const openMenuGroupsCoModal = (menuCode?: string) => {
+    setMenuCodeForGroupsModal(menuCode || (menus[0]?.code || ''));
+    setIsMenuGroupsCoModalOpen(true);
+  };
+
+  const handleSyncAllMissingForMenu = async (menuCode: string, missingCount: number) => {
+    if (!activeHost) return;
+    if (!confirm(`Đưa toàn bộ ${missingCount} nhóm chưa có lên CO cho Menu "${menuCode}"?`)) return;
+
+    setTogglingGroupCo(true);
+    try {
+      const detail = await mongoService.getMenuGroupsCo({
+        host: activeHost,
+        port: 27017,
+        menu_code: menuCode
+      });
+      const missingCodes = detail.so_groups.filter((g) => !g.is_co).map((g) => g.code);
+      if (missingCodes.length === 0) {
+        showToast('Tất cả nhóm của Menu này đã có trên CO!', 'info');
+        return;
+      }
+      const res = await mongoService.bulkSyncMenuGroupsCo({
+        host: activeHost,
+        port: 27017,
+        menu_code: menuCode,
+        group_codes: missingCodes,
+        action: 'ADD',
+        update_file2: true
+      });
+      showToast(res.message, 'success');
+      fetchMenus();
+      fetchDishItems();
+    } catch (err: any) {
+      showToast('Lỗi cập nhật: ' + (err.response?.data?.detail || err.message), 'error');
     } finally {
       setTogglingGroupCo(false);
     }
@@ -2075,6 +2122,17 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
               >
                 Đồng Bộ Sang NH Khác
               </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openMenuGroupsCoModal(selectedMenuCodes.length === 1 ? selectedMenuCodes[0] : undefined)}
+                style={{ borderColor: '#10B981', color: '#047857', backgroundColor: '#ECFDF5', fontWeight: 700, height: '36px', fontSize: '12px' }}
+                title="Quản lý và đối soát danh sách nhóm hiển thị của từng Menu lên CO (File Số 2: CO_FILE_2.xlsx)"
+                leftIcon={<FileSpreadsheet size={14} color="#059669" />}
+              >
+                Nhóm Hiển Thị CO (File 2)
+              </Button>
             </div>
           </div>
 
@@ -2488,6 +2546,59 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                         <span style={{ fontSize: '11px', fontWeight: 700, color: '#047857', backgroundColor: '#D1FAE5', padding: '2px 8px', borderRadius: '10px', border: '1px solid #A7F3D0' }}>
                           {m.total_dishes} món phù hợp
                         </span>
+
+                        {m.so_only_group_count > 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSyncAllMissingForMenu(m.menu_code, m.so_only_group_count);
+                            }}
+                            disabled={togglingGroupCo}
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              color: '#B45309',
+                              backgroundColor: '#FFFBEB',
+                              border: '1px solid #F59E0B',
+                              borderRadius: '4px',
+                              padding: '2px 8px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px'
+                            }}
+                            title={`Đưa toàn bộ ${m.so_only_group_count} nhóm SO chưa có lên CO cho Menu này`}
+                          >
+                            <Zap size={12} color="#D97706" />
+                            + Đưa tất cả {m.so_only_group_count} nhóm lên CO
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openMenuGroupsCoModal(m.menu_code);
+                          }}
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            color: '#065F46',
+                            backgroundColor: '#ECFDF5',
+                            border: '1px solid #A7F3D0',
+                            borderRadius: '4px',
+                            padding: '2px 8px',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                          title="Quản lý, chọn checkbox và đối soát với File 2 (CO_FILE_2.xlsx)"
+                        >
+                          <FileSpreadsheet size={12} color="#059669" />
+                          Quản lý nhóm CO (File 2)
+                        </button>
                       </div>
 
                       <button
@@ -5356,6 +5467,27 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* MODAL QUẢN LÝ & ĐỐI SOÁT NHÓM HIỂN THỊ CO (FILE SỐ 2) */}
+      {isMenuGroupsCoModalOpen && (
+        <MenuGroupsCoModal
+          isOpen={isMenuGroupsCoModalOpen}
+          onClose={() => setIsMenuGroupsCoModalOpen(false)}
+          host={activeHost}
+          port={27017}
+          initialMenuCode={menuCodeForGroupsModal}
+          availableMenus={menus.map((m) => ({
+            code: m.code,
+            name: m.name,
+            group_count: m.group_count,
+            so_only_group_count: m.so_only_group_count
+          }))}
+          onUpdated={() => {
+            fetchMenus();
+            fetchDishItems();
+          }}
+        />
       )}
     </div>
   );

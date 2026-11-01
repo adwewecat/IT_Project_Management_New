@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -126,7 +127,11 @@ from app.schemas.mongodb import (
     DirectSyncMenuResponse,
     DishLookupResponse,
     ToggleGroupCoRequest,
-    ToggleGroupCoResponse
+    ToggleGroupCoResponse,
+    MenuGroupsCoDetailResponse,
+    BulkSyncMenuGroupsCoRequest,
+    BulkSyncMenuGroupsCoResponse,
+    ReadFile2Response
 )
 from app.services.mongodb_service import (
     MongoDBService,
@@ -2091,6 +2096,105 @@ def toggle_menu_group_co(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Lỗi khi cập nhật nhóm CO: {str(e)}"
+        )
+
+
+@router.get("/menu-so-co/menu-groups-co", response_model=MenuGroupsCoDetailResponse)
+def get_menu_groups_co_detail_endpoint(
+    host: str,
+    menu_code: str,
+    port: int = 27017,
+    file2_path: Optional[str] = None,
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """Lấy chi tiết danh sách nhóm món SO đối chiếu với CO trên Mongo và File số 2"""
+    try:
+        res = mongo_menu_so_co_service.get_menu_groups_co_detail(
+            host=host,
+            port=port,
+            menu_code=menu_code,
+            custom_file2_path=file2_path
+        )
+        return MenuGroupsCoDetailResponse(**res)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi lấy chi tiết nhóm CO: {str(e)}"
+        )
+
+
+@router.post("/menu-so-co/sync-menu-groups-co", response_model=BulkSyncMenuGroupsCoResponse)
+def sync_menu_groups_co_endpoint(
+    payload: BulkSyncMenuGroupsCoRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """Thêm/gỡ/cập nhật hàng loạt mã nhóm lên CO (DB Mongo) và tùy chọn cập nhật File số 2"""
+    try:
+        res = mongo_menu_so_co_service.bulk_sync_menu_groups_co(
+            host=payload.host,
+            port=payload.port,
+            menu_code=payload.menu_code,
+            group_codes=payload.group_codes,
+            action=payload.action,
+            update_file2=payload.update_file2,
+            custom_file2_path=payload.file2_path
+        )
+        if res.get("success"):
+            f2_note = " (kèm cập nhật File 2)" if res.get("file2_updated") else ""
+            LogService.record_log(
+                db=db,
+                nhom_quyen="APP",
+                man_hinh="GPOS_MENU_SO_CO",
+                hanh_dong="SYNC_GROUPS_CO",
+                noi_dung=f"Đồng bộ nhóm CO: {payload.action} {len(payload.group_codes)} nhóm (Menu {payload.menu_code}) trên {payload.host}{f2_note}",
+                user_thuchien=current_user.username,
+                current_user=current_user
+            )
+        return BulkSyncMenuGroupsCoResponse(**res)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi đồng bộ nhóm CO: {str(e)}"
+        )
+
+
+@router.get("/menu-so-co/file2-summary", response_model=ReadFile2Response)
+def get_file2_summary_endpoint(
+    file_path: Optional[str] = None,
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """Đọc danh sách menu và mã nhóm từ File 2 (CO_FILE_2.xlsx) trên máy chủ"""
+    try:
+        res = mongo_menu_so_co_service.read_file_2_co_menus(file_path=file_path)
+        return ReadFile2Response(**res)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi đọc File 2: {str(e)}"
+        )
+
+
+@router.get("/menu-so-co/export-file2")
+def export_file2_endpoint(
+    host: str,
+    port: int = 27017,
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """Tải xuống file Excel CO_FILE_2.xlsx đã cập nhật danh sách nhóm CO từ MongoDB"""
+    try:
+        from datetime import datetime
+        stream = mongo_menu_so_co_service.export_file_2_co_menus(host=host, port=port)
+        filename = f"CO_FILE_2_updated_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        return StreamingResponse(
+            stream,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi xuất File 2: {str(e)}"
         )
 
 

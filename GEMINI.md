@@ -2360,3 +2360,71 @@
 - **Kiểm thử & Bàn giao**:
   - Frontend: `cmd /c "npm run build"` tại `frontend/` hoàn thành sạch sẽ 100% với exit code 0 (`✓ built in 4.16s`).
   - Backend: `python -m compileall backend/app` hoàn thành sạch sẽ 0 lỗi; Smoke test hàm sinh mã chạy chuẩn xác (`9271chk374 (cần bổ sung mã đúng)`).
+
+---
+
+### [2026-11-01] - Phat Trien Tinh Nang Quan Ly & Doi Soat Nhom Hien Thi CO (File 2: CO_FILE_2.xlsx) Trong Tac Vu SO/CO
+- **Boi canh & Yeu cau cua nguoi dung**:
+  - Nguoi dung tiep nhan du an quan ly hinh anh & nhom hien thi cua ung dung Customer Order (CO).
+  - He thong khi download du lieu xuong bao gom 3 file Excel theo thu tu tai thu muc:
+    `D:\1.Download\SO.CO\File_goc`
+    + `1 so_goc.xlsx`: Thuc don va cau truc nhom cua Staff Order (SO).
+    + `2 CO_FILE_2.xlsx`: Danh muc Menu/Loai Menu cua CO, trong do Cot so 18 ghi ro danh sach cac nhom hien thi tren CO (`Danh sach cac group hien thi tren Co`, danh sach ma nhom phan tach bang dau phay).
+    + `3 CO_GOC.xlsx`: Chi tiet hinh anh, kich thuoc va calo cua mon an tren CO.
+  - Tai man hinh **Phan Tich MongoDB Nha Hang**, phan he Tac vu 3: **Xu Ly SO/CO (Thuc Don, Mon An & Bang Tinh)**, yeu cau phat trien them tinh nang chuyen sau phu hop voi File so 2 (`2 CO_FILE_2.xlsx`).
+  - Muc dich nghiep vu:
+    + So sanh doi soat danh sach nhom o SO (`ORDER_MENU_CACHE_CATEGORY`) voi danh sach nhom o File so 2 (ung voi mang `CO_ORDER_CATEGORY.menuGroupCodes` tren MongoDB cua tram POS nha hang).
+    + Nhan biet truc quan nhom nao da duoc dua len CO, nhom nao chua dua len CO.
+    + Cho phep nhan su them ma nhom bang tay (input nhap ma thu cong), hoac chon nhanh tu danh sach nhom SO ung voi Menu do thong qua cac o Checkbox hoac bam **Chon tat ca nhom chua co (Select All)** de day dong loat len CO.
+    + Cho phep dong bo cap nhat nguoc lai truc tiep vao File 2 tren may tinh hoac xuat tai File 2 Excel moi nhat.
+    + Luu y tuan thu: Dam bao khong lam thay doi bang SQL Server (tac vu thao tac tren MongoDB nha hang va file Excel), build sach 100% khong phat sinh loi.
+- **Giai phap & Trien khai Ky thuat**:
+  1. **Backend Schemas & Models (`backend/app/schemas/mongodb.py`)**:
+     - Dinh nghia `MenuSoGroupItem`: Chua thong tin nhom SO (`code`, `name`, `level`, `is_co`, `in_file2`, `dish_count`, `active_dish_count`).
+     - Dinh nghia `MenuGroupsCoDetailResponse`: Tra ve chi tiet doi soat cua 1 Menu gom danh sach `so_groups`, `co_group_codes`, `file2_group_codes`, `extra_co_group_codes` (cac nhom la co tren CO nhung khong thuoc SO), duong dan file 2 va trang thai ton tai cua file.
+     - Dinh nghia `BulkSyncMenuGroupsCoRequest` & `BulkSyncMenuGroupsCoResponse`: Ho tro dong bo hang loat theo action `ADD`, `REMOVE`, `SET` va tuy chon `update_file2: bool`.
+     - Dinh nghia `File2MenuSummaryItem` & `ReadFile2Response`: Doc va tong hop thong ke toan bo cac Menu co trong File 2.
+  2. **Backend Service (`backend/app/services/mongo_menu_so_co_service.py`)**:
+     - Ham `read_file_2_co_menus(file_path)`: Doc file Excel `2 CO_FILE_2.xlsx` qua `openpyxl`, tu dong nhan dien cot `Ma Loai Menu` va cot `Danh sach cac group hien thi tren Co` (cot 18), boc tach danh sach ma nhom chuan xac.
+     - Ham `get_menu_groups_co_detail(host, port, menu_code, custom_file2_path)`:
+       + Ket noi MongoDB nha hang (port 27017, database `G_ORDER`), doc `ORDER_MENU_CACHE_CATEGORY` ung voi menu_code.
+       + Doc collection `CO_ORDER_CATEGORY` de lay mang `menuGroupCodes` thuc te tren POS.
+       + Doc File 2 tai `D:\1.Download\SO.CO\File_goc\2 CO_FILE_2.xlsx` de so khop.
+       + Phan loai trang thai `is_co` (da co tren MongoDB CO) va `in_file2` (da co trong File 2).
+       + Trich xuat danh sach `extra_co_group_codes` (ma nhom ton tai tren CO nhung khong thuoc menu SO de nhan su nam bat).
+     - Ham `bulk_sync_menu_groups_co(...)`:
+       + Cap nhat MongoDB qua toan tu `$addToSet`, `$pull` hoac `$set` tren document `CO_ORDER_CATEGORY`.
+       + Neu `update_file2=True` va file ton tai: Mo workbook qua `openpyxl`, tim dung dong Menu va ghi de danh sach ma nhom moi phan tach bang dau phay vao cot 18, luu file an toan.
+     - Ham `export_file_2_co_menus(...)`: Doc file goc va dong bo toan bo cau hinh nhom tu MongoDB xuat thanh file Excel tai ve truc tiep tu trinh duyet.
+  3. **Backend API Router (`backend/app/api/v1/mongodb.py`)**:
+     - `GET /api/v1/mongodb/menu-so-co/menu-groups-co`: Lay chi tiet nhom SO, CO va File 2 cua mot Menu.
+     - `POST /api/v1/mongodb/menu-so-co/sync-menu-groups-co`: Cap nhat them/go nhom len CO va dong bo File 2.
+     - `GET /api/v1/mongodb/menu-so-co/file2-summary`: Thong ke tong quan file 2.
+     - `GET /api/v1/mongodb/menu-so-co/export-file2`: Xuat file Excel CO_FILE_2.xlsx.
+  4. **Frontend Service (`frontend/src/services/mongoService.ts`)**:
+     - Khai bao cac Interface TypeScript: `MenuSoGroupItem`, `MenuGroupsCoDetailResponse`, `BulkSyncMenuGroupsCoRequest`, `BulkSyncMenuGroupsCoResponse`, `File2MenuSummaryItem`, `ReadFile2Response`.
+     - Bo sung cac phuong thuc: `getMenuGroupsCo`, `bulkSyncMenuGroupsCo`, `getFile2Summary`, `getExportFile2Url`.
+  5. **Component Modal Chuyen Dung (`frontend/src/pages/app/MenuGroupsCoModal.tsx`)**:
+     - Xay dung giao dien Modal `MenuGroupsCoModal` hien dai, chuan UI/UX Golden Gate:
+       + **Thanh chon Menu**: Dropdown chuyen doi nhanh giua cac Menu kem badge so luong nhom va so nhom chua len CO.
+       + **Nhan dien File 2 thong minh**: Hien thi trang thai phat hien file tai `D:\1.Download\SO.CO\File_goc\2 CO_FILE_2.xlsx` kem nut tai file Excel truc tiep.
+       + **Khoi the tong quan tinh gon**: 4 chi so thong ke (Tong nhom SO, Da dua len CO, Chua co tren CO, So ma CO/File 2).
+       + **Them ma nhom thu cong (Them tay)**: O input ho tro nhap 1 hoac nhieu ma nhom phan tach bang dau phay, khoang trang hoac xuong dong.
+       + **Dai hien thi nhom la (Extra CO Groups)**: Liet ke cac ma nhom dang co tren CO nhung khong co trong danh muc SO, ho tro go nhanh chi voi 1 click.
+       + **Bang du lieu nhom SO**:
+         * O Checkbox cho tung hang nhom mon.
+         * O Checkbox tren tieu de: **Chon tat ca nhom chua co (Select All)** giup thao tac 1 cham.
+         * Cot Ma nhom, Ten nhom, Cap do, So mon dang hoat dong, Trang thai CO (`✅ Da len CO` / `⚠️ Chua co tren CO`), Trang thai File 2 (`📄 Khop File 2`).
+         * Nut hanh dong nhanh tung dong: `+ Dua Len CO` hoac `Go khoi CO`.
+       + **Thanh thao tac chan trang (Footer Bar)**:
+         * Tuy chon checkbox: `Dong thoi cap nhat vao File 2 (CO_FILE_2.xlsx) tren may tinh`.
+         * Nut `Dua Tat Ca X Nhom Chua Co Len CO`.
+         * Nut `Dua Cac Nhom Da Chon Len CO (N nhom)`.
+  6. **Tich hop Vao Tac Vu SO/CO (`frontend/src/pages/app/ManageMenuSoCoTask.tsx`)**:
+     - Bo sung nut bam noi bat tai thanh cong cu tren cung: `📑 Nhom Hien Thi CO (File 2)` voi icon `FileSpreadsheet`.
+     - Tai header cua tung Menu trong danh sach mon: Bo sung 2 nut bam nhanh:
+       + `+ Dua tat ca X nhom len CO` (kem bieu tuong tia chop `Zap` hien thi khi menu con nhom chua len CO).
+       + `Quan ly nhom CO (File 2)` de mo ngay popup doi soat va chon checkbox cho menu do.
+- **Kiem thu & Dong goi (Tuan thu Immutable Rule 4 & 7)**:
+  - Frontend: Chay `cmd /c "npm run build"` tai thu muc `frontend/` hoan thanh sach se 100% voi exit code 0 (`✓ built in 4.47s`). Ban build moi da san sang trong `frontend/dist/`.
+  - Backend: `python -m compileall app` hoan thanh sach se 100% voi exit code 0; Smoke test `from app.main import app; print('>>> BACKEND SMOKE TEST PASSED 100%')` dat exit code 0.

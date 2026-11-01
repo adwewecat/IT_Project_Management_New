@@ -1388,6 +1388,62 @@ class ToggleGroupCoResponse(BaseModel):
     action: str
     menuGroupCodes: List[str] = []
 
+class MenuSoGroupItem(BaseModel):
+    code: str
+    name: str
+    level: int = -1
+    dish_count: int = 0
+    is_co: bool = False
+    in_file2: Optional[bool] = None
+
+
+class MenuGroupsCoDetailResponse(BaseModel):
+    success: bool
+    message: str = ""
+    menu_code: str
+    menu_name: str = ""
+    so_groups: List[MenuSoGroupItem] = []
+    co_group_codes: List[str] = []
+    file2_available: bool = False
+    file2_group_codes: List[str] = []
+    file2_path: Optional[str] = None
+    extra_co_groups: List[str] = []
+
+
+class BulkSyncMenuGroupsCoRequest(BaseModel):
+    host: str
+    port: int = 27017
+    menu_code: str
+    group_codes: List[str] = []
+    action: str = "ADD"  # "ADD", "SET", "REMOVE"
+    update_file2: bool = False
+    file2_path: Optional[str] = None
+
+
+class BulkSyncMenuGroupsCoResponse(BaseModel):
+    success: bool
+    message: str
+    menu_code: str
+    action: str
+    updated_count: int
+    current_co_groups: List[str] = []
+    file2_updated: bool = False
+
+
+class File2MenuSummaryItem(BaseModel):
+    menu_code: str
+    menu_name: str
+    group_count: int
+    group_codes: List[str] = []
+    raw_groups: str = ""
+
+
+class ReadFile2Response(BaseModel):
+    success: bool
+    message: str
+    file_path: str
+    menus: List[File2MenuSummaryItem] = []
+
 
 class LoadMenuItemsRequest(BaseModel):
     host: str

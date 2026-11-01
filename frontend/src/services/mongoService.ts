@@ -1246,6 +1246,25 @@ export const mongoService = {
     return res.data;
   },
 
+  getMenuGroupsCo: async (params: { host: string; menu_code: string; port?: number; file2_path?: string }): Promise<MenuGroupsCoDetailResponse> => {
+    const res = await api.get<MenuGroupsCoDetailResponse>('/mongodb/menu-so-co/menu-groups-co', { params });
+    return res.data;
+  },
+
+  bulkSyncMenuGroupsCo: async (payload: BulkSyncMenuGroupsCoRequest): Promise<BulkSyncMenuGroupsCoResponse> => {
+    const res = await api.post<BulkSyncMenuGroupsCoResponse>('/mongodb/menu-so-co/sync-menu-groups-co', payload);
+    return res.data;
+  },
+
+  getFile2Summary: async (params?: { file_path?: string }): Promise<ReadFile2Response> => {
+    const res = await api.get<ReadFile2Response>('/mongodb/menu-so-co/file2-summary', { params });
+    return res.data;
+  },
+
+  getExportFile2Url: (host: string, port: number = 27017): string => {
+    return `${api.defaults.baseURL || '/api/v1'}/mongodb/menu-so-co/export-file2?host=${encodeURIComponent(host)}&port=${port}`;
+  },
+
   bulkAddMenuDishes: async (payload: BulkAddDishesRequest): Promise<BulkAddDishesResponse> => {
     const res = await api.post<BulkAddDishesResponse>('/mongodb/menu-so-co/bulk-add', payload);
     return res.data;
@@ -2024,6 +2043,63 @@ export interface ToggleGroupCoResponse {
   group_code: string;
   action: string;
   menuGroupCodes: string[];
+}
+
+export interface MenuSoGroupItem {
+  code: string;
+  name: string;
+  level: number;
+  dish_count: number;
+  is_co: boolean;
+  in_file2?: boolean | null;
+}
+
+export interface MenuGroupsCoDetailResponse {
+  success: boolean;
+  message: string;
+  menu_code: string;
+  menu_name: string;
+  so_groups: MenuSoGroupItem[];
+  co_group_codes: string[];
+  file2_available: boolean;
+  file2_group_codes: string[];
+  file2_path?: string | null;
+  extra_co_groups: string[];
+}
+
+export interface BulkSyncMenuGroupsCoRequest {
+  host: string;
+  port?: number;
+  menu_code: string;
+  group_codes: string[];
+  action: 'ADD' | 'SET' | 'REMOVE';
+  update_file2?: boolean;
+  file2_path?: string | null;
+}
+
+export interface BulkSyncMenuGroupsCoResponse {
+  success: boolean;
+  message: string;
+  menu_code: string;
+  action: string;
+  updated_count: number;
+  current_co_groups: string[];
+  file2_updated: boolean;
+}
+
+export interface File2MenuSummaryItem {
+  menu_code: string;
+  menu_name: string;
+  group_count: number;
+  group_codes: string[];
+  raw_groups: string;
+}
+
+export interface ReadFile2Response {
+  success: boolean;
+  message: string;
+  file_path: string;
+  menus: File2MenuSummaryItem[];
 }
 
 export interface DishLookupResponse {

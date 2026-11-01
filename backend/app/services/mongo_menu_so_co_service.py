@@ -1,3 +1,5 @@
+import io
+import openpyxl
 import os
 import re
 import json
@@ -2251,3 +2253,340 @@ def toggle_group_co(
         client.close()
 
 
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# TÍNH NĂNG MỚI: QUẢN LÝ & ĐỐI SOÁT NHÓM HIỂN THỊ TRÊN CO (FILE SỐ 2)
+# ══════════════════════════════════════════════════════════════════════════
+
+DEFAULT_FILE_2_PATH = r"D:\1.Download\SO.CO\File_goc\2 CO_FILE_2.xlsx"
+
+
+def read_file_2_co_menus(file_path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Đọc file số 2 (CO_FILE_2.xlsx) chứa cấu hình Menu và danh sách group hiển thị trên CO (Cột 18).
+    Trả về danh sách các Menu và các mã nhóm tương ứng.
+    """
+    target_path = file_path or DEFAULT_FILE_2_PATH
+    if not os.path.exists(target_path):
+        return {
+            "success": False,
+            "message": f"Không tìm thấy file 2 tại: {target_path}",
+            "file_path": target_path,
+            "menus": []
+        }
+
+    try:
+        wb = openpyxl.load_workbook(target_path, data_only=True)
+        sheet = wb["Menu"] if "Menu" in wb.sheetnames else wb.active
+        menus = []
+        # Cột 1: Mã Loại Menu, Cột 2: Tên Loại Menu VN, Cột 18: Danh sách các group hiển thị trên Co
+        for r in range(2, sheet.max_row + 1):
+            m_code = str(sheet.cell(row=r, column=1).value or "").strip()
+            m_name = str(sheet.cell(row=r, column=2).value or "").strip()
+            raw_groups = str(sheet.cell(row=r, column=18).value or "").strip()
+            if not m_code:
+                continue
+            group_codes = [g.strip() for g in raw_groups.split(",") if g.strip()]
+            menus.append({
+                "menu_code": m_code,
+                "menu_name": m_name,
+                "group_count": len(group_codes),
+                "group_codes": group_codes,
+                "raw_groups": raw_groups
+            })
+
+        return {
+            "success": True,
+            "message": f"Đọc thành công {len(menus)} menu từ File 2.",
+            "file_path": target_path,
+            "menus": menus
+        }
+    except Exception as e:
+        logger.error("Lỗi đọc File 2 (%s): %s", target_path, e)
+        return {
+            "success": False,
+            "message": f"Lỗi đọc File 2: {str(e)}",
+            "file_path": target_path,
+            "menus": []
+        }
+
+
+def get_menu_groups_co_detail(
+    host: str,
+    port: int = 27017,
+    menu_code: str = "",
+    custom_file2_path: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Lấy chi tiết danh sách nhóm món trong SO của một Menu,
+    đối chiếu trực tiếp với:
+    1. Cấu hình thực tế trên DB MONGO Nhà Hàng (CO_ORDER_CATEGORY.menuGroupCodes).
+    2. File số 2 (CO_FILE_2.xlsx - Cột 18: Danh sách các group hiển thị trên Co).
+    """
+    client = get_mongo_client(host, port)
+    try:
+        db = client["G_ORDER"]
+        menu_code_clean = str(menu_code).strip()
+
+        # 1. Lấy danh sách nhóm CO thực tế từ Mongo
+        co_group_codes: List[str] = []
+        co_cat = db["CO_ORDER_CATEGORY"].find_one({"code": menu_code_clean})
+        if not co_cat and menu_code_clean.isdigit():
+            co_cat = db["CO_ORDER_CATEGORY"].find_one({"code": int(menu_code_clean)})
+
+        if co_cat:
+            co_group_codes = [str(g).strip() for g in co_cat.get("menuGroupCodes", []) if str(g).strip()]
+
+        co_set = set(co_group_codes)
+
+        # 2. Đọc File số 2 nếu có
+        file2_path = custom_file2_path or DEFAULT_FILE_2_PATH
+        file2_available = os.path.exists(file2_path)
+        file2_group_codes: List[str] = []
+
+        if file2_available:
+            try:
+                wb = openpyxl.load_workbook(file2_path, data_only=True)
+                sheet = wb["Menu"] if "Menu" in wb.sheetnames else wb.active
+                for r in range(2, sheet.max_row + 1):
+                    row_m_code = str(sheet.cell(row=r, column=1).value or "").strip()
+                    if row_m_code == menu_code_clean:
+                        raw_groups = str(sheet.cell(row=r, column=18).value or "").strip()
+                        file2_group_codes = [g.strip() for g in raw_groups.split(",") if g.strip()]
+                        break
+            except Exception as ex_f2:
+                logger.warning("Không đọc được file 2 (%s): %s", file2_path, ex_f2)
+
+        file2_set = set(file2_group_codes)
+
+        # 3. Lấy SO groups từ ORDER_MENU_CACHE_CATEGORY
+        so_groups: List[Dict[str, Any]] = []
+        menu_title = f"Menu {menu_code_clean}"
+        omc = db["ORDER_MENU_CACHE_CATEGORY"].find_one({"category-code": menu_code_clean})
+        if omc:
+            menu_name_map = _build_menu_name_map(db)
+            menu_title = menu_name_map.get(menu_code_clean, menu_title)
+            groups = omc.get("main-menu", {}).get("items", []) or []
+
+            seen_codes = set()
+            for g in groups:
+                flattened = _flatten_group_items(g)
+                sub_map: Dict[str, Dict[str, Any]] = {}
+                for it, it_g_code, it_g_name, it_g_lvl, _, p_code in flattened:
+                    if it_g_code not in sub_map:
+                        is_co = (it_g_code in co_set) or (p_code in co_set)
+                        in_f2 = (it_g_code in file2_set) or (p_code in file2_set) if file2_available else None
+                        sub_map[it_g_code] = {
+                            "code": it_g_code,
+                            "name": it_g_name,
+                            "level": it_g_lvl,
+                            "dish_count": 0,
+                            "is_co": is_co,
+                            "in_file2": in_f2
+                        }
+                    sub_map[it_g_code]["dish_count"] += 1
+
+                for grp in sub_map.values():
+                    if grp["code"] not in seen_codes:
+                        seen_codes.add(grp["code"])
+                        so_groups.append(grp)
+
+        # 4. Xác định các mã nhóm đặc biệt có trong CO/File 2 mà không thuộc SO (ví dụ mã gán tay, extra)
+        so_code_set = {g["code"] for g in so_groups}
+        extra_codes = []
+        for c in co_group_codes:
+            if c not in so_code_set and c not in extra_codes:
+                extra_codes.append(c)
+        for c in file2_group_codes:
+            if c not in so_code_set and c not in extra_codes:
+                extra_codes.append(c)
+
+        return {
+            "success": True,
+            "message": "Lấy chi tiết nhóm CO thành công.",
+            "menu_code": menu_code_clean,
+            "menu_name": menu_title,
+            "so_groups": so_groups,
+            "co_group_codes": co_group_codes,
+            "file2_available": file2_available,
+            "file2_group_codes": file2_group_codes,
+            "file2_path": file2_path if file2_available else None,
+            "extra_co_groups": extra_codes
+        }
+    finally:
+        client.close()
+
+
+def bulk_sync_menu_groups_co(
+    host: str,
+    port: int = 27017,
+    menu_code: str = "",
+    group_codes: List[str] = [],
+    action: str = "ADD",
+    update_file2: bool = False,
+    custom_file2_path: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Thêm/Gỡ/Ghi đè hàng loạt mã nhóm (group_codes) vào trường menuGroupCodes của CO_ORDER_CATEGORY trong MongoDB.
+    Tùy chọn: Đồng thời cập nhật trực tiếp vào File 2 (CO_FILE_2.xlsx) tại cột 18.
+    """
+    client = get_mongo_client(host, port)
+    try:
+        db = client["G_ORDER"]
+        menu_code_clean = str(menu_code).strip()
+        action_clean = str(action).strip().upper()
+        clean_codes = [str(c).strip() for c in group_codes if str(c).strip()]
+
+        if not menu_code_clean:
+            return {
+                "success": False,
+                "message": "Thiếu mã Menu.",
+                "menu_code": menu_code_clean,
+                "action": action_clean,
+                "updated_count": 0,
+                "current_co_groups": [],
+                "file2_updated": False
+            }
+
+        co_cat = db["CO_ORDER_CATEGORY"].find_one({"code": menu_code_clean})
+        if not co_cat and menu_code_clean.isdigit():
+            co_cat = db["CO_ORDER_CATEGORY"].find_one({"code": int(menu_code_clean)})
+
+        if not co_cat:
+            # Tạo mới CO_ORDER_CATEGORY nếu chưa có
+            cat_name = f"Menu {menu_code_clean}"
+            rc = db["RESTAURANT_CATEGORY"].find_one({"code": menu_code_clean})
+            if rc:
+                cat_name = rc.get("name") or cat_name
+            db["CO_ORDER_CATEGORY"].insert_one({
+                "code": menu_code_clean,
+                "name": cat_name,
+                "nameVn": cat_name,
+                "nameEn": cat_name,
+                "menuGroupCodes": clean_codes if action_clean in ("ADD", "SET") else [],
+                "active": True
+            })
+            target_code_field = menu_code_clean
+        else:
+            target_code_field = co_cat.get("code")
+
+            if action_clean == "ADD":
+                if clean_codes:
+                    db["CO_ORDER_CATEGORY"].update_one(
+                        {"code": target_code_field},
+                        {"$addToSet": {"menuGroupCodes": {"$each": clean_codes}}}
+                    )
+            elif action_clean == "REMOVE":
+                if clean_codes:
+                    db["CO_ORDER_CATEGORY"].update_one(
+                        {"code": target_code_field},
+                        {"$pull": {"menuGroupCodes": {"$in": clean_codes}}}
+                    )
+            elif action_clean == "SET":
+                db["CO_ORDER_CATEGORY"].update_one(
+                    {"code": target_code_field},
+                    {"$set": {"menuGroupCodes": clean_codes}}
+                )
+
+        # Lấy lại danh sách nhóm CO mới nhất sau cập nhật
+        updated_cat = db["CO_ORDER_CATEGORY"].find_one({"code": target_code_field})
+        current_groups = [str(x).strip() for x in updated_cat.get("menuGroupCodes", []) if str(x).strip()] if updated_cat else []
+
+        # Cập nhật File 2 nếu được yêu cầu
+        file2_updated = False
+        file2_path = custom_file2_path or DEFAULT_FILE_2_PATH
+        if update_file2 and os.path.exists(file2_path):
+            try:
+                wb = openpyxl.load_workbook(file2_path)
+                sheet = wb["Menu"] if "Menu" in wb.sheetnames else wb.active
+                row_found = False
+                for r in range(2, sheet.max_row + 1):
+                    row_m_code = str(sheet.cell(row=r, column=1).value or "").strip()
+                    if row_m_code == menu_code_clean:
+                        # Ghi danh sách mã nhóm mới vào Cột 18 (phân tách dấu phẩy)
+                        sheet.cell(row=r, column=18).value = ",".join(current_groups)
+                        row_found = True
+                        break
+
+                if not row_found:
+                    # Nếu chưa có dòng cho Menu này, thêm dòng mới
+                    new_r = sheet.max_row + 1
+                    sheet.cell(row=new_r, column=1).value = menu_code_clean
+                    sheet.cell(row=new_r, column=2).value = co_cat.get("name", f"Menu {menu_code_clean}") if co_cat else f"Menu {menu_code_clean}"
+                    sheet.cell(row=new_r, column=18).value = ",".join(current_groups)
+
+                wb.save(file2_path)
+                file2_updated = True
+                logger.info("Đã cập nhật File 2 (%s) cho Menu %s thành công.", file2_path, menu_code_clean)
+            except Exception as ex_wb:
+                logger.error("Lỗi khi ghi File 2 (%s): %s", file2_path, ex_wb)
+
+        action_msg = "đưa lên CO" if action_clean == "ADD" else ("gỡ khỏi CO" if action_clean == "REMOVE" else "đồng bộ toàn bộ danh sách CO")
+        f2_msg = " (Đã đồng bộ vào File 2)" if file2_updated else ""
+
+        return {
+            "success": True,
+            "message": f"Đã {action_msg} thành công cho {len(clean_codes)} nhóm món của Menu {menu_code_clean}!{f2_msg}",
+            "menu_code": menu_code_clean,
+            "action": action_clean,
+            "updated_count": len(clean_codes),
+            "current_co_groups": current_groups,
+            "file2_updated": file2_updated
+        }
+    finally:
+        client.close()
+
+
+def export_file_2_co_menus(
+    host: str,
+    port: int = 27017,
+    source_file_path: Optional[str] = None
+) -> io.BytesIO:
+    """
+    Xuất File 2 (CO_FILE_2.xlsx) mới nhất:
+    Lấy danh sách mã nhóm hiển thị trên CO (Cột 18) trực tiếp từ MongoDB CO_ORDER_CATEGORY của nhà hàng.
+    """
+    client = get_mongo_client(host, port)
+    try:
+        db = client["G_ORDER"]
+        target_path = source_file_path or DEFAULT_FILE_2_PATH
+
+        if os.path.exists(target_path):
+            wb = openpyxl.load_workbook(target_path)
+            sheet = wb["Menu"] if "Menu" in wb.sheetnames else wb.active
+        else:
+            # Tạo workbook mẫu nếu không tìm thấy file gốc
+            wb = openpyxl.Workbook()
+            sheet = wb.active
+            sheet.title = "Menu"
+            headers = [
+                "Mã Loại Menu", "Tên Loại Menu VN", "Tên Loại Menu EN", "Mô tả VN", "Mô tả EN",
+                "Mô tả tiếng Nhật", "Mô tả tiếng Hàn", "Mô tả tiếng Trung", "Ghi chú khi xem danh sách món",
+                "Số tiền ăn trung bình", "Loại menu (1:ALC, 2: BF, 3: SET)", "Tên ALC", "Tên BF",
+                "Tên Drink", "Tên ALC EN", "Tên BF EN", "Tên Drink EN", "Danh sách các group hiển thị trên Co",
+                "Vị trí menu giới thiệu NH (0: ở dưới, 1: ở trên)", "Ảnh đại diện", "Ảnh Giới Thiệu",
+                "Ảnh giới thiệu Nhà hàng", "Video giới thiệu Nhà hàng", "Video giới thiệu",
+                "Ảnh đại diện cho menu 1 category ", "Ảnh làm đại diện cho menu >= 2 category",
+                "Trạng thái", "Nguyên nhân lỗi"
+            ]
+            sheet.append(headers)
+
+        # Map nhóm từ Mongo CO_ORDER_CATEGORY
+        co_map: Dict[str, List[str]] = {}
+        for co in db["CO_ORDER_CATEGORY"].find():
+            c = str(co.get("code") or "").strip()
+            if c:
+                co_map[c] = [str(x).strip() for x in co.get("menuGroupCodes", []) if str(x).strip()]
+
+        for r in range(2, sheet.max_row + 1):
+            m_code = str(sheet.cell(row=r, column=1).value or "").strip()
+            if m_code in co_map:
+                sheet.cell(row=r, column=18).value = ",".join(co_map[m_code])
+
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+        return out
+    finally:
+        client.close()
