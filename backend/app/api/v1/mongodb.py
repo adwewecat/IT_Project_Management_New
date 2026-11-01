@@ -2643,14 +2643,29 @@ def sync_dish_images(
             fixes=fixes
         )
         if res.get("success") and res.get("updated_count", 0) > 0:
+            user_uname = getattr(current_user, "username", "SYSTEM")
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            dish_codes = [f.rk7_code or f.sap_code for f in payload.fixes if (f.rk7_code or f.sap_code)][:25]
+            codes_summary = ", ".join(dish_codes)
+            if len(payload.fixes) > 25:
+                codes_summary += f" ... (+{len(payload.fixes) - 25} món)"
+
+            noi_dung = (
+                f"[ĐỒNG NHẤT ẢNH CO HÀNG LOẠT] User '{user_uname}' lúc {now_str} đã đồng nhất thành công "
+                f"{res.get('updated_count')}/{len(payload.fixes)} link ảnh từ máy chủ vào MongoDB {payload.host} "
+                f"(Menu: '{payload.menu_name or payload.menu_code or 'N/A'}', NH: '{payload.restaurant_name or 'N/A'}'). "
+                f"Mã món: [{codes_summary}]"
+            )
+
             LogService.record_log(
                 db=db,
                 nhom_quyen="APP",
                 man_hinh="GPOS_IMAGE_SYNC",
                 hanh_dong="UPDATE",
-                noi_dung=f"Dong nhat {res.get('updated_count')} ten hinh anh tu may chu anh 192.168.201.116 vao MongoDB {payload.host}",
-                user_thuchien=current_user.username,
-                current_user=current_user
+                noi_dung=noi_dung,
+                user_thuchien=user_uname,
+                current_user=current_user,
+                force_log=True  # Bắt buộc lưu log kể cả Super Admin để chống mất mát dữ liệu
             )
         return SyncDishImagesResponse(**res)
     except Exception as e:

@@ -17,16 +17,32 @@ def log_admin_action(
     actor: str,
     content: str
 ):
-    """Write an audit entry to dbo.LOGS"""
-    log_entry = AuditLog(
-        manhinh=screen,
-        chucnang=action,
-        user_thuchien=actor,
-        noidung=content,
-        ngay_insert=datetime.now(),
-        active=True
-    )
-    db.add(log_entry)
+    """Ghi nhận lịch sử thao tác vào dbo.LOGS và dbo.LOGS__New"""
+    try:
+        log_entry = AuditLog(
+            manhinh=screen,
+            chucnang=action,
+            user_thuchien=actor,
+            noidung=content,
+            ngay_insert=datetime.now(),
+            active=True
+        )
+        db.add(log_entry)
+    except Exception as e:
+        logger.warning(f"Lỗi ghi dbo.LOGS: {e}")
+
+    try:
+        from app.services.log_service import LogService
+        LogService.record_log(
+            db=db,
+            nhom_quyen="ADMIN",
+            man_hinh=screen,
+            hanh_dong=action,
+            noi_dung=content,
+            user_thuchien=actor
+        )
+    except Exception as e:
+        logger.warning(f"Lỗi ghi dbo.LOGS__New từ log_admin_action: {e}")
 
 
 ROLE_CODE_TO_CANONICAL = {

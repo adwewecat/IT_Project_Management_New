@@ -1748,6 +1748,9 @@ class SyncDishImagesRequest(BaseModel):
     host: str
     port: int = 27017
     fixes: List[DishImageFixItem]
+    menu_code: Optional[str] = ""
+    menu_name: Optional[str] = ""
+    restaurant_name: Optional[str] = ""
 
 
 class SyncDishImagesResponse(BaseModel):

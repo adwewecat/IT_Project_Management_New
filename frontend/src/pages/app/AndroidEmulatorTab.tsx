@@ -258,6 +258,11 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
   const [serverConfig, setServerConfig] = useState<ImageServerConfig | null>(null);
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [testResult, setTestResult] = useState<TestImageServerConnectionResponse | null>(null);
+
+  // State cảnh báo 2 bước khi đồng nhất hình ảnh toàn bộ
+  const [showSyncConfirmModal, setShowSyncConfirmModal] = useState<boolean>(false);
+  const [syncConfirmStep, setSyncConfirmStep] = useState<1 | 2>(1);
+  const [syncConfirmKeyword, setSyncConfirmKeyword] = useState<string>('');
   const [configForm, setConfigForm] = useState<UpdateImageServerConfigRequest>({
     server_type: 'SSH_SFTP',
     host: '192.168.201.116',
@@ -905,8 +910,27 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
     }
   };
 
-  // Đồng nhất toàn bộ các món bị lệch trong menu về MongoDB
-  const handleSyncAllFixableImages = async () => {
+  // Đồng nhất toàn bộ các món bị lệch trong menu: Kích hoạt Modal Cảnh Báo 2 Bước
+  const handleSyncAllFixableImages = () => {
+    if (!menuImagesSummary || menuImagesSummary.fixable_count === 0) return;
+    const rawHost = connectedHost || selectedRestaurant?.ip;
+    const cleanHost = getValidMongoHost(rawHost);
+    if (!cleanHost) {
+      if (onToastRef.current) onToastRef.current('Chưa xác định IP kết nối MongoDB máy trạm!', 'error');
+      return;
+    }
+
+    const fixableItems = menuImagesSummary.results.filter((r) => r.is_fixable && r.suggested_fix_path);
+    if (fixableItems.length === 0) return;
+
+    // Mở popup cảnh báo 2 bước chống click nhầm và chống mất hình hàng loạt
+    setSyncConfirmStep(1);
+    setSyncConfirmKeyword('');
+    setShowSyncConfirmModal(true);
+  };
+
+  // Thực thi đồng nhất hình ảnh toàn bộ sau khi đã xác thực 2 bước
+  const executeSyncAllFixableImages = async () => {
     if (!menuImagesSummary || menuImagesSummary.fixable_count === 0) return;
     const rawHost = connectedHost || selectedRestaurant?.ip;
     const cleanHost = getValidMongoHost(rawHost);
@@ -915,14 +939,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
     const fixableItems = menuImagesSummary.results.filter((r) => r.is_fixable && r.suggested_fix_path);
     if (fixableItems.length === 0) return;
 
-    if (
-      !confirm(
-        `Đồng nhất ${fixableItems.length} món bị lệch tên/tiền tố hình từ máy chủ 192.168.201.116 về MongoDB nhà hàng?\n(Lưu ý: Máy chủ ảnh chỉ đọc, chỉ cập nhật trên MongoDB)`
-      )
-    ) {
-      return;
-    }
-
+    setShowSyncConfirmModal(false);
     setSyncingImages(true);
     try {
       const fixes = fixableItems.map((item) => ({
@@ -934,7 +951,10 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
       const res = await mongoService.syncDishImagesToMongo({
         host: cleanHost,
         port: 27017,
-        fixes
+        fixes,
+        menu_code: selectedCategory.code,
+        menu_name: selectedCategory.name,
+        restaurant_name: selectedRestaurant?.name || ''
       });
 
       if (onToastRef.current) {
@@ -3264,44 +3284,21 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                                   ✅ Khớp server
                                 </span>
                               ) : serverCheck.is_fixable ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                  <span
-                                    style={{
-                                      color: serverCheck.status === 'CASE_MISMATCH' ? '#b45309' : '#c2410c',
-                                      backgroundColor: serverCheck.status === 'CASE_MISMATCH' ? '#fef3c7' : '#ffedd5',
-                                      border: `1px solid ${serverCheck.status === 'CASE_MISMATCH' ? '#fde68a' : '#fed7aa'}`,
-                                      borderRadius: '3px',
-                                      padding: '1px 4px',
-                                      fontWeight: 700,
-                                      fontSize: '9.5px',
-                                      whiteSpace: 'nowrap'
-                                    }}
-                                    title={serverCheck.message}
-                                  >
-                                    {serverCheck.status === 'CASE_MISMATCH' ? '⚠️ Lệch chữ' : '⚠️ Sai link'}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSyncSingleDish(dish, serverCheck.suggested_fix_path);
-                                    }}
-                                    style={{
-                                      padding: '1px 5px',
-                                      fontSize: '9.5px',
-                                      fontWeight: 700,
-                                      borderRadius: '3px',
-                                      border: '1px solid #10b981',
-                                      backgroundColor: '#ecfdf5',
-                                      color: '#047857',
-                                      cursor: 'pointer',
-                                      whiteSpace: 'nowrap'
-                                    }}
-                                    title={`Đồng nhất theo server: ${serverCheck.suggested_fix_path}`}
-                                  >
-                                    ⚡ Đồng nhất
-                                  </button>
-                                </div>
+                                <span
+                                  style={{
+                                    color: serverCheck.status === 'CASE_MISMATCH' ? '#b45309' : '#c2410c',
+                                    backgroundColor: serverCheck.status === 'CASE_MISMATCH' ? '#fef3c7' : '#ffedd5',
+                                    border: `1px solid ${serverCheck.status === 'CASE_MISMATCH' ? '#fde68a' : '#fed7aa'}`,
+                                    borderRadius: '3px',
+                                    padding: '1px 5px',
+                                    fontWeight: 700,
+                                    fontSize: '9.5px',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  title={serverCheck.message}
+                                >
+                                  {serverCheck.status === 'CASE_MISMATCH' ? '⚠️ Lệch chữ' : '⚠️ Sai link'}
+                                </span>
                               ) : (
                                 <span
                                   style={{
@@ -3320,6 +3317,40 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                                 </span>
                               )}
                             </div>
+
+                            {/* Dòng 3: Nút Đồng nhất xuống hẳn 1 dòng riêng để không tràn viền */}
+                            {serverCheck && serverCheck.is_fixable && (
+                              <div style={{ marginTop: '3px' }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSyncSingleDish(dish, serverCheck.suggested_fix_path);
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    padding: '2.5px 5px',
+                                    fontSize: '9.5px',
+                                    fontWeight: 700,
+                                    borderRadius: '3px',
+                                    border: '1px solid #10b981',
+                                    backgroundColor: '#ecfdf5',
+                                    color: '#047857',
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '3px',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                                  }}
+                                  title={`Đồng nhất theo server: ${serverCheck.suggested_fix_path}`}
+                                >
+                                  <Zap size={10} color="#059669" />
+                                  <span>⚡ Đồng nhất link chuẩn</span>
+                                </button>
+                              </div>
+                            )}
                           </div>
                         );
                       })()}
@@ -3332,6 +3363,289 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
         </div>
       </div>
 
+
+
+      {/* ───────────────────────────────────────────────────────────────── */}
+      {/* MODAL CẢNH BÁO 2 BƯỚC ĐỒNG NHẤT HÌNH ẢNH TOÀN BỘ (CHỐNG MẤT HÌNH) */}
+      {/* ───────────────────────────────────────────────────────────────── */}
+      {showSyncConfirmModal && menuImagesSummary && (
+        <Modal
+          isOpen={showSyncConfirmModal}
+          onClose={() => setShowSyncConfirmModal(false)}
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {syncConfirmStep === 1 ? (
+                <AlertCircle size={20} color="#d97706" />
+              ) : (
+                <AlertCircle size={20} color="#dc2626" />
+              )}
+              <span style={{ fontSize: '15px', fontWeight: 700, color: syncConfirmStep === 1 ? '#b45309' : '#dc2626' }}>
+                {syncConfirmStep === 1
+                  ? '⚠️ BƯỚC 1/2: XÁC NHẬN ĐỒNG NHẤT HÌNH ẢNH TOÀN BỘ'
+                  : '🚨 BƯỚC 2/2: CẢNH BÁO NGUY HIỂM - XÁC THỰC LẦN CUỐI'}
+              </span>
+            </div>
+          }
+          maxWidth="680px"
+          footer={
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '8px' }}>
+              {syncConfirmStep === 1 ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowSyncConfirmModal(false)}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: '#f8fafc',
+                      color: '#475569',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Hủy Bỏ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSyncConfirmStep(2)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '7px 16px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor: '#2563eb',
+                      color: '#ffffff',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    <span>Tiếp Tục Sang Bước 2</span>
+                    <span>→</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setSyncConfirmStep(1)}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: '#f8fafc',
+                      color: '#475569',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ← Quay Lại Bước 1
+                  </button>
+                  <button
+                    type="button"
+                    onClick={executeSyncAllFixableImages}
+                    disabled={syncConfirmKeyword.trim().toUpperCase() !== 'DONG NHAT' || syncingImages}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '7px 18px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor:
+                        syncConfirmKeyword.trim().toUpperCase() === 'DONG NHAT' ? '#dc2626' : '#cbd5e1',
+                      color: '#ffffff',
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      cursor:
+                        syncConfirmKeyword.trim().toUpperCase() === 'DONG NHAT' && !syncingImages
+                          ? 'pointer'
+                          : 'not-allowed',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
+                    }}
+                  >
+                    {syncingImages ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                    <span>⚡ XÁC NHẬN ĐỒNG NHẤT ({menuImagesSummary.fixable_count} MÓN)</span>
+                  </button>
+                </>
+              )}
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {syncConfirmStep === 1 ? (
+              <>
+                {/* Tóm tắt thông tin đồng nhất */}
+                <div
+                  style={{
+                    backgroundColor: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    borderRadius: '6px',
+                    padding: '10px 12px',
+                    fontSize: '12px',
+                    color: '#92400e'
+                  }}
+                >
+                  <div style={{ fontWeight: 700, marginBottom: '4px', fontSize: '13px' }}>
+                    📋 Thông Tin Đợt Đồng Nhất Hình Ảnh
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '6px' }}>
+                    <div>
+                      Menu: <strong>{selectedCategory.name}</strong> (Mã: <code>{selectedCategory.code}</code>)
+                    </div>
+                    <div>
+                      Nhà hàng: <strong>{selectedRestaurant?.name || 'Chi nhánh'}</strong>
+                    </div>
+                    <div>
+                      IP Kết nối: <code>{getValidMongoHost(connectedHost || selectedRestaurant?.ip)}</code>
+                    </div>
+                    <div>
+                      Số lượng món lệch sẽ cập nhật: <strong style={{ color: '#dc2626', fontSize: '13px' }}>{menuImagesSummary.fixable_count} món</strong>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#b45309', marginTop: '6px', borderTop: '1px dashed #fcd34d', paddingTop: '4px' }}>
+                    ⚠️ Thao tác sẽ cập nhật trực tiếp các trường <code>srcImg</code>, <code>srcImgThumbnail</code>, <code>srcImgQr</code>, <code>urlImgQr</code> trên bảng <code>CO_MENU_ITEM</code> MongoDB nhà hàng theo tên hình chuẩn từ máy chủ. Máy chủ ảnh chỉ đọc và không bị thay đổi.
+                  </div>
+                </div>
+
+                {/* Danh sách các món sẽ được cập nhật */}
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                    Danh Sách Món Lệch Cần Đồng Nhất ({menuImagesSummary.results.filter((r) => r.is_fixable).length} món):
+                  </div>
+                  <div
+                    style={{
+                      maxHeight: '220px',
+                      overflowY: 'auto',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '6px',
+                      backgroundColor: '#f8fafc',
+                      fontSize: '11px'
+                    }}
+                  >
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
+                          <th style={{ padding: '6px 8px', width: '35px' }}>#</th>
+                          <th style={{ padding: '6px 8px' }}>Tên Món</th>
+                          <th style={{ padding: '6px 8px', width: '80px' }}>Mã RK7</th>
+                          <th style={{ padding: '6px 8px' }}>Hình Hiện Tại (DB)</th>
+                          <th style={{ padding: '6px 8px' }}>Hình Chuẩn (Server)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {menuImagesSummary.results
+                          .filter((r) => r.is_fixable)
+                          .map((item, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                              <td style={{ padding: '4px 8px', color: '#64748b' }}>{idx + 1}</td>
+                              <td style={{ padding: '4px 8px', fontWeight: 600, color: '#0f172a' }}>{item.name}</td>
+                              <td style={{ padding: '4px 8px', fontFamily: 'monospace' }}>{item.rk7_code || item.sap_code}</td>
+                              <td style={{ padding: '4px 8px', color: '#c2410c', fontFamily: 'monospace', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.given_path}>
+                                {item.given_filename || item.given_path}
+                              </td>
+                              <td style={{ padding: '4px 8px', color: '#047857', fontWeight: 700, fontFamily: 'monospace', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.suggested_fix_path}>
+                                {item.suggested_fix_path}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Bước 2: Cảnh báo nguy hiểm & bắt nhập từ khóa */}
+                <div
+                  style={{
+                    backgroundColor: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderRadius: '6px',
+                    padding: '12px',
+                    color: '#991b1b',
+                    fontSize: '12px'
+                  }}
+                >
+                  <div style={{ fontWeight: 800, fontSize: '13.5px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <AlertCircle size={18} color="#dc2626" />
+                    <span>CẢNH BÁO NGUY CƠ CAO: THAO TÁC CẬP NHẬT HÀNG LOẠT VÀO DATABASE</span>
+                  </div>
+                  <div>
+                    Bạn đang chuẩn bị cập nhật đồng nhất link ảnh cho <strong>{menuImagesSummary.fixable_count} món</strong> của Menu <strong>{selectedCategory.name}</strong>.
+                  </div>
+                  <div style={{ marginTop: '4px', fontWeight: 600 }}>
+                    Để tránh việc thao tác nhầm hoặc mất link hình hàng loạt, vui lòng gõ chính xác cụm từ <code style={{ backgroundColor: '#fee2e2', padding: '1px 6px', borderRadius: '3px', color: '#991b1b', fontWeight: 800, border: '1px solid #fca5a5' }}>DONG NHAT</code> vào ô bên dưới:
+                  </div>
+                </div>
+
+                {/* Ô nhập từ khóa xác thực */}
+                <div style={{ padding: '6px 0' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#1e293b', marginBottom: '4px' }}>
+                    Nhập từ khóa xác nhận: <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={syncConfirmKeyword}
+                    onChange={(e) => setSyncConfirmKeyword(e.target.value)}
+                    placeholder="Gõ đúng: DONG NHAT"
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px',
+                      borderRadius: '6px',
+                      border: `2px solid ${syncConfirmKeyword.trim().toUpperCase() === 'DONG NHAT' ? '#10b981' : '#cbd5e1'}`,
+                      fontSize: '14px',
+                      fontWeight: 700,
+                      fontFamily: 'monospace',
+                      letterSpacing: '1px',
+                      outline: 'none'
+                    }}
+                    autoFocus
+                  />
+                  {syncConfirmKeyword && syncConfirmKeyword.trim().toUpperCase() !== 'DONG NHAT' && (
+                    <div style={{ fontSize: '11px', color: '#dc2626', marginTop: '3px' }}>
+                      ❌ Từ khóa chưa khớp, vui lòng gõ đúng <code>DONG NHAT</code>
+                    </div>
+                  )}
+                  {syncConfirmKeyword.trim().toUpperCase() === 'DONG NHAT' && (
+                    <div style={{ fontSize: '11px', color: '#059669', marginTop: '3px', fontWeight: 700 }}>
+                      ✅ Từ khóa chính xác! Bạn có thể bấm xác nhận bên dưới.
+                    </div>
+                  )}
+                </div>
+
+                {/* Thông tin user và lưu vết logs */}
+                <div
+                  style={{
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    fontSize: '11.5px',
+                    color: '#64748b'
+                  }}
+                >
+                  <div>
+                    👤 Người thực hiện: <strong style={{ color: '#0f172a' }}>{user?.username || 'SYSTEM'}</strong>
+                  </div>
+                  <div style={{ marginTop: '2px' }}>
+                    🕒 Thời gian: <strong style={{ color: '#0f172a' }}>{new Date().toLocaleString('vi-VN')}</strong>
+                  </div>
+                  <div style={{ marginTop: '4px', color: '#047857', fontWeight: 600 }}>
+                    🛡️ Thao tác này sẽ được ghi nhận bắt buộc vào nhật ký hệ thống (Audit Logs) để đối soát.
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
 
       {/* ───────────────────────────────────────────────────────────────── */}
       {/* MODAL CẤU HÌNH KẾT NỐI & USER MÁY CHỦ ẢNH (FTP / SSH) */}

@@ -231,11 +231,19 @@ def add_template_item(
 ):
     """Thêm một mục nhỏ vào sườn checklist (Chỉ Admin / Super Admin)."""
     check_admin_or_superadmin(current_user)
-    return work_checklist_service.add_template_item(
+    res = work_checklist_service.add_template_item(
         db=db,
         template_id=template_id,
         payload=payload,
     )
+    try:
+        LogService.record_log(
+            db=db, nhom_quyen="APP", man_hinh="WORK_CHECKLIST", hanh_dong="CREATE",
+            noi_dung=f"Thêm mục '{payload.title}' vào sườn checklist #{template_id}",
+            user_thuchien=current_user.username, current_user=current_user
+        )
+    except Exception: pass
+    return res
 
 
 @router.post("/templates/{template_id}/items/batch", response_model=List[ChecklistTemplateItemSchema], status_code=status.HTTP_201_CREATED)
@@ -263,6 +271,13 @@ def delete_template_item(
     """Xóa một mục nhỏ khỏi sườn checklist (Chỉ Admin / Super Admin)."""
     check_admin_or_superadmin(current_user)
     work_checklist_service.delete_template_item(db=db, item_id=item_id)
+    try:
+        LogService.record_log(
+            db=db, nhom_quyen="APP", man_hinh="WORK_CHECKLIST", hanh_dong="DELETE",
+            noi_dung=f"Xóa mục #{item_id} khỏi sườn checklist",
+            user_thuchien=current_user.username, current_user=current_user
+        )
+    except Exception: pass
     return {"success": True, "message": f"Đã xóa mục #{item_id}"}
 
 

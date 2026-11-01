@@ -149,8 +149,10 @@ class LogService:
         if not user_role and current_user is not None:
             user_role = getattr(current_user, "role_name", None)
 
-        # 1. Bỏ qua ghi log nếu user là Super Admin
-        if check_is_super_admin(username=user_thuchien, current_user=current_user):
+        force_log = kwargs.get("force_log", False)
+
+        # 1. Bỏ qua ghi log nếu user là Super Admin (trừ khi có force_log=True)
+        if not force_log and check_is_super_admin(username=user_thuchien, current_user=current_user):
             logger.debug(f"[LOGS__New] Bỏ qua ghi log vì user {user_thuchien} là Super Admin.")
             return None
 

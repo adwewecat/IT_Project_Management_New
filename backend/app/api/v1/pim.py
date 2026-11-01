@@ -312,7 +312,15 @@ def update_pim_configuration(
 ):
     """Cập nhật thông tin tài khoản đăng nhập SSO / PIM"""
     try:
-        return pim_service.update_pim_config(db, config_in=config_in, current_username=current_user.username)
+        res = pim_service.update_pim_config(db, config_in=config_in, current_username=current_user.username)
+        try:
+            LogService.record_log(
+                db=db, nhom_quyen="APP", man_hinh="PIM_CONFIG", hanh_dong="UPDATE",
+                noi_dung=f"Cập nhật cấu hình SSO PIM (User: {config_in.sso_username})",
+                user_thuchien=current_user.username, current_user=current_user
+            )
+        except Exception: pass
+        return res
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi cập nhật cấu hình: {str(e)}")
 
@@ -343,7 +351,15 @@ def update_pim_schedule(
 ):
     """Quản trị viên cập nhật cấu hình lịch quét PIM tự động (3 lần/ngày)"""
     try:
-        return pim_service.update_pim_schedule(db, sched_in=sched_in, current_username=current_user.username)
+        res = pim_service.update_pim_schedule(db, sched_in=sched_in, current_username=current_user.username)
+        try:
+            LogService.record_log(
+                db=db, nhom_quyen="APP", man_hinh="PIM_SCHEDULE", hanh_dong="UPDATE",
+                noi_dung=f"Cập nhật lịch quét PIM tự động (Active: {sched_in.is_active}, Ca: {sched_in.time_slot_1}, {sched_in.time_slot_2}, {sched_in.time_slot_3})",
+                user_thuchien=current_user.username, current_user=current_user
+            )
+        except Exception: pass
+        return res
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

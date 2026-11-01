@@ -5984,3 +5984,41 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
   - Frontend: `cmd /c "npm run build"` tại `frontend/` hoàn thành 100% exit code 0 (`✓ built in 4.41s`). Tạo sẵn bản build mới trong `frontend/dist/`.
   - Backend: `python -m compileall app` biên dịch 100% không có lỗi; Smoke Test vượt qua 100%.
   - Kết nối thực tế tới `192.168.201.116:22` đã kiểm tra và phản hồi thành công 12,297 files.
+
+
+---
+
+### PHIÊN LÀM VIỆC NGÀY 01/11/2026: TỐI ƯU GIAO DIỆN THẺ MÓN, CẢNH BÁO 2 BƯỚC ĐỒNG NHẤT ẢNH & RÀ SOÁT AUDIT LOGS TOÀN BỘ DỰ ÁN
+- **Yêu cầu nghiệp vụ**:
+  1. **Khắc phục vỡ layout hiển thị thẻ món (Dish Card Overflow)**:
+     - Nút "⚡ Đồng nhất" trên thẻ món bị tràn ra ngoài viền phải khi kiểm tra ảnh bị lệch link hoặc lệch chữ.
+     - Yêu cầu: Tách nút "⚡ Đồng nhất" xuống riêng 1 dòng bên dưới (`xuống dưới 1 dòng luôn`), dòng trên chỉ giữ thông tin `🌐 Server:` và badge trạng thái.
+  2. **Cảnh báo 2 bước khi đồng nhất hình ảnh toàn bộ (2-Step Bulk Sync Confirmation)**:
+     - Thao tác đồng nhất hàng loạt tiềm ẩn nguy cơ mất link hình nếu click nhầm.
+     - Yêu cầu: Bắt buộc cảnh báo 2 bước:
+       * **Bước 1**: Hiển thị bảng chi tiết các món sẽ được cập nhật, tên menu, tên nhà hàng, số lượng món.
+       * **Bước 2**: Cảnh báo rủi ro cao màu đỏ và bắt buộc người dùng gõ chính xác từ khóa `DONG NHAT` mới cho phép kích hoạt nút bấm xác nhận.
+     - **Ghi nhận Logs bắt buộc**: Ghi nhận chi tiết ai (user nào) thực hiện, thực hiện lúc nào, cập nhật bao nhiêu món, mã món nào, kể cả Super Admin thao tác cũng phải lưu vết (Audit Trail).
+  3. **Rà soát toàn diện hệ thống ghi nhận Logs (Audit Logs Review)**:
+     - Kiểm tra toàn bộ 1 vòng tất cả các chức năng Thêm - Xóa - Sửa - Cập nhật trên toàn bộ website, đảm bảo 100% đều có ghi nhận logs vào hệ thống `LOGS__New`.
+- **Triển khai kỹ thuật**:
+  1. **Tối ưu Layout Thẻ Món (`frontend/src/pages/app/AndroidEmulatorTab.tsx`)**:
+     - Dòng 2 (`🌐 Server:`): Chỉ hiển thị nhãn `🌐 Server:` và badge trạng thái (`✅ Khớp server`, `⚠️ Sai link`, `⚠️ Lệch chữ`, `❌ Không có ảnh`, hoặc nút `🔍 Check hình`).
+     - Dòng 3: Nút `⚡ Đồng nhất link chuẩn` được tách riêng xuống 1 dòng bên dưới full width, padding gọn gàng, không bao giờ tràn viền card.
+  2. **Modal Cảnh Báo 2 Bước (`SyncImagesConfirmModal`)**:
+     - State `showSyncConfirmModal`, `syncConfirmStep: 1 | 2`, `syncConfirmKeyword`.
+     - Bước 1: Preview bảng danh sách món lệch, mã RK7/SAP, đường dẫn hiện tại và đường dẫn chuẩn server.
+     - Bước 2: Alert nguy hiểm màu đỏ, ô input nhập `DONG NHAT`, thông tin user thực hiện và timestamp.
+     - Nút xác nhận chỉ sáng lên khi nhập chính xác từ khóa `DONG NHAT`.
+  3. **Backend Image Sync Logging & Force Log (`backend/app/services/log_service.py` & `backend/app/api/v1/mongodb.py`)**:
+     - `LogService.record_log` được bổ sung tham số `force_log: bool = False`. Khi `force_log=True`, thao tác được ghi nhận vào `LOGS__New` bất kể quyền của người dùng (kể cả Super Admin) để chống thất thoát dữ liệu.
+     - `POST /image-server/sync-images` ghi nhận đầy đủ: User, thời gian, tên menu, mã menu, tên nhà hàng, số món cập nhật thành công, danh sách các mã món.
+  4. **Rà soát & Bổ sung Audit Logs Toàn Bộ Dự Án**:
+     - `backend/app/models/audit_log.py`: Cập nhật `AuditLog.__init__` hỗ trợ cả 2 chuẩn tham số (`USER_ACTION`, `ACTION_TYPE`, `TARGET_OBJECT`, `DESCRIPTION` và `user_thuchien`, `chucnang`, `manhinh`, `noidung`), tự động kích hoạt SQLAlchemy hook `after_insert` đồng bộ sang `LOGS__New` cho hàng chục vị trí trong `mongodb_service.py`, `memo_service.py`, `restaurant_service.py`.
+     - `backend/app/services/user_service.py`: Cập nhật `log_admin_action` gọi `LogService.record_log` để toàn bộ thao tác thêm, sửa, reset mật khẩu, khóa/mở user và nhóm quyền đều ghi vào `LOGS__New`.
+     - `backend/app/api/v1/agent_multitask.py`: Bổ sung `LogService.record_log` cho CRUD máy ngoài, gửi lệnh điều khiển từ xa, mẫu script, mẫu package.
+     - `backend/app/api/v1/pim.py`: Bổ sung `LogService.record_log` cho cập nhật cấu hình SSO PIM và lịch quét tự động.
+     - `backend/app/api/v1/work_checklists.py`: Bổ sung `LogService.record_log` cho thêm/xóa mục con trong sườn checklist.
+- **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
+  - Frontend: `cmd /c "npm run build"` tại `frontend/` hoàn thành 100% exit code 0 (`✓ built in 4.50s`). Bản build mới đã sẵn sàng trong `frontend/dist/`.
+  - Backend: `python -m compileall app` biên dịch 100% không có lỗi; Smoke Test `from app.main import app; print('>>> PASSED 100%')` vượt qua 100%.

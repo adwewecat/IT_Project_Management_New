@@ -17,6 +17,26 @@ class AuditLog(Base):
     ngay_insert: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.now)
     active: Mapped[Optional[bool]] = mapped_column(Boolean, default=True)
 
+    def __init__(self, **kwargs):
+        # Hỗ trợ cả 2 chuẩn tham số lịch sử trong toàn bộ codebase:
+        # Chuẩn 1: manhinh, chucnang, user_thuchien, noidung
+        # Chuẩn 2: TARGET_OBJECT, ACTION_TYPE, USER_ACTION, DESCRIPTION
+        manhinh = kwargs.pop("manhinh", None) or kwargs.pop("TARGET_OBJECT", None) or kwargs.pop("screen", None)
+        chucnang = kwargs.pop("chucnang", None) or kwargs.pop("ACTION_TYPE", None) or kwargs.pop("action", None)
+        user_thuchien = kwargs.pop("user_thuchien", None) or kwargs.pop("USER_ACTION", None) or kwargs.pop("actor", None)
+        noidung = kwargs.pop("noidung", None) or kwargs.pop("DESCRIPTION", None) or kwargs.pop("content", None)
+        ngay_insert = kwargs.pop("ngay_insert", None) or datetime.now()
+        active = kwargs.pop("active", True)
+        super().__init__(
+            manhinh=manhinh,
+            chucnang=chucnang,
+            user_thuchien=user_thuchien,
+            noidung=noidung,
+            ngay_insert=ngay_insert,
+            active=active,
+            **kwargs
+        )
+
 
 SUPER_ADMIN_SET = {"admin", "administrator", "dung.nguyenanh"}
 
@@ -63,4 +83,3 @@ def sync_audit_log_to_logs_new(mapper, connection, target):
         )
     except Exception:
         pass
-

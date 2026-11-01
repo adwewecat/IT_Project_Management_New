@@ -2577,6 +2577,9 @@ export interface SyncDishImagesRequest {
   host: string;
   port?: number;
   fixes: DishImageFixItem[];
+  menu_code?: string;
+  menu_name?: string;
+  restaurant_name?: string;
 }
 
 export interface SyncDishImagesResponse {
