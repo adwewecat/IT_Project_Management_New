@@ -75,6 +75,15 @@
 >     - **Hiển thị trực tiếp mật khẩu (Không che `••••••••`)**: Mật khẩu OU (không sys) trên mobile hiển thị trực tiếp bằng font monospace rõ ràng kèm nút copy 1-chạm (nếu tài khoản có quyền xem), không bắt người dùng bấm thêm nút mở mắt toggle để tránh tốn thao tác ngón tay.
 >     - **Gom tính năng vào Popup "Xử Lý Nhanh"**: Không trải các nút chức năng to cồng kềnh chiếm diện tích trên từng thẻ nhà hàng. Thay vào đó, dùng nút `⚡ Xử lý nhanh` mở Modal Popup gom các nghiệp vụ xử lý nhanh (KDS, mở quyền, hồ sơ...) khi cần.
 >     - **Dò tìm tín hiệu kết nối thực tế trước khi hiển thị (Ping Check First)**: Với các máy chủ MongoDB nhà hàng (.11, .12, .41), bắt buộc ping kiểm tra tín hiệu thực tế trước. Nếu không có máy chủ nào phản hồi, báo lỗi ngắn gọn `Nhà hàng không có mongo 11, 12, 41 nào online` và không hiện nút chọn; nếu chỉ có 1 máy chủ online thì tự động kết nối; chỉ khi có từ 2 máy chủ online trở lên mới hiển thị nút chọn giữa các máy chủ online đó.
+>
+> 12. **Quy tắc Bất Di Bất Dịch Về Bộ Kỹ Năng Kỹ Sư Chuyên Nghiệp (Superpowers & Matt Pocock Skills Integration)**:
+>     - **Đã tích hợp 54 Skills vào `.agents/skills/` và Plugin toàn cục**: Dự án đã tích hợp trọn bộ 15 kỹ năng từ Superpowers (`obra/superpowers`) và 39 kỹ năng từ Matt Pocock Skills (`mattpocock/skills`) nhằm nâng chuẩn quy trình kỹ thuật phần mềm lên cấp độ doanh nghiệp (Enterprise-Grade).
+>     - **Cơ chế Kích hoạt tự động (Auto-Trigger & Skill Selection)**:
+>       + Khi phát triển tính năng / luồng mới: Tự động kích hoạt tư duy `brainstorming` / `grill-me` / `grill-with-docs` để bóc tách rõ ràng yêu cầu nghiệp vụ, phương án thiết kế trước khi gõ code.
+>       + Khi lập kế hoạch & triển khai: Dùng `writing-plans`, `executing-plans`, `to-spec`, `to-tickets`, `subagent-driven-development`.
+>       + Khi kiểm thử & viết mã: Áp dụng nghiêm ngặt `test-driven-development` (`tdd`), `verification-before-completion` và `code-review`.
+>       + Khi điều tra lỗi / sự cố: Kích hoạt `systematic-debugging` / `diagnosing-bugs` (xây dựng test case tái hiện lỗi trước khi can thiệp mã nguồn).
+>       + Khi cần tư vấn chọn kỹ năng: Kích hoạt `ask-matt` để điều hướng quy trình phù hợp.
 
 ---
 

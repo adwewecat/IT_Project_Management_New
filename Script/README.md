@@ -5764,3 +5764,27 @@ estaurant_service.py).
 - **Kiểm thử & Triển khai**:
   - Frontend: Chạy `cmd /c "npm run build"` tại `frontend/` đạt exit code 0 (`✓ built in 10.30s`).
   - Backend: `python -m compileall app` đạt exit code 0 sạch lỗi.
+
+
+---
+
+### [2026-11-01] - Tích Hợp & Kích Hoạt Trọn Bộ 54 Skills Từ Matt Pocock (skills) & Jesse Vincent (superpowers)
+- **Bối cảnh & Yêu cầu của người dùng**:
+  - Tích hợp 2 bộ Skills mã nguồn mở nổi tiếng:
+    1. `https://github.com/mattpocock/skills`: Bộ kỹ năng kỹ sư phần mềm thực chiến (Matt Pocock) gồm spec/ticket flows, grilling, TDD, code review, domain modeling, architecture...
+    2. `https://github.com/obra/superpowers`: Bộ phương pháp luận phát triển phần mềm chuẩn mực (Jesse Vincent) gồm brainstorming, systematic debugging, test-driven-development, subagent-driven development, git worktrees...
+  - Kích hoạt và đưa vào vận hành thực tế trong dự án `IT_Project_Management_New`.
+- **Triển khai Kiến trúc & Tích hợp**:
+  1. **Cài đặt & Kích hoạt Plugin Toàn cục (`~/.gemini/config/plugins/`)**:
+     - Cài đặt plugin `superpowers` (Version 7.0.1) chứa 15 kỹ năng: `brainstorming`, `diagnosing-superpowers`, `dispatching-parallel-agents`, `executing-plans`, `finishing-a-development-branch`, `receiving-code-review`, `requesting-code-review`, `subagent-driven-development`, `systematic-debugging`, `test-driven-development`, `using-git-worktrees`, `using-superpowers`, `verification-before-completion`, `writing-plans`, `writing-skills`.
+     - Cài đặt plugin `mattpocock-skills` (Version 1.3.2) và chuẩn hóa cấu trúc 1-level directory chứa 39 kỹ năng: `ask-matt`, `code-review`, `codebase-design`, `diagnosing-bugs`, `domain-modeling`, `grill-me`, `grill-with-docs`, `grilling`, `handoff`, `implement`, `implement-spec`, `improve-codebase-architecture`, `tdd`, `to-spec`, `to-tickets`, `triage`, `wayfinder`, `wizard`, v.v.
+     - Cả 2 plugins được kích hoạt tự động (`enabled: true`) trong Antigravity CLI (`agy plugin list`).
+  2. **Đồng bộ Trực Tiếp Vào Workspace Dự Án (`.agents/skills/`)**:
+     - Đồng bộ toàn bộ 54 skills vào `.agents/skills/` của repository để đảm bảo khi đẩy lên Git (`origin/main`) hoặc clone sang máy tính khác, toàn bộ kỹ năng này đều đi cùng dự án mà không bị phụ thuộc vào môi trường máy tính cục bộ.
+     - Khai báo cấu hình `.agents/skills.json` định tuyến đường dẫn quét kỹ năng dự án.
+  3. **Bổ Sung Nguyên Tắc Bất Di Bất Dịch Số 12 (Rule 12)**:
+     - Ghi nhận vào `AGENTS.md` và `GEMINI.md`: AI Coding Assistant luôn tự động kích hoạt tư duy `brainstorming` / `grill-me` khi nhận tác vụ mới, áp dụng `test-driven-development` (`tdd`), `systematic-debugging` khi sửa lỗi, và `code-review` / `verification-before-completion` trước khi bàn giao.
+- **Kiểm thử & Đóng gói**:
+  - Danh sách plugin Antigravity: `agy plugin list` nhận diện 100% cả 2 plugins (Tổng cộng 54 skills hoạt động đồng thời).
+  - Frontend: `cmd /c "npm run build"` đạt exit code 0.
+  - Backend: `python -m compileall app` sạch lỗi 100%.
