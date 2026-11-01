@@ -11,9 +11,9 @@ class Restaurant(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     res: Mapped[Optional[str]] = mapped_column(Unicode(250), nullable=True)  # Tên nhà hàng
-    sap: Mapped[Optional[str]] = mapped_column(Unicode(40), nullable=True)
-    coscenter: Mapped[Optional[str]] = mapped_column(Unicode(40), nullable=True)
-    rk7: Mapped[Optional[str]] = mapped_column(Unicode(40), nullable=True)
+    sap: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
+    coscenter: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
+    rk7: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
     sap_old: Mapped[Optional[str]] = mapped_column(Unicode(10), nullable=True)
     oracale: Mapped[Optional[str]] = mapped_column(Unicode(50), nullable=True)
     don_gia: Mapped[Optional[str]] = mapped_column(Unicode(50), nullable=True)

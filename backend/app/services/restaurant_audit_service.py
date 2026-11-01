@@ -160,12 +160,12 @@ class RestaurantAuditService:
 
         # 2. Cost Center (PHẢI 5 số/ký tự trở lên)
         cc_s = str(coscenter or "").strip()
-        if not cc_s or cc_s.lower() in ('1', '0', 'none', 'null') or len(cc_s) < 5:
+        if not cc_s or "cần bổ sung mã đúng" in cc_s.lower() or cc_s.lower() in ('1', '0', 'none', 'null') or len(cc_s) < 5:
             missing.append("Thiếu Cost Center")
 
         # 3. Mã RK7 (3 số trở lên)
         rk7_s = str(rk7 or "").strip()
-        if not rk7_s or rk7_s.lower() in ('1', '0', 'none', 'null') or not re.search(r'\d{3,}', rk7_s):
+        if not rk7_s or "cần bổ sung mã đúng" in rk7_s.lower() or rk7_s.lower() in ('1', '0', 'none', 'null') or not re.search(r'\d{3,}', rk7_s):
             missing.append("Thiếu Mã RK7")
 
         # 4. Ngày Khai Trương (Phải khác 01/01/1999 và không được để trống)

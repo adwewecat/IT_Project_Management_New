@@ -200,6 +200,23 @@ async def lifespan(app: FastAPI):
                 _c.commit()
                 logger.info("Đã tự động bổ sung cột ghi_chu vào bảng SOFTWARE_VERSIONS.")
 
+            # Đảm bảo độ dài cột sap, coscenter, rk7 trong bảng RESTAURANT tối thiểu 100 ký tự (phục vụ mã tạm bổ sung)
+            try:
+                _c.execute(text("""
+                    IF OBJECT_ID('dbo.RESTAURANT', 'U') IS NOT NULL
+                    BEGIN
+                        IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='RESTAURANT' AND COLUMN_NAME='sap' AND CHARACTER_MAXIMUM_LENGTH < 100)
+                            ALTER TABLE dbo.RESTAURANT ALTER COLUMN sap NVARCHAR(100) NULL;
+                        IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='RESTAURANT' AND COLUMN_NAME='coscenter' AND CHARACTER_MAXIMUM_LENGTH < 100)
+                            ALTER TABLE dbo.RESTAURANT ALTER COLUMN coscenter NVARCHAR(100) NULL;
+                        IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='RESTAURANT' AND COLUMN_NAME='rk7' AND CHARACTER_MAXIMUM_LENGTH < 100)
+                            ALTER TABLE dbo.RESTAURANT ALTER COLUMN rk7 NVARCHAR(100) NULL;
+                    END
+                """))
+                _c.commit()
+            except Exception as _ex_res:
+                logger.warning("Lỗi tự động mở rộng cột RESTAURANT (sap, coscenter, rk7): %s", _ex_res)
+
             # Đảm bảo các cột cho AGENT_MULTITASK_ENDPOINTS (Hỗ trợ máy ngoài và đa máy trạm)
             try:
                 _c.execute(text("""

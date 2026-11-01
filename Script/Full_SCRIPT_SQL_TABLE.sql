@@ -219,9 +219,9 @@ IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[RE
 BEGIN
     CREATE TABLE [dbo].[RESTAURANT] (
         [id] int IDENTITY(1,1) NOT NULL,
-        [sap] nvarchar(40) NULL,
-        [coscenter] nvarchar(40) NULL,
-        [rk7] nvarchar(40) NULL,
+        [sap] nvarchar(100) NULL,
+        [coscenter] nvarchar(100) NULL,
+        [rk7] nvarchar(100) NULL,
         [res] nvarchar(250) NULL,
         [status] nvarchar(20) NULL,
         [ip] nvarchar(50) NULL,

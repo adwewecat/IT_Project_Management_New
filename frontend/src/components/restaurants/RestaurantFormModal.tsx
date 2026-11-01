@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Store, Network, Wifi, MapPin, Save, Lock, Check, Shield, ShieldAlert } from 'lucide-react';
+import { Store, Network, Wifi, MapPin, Save, Lock, Check, Shield, ShieldAlert, Sparkles } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -10,6 +10,19 @@ import { Alert } from '../ui/Alert';
 import { RestaurantItem } from '../../types/restaurant';
 import { useAuth } from '../../contexts/AuthContext';
 import { createRestaurant, updateRestaurant } from '../../services/restaurantService';
+
+/**
+ * Sinh mã tạm ngẫu nhiên theo định dạng người dùng yêu cầu: 9987axz112 (cần bổ sung mã đúng)
+ * Cấu trúc: 4 chữ số + 3 chữ thường + 3 chữ số (tổng 10 ký tự) + ' (cần bổ sung mã đúng)'
+ */
+export const generateTempPendingCode = (): string => {
+  const digits = '0123456789';
+  const letters = 'abcdefghijklmnopqrstuvwxyz';
+  const part1 = Array.from({ length: 4 }, () => digits[Math.floor(Math.random() * digits.length)]).join('');
+  const part2 = Array.from({ length: 3 }, () => letters[Math.floor(Math.random() * letters.length)]).join('');
+  const part3 = Array.from({ length: 3 }, () => digits[Math.floor(Math.random() * digits.length)]).join('');
+  return `${part1}${part2}${part3} (cần bổ sung mã đúng)`;
+};
 
 interface RestaurantFormModalProps {
   isOpen: boolean;
@@ -63,10 +76,47 @@ export const RestaurantFormModal: React.FC<RestaurantFormModalProps> = ({
 
   const renderFieldLabel = (title: string, fieldName: string, required: boolean = false) => {
     const editable = canEditField(fieldName);
+    const isCodeField = !isEditMode && (fieldName === 'sap' || fieldName === 'coscenter' || fieldName === 'rk7');
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-        <span>
-          {title} {required && <span style={{ color: 'var(--color-error)' }}>*</span>}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+          <span>
+            {title} {required && <span style={{ color: 'var(--color-error)' }}>*</span>}
+          </span>
+          {isCodeField && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleChange(fieldName, generateTempPendingCode());
+              }}
+              style={{
+                fontSize: '11px',
+                color: '#b45309',
+                backgroundColor: '#fef3c7',
+                border: '1px solid #fde68a',
+                borderRadius: '4px',
+                padding: '1px 6px',
+                cursor: 'pointer',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+                lineHeight: 1.2,
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#fde68a';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#fef3c7';
+              }}
+              title="Nhấp để tự tạo ngay một mã tạm ngẫu nhiên kèm '(cần bổ sung mã đúng)'"
+            >
+              <Sparkles size={11} color="#d97706" /> Tạo mã tạm
+            </button>
+          )}
         </span>
         {!editable ? (
           <span
@@ -251,6 +301,28 @@ export const RestaurantFormModal: React.FC<RestaurantFormModalProps> = ({
       delete payload.status;
     }
 
+    // Khi thêm mới nhà hàng: nếu các trường Mã SAP, Cost Center, Mã RK7 bị để trống,
+    // tự động gán mã tạm ngẫu nhiên kèm '(cần bổ sung mã đúng)' theo yêu cầu người dùng
+    if (!isEditMode) {
+      if (!payload.sap || !String(payload.sap).trim()) {
+        payload.sap = generateTempPendingCode();
+      } else {
+        payload.sap = String(payload.sap).trim();
+      }
+
+      if (!payload.coscenter || !String(payload.coscenter).trim()) {
+        payload.coscenter = generateTempPendingCode();
+      } else {
+        payload.coscenter = String(payload.coscenter).trim();
+      }
+
+      if (!payload.rk7 || !String(payload.rk7).trim()) {
+        payload.rk7 = generateTempPendingCode();
+      } else {
+        payload.rk7 = String(payload.rk7).trim();
+      }
+    }
+
     // Chuẩn hóa định dạng ngày gửi lên server (YYYY-MM-DD hoặc null)
     if (payload.ngay_khaitruong && String(payload.ngay_khaitruong).trim()) {
       const check = parseAndValidateDate(payload.ngay_khaitruong);
@@ -412,6 +484,28 @@ export const RestaurantFormModal: React.FC<RestaurantFormModalProps> = ({
           {/* TAB 1: THÔNG TIN CHÍNH */}
           {activeTab === 'main' && (
             <div style={formGridStyle}>
+              {!isEditMode && (
+                <div
+                  style={{
+                    gridColumn: '1 / -1',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    backgroundColor: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    fontSize: '12px',
+                    color: '#92400e',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    lineHeight: '1.4',
+                  }}
+                >
+                  <Sparkles size={16} style={{ color: '#d97706', flexShrink: 0 }} />
+                  <span>
+                    <strong>Mẹo tạo mã tự động:</strong> Khi thêm mới nhà hàng chưa có license, bạn có thể <strong>để trống</strong> ô <em>Mã SAP</em>, <em>Cost Center</em> hoặc <em>Mã RK7</em> (hoặc bấm nút <strong>Tạo mã tạm</strong>). Hệ thống sẽ tự động gán mã ngẫu nhiên kèm <code>(cần bổ sung mã đúng)</code> để tránh trùng và dễ cập nhật sau khi đối tác cấp license.
+                  </span>
+                </div>
+              )}
               <div style={{ gridColumn: '1 / -1' }}>
                 <Input
                   label={renderFieldLabel('Tên Nhà Hàng', 'res', true)}
@@ -426,7 +520,7 @@ export const RestaurantFormModal: React.FC<RestaurantFormModalProps> = ({
                 label={renderFieldLabel('Mã SAP', 'sap')}
                 value={formData.sap || ''}
                 onChange={(e) => handleChange('sap', e.target.value)}
-                placeholder="Ví dụ: NH001"
+                placeholder={isEditMode ? "Ví dụ: NH001" : "Ví dụ: NH001 (để trống tự tạo mã tạm)"}
                 error={errors.sap}
                 disabled={!canEditField('sap')}
               />
@@ -434,14 +528,14 @@ export const RestaurantFormModal: React.FC<RestaurantFormModalProps> = ({
                 label={renderFieldLabel('Cost Center', 'coscenter')}
                 value={formData.coscenter || ''}
                 onChange={(e) => handleChange('coscenter', e.target.value)}
-                placeholder="Ví dụ: CC1001"
+                placeholder={isEditMode ? "Ví dụ: CC1001" : "Ví dụ: CC1001 (để trống tự tạo mã tạm)"}
                 disabled={!canEditField('coscenter')}
               />
               <Input
                 label={renderFieldLabel('Mã RK7', 'rk7')}
                 value={formData.rk7 || ''}
                 onChange={(e) => handleChange('rk7', e.target.value)}
-                placeholder="Ví dụ: RK001"
+                placeholder={isEditMode ? "Ví dụ: RK001" : "Ví dụ: RK001 (để trống tự tạo mã tạm)"}
                 error={errors.rk7}
                 disabled={!canEditField('rk7')}
               />

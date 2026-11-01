@@ -2336,3 +2336,27 @@
   - Danh sách plugin Antigravity: `agy plugin list` nhận diện 100% cả 2 plugins (Tổng cộng 54 skills hoạt động đồng thời).
   - Frontend: `cmd /c "npm run build"` đạt exit code 0.
   - Backend: `python -m compileall app` sạch lỗi 100%.
+
+---
+
+### [2026-11-01] - Tự Động Sinh Mã Tạm Random Cho Mã SAP, Cost Center & Mã RK7 Khi Thêm Mới Nhà Hàng
+- **Bối cảnh & Yêu cầu của người dùng**:
+  - Khi thêm mới một nhà hàng, thông thường chưa có ngay Mã SAP, Cost Center và Mã RK7 do phải chờ đối tác cấp license phần mềm.
+  - Yêu cầu: Nếu người dùng để trống các ô này khi tạo mới, hệ thống sẽ tự động gán một chuỗi mã ngẫu nhiên (random) để tránh trùng lặp và nối thêm đuôi ` (cần bổ sung mã đúng)` để nhân sự IT & Kế toán nhận biết và bổ sung lại mã chuẩn khi có license.
+  - Ví dụ chuẩn người dùng đưa ra: `9987axz112 (cần bổ sung mã đúng)` (4 số + 3 chữ cái thường + 3 số = 10 ký tự kết hợp đuôi chú thích).
+- **Giải pháp & Triển khai Kỹ thuật**:
+  1. **Frontend (`RestaurantFormModal.tsx` & `RestaurantListPage.tsx`)**:
+     - Hàm sinh mã tạm `generateTempPendingCode()`: Tạo chuỗi 10 ký tự gồm 4 chữ số + 3 chữ cái thường + 3 chữ số ngẫu nhiên (đảm bảo hàng tỷ tổ hợp ngẫu nhiên, hoàn toàn không trùng lặp) + ` (cần bổ sung mã đúng)`.
+     - Bổ sung nút bấm nhanh `⚡ Tạo mã tạm` ngay cạnh tiêu đề của 3 trường `Mã SAP`, `Cost Center`, `Mã RK7` (khi ở chế độ Thêm mới), cho phép người dùng click để tự động điền ngay mã tạm nếu muốn.
+     - Cập nhật placeholder trực quan: `Ví dụ: NH001 (để trống tự tạo mã tạm)`.
+     - Trong hàm `handleSubmit`: Nếu là thêm mới (`!isEditMode`), nếu ô nào bị để trống thì tự động sinh mã tạm ngẫu nhiên gán vào payload trước khi gửi lên API.
+     - Bổ sung banner nhắc nhở phong cách hiện đại trong tab "Thông Tin Chính" giải thích rõ cơ chế tạo mã tạm tự động.
+     - Tại `RestaurantListPage.tsx`: Với các nhà hàng có mã chứa `(cần bổ sung mã đúng)`, hiển thị phần mã gốc kèm badge cảnh báo màu hổ phách `⚠️ Cần bổ sung mã đúng` để người dùng dễ theo dõi và đối soát.
+  2. **Backend (`restaurant_service.py` & `main.py`)**:
+     - Thêm hàm backend `generate_temp_pending_code(db, field)`: Tự động kiểm tra trực tiếp trong DB bảng `RESTAURANT` để đảm bảo chuỗi mã sinh ra hoàn toàn không trùng với bất kỳ bản ghi nào khác.
+     - Trong `create_restaurant()`: Bắt trường hợp `sap`, `coscenter`, `rk7` để trống/khoảng trắng thì tự động gán mã tạm trước khi chạy hàm kiểm tra trùng lặp `validate_restaurant_uniqueness()`.
+     - Trong `restaurant_audit_service.py`: Cập nhật logic kiểm tra audit nhà hàng, tự động nhận diện các nhà hàng đang dùng mã tạm `cần bổ sung mã đúng` để đưa vào danh sách cần bổ sung thông tin chính thức.
+     - Mở rộng phòng vệ độ dài cột (`ALTER COLUMN sap/coscenter/rk7 NVARCHAR(100)`): Thêm script kiểm tra tự động trong `lifespan` tại `backend/app/main.py` và cập nhật vào `backend/app/models/restaurant.py` cũng như `Script/Full_SCRIPT_SQL_TABLE.sql`.
+- **Kiểm thử & Bàn giao**:
+  - Frontend: `cmd /c "npm run build"` tại `frontend/` hoàn thành sạch sẽ 100% với exit code 0 (`✓ built in 4.16s`).
+  - Backend: `python -m compileall backend/app` hoàn thành sạch sẽ 0 lỗi; Smoke test hàm sinh mã chạy chuẩn xác (`9271chk374 (cần bổ sung mã đúng)`).

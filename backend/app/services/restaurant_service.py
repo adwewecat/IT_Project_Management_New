@@ -1,4 +1,6 @@
 import io
+import random
+import string
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy import select, func, or_, and_, text, desc, asc, literal, Unicode, case
@@ -381,12 +383,54 @@ def validate_restaurant_uniqueness(
                 )
 
 
+def generate_temp_pending_code(db: Optional[Session] = None, field: str = "sap") -> str:
+    """
+    Sinh mã tạm ngẫu nhiên theo định dạng người dùng yêu cầu: 9987axz112 (cần bổ sung mã đúng)
+    Cấu trúc: 4 chữ số + 3 chữ thường + 3 chữ số (tổng 10 ký tự) + ' (cần bổ sung mã đúng)'
+    Đảm bảo kiểm tra không bị trùng lặp với bất kỳ nhà hàng nào trong DB.
+    """
+    digits = string.digits
+    letters = string.ascii_lowercase
+    for _ in range(50):
+        part1 = "".join(random.choices(digits, k=4))
+        part2 = "".join(random.choices(letters, k=3))
+        part3 = "".join(random.choices(digits, k=3))
+        code = f"{part1}{part2}{part3} (cần bổ sung mã đúng)"
+        if db:
+            col = getattr(Restaurant, field, None)
+            if col is not None:
+                exists = db.scalar(select(Restaurant.id).where(col == code))
+                if not exists:
+                    return code
+            else:
+                return code
+        else:
+            return code
+    return f"{int(datetime.now().timestamp())}tmp (cần bổ sung mã đúng)"
+
+
 def create_restaurant(
     db: Session,
     current_user: UserInfo,
     data: RestaurantCreate
 ) -> RestaurantItem:
-    """Thêm mới nhà hàng vào dbo.RESTAURANT (có bắt trùng SAP, RK7, Email)"""
+    """Thêm mới nhà hàng vào dbo.RESTAURANT (có bắt trùng SAP, RK7, Email, tự sinh mã tạm nếu để trống)"""
+    # Nếu Mã SAP, Cost Center hoặc Mã RK7 để trống -> Tự động sinh mã tạm ngẫu nhiên kèm (cần bổ sung mã đúng)
+    if not data.sap or not str(data.sap).strip():
+        data.sap = generate_temp_pending_code(db, "sap")
+    else:
+        data.sap = str(data.sap).strip()
+
+    if not data.coscenter or not str(data.coscenter).strip():
+        data.coscenter = generate_temp_pending_code(db, "coscenter")
+    else:
+        data.coscenter = str(data.coscenter).strip()
+
+    if not data.rk7 or not str(data.rk7).strip():
+        data.rk7 = generate_temp_pending_code(db, "rk7")
+    else:
+        data.rk7 = str(data.rk7).strip()
+
     # Kiểm tra trùng lặp SAP, RK7, Email
     validate_restaurant_uniqueness(db, sap=data.sap, rk7=data.rk7, email=data.email)
 

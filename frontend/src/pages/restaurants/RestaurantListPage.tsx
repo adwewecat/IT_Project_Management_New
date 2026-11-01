@@ -1056,7 +1056,30 @@ export const RestaurantListPage: React.FC = () => {
                           color: 'var(--text-primary)',
                         }}
                       >
-                        {r.sap || '—'}
+                        {r.sap?.includes('cần bổ sung mã đúng') ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <span style={{ fontSize: '12px', color: '#b45309', fontWeight: 700 }}>
+                              {r.sap.replace(/\s*\(cần bổ sung mã đúng\)/i, '')}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                color: '#b45309',
+                                backgroundColor: '#fef3c7',
+                                padding: '1px 5px',
+                                borderRadius: '4px',
+                                border: '1px solid #fde68a',
+                                width: 'fit-content',
+                                fontWeight: 600,
+                              }}
+                              title={r.sap}
+                            >
+                              ⚠️ Cần bổ sung mã đúng
+                            </span>
+                          </div>
+                        ) : (
+                          r.sap || '—'
+                        )}
                       </td>
 
                       {/* Mã RK7 */}
@@ -1067,7 +1090,30 @@ export const RestaurantListPage: React.FC = () => {
                           color: 'var(--text-secondary)',
                         }}
                       >
-                        {r.rk7 || '—'}
+                        {r.rk7?.includes('cần bổ sung mã đúng') ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <span style={{ fontSize: '12px', color: '#b45309', fontWeight: 700 }}>
+                              {r.rk7.replace(/\s*\(cần bổ sung mã đúng\)/i, '')}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                color: '#b45309',
+                                backgroundColor: '#fef3c7',
+                                padding: '1px 5px',
+                                borderRadius: '4px',
+                                border: '1px solid #fde68a',
+                                width: 'fit-content',
+                                fontWeight: 600,
+                              }}
+                              title={r.rk7}
+                            >
+                              ⚠️ Cần bổ sung mã đúng
+                            </span>
+                          </div>
+                        ) : (
+                          r.rk7 || '—'
+                        )}
                       </td>
 
                       {/* Tên Nhà Hàng */}
@@ -1159,7 +1205,30 @@ export const RestaurantListPage: React.FC = () => {
                           color: 'var(--text-primary)',
                         }}
                       >
-                        {r.coscenter || '—'}
+                        {r.coscenter?.includes('cần bổ sung mã đúng') ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <span style={{ fontSize: '12px', color: '#b45309', fontWeight: 700 }}>
+                              {r.coscenter.replace(/\s*\(cần bổ sung mã đúng\)/i, '')}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                color: '#b45309',
+                                backgroundColor: '#fef3c7',
+                                padding: '1px 5px',
+                                borderRadius: '4px',
+                                border: '1px solid #fde68a',
+                                width: 'fit-content',
+                                fontWeight: 600,
+                              }}
+                              title={r.coscenter}
+                            >
+                              ⚠️ Cần bổ sung mã đúng
+                            </span>
+                          </div>
+                        ) : (
+                          r.coscenter || '—'
+                        )}
                       </td>
 
                       {/* Số Điện Thoại */}
