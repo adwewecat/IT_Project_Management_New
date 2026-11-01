@@ -10,13 +10,21 @@ import {
   Plus,
   Minus,
   Trash2,
-  ChevronRight,
   ChefHat,
-  EyeOff
+  EyeOff,
+  Smartphone,
+  Monitor,
+  Zap,
+  FileSpreadsheet,
+  Check,
+  CheckSquare,
+  Square,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { RestaurantItem } from '../../types/restaurant';
-import { mongoService, LockedTableItem } from '../../services/mongoService';
+import { mongoService, LockedTableItem, CheckDishImageResult, CheckMenuImagesResponse, MenuGroupsCoDetailResponse } from '../../services/mongoService';
 
 export interface AndroidEmulatorTabProps {
   selectedRestaurant: RestaurantItem | null;
@@ -42,6 +50,7 @@ export interface DishItem {
   name: string;
   price: number; // > 0: Alacarte, = 0: Buffet
   group: string; // Tên nhóm (vd: 'Combo', 'ALC.GÀ RÁN NHẬT BẢN', 'ALC.Mỳ'...)
+  groupCode?: string; // Mã nhóm (vd: 'CK_ALC001_1')
   isDrink?: boolean;
   rk7Code: string | number;
   sapCode: string;
@@ -53,6 +62,7 @@ export interface DishItem {
   matchRule?: string;
   isSpecialCard?: boolean;
   isHidden?: boolean; // Cờ đánh dấu món đang ẩn trên POS
+  isCo?: boolean; // Món thuộc kênh CO
 }
 
 // Hàm chuẩn hóa tiếng Việt bỏ dấu, đưa về chữ thường
@@ -243,6 +253,23 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
   const [activeGroup, setActiveGroup] = useState<string>('Combo');
   const [menuSearch, setMenuSearch] = useState<string>('');
 
+  // ── Chế độ thực đơn: 'SO' (Staff Order) | 'CO' (Customer Order) ──
+  const [orderMode, setOrderMode] = useState<'SO' | 'CO'>('SO');
+
+  // Thông tin cấu hình nhóm hiển thị CO (theo File 2: CO_FILE_2.xlsx & MongoDB)
+  const [coDetail, setCoDetail] = useState<MenuGroupsCoDetailResponse | null>(null);
+  const [loadingCoDetail, setLoadingCoDetail] = useState<boolean>(false);
+  const [selectedMissingGroupCodes, setSelectedMissingGroupCodes] = useState<Set<string>>(new Set());
+  const [manualGroupInput, setManualGroupInput] = useState<string>('');
+  const [isCoGroupsBarExpanded, setIsCoGroupsBarExpanded] = useState<boolean>(true);
+
+  // Quản lý kiểm tra hình ảnh món với máy chủ 192.168.201.116
+  const [checkedDishImagesMap, setCheckedDishImagesMap] = useState<Record<string, CheckDishImageResult>>({});
+  const [checkingDishId, setCheckingDishId] = useState<string | null>(null);
+  const [checkingAllMenu, setCheckingAllMenu] = useState<boolean>(false);
+  const [syncingImages, setSyncingImages] = useState<boolean>(false);
+  const [menuImagesSummary, setMenuImagesSummary] = useState<CheckMenuImagesResponse | null>(null);
+
 
 
   // Quản lý tải ảnh trực tuyến từ Cloud Gateway (Chống lag & xử lý lỗi ảnh vỡ)
@@ -429,13 +456,15 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
               name: it.name,
               price: it.price || 0,
               group: groupClean,
+              groupCode: it.group_code || '',
               isDrink,
               rk7Code: rk7Str,
               sapCode: sapStr,
               imageUrl: it.image_url || undefined,
               srcImg: it.src_img || undefined,
               urlImgQr: it.url_img_qr || undefined,
-              isHidden
+              isHidden,
+              isCo: it.is_co ?? it.group_is_co
             });
           }
         });
@@ -567,6 +596,302 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
     return tables.filter((t) => t.hallName === selectedHall);
   }, [tables, selectedHall]);
 
+    // Tải chi tiết nhóm CO (File 2) cho Menu đang chọn
+  const fetchCoGroupsDetail = useCallback(async (menuCode: string) => {
+    const rawHost = connectedHost || selectedRestaurant?.ip;
+    const cleanHost = getValidMongoHost(rawHost);
+    if (!cleanHost || !menuCode) return;
+    setLoadingCoDetail(true);
+    try {
+      const res = await mongoService.getMenuGroupsCo({
+        host: cleanHost,
+        port: 27017,
+        menu_code: menuCode
+      });
+      setCoDetail(res);
+      setSelectedMissingGroupCodes(new Set());
+    } catch (err) {
+      console.warn('Lỗi tải nhóm CO chi tiết:', err);
+    } finally {
+      setLoadingCoDetail(false);
+    }
+  }, [connectedHost, selectedRestaurant?.ip]);
+
+  // Tự động nạp nhóm CO khi chuyển sang chế độ CO hoặc khi selectedCategory thay đổi
+  useEffect(() => {
+    if (orderMode === 'CO' && selectedCategory.code) {
+      fetchCoGroupsDetail(selectedCategory.code);
+    }
+  }, [orderMode, selectedCategory.code, fetchCoGroupsDetail]);
+
+  // Bản đồ tra cứu mã nhóm (group code) cho từng tên nhóm món
+  const groupCodeMap = useMemo(() => {
+    const map = new Map<string, string>();
+    dishes.forEach((d) => {
+      if (d.group && d.groupCode && !map.has(d.group)) {
+        map.set(d.group, d.groupCode);
+      }
+    });
+    if (coDetail && coDetail.so_groups) {
+      coDetail.so_groups.forEach((g) => {
+        if (g.name && g.code && !map.has(g.name)) {
+          map.set(g.name, g.code);
+        }
+      });
+    }
+    return map;
+  }, [dishes, coDetail]);
+
+  // Kiểm tra hình ảnh 1 món trên máy chủ ảnh 192.168.201.116
+  const handleCheckSingleDish = async (dish: DishItem) => {
+    setCheckingDishId(dish.id);
+    try {
+      const rawPath = dish.srcImg || dish.imageUrl || '';
+      const res = await mongoService.checkSingleDishImage({
+        raw_path: rawPath,
+        dish_name: dish.name,
+        rk7_code: String(dish.rk7Code || ''),
+        sap_code: dish.sapCode || ''
+      });
+      setCheckedDishImagesMap((prev) => ({
+        ...prev,
+        [dish.id]: res
+      }));
+      if (onToastRef.current) {
+        if (res.status === 'MATCH') {
+          onToastRef.current(`Khớp 100%: ${res.server_filename}`, 'success');
+        } else if (res.is_fixable) {
+          onToastRef.current(res.message, 'info');
+        } else {
+          onToastRef.current(res.message, 'error');
+        }
+      }
+    } catch (err: any) {
+      if (onToastRef.current) {
+        onToastRef.current('Lỗi kiểm tra hình ảnh: ' + (err.response?.data?.detail || err.message), 'error');
+      }
+    } finally {
+      setCheckingDishId(null);
+    }
+  };
+
+  // Kiểm tra toàn bộ hình ảnh của các món thuộc Menu hiện tại
+  const handleCheckAllMenuImages = async () => {
+    const rawHost = connectedHost || selectedRestaurant?.ip;
+    const cleanHost = getValidMongoHost(rawHost);
+    if (!cleanHost) {
+      if (onToastRef.current) onToastRef.current('Chưa xác định IP kết nối MongoDB máy trạm!', 'error');
+      return;
+    }
+
+    setCheckingAllMenu(true);
+    try {
+      const res = await mongoService.checkMenuDishImages({
+        host: cleanHost,
+        port: 27017,
+        menu_code: selectedCategory.code,
+        dishes: dishes.map((d) => ({
+          id: d.id,
+          name: d.name,
+          rk7_code: d.rk7Code,
+          sap_code: d.sapCode,
+          src_img: d.srcImg || '',
+          image_url: d.imageUrl || '',
+          url_img_qr: d.urlImgQr || ''
+        }))
+      });
+
+      setMenuImagesSummary(res);
+
+      const newMap: Record<string, CheckDishImageResult> = {};
+      res.results.forEach((r) => {
+        if (r.dish_id) {
+          newMap[r.dish_id] = r;
+        }
+      });
+      setCheckedDishImagesMap((prev) => ({ ...prev, ...newMap }));
+
+      if (onToastRef.current) {
+        onToastRef.current(
+          `Đã check ${res.total_dishes} món: ${res.match_count} khớp • ${res.case_mismatch_count} lệch hoa thường • ${res.prefix_mismatch_count} sai tiền tố • ${res.not_found_count} không có`,
+          res.fixable_count > 0 ? 'info' : 'success'
+        );
+      }
+    } catch (err: any) {
+      if (onToastRef.current) {
+        onToastRef.current('Lỗi kiểm tra ảnh menu: ' + (err.response?.data?.detail || err.message), 'error');
+      }
+    } finally {
+      setCheckingAllMenu(false);
+    }
+  };
+
+  // Đồng nhất 1 món: Cập nhật tên hình từ server về MongoDB nhà hàng
+  const handleSyncSingleDish = async (dish: DishItem, targetPath: string) => {
+    const rawHost = connectedHost || selectedRestaurant?.ip;
+    const cleanHost = getValidMongoHost(rawHost);
+    if (!cleanHost) return;
+
+    try {
+      const res = await mongoService.syncDishImagesToMongo({
+        host: cleanHost,
+        port: 27017,
+        fixes: [
+          {
+            rk7_code: String(dish.rk7Code || ''),
+            sap_code: dish.sapCode || '',
+            target_image_path: targetPath
+          }
+        ]
+      });
+
+      if (onToastRef.current) {
+        onToastRef.current(res.message, 'success');
+      }
+
+      setDishes((prev) =>
+        prev.map((d) =>
+          d.id === dish.id
+            ? {
+                ...d,
+                srcImg: targetPath,
+                imageUrl: targetPath
+              }
+            : d
+        )
+      );
+
+      setCheckedDishImagesMap((prev) => ({
+        ...prev,
+        [dish.id]: {
+          status: 'MATCH',
+          is_match: true,
+          is_fixable: false,
+          message: 'Khớp hoàn toàn 100% cả tên hình và đường dẫn /resources/menu/',
+          given_path: targetPath,
+          given_filename: targetPath.replace('/resources/menu/', ''),
+          given_prefix: '/resources/menu/',
+          server_filename: targetPath.replace('/resources/menu/', ''),
+          suggested_fix_path: targetPath
+        }
+      }));
+    } catch (err: any) {
+      if (onToastRef.current) {
+        onToastRef.current('Lỗi đồng nhất: ' + (err.response?.data?.detail || err.message), 'error');
+      }
+    }
+  };
+
+  // Đồng nhất toàn bộ các món bị lệch trong menu về MongoDB
+  const handleSyncAllFixableImages = async () => {
+    if (!menuImagesSummary || menuImagesSummary.fixable_count === 0) return;
+    const rawHost = connectedHost || selectedRestaurant?.ip;
+    const cleanHost = getValidMongoHost(rawHost);
+    if (!cleanHost) return;
+
+    const fixableItems = menuImagesSummary.results.filter((r) => r.is_fixable && r.suggested_fix_path);
+    if (fixableItems.length === 0) return;
+
+    if (
+      !confirm(
+        `Đồng nhất ${fixableItems.length} món bị lệch tên/tiền tố hình từ máy chủ 192.168.201.116 về MongoDB nhà hàng?\n(Lưu ý: Máy chủ ảnh chỉ đọc, chỉ cập nhật trên MongoDB)`
+      )
+    ) {
+      return;
+    }
+
+    setSyncingImages(true);
+    try {
+      const fixes = fixableItems.map((item) => ({
+        rk7_code: item.rk7_code,
+        sap_code: item.sap_code,
+        target_image_path: item.suggested_fix_path
+      }));
+
+      const res = await mongoService.syncDishImagesToMongo({
+        host: cleanHost,
+        port: 27017,
+        fixes
+      });
+
+      if (onToastRef.current) {
+        onToastRef.current(res.message, 'success');
+      }
+
+      await loadDishesFromMongo(cleanHost);
+
+      setCheckedDishImagesMap((prev) => {
+        const updated = { ...prev };
+        fixableItems.forEach((it) => {
+          if (it.dish_id) {
+            updated[it.dish_id] = {
+              ...it,
+              status: 'MATCH',
+              is_match: true,
+              is_fixable: false,
+              message: 'Đã đồng nhất khớp chuẩn với máy chủ ảnh',
+              given_path: it.suggested_fix_path,
+              given_filename: it.server_filename
+            };
+          }
+        });
+        return updated;
+      });
+
+      setMenuImagesSummary(null);
+    } catch (err: any) {
+      if (onToastRef.current) {
+        onToastRef.current('Lỗi đồng nhất hàng loạt: ' + (err.response?.data?.detail || err.message), 'error');
+      }
+    } finally {
+      setSyncingImages(false);
+    }
+  };
+
+  // Thêm nhanh các nhóm SO chưa có lên CO
+  const handleBulkAddMissingGroupsToCo = async (groupCodes: string[]) => {
+    if (groupCodes.length === 0) return;
+    const rawHost = connectedHost || selectedRestaurant?.ip;
+    const cleanHost = getValidMongoHost(rawHost);
+    if (!cleanHost) return;
+
+    if (!confirm(`Đưa ${groupCodes.length} nhóm này lên cấu hình hiển thị CO cho Menu "${selectedCategory.name}"?`)) {
+      return;
+    }
+
+    try {
+      const res = await mongoService.bulkSyncMenuGroupsCo({
+        host: cleanHost,
+        port: 27017,
+        menu_code: selectedCategory.code,
+        group_codes: groupCodes,
+        action: 'ADD',
+        update_file2: true
+      });
+
+      if (onToastRef.current) {
+        onToastRef.current(res.message, 'success');
+      }
+
+      await fetchCoGroupsDetail(selectedCategory.code);
+      await loadDishesFromMongo(cleanHost);
+    } catch (err: any) {
+      if (onToastRef.current) {
+        onToastRef.current('Lỗi thêm nhóm lên CO: ' + (err.response?.data?.detail || err.message), 'error');
+      }
+    }
+  };
+
+  // Thêm mã nhóm thủ công vào CO
+  const handleAddManualGroupToCo = async () => {
+    const code = manualGroupInput.trim();
+    if (!code) return;
+    const codes = code.split(/[\s,;\n]+/).filter(Boolean);
+    if (codes.length === 0) return;
+    await handleBulkAddMissingGroupsToCo(codes);
+    setManualGroupInput('');
+  };
+
   // Click vào bàn trên Sơ đồ bàn -> Mở Bước 2: Chọn Hạng Mục Order
   const handleSelectTableFromMap = (table: PosTableData) => {
     setActiveTableId(table.id);
@@ -587,8 +912,9 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
   };
 
   // Xác nhận Hạng Mục Order -> Vào Màn hình Thực Đơn Menu (Image 3)
-  const handleConfirmCategory = (cat: OrderCategoryOption) => {
+  const handleConfirmCategory = (cat: OrderCategoryOption, mode: 'SO' | 'CO' = 'SO') => {
     setSelectedCategory(cat);
+    setOrderMode(mode);
     // Cập nhật thông tin cho bàn
     setTables((prev) =>
       prev.map((t) =>
@@ -607,6 +933,10 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
     const validHost = getValidMongoHost(connectedHost || selectedRestaurant?.ip);
     if (validHost && dishes.length <= 5) {
       loadDishesFromMongo(validHost);
+    }
+
+    if (mode === 'CO') {
+      fetchCoGroupsDetail(cat.code);
     }
 
     // Nếu chọn Buffet và nhà hàng có món 0đ thì ưu tiên tab Buffet, ngược lại Alacarte
@@ -1238,40 +1568,102 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                   )}
                 </div>
 
-                <div style={{ width: '100%', display: 'flex', justifyContent: 'center', marginTop: '10px' }}>
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      color: isCatSelected ? '#ffffff' : '#ea580c',
-                      backgroundColor: isCatSelected ? '#ea580c' : '#fff7ed',
-                      border: `1px solid ${isCatSelected ? '#ea580c' : '#fed7aa'}`,
-                      padding: '2px 12px',
-                      borderRadius: '4px'
-                    }}
-                  >
-                    {isCatSelected ? 'Đang chọn' : 'Bấm để chọn'}
-                  </span>
+                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', width: '100%' }}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleConfirmCategory(cat, 'SO');
+                      }}
+                      style={{
+                        padding: '6px 4px',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        backgroundColor: '#fffbeb',
+                        color: '#b45309',
+                        border: '1px solid #fde68a',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '3px',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title="Vào gọi món thực đơn chế độ Staff Order (SO)"
+                    >
+                      <Smartphone size={13} />
+                      <span>Vào SO</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleConfirmCategory(cat, 'CO');
+                      }}
+                      style={{
+                        padding: '6px 4px',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        backgroundColor: '#ecfdf5',
+                        color: '#047857',
+                        border: '1px solid #a7f3d0',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '3px',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title="Vào quản lý thực đơn Customer Order (CO) - Check hình & Nhóm"
+                    >
+                      <Monitor size={13} />
+                      <span>Vào CO</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
 
-        {/* Nút hành động căn giữa */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', marginTop: '10px' }}>
+        {/* Nút hành động căn giữa: 2 chế độ SO và CO */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '10px', flexWrap: 'wrap' }}>
           <Button
             variant="secondary"
             onClick={() => setCurrentView('table_map')}
           >
             Hủy bỏ
           </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => handleConfirmCategory(selectedCategory, 'SO')}
+            leftIcon={<Smartphone size={15} color="#b45309" />}
+            style={{
+              borderColor: '#f59e0b',
+              color: '#b45309',
+              backgroundColor: '#fffbeb',
+              fontWeight: 700
+            }}
+          >
+            📱 Vào Menu SO ({selectedCategory.name})
+          </Button>
+
           <Button
             variant="primary"
-            onClick={() => handleConfirmCategory(selectedCategory)}
-            rightIcon={<ChevronRight size={16} />}
+            onClick={() => handleConfirmCategory(selectedCategory, 'CO')}
+            leftIcon={<Monitor size={15} color="#ffffff" />}
+            style={{
+              backgroundColor: '#059669',
+              borderColor: '#059669',
+              fontWeight: 700
+            }}
           >
-            Vào Menu Gọi Món ({selectedCategory.name})
+            🖥️ Vào Menu CO ({selectedCategory.name})
           </Button>
         </div>
       </div>
@@ -1602,8 +1994,71 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
             backgroundColor: '#ffffff'
           }}
         >
-          {/* Các Tabs chính: Tất cả • Alacarte (giá > 0) • Buffet (giá = 0) • Đồ uống */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {/* Trái: Switch 2 Chế Độ SO / CO & Các Tabs chính Tất cả • Alacarte • Buffet • Đồ uống */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            {/* Thanh chuyển chế độ SO (Staff Order) và CO (Customer Order) */}
+            <div
+              style={{
+                display: 'inline-flex',
+                borderRadius: '8px',
+                border: '1.5px solid #cbd5e1',
+                padding: '2px',
+                backgroundColor: '#f1f5f9'
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setOrderMode('SO')}
+                style={{
+                  padding: '5px 12px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  borderRadius: '6px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  backgroundColor: orderMode === 'SO' ? '#ffffff' : 'transparent',
+                  color: orderMode === 'SO' ? '#d97706' : '#64748b',
+                  boxShadow: orderMode === 'SO' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Kênh Staff Order (SO) - Menu nhân viên gọi món"
+              >
+                <Smartphone size={13} />
+                <span>Kênh SO</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderMode('CO');
+                  if (selectedCategory.code) {
+                    fetchCoGroupsDetail(selectedCategory.code);
+                  }
+                }}
+                style={{
+                  padding: '5px 12px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  borderRadius: '6px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  backgroundColor: orderMode === 'CO' ? '#ffffff' : 'transparent',
+                  color: orderMode === 'CO' ? '#059669' : '#64748b',
+                  boxShadow: orderMode === 'CO' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Kênh Customer Order (CO) - Quản lý nhóm & kiểm tra link hình ảnh với máy chủ 192.168.201.116"
+              >
+                <Monitor size={13} />
+                <span>Kênh CO (Khách)</span>
+              </button>
+            </div>
             {/* Tab: Tất cả */}
             <button
               type="button"
@@ -1924,6 +2379,343 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
         </div>
       </div>
 
+        {/* ═════════════════════════════════════════════════════════════════ */}
+        {/* THANH THÔNG TIN CẤU HÌNH NHÓM HIỂN THỊ CO (THEO FILE 2 & MONGO)   */}
+        {/* HIỂN THỊ KHI CHỌN CHẾ ĐỘ CO: MÃ LOẠI, TÊN MENU, NHÓM CO & NHÓM SO THIẾU */}
+        {/* ═════════════════════════════════════════════════════════════════ */}
+        {orderMode === 'CO' && (
+          <div
+            style={{
+              backgroundColor: '#f8fafc',
+              borderBottom: '1.5px solid #e2e8f0',
+              padding: '10px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}
+          >
+            {/* Header CO: Mã Loại Menu, Tên Menu, Tóm Tắt & Nút Check Toàn Bộ Ảnh */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '12px', fontWeight: 800, color: '#0f172a', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <FileSpreadsheet size={15} color="#059669" />
+                  <span>Cấu Hình CO (File 2):</span>
+                </span>
+                <span style={{ fontSize: '11px', fontWeight: 700, backgroundColor: '#e0e7ff', color: '#3730a3', padding: '2px 8px', borderRadius: '4px' }}>
+                  Mã loại: {selectedCategory.code}
+                </span>
+                <span style={{ fontSize: '11px', fontWeight: 700, backgroundColor: '#ecfdf5', color: '#065f46', padding: '2px 8px', borderRadius: '4px', border: '1px solid #a7f3d0' }}>
+                  Tên menu: {selectedCategory.name}
+                </span>
+                {coDetail && (
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
+                    ({coDetail.co_group_codes.length} nhóm CO • {coDetail.so_groups.length} nhóm SO)
+                  </span>
+                )}
+              </div>
+
+              {/* Action Buttons: Check Toàn Bộ Ảnh Server & Đồng Nhất */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={handleCheckAllMenuImages}
+                  disabled={checkingAllMenu}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '5px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #3b82f6',
+                    backgroundColor: '#eff6ff',
+                    color: '#1d4ed8',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    cursor: checkingAllMenu ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                  }}
+                  title="So khớp toàn bộ link hình của Menu này với máy chủ ảnh 192.168.201.116"
+                >
+                  <Search size={13} className={checkingAllMenu ? 'animate-spin' : ''} />
+                  <span>{checkingAllMenu ? 'Đang check toàn bộ...' : '🔍 Check Toàn Bộ Ảnh Server (Menu này)'}</span>
+                </button>
+
+                {menuImagesSummary && menuImagesSummary.fixable_count > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleSyncAllFixableImages}
+                    disabled={syncingImages}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '5px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid #10b981',
+                      backgroundColor: '#ecfdf5',
+                      color: '#047857',
+                      fontSize: '11.5px',
+                      fontWeight: 800,
+                      cursor: syncingImages ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                    }}
+                    title="Cập nhật đồng nhất tất cả các tên hình bị lệch từ Server về MongoDB (Server chỉ đọc)"
+                  >
+                    <Zap size={13} color="#059669" />
+                    <span>⚡ Đồng Nhất Toàn Bộ ({menuImagesSummary.fixable_count} món lệch về DB)</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setIsCoGroupsBarExpanded(!isCoGroupsBarExpanded)}
+                  style={{
+                    border: 'none',
+                    background: 'none',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    padding: '2px 4px',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                  title={isCoGroupsBarExpanded ? 'Thu gọn nhóm CO' : 'Mở rộng nhóm CO'}
+                >
+                  {isCoGroupsBarExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Chi tiết 2 khối: Nhóm hiển thị CO & Nhóm SO chưa đưa lên CO */}
+            {isCoGroupsBarExpanded && (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '12px',
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '6px',
+                  padding: '8px 12px'
+                }}
+              >
+                {/* Khối 1: Danh sách nhóm đang hiển thị trên CO */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#047857', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Check size={13} color="#059669" />
+                    <span>Nhóm Hiển Thị Trên CO ({coDetail?.co_group_codes.length || 0} nhóm):</span>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '4px',
+                      maxHeight: '85px',
+                      overflowY: 'auto',
+                      padding: '4px',
+                      backgroundColor: '#f8fafc',
+                      borderRadius: '4px'
+                    }}
+                  >
+                    {coDetail && coDetail.co_group_codes.length > 0 ? (
+                      coDetail.co_group_codes.map((code) => {
+                        const soMatch = coDetail.so_groups.find((g) => g.code === code);
+                        const titleText = soMatch ? `${code} - ${soMatch.name}` : code;
+                        return (
+                          <span
+                            key={code}
+                            style={{
+                              fontSize: '10.5px',
+                              fontFamily: 'monospace',
+                              fontWeight: 600,
+                              backgroundColor: '#ecfdf5',
+                              color: '#065f46',
+                              border: '1px solid #a7f3d0',
+                              borderRadius: '3px',
+                              padding: '1px 6px',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={titleText}
+                          >
+                            {code}
+                          </span>
+                        );
+                      })
+                    ) : (
+                      <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                        {loadingCoDetail ? 'Đang tải nhóm CO...' : 'Chưa có nhóm nào trên CO'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Khối 2: Nhóm có trên SO nhưng CHƯA hiển thị trên CO */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+                  {(() => {
+                    const missingGroups = (coDetail?.so_groups || []).filter((g) => !g.is_co);
+                    const allSelected = missingGroups.length > 0 && missingGroups.every((g) => selectedMissingGroupCodes.has(g.code));
+
+                    return (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap' }}>
+                          <div style={{ fontSize: '11px', fontWeight: 700, color: missingGroups.length > 0 ? '#b45309' : '#15803d', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Zap size={13} color={missingGroups.length > 0 ? '#d97706' : '#16a34a'} />
+                            <span>Nhóm SO Chưa Lên CO ({missingGroups.length} nhóm):</span>
+                          </div>
+
+                          {missingGroups.length > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (allSelected) {
+                                    setSelectedMissingGroupCodes(new Set());
+                                  } else {
+                                    setSelectedMissingGroupCodes(new Set(missingGroups.map((g) => g.code)));
+                                  }
+                                }}
+                                style={{
+                                  fontSize: '10.5px',
+                                  color: '#1e40af',
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px'
+                                }}
+                              >
+                                {allSelected ? <CheckSquare size={12} /> : <Square size={12} />}
+                                <span>{allSelected ? 'Bỏ chọn hết' : 'Chọn tất cả'}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleBulkAddMissingGroupsToCo(Array.from(selectedMissingGroupCodes))}
+                                disabled={selectedMissingGroupCodes.size === 0}
+                                style={{
+                                  fontSize: '10.5px',
+                                  fontWeight: 700,
+                                  backgroundColor: selectedMissingGroupCodes.size > 0 ? '#10b981' : '#e2e8f0',
+                                  color: selectedMissingGroupCodes.size > 0 ? '#ffffff' : '#94a3b8',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  padding: '2px 8px',
+                                  cursor: selectedMissingGroupCodes.size > 0 ? 'pointer' : 'not-allowed'
+                                }}
+                              >
+                                + Đưa Lên CO ({selectedMissingGroupCodes.size})
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Danh sách checkbox nhóm thiếu & Ô nhập tay */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '6px',
+                            maxHeight: '85px',
+                            overflowY: 'auto',
+                            padding: '4px',
+                            backgroundColor: '#fffbeb',
+                            borderRadius: '4px',
+                            border: '1px solid #fef3c7'
+                          }}
+                        >
+                          {missingGroups.length > 0 ? (
+                            missingGroups.map((grp) => {
+                              const isChecked = selectedMissingGroupCodes.has(grp.code);
+                              return (
+                                <label
+                                  key={grp.code}
+                                  style={{
+                                    fontSize: '10.5px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    backgroundColor: isChecked ? '#fde68a' : '#ffffff',
+                                    border: `1px solid ${isChecked ? '#f59e0b' : '#fde68a'}`,
+                                    borderRadius: '3px',
+                                    padding: '1px 6px',
+                                    cursor: 'pointer',
+                                    userSelect: 'none'
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      const next = new Set(selectedMissingGroupCodes);
+                                      if (e.target.checked) next.add(grp.code);
+                                      else next.delete(grp.code);
+                                      setSelectedMissingGroupCodes(next);
+                                    }}
+                                    style={{ margin: 0, cursor: 'pointer' }}
+                                  />
+                                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#92400e' }}>{grp.code}</span>
+                                  <span style={{ color: '#451a03' }}>({grp.name})</span>
+                                </label>
+                              );
+                            })
+                          ) : (
+                            <div style={{ fontSize: '11px', color: '#166534', fontWeight: 600, padding: '4px 2px' }}>
+                              ✅ Tuyệt vời! 100% nhóm SO đã có trên CO.
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Nhập mã nhóm thủ công (Thêm tay) */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                          <input
+                            type="text"
+                            value={manualGroupInput}
+                            onChange={(e) => setManualGroupInput(e.target.value)}
+                            placeholder="Hoặc nhập mã nhóm thêm tay (vd: CK_ALC009_1)..."
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddManualGroupToCo();
+                              }
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: '3px 8px',
+                              fontSize: '11px',
+                              borderRadius: '4px',
+                              border: '1px solid #cbd5e1',
+                              outline: 'none',
+                              fontFamily: 'monospace'
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddManualGroupToCo}
+                            disabled={!manualGroupInput.trim()}
+                            style={{
+                              padding: '3px 8px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              backgroundColor: manualGroupInput.trim() ? '#d97706' : '#e2e8f0',
+                              color: manualGroupInput.trim() ? '#ffffff' : '#94a3b8',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: manualGroupInput.trim() ? 'pointer' : 'not-allowed'
+                            }}
+                          >
+                            + Thêm Mã
+                          </button>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Hàng 2: Thanh Nhóm Món (Category/Subgroup tabs - Tự động xuống dòng 2, 3... nếu danh sách dài) */}
         <div
           style={{
@@ -1940,25 +2732,41 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
         >
           {availableGroupsInSuperType.map((grp) => {
             const isGroupActive = activeGroup === grp;
+            const grpCode = groupCodeMap.get(grp);
             return (
               <button
                 key={grp}
                 type="button"
                 onClick={() => setActiveGroup(grp)}
                 style={{
-                  padding: '7px 14px',
+                  padding: orderMode === 'SO' && grpCode ? '4px 12px' : '7px 14px',
                   borderRadius: '4px',
-                  fontSize: '13px',
-                  fontWeight: isGroupActive ? 800 : 600,
                   backgroundColor: isGroupActive ? '#ea580c' : '#ffffff',
                   color: isGroupActive ? '#ffffff' : '#374151',
                   border: isGroupActive ? '1px solid #ea580c' : '1px solid #d1d5db',
                   cursor: 'pointer',
+                  textAlign: 'center',
                   whiteSpace: 'nowrap',
                   transition: 'all 0.15s ease'
                 }}
               >
-                {grp}
+                <div style={{ fontSize: '13px', fontWeight: isGroupActive ? 800 : 600 }}>
+                  {grp}
+                </div>
+                {orderMode === 'SO' && grpCode && (
+                  <div
+                    style={{
+                      fontSize: '10px',
+                      color: isGroupActive ? 'rgba(255,255,255,0.9)' : '#6b7280',
+                      fontFamily: 'monospace',
+                      fontWeight: 600,
+                      marginTop: '1px'
+                    }}
+                    title={`Mã nhóm: ${grpCode}`}
+                  >
+                    {grpCode}
+                  </div>
+                )}
               </button>
             );
           })}
@@ -1967,17 +2775,36 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
         {/* Hàng 3: Tiêu đề Nhóm Món đang chọn & Số lượng món */}
         <div style={{ padding: '12px 16px 6px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h3
-              style={{
-                fontSize: '16px',
-                fontWeight: 800,
-                color: '#111827',
-                margin: 0,
-                letterSpacing: '-0.2px'
-              }}
-            >
-              {activeGroup}
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3
+                style={{
+                  fontSize: '16px',
+                  fontWeight: 800,
+                  color: '#111827',
+                  margin: 0,
+                  letterSpacing: '-0.2px'
+                }}
+              >
+                {activeGroup}
+              </h3>
+              {orderMode === 'SO' && groupCodeMap.get(activeGroup) && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#4b5563',
+                    backgroundColor: '#f3f4f6',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '4px',
+                    padding: '2px 7px',
+                    fontFamily: 'monospace'
+                  }}
+                  title="Mã nhóm trên hệ thống"
+                >
+                  Mã: {groupCodeMap.get(activeGroup)}
+                </span>
+              )}
+            </div>
             {loadingDishes && (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#ea580c', fontWeight: 600 }}>
                 <RefreshCw size={12} className="animate-spin" /> Đang tải...
@@ -2022,17 +2849,21 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
               const isHidden = !!dish.isHidden;
               const isHighlighted = highlightedDishId === dish.id;
 
-              // Kiểm tra món có link hình ảnh không (chỉ kiểm tra link, không load hình để tránh lag đơ)
-              const hasImageLink = Boolean(
-                (dish.urlImgQr && dish.urlImgQr.trim()) ||
-                (dish.imageUrl && dish.imageUrl.trim())
-              );
+
 
               return (
                 <div
                   key={dish.id}
                   id={`dish-card-${dish.id}`}
-                  onClick={() => handleAddDishToOrder(dish)}
+                  onClick={() => {
+                    if (orderMode === 'CO') {
+                      if (!checkedDishImagesMap[dish.id]) {
+                        handleCheckSingleDish(dish);
+                      }
+                    } else {
+                      handleAddDishToOrder(dish);
+                    }
+                  }}
                   style={{
                     minHeight: '85px',
                     borderRadius: '8px',
@@ -2144,63 +2975,208 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                     </div>
                   </div>
 
-                  {/* Hàng dưới: Mã RK7, Mã SAP nhỏ xíu + Chữ "Có hình" / "Không hình" */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-end',
-                      justifyContent: 'space-between',
-                      borderTop: `1px dashed ${isSpecial ? 'rgba(255,255,255,0.3)' : '#e5e7eb'}`,
-                      paddingTop: '6px',
-                      marginTop: '6px'
-                    }}
-                  >
-                    {/* Mã RK7 & SAP nhỏ nhỏ phía dưới */}
+                  {/* Hàng dưới: Phân biệt hiển thị SO vs CO */}
+                  {orderMode === 'SO' ? (
+                    /* CHẾ ĐỘ SO: RK7 & SAP + Ẩn nếu có (TUYỆT ĐỐI KHÔNG HIỆN CÓ HÌNH/KHÔNG HÌNH) */
                     <div
                       style={{
-                        fontSize: '11px',
-                        color: isSpecial ? 'rgba(255,255,255,0.85)' : '#6b7280',
-                        lineHeight: '1.2'
+                        display: 'flex',
+                        alignItems: 'flex-end',
+                        justifyContent: 'space-between',
+                        borderTop: `1px dashed ${isSpecial ? 'rgba(255,255,255,0.3)' : '#e5e7eb'}`,
+                        paddingTop: '6px',
+                        marginTop: '6px'
                       }}
                     >
-                      <div>RK7: <strong>{dish.rk7Code}</strong></div>
-                      <div>SAP: <strong>{dish.sapCode}</strong></div>
-                    </div>
+                      <div
+                        style={{
+                          fontSize: '11px',
+                          color: isSpecial ? 'rgba(255,255,255,0.85)' : '#6b7280',
+                          lineHeight: '1.2'
+                        }}
+                      >
+                        <div>RK7: <strong>{dish.rk7Code}</strong></div>
+                        <div>SAP: <strong>{dish.sapCode}</strong></div>
+                      </div>
 
-                    {/* Chỉ xem có link hình không thì hiện lại chữ Có hình / Không hình theo đúng yêu cầu */}
-                    {hasImageLink ? (
-                      <span
-                        style={{
-                          backgroundColor: '#ecfdf5',
-                          border: '1px solid #a7f3d0',
-                          color: '#059669',
-                          borderRadius: '4px',
-                          padding: '2px 7px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          lineHeight: 1.2
-                        }}
-                        title={dish.urlImgQr || dish.imageUrl || 'Món có link hình'}
-                      >
-                        Có hình
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          backgroundColor: '#f3f4f6',
-                          border: '1px solid #e5e7eb',
-                          color: '#9ca3af',
-                          borderRadius: '4px',
-                          padding: '2px 7px',
-                          fontSize: '11px',
-                          fontWeight: 500,
-                          lineHeight: 1.2
-                        }}
-                      >
-                        Không hình
-                      </span>
-                    )}
-                  </div>
+                      {isHidden && (
+                        <span
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            backgroundColor: '#fee2e2',
+                            color: '#dc2626',
+                            border: '1px solid #fca5a5',
+                            borderRadius: '4px',
+                            padding: '1px 5px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '2px'
+                          }}
+                          title="Món này đang được ẩn trên kênh Staff Order (SO)"
+                        >
+                          <EyeOff size={10} /> Ẩn SO
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    /* CHẾ ĐỘ CO: RK7 & SAP + Ô 2 DÒNG (HÌNH TRÊN FILE & HÌNH TRÊN SERVER) */
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px', borderTop: '1px dashed #e5e7eb', paddingTop: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: '#6b7280' }}>
+                        <span>RK7: <strong>{dish.rk7Code}</strong></span>
+                        <span>SAP: <strong>{dish.sapCode}</strong></span>
+                      </div>
+
+                      {/* Ô 2 DÒNG KIỂM TRA HÌNH ẢNH: DÒNG 1 HÌNH FILE, DÒNG 2 HÌNH SERVER */}
+                      {(() => {
+                        const fileImg = dish.srcImg || dish.imageUrl || '';
+                        const serverCheck = checkedDishImagesMap[dish.id];
+
+                        return (
+                          <div
+                            style={{
+                              backgroundColor: '#f8fafc',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '6px',
+                              padding: '5px 7px',
+                              fontSize: '10.5px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '3px'
+                            }}
+                          >
+                            {/* Dòng 1: Hình trên file */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden' }}>
+                              <span style={{ color: '#64748b', fontWeight: 700, flexShrink: 0 }}>📁 File:</span>
+                              <span
+                                style={{
+                                  fontFamily: 'monospace',
+                                  color: fileImg ? '#0f172a' : '#94a3b8',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  fontWeight: fileImg ? 600 : 400
+                                }}
+                                title={fileImg || 'Chưa có cấu hình ảnh'}
+                              >
+                                {fileImg || '(Chưa cấu hình)'}
+                              </span>
+                            </div>
+
+                            {/* Dòng 2: Hình trên server */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                              <span style={{ color: '#64748b', fontWeight: 700, flexShrink: 0 }}>🌐 Server:</span>
+
+                              {!serverCheck ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCheckSingleDish(dish);
+                                  }}
+                                  disabled={checkingDishId === dish.id}
+                                  style={{
+                                    padding: '1px 6px',
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    borderRadius: '3px',
+                                    border: '1px solid #cbd5e1',
+                                    backgroundColor: '#ffffff',
+                                    color: '#2563eb',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                  }}
+                                  title="Bấm để kiểm tra ảnh trên máy chủ 192.168.201.116 (không tự load trước)"
+                                >
+                                  {checkingDishId === dish.id ? (
+                                    <RefreshCw size={10} className="animate-spin" />
+                                  ) : (
+                                    <Search size={10} />
+                                  )}
+                                  <span>Check hình</span>
+                                </button>
+                              ) : serverCheck.status === 'MATCH' ? (
+                                <span
+                                  style={{
+                                    color: '#15803d',
+                                    backgroundColor: '#dcfce7',
+                                    border: '1px solid #bbf7d0',
+                                    borderRadius: '3px',
+                                    padding: '1px 5px',
+                                    fontWeight: 700,
+                                    fontSize: '10px',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  title={serverCheck.message}
+                                >
+                                  ✅ Khớp server
+                                </span>
+                              ) : serverCheck.is_fixable ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  <span
+                                    style={{
+                                      color: serverCheck.status === 'CASE_MISMATCH' ? '#b45309' : '#c2410c',
+                                      backgroundColor: serverCheck.status === 'CASE_MISMATCH' ? '#fef3c7' : '#ffedd5',
+                                      border: `1px solid ${serverCheck.status === 'CASE_MISMATCH' ? '#fde68a' : '#fed7aa'}`,
+                                      borderRadius: '3px',
+                                      padding: '1px 4px',
+                                      fontWeight: 700,
+                                      fontSize: '9.5px',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                    title={serverCheck.message}
+                                  >
+                                    {serverCheck.status === 'CASE_MISMATCH' ? '⚠️ Lệch chữ' : '⚠️ Sai link'}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSyncSingleDish(dish, serverCheck.suggested_fix_path);
+                                    }}
+                                    style={{
+                                      padding: '1px 5px',
+                                      fontSize: '9.5px',
+                                      fontWeight: 700,
+                                      borderRadius: '3px',
+                                      border: '1px solid #10b981',
+                                      backgroundColor: '#ecfdf5',
+                                      color: '#047857',
+                                      cursor: 'pointer',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                    title={`Đồng nhất theo server: ${serverCheck.suggested_fix_path}`}
+                                  >
+                                    ⚡ Đồng nhất
+                                  </button>
+                                </div>
+                              ) : (
+                                <span
+                                  style={{
+                                    color: '#dc2626',
+                                    backgroundColor: '#fee2e2',
+                                    border: '1px solid #fecaca',
+                                    borderRadius: '3px',
+                                    padding: '1px 5px',
+                                    fontWeight: 600,
+                                    fontSize: '9.5px',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  title={serverCheck.message}
+                                >
+                                  {serverCheck.status === 'NO_IMAGE' ? 'Chưa có ảnh' : '❌ Không có ảnh'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               );
             })

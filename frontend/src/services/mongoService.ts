@@ -1322,6 +1322,32 @@ export const mongoService = {
   directSyncMenu: async (payload: DirectSyncMenuRequest): Promise<DirectSyncMenuResponse> => {
     const res = await api.post<DirectSyncMenuResponse>('/mongodb/menu-so-co/sync-to-restaurant', payload);
     return res.data;
+  },
+
+  checkSingleDishImage: async (payload: {
+    raw_path: string;
+    dish_name?: string;
+    rk7_code?: string;
+    sap_code?: string;
+  }): Promise<CheckDishImageResult> => {
+    const res = await api.post<CheckDishImageResult>('/mongodb/image-server/check-dish', payload);
+    return res.data;
+  },
+
+  checkMenuDishImages: async (payload: {
+    host: string;
+    port?: number;
+    menu_code: string;
+    force_refresh?: boolean;
+    dishes?: any[];
+  }): Promise<CheckMenuImagesResponse> => {
+    const res = await api.post<CheckMenuImagesResponse>('/mongodb/image-server/check-menu', payload);
+    return res.data;
+  },
+
+  syncDishImagesToMongo: async (payload: SyncDishImagesRequest): Promise<SyncDishImagesResponse> => {
+    const res = await api.post<SyncDishImagesResponse>('/mongodb/image-server/sync-images', payload);
+    return res.data;
   }
 };
 
@@ -2452,3 +2478,56 @@ export interface DirectSyncMenuResponse {
 
 
 
+
+
+export interface CheckDishImageResult {
+  status: 'MATCH' | 'PREFIX_MISMATCH' | 'CASE_MISMATCH' | 'CANDIDATE_FOUND' | 'NOT_FOUND' | 'NO_IMAGE';
+  is_match: boolean;
+  is_fixable: boolean;
+  message: string;
+  given_path: string;
+  given_filename: string;
+  given_prefix: string;
+  server_filename: string;
+  suggested_fix_path: string;
+}
+
+export interface CheckMenuImagesResponse {
+  server_host: string;
+  server_dir: string;
+  total_dishes: number;
+  total_server_files: number;
+  match_count: number;
+  prefix_mismatch_count: number;
+  case_mismatch_count: number;
+  candidate_count: number;
+  not_found_count: number;
+  no_image_count: number;
+  fixable_count: number;
+  results: (CheckDishImageResult & {
+    dish_id: string;
+    rk7_code: string;
+    sap_code: string;
+    name: string;
+  })[];
+}
+
+export interface DishImageFixItem {
+  rk7_code: string;
+  sap_code?: string;
+  target_image_path: string;
+}
+
+export interface SyncDishImagesRequest {
+  host: string;
+  port?: number;
+  fixes: DishImageFixItem[];
+}
+
+export interface SyncDishImagesResponse {
+  success: boolean;
+  updated_count: number;
+  total_requested: number;
+  message: string;
+  errors: string[];
+}

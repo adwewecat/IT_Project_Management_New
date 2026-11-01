@@ -2558,3 +2558,99 @@ def direct_sync_restaurant_menu(
 
 
 
+
+
+# ==========================================================================
+# KIEM TRA & DONG NHAT HINH ANH MON AN VOI MAY CHU ANH 192.168.201.116
+# ==========================================================================
+from app.services import image_server_service
+from app.schemas.mongodb import (
+    CheckSingleImageRequest,
+    CheckDishImageResult,
+    CheckMenuImagesRequest,
+    CheckMenuImagesResponse,
+    SyncDishImagesRequest,
+    SyncDishImagesResponse
+)
+
+
+@router.post("/image-server/check-dish", response_model=CheckDishImageResult)
+def check_single_dish_image(
+    payload: CheckSingleImageRequest,
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """Kiem tra hinh anh cua 1 mon voi may chu anh 192.168.201.116"""
+    try:
+        res = image_server_service.compare_single_image(
+            raw_path=payload.raw_path,
+            dish_name=payload.dish_name or "",
+            rk7_code=payload.rk7_code or "",
+            sap_code=payload.sap_code or ""
+        )
+        return CheckDishImageResult(**res)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Loi kiem tra hinh anh: {str(e)}"
+        )
+
+
+@router.post("/image-server/check-menu", response_model=CheckMenuImagesResponse)
+def check_menu_dish_images(
+    payload: CheckMenuImagesRequest,
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """Kiem tra toan bo hinh anh cua cac mon thuoc 1 Menu voi may chu anh 192.168.201.116"""
+    try:
+        dishes = payload.dishes
+        if not dishes:
+            loaded = mongo_menu_so_co_service.load_menu_items(
+                host=payload.host,
+                port=payload.port,
+                menu_codes=[payload.menu_code],
+                search_all=False
+            )
+            dishes = loaded.get("items", [])
+
+        res = image_server_service.check_dishes_images_for_menu(
+            dishes=dishes,
+            force_refresh_cache=payload.force_refresh
+        )
+        return CheckMenuImagesResponse(**res)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Loi kiem tra hinh anh toan menu: {str(e)}"
+        )
+
+
+@router.post("/image-server/sync-images", response_model=SyncDishImagesResponse)
+def sync_dish_images(
+    payload: SyncDishImagesRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """Dong nhat ten hinh anh tren MongoDB nha hang theo ten hinh chuan tren may chu anh 192.168.201.116 (Read-Only tren Server)"""
+    try:
+        fixes = [f.model_dump() for f in payload.fixes]
+        res = image_server_service.sync_dish_images_to_mongo(
+            host=payload.host,
+            port=payload.port,
+            fixes=fixes
+        )
+        if res.get("success") and res.get("updated_count", 0) > 0:
+            LogService.record_log(
+                db=db,
+                nhom_quyen="APP",
+                man_hinh="GPOS_IMAGE_SYNC",
+                hanh_dong="UPDATE",
+                noi_dung=f"Dong nhat {res.get('updated_count')} ten hinh anh tu may chu anh 192.168.201.116 vao MongoDB {payload.host}",
+                user_thuchien=current_user.username,
+                current_user=current_user
+            )
+        return SyncDishImagesResponse(**res)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Loi dong nhat hinh anh: {str(e)}"
+        )

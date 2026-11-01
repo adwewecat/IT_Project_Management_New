@@ -5884,3 +5884,58 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
 - **Kiem thu & Dong goi (Tuan thu Immutable Rule 4 & 7)**:
   - Frontend: Chay `cmd /c "npm run build"` tai thu muc `frontend/` hoan thanh sach se 100% voi exit code 0 (`✓ built in 4.47s`). Ban build moi da san sang trong `frontend/dist/`.
   - Backend: `python -m compileall app` hoan thanh sach se 100% voi exit code 0; Smoke test `from app.main import app; print('>>> BACKEND SMOKE TEST PASSED 100%')` dat exit code 0.
+
+---
+
+### [2026-11-01] - Nâng Cấp Tab 3: Sơ Đồ Bàn Theo Khu (Restaurant Table Map) - Tích Hợp 2 Chế Độ SO/CO, Quản Lý Nhóm CO & Đối Soát Hình Ảnh Với Server Ảnh 192.168.201.116
+- **Bối cảnh & Yêu cầu của người dùng**:
+  - Tại màn hình **Phân Tích MongoDB Nhà Hàng**, Tab 3: **Sơ Đồ Bàn Theo Khu (Restaurant Table Map)**:
+  - Khi bấm vào bàn: Vẫn hiển thị tất cả Menu của nhà hàng cấu hình trên MongoDB (`select_category`), giữ nguyên tính năng.
+  - Khi bấm vào menu: Hiển thị 2 chế độ để chọn:
+    1. `SO` (Staff Order)
+    2. `CO` (Customer Order)
+    để nạp menu tương ứng theo kênh chọn.
+  - **Khi chọn chế độ CO**:
+    + Thanh trên cùng hiển thị thông tin nhóm tương tự File 2 (`2 CO_FILE_2.xlsx`): Mã loại menu, Tên menu, Danh sách các nhóm hiển thị trên CO (`CO_ORDER_CATEGORY.menuGroupCodes`).
+    + Kèm khối hiển thị các nhóm đã có trên SO nhưng chưa được đưa lên CO, hỗ trợ chọn nhanh bằng checkbox (từng nhóm hoặc Chọn tất cả) hoặc ô nhập mã nhóm thủ công để thêm nhanh vào CO.
+    + Thiết kế lại danh sách thẻ món ăn (Dish Card) của CO: Dưới phần `RK7: ... SAP: ...` bổ sung 1 ô gồm 2 dòng:
+      * Dòng 1: **Hình trên file** (tên file ảnh cấu hình trên MongoDB / File).
+      * Dòng 2: **Hình trên server** (kết quả kiểm tra trên server ảnh).
+      * **Quy tắc tuyệt đối**: Tuyệt đối không tự động load trước và check toàn bộ khi vừa mở menu. Chỉ khi người dùng click vào món đó thì mới gửi request kiểm tra hình ảnh và so sánh xem tên đã khớp với trên server hay chưa.
+    + Nút bấm **"Check toàn bộ"**: Cho phép kiểm tra toàn bộ link hình của toàn bộ món thuộc menu đó với danh sách file trên server ảnh `192.168.201.116:22` (xử lý theo từng menu).
+    + Khi phát hiện lệch (sai tiền tố `/resources/menu/` hoặc lệch chữ hoa/thường): Cung cấp nút bấm **"Đồng nhất toàn bộ"** để xử lý hàng loạt cập nhật tên hình chuẩn từ server về MongoDB nhà hàng.
+    + **Quy tắc bảo vệ máy chủ ảnh**: Server `192.168.201.116:22` (path `/opt/gpos/gmonitor/resources/menu`, user `dung.na`, pass `bp7em2zmQP`) CHỈ ĐỂ ĐỌC (READ-ONLY). Tuyệt đối không chỉnh sửa bất kỳ file hay dữ liệu nào trên máy chủ Linux này, chỉ cập nhật trên MongoDB.
+    + Quy chuẩn so sánh:
+      * Tên hình có phân biệt chữ hoa/thường (case-sensitive) với file trên Linux.
+      * Tiền tố chuẩn bắt buộc là: `/resources/menu/<tên_hình_có_đuôi>`.
+  - **Khi chọn chế độ SO**:
+    + Hiển thị món theo nhóm như cũ, nhưng mỗi nhóm tiếng Việt có thêm **mã nhóm nhỏ bên dưới** (monospace).
+    + Với SO thì **KHÔNG hiển thị badge Có hình / Không hình**.
+    + Nút / Tag ẩn món: Chỉ giới hạn hiển thị ở SO (nếu món bị ẩn trên SO).
+- **Triển khai Kỹ thuật**:
+  1. **Backend Service (`backend/app/services/image_server_service.py`)**:
+     - Kết nối SSH Paramiko tới `192.168.201.116:22` với thông tin đăng nhập `dung.na` / `bp7em2zmQP`.
+     - Bộ đệm Cache RAM 5 phút cho 12,297 files trên server để tốc độ kiểm tra tức thì (<1ms).
+     - Hàm `compare_single_image()`: Tách prefix và filename, kiểm tra khớp 100% (`MATCH`), lệch tiền tố (`PREFIX_MISMATCH`), lệch chữ hoa/thường (`CASE_MISMATCH`), gợi ý ứng viên (`CANDIDATE_FOUND`), hoặc không tìm thấy (`NOT_FOUND`).
+     - Hàm `check_dishes_images_for_menu()`: So khớp danh sách món của menu với server ảnh, trả về thống kê và chi tiết từng món.
+     - Hàm `sync_dish_images_to_mongo()`: Cập nhật `srcImg`, `srcImgThumbnail`, `srcImgQr`, `urlImgQr` trên collection `CO_MENU_ITEM` trong MongoDB nhà hàng về chuẩn `/resources/menu/<exact_server_filename>`. Tuyệt đối không ghi lên server ảnh.
+  2. **Backend Schemas & API (`backend/app/schemas/mongodb.py` & `backend/app/api/v1/mongodb.py`)**:
+     - `POST /api/v1/mongodb/image-server/check-dish`: Kiểm tra 1 món theo yêu cầu (on-demand).
+     - `POST /api/v1/mongodb/image-server/check-menu`: Kiểm tra toàn bộ món của menu theo yêu cầu.
+     - `POST /api/v1/mongodb/image-server/sync-images`: Cập nhật đồng nhất tên hình chuẩn từ server về MongoDB nhà hàng.
+     - Ghi nhận `LogService` khi có thao tác đồng nhất hình ảnh.
+  3. **Frontend Service (`frontend/src/services/mongoService.ts`)**:
+     - Khai báo các interface `CheckDishImageResult`, `CheckMenuImagesResponse`, `DishImageFixItem`, `SyncDishImagesRequest`, `SyncDishImagesResponse`.
+     - Bổ sung các hàm API `checkSingleDishImage()`, `checkMenuDishImages()`, `syncDishImagesToMongo()`.
+  4. **Frontend Tab 3 Component (`frontend/src/pages/app/AndroidEmulatorTab.tsx`)**:
+     - Bổ sung state `orderMode: 'SO' | 'CO'` cùng nút chuyển đổi nhanh trên thanh điều khiển.
+     - Tại `select_category`: Mỗi thẻ menu bổ sung 2 nút lựa chọn nhanh `📱 Vào SO` và `🖥️ Vào CO`, cùng 2 nút hành động ở chân trang.
+     - Tại `menu_order`:
+       + Ở chế độ SO: Mỗi nút nhóm món hiển thị tên tiếng Việt kèm mã nhóm nhỏ bên dưới (`CK_ALC001_1`), tiêu đề nhóm hiển thị mã nhóm, bỏ badge có hình/không hình, tag ẩn chỉ hiển thị cho SO.
+       + Ở chế độ CO: Bổ sung thanh điều khiển File 2 hiển thị mã loại menu, tên menu, danh sách badge nhóm CO, danh sách nhóm SO chưa lên CO kèm checkbox từng nhóm / chọn tất cả / ô thêm mã thủ công và nút `+ Đưa Lên CO`.
+       + Thẻ món CO: Thiết kế lại ô 2 dòng (Dòng 1: Hình trên file, Dòng 2: Hình trên server kèm nút check theo yêu cầu và nút `⚡ Đồng nhất`). Tuyệt đối không tự động check toàn bộ khi vừa mở.
+       + Bổ sung nút `🔍 Check Toàn Bộ Ảnh Server (Menu này)` và nút `⚡ Đồng Nhất Toàn Bộ (X món lệch về DB)`.
+- **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
+  - Frontend: `cmd /c "npm run build"` tại `frontend/` hoàn thành sạch sẽ 100% với exit code 0 (`✓ built in 4.19s`). Bản build mới đã tạo sẵn trong `frontend/dist/`.
+  - Backend: `python -m compileall app` hoàn thành 100% sạch lỗi; Backend Smoke Test vượt qua 100%.
+  - Cơ sở dữ liệu: Tác vụ thao tác trên MongoDB nhà hàng và server ảnh SSH, không thêm bảng/cột mới nào trên SQL Server DB .25.

@@ -1690,3 +1690,69 @@ class DishLookupResponse(BaseModel):
 
 
 
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# KIỂM TRA & ĐỒNG NHẤT HÌNH ẢNH MÓN VỚI MÁY CHỦ ẢNH 192.168.201.116
+# ══════════════════════════════════════════════════════════════════════════
+
+class CheckSingleImageRequest(BaseModel):
+    raw_path: str = ''
+    dish_name: Optional[str] = ''
+    rk7_code: Optional[str] = ''
+    sap_code: Optional[str] = ''
+
+
+class CheckDishImageResult(BaseModel):
+    status: str
+    is_match: bool
+    is_fixable: bool
+    message: str
+    given_path: str
+    given_filename: str
+    given_prefix: str
+    server_filename: str
+    suggested_fix_path: str
+
+
+class CheckMenuImagesRequest(BaseModel):
+    host: str
+    port: int = 27017
+    menu_code: str
+    force_refresh: bool = False
+    dishes: Optional[List[Dict[str, Any]]] = None
+
+
+class CheckMenuImagesResponse(BaseModel):
+    server_host: str
+    server_dir: str
+    total_dishes: int
+    total_server_files: int
+    match_count: int
+    prefix_mismatch_count: int
+    case_mismatch_count: int
+    candidate_count: int
+    not_found_count: int
+    no_image_count: int
+    fixable_count: int
+    results: List[Dict[str, Any]] = []
+
+
+class DishImageFixItem(BaseModel):
+    rk7_code: str
+    sap_code: Optional[str] = ''
+    target_image_path: str
+
+
+class SyncDishImagesRequest(BaseModel):
+    host: str
+    port: int = 27017
+    fixes: List[DishImageFixItem]
+
+
+class SyncDishImagesResponse(BaseModel):
+    success: bool
+    updated_count: int
+    total_requested: int
+    message: str
+    errors: List[str] = []
