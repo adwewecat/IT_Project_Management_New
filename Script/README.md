@@ -6022,3 +6022,44 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
 - **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
   - Frontend: `cmd /c "npm run build"` tại `frontend/` hoàn thành 100% exit code 0 (`✓ built in 4.50s`). Bản build mới đã sẵn sàng trong `frontend/dist/`.
   - Backend: `python -m compileall app` biên dịch 100% không có lỗi; Smoke Test `from app.main import app; print('>>> PASSED 100%')` vượt qua 100%.
+
+---
+
+### [2026-11-01] TÍNH NĂNG XUẤT FILE EXCEL MÓN SAI LINK / TÊN HÌNH ẢNH THEO ĐÚNG CHUẨN FILE 3 (CUSTOMER_MENU) CHO RIÊNG MENU ĐANG CHỌN
+- **Yêu cầu nghiệp vụ**:
+  1. **Xuất file Excel đối soát món sai ảnh**:
+     - Xuất danh sách tất cả các món đang bị sai tiền tố link (`PREFIX_MISMATCH`: ví dụ `/menu/` thay vì `/resources/menu/`), lệch chữ hoa/thường (`CASE_MISMATCH`), chỉ tìm thấy ứng viên theo mã (`CANDIDATE_FOUND`), hoặc không tìm thấy ảnh trên máy chủ ảnh (`NOT_FOUND`), chưa có cấu hình ảnh (`NO_IMAGE`).
+  2. **Chuẩn hóa cấu trúc 38 cột theo File 3 gốc**:
+     - Tuân thủ 100% theo đúng cấu trúc của File 3 tại `D:\1.Download\SO.CO\File_goc\3 CO_GOC.xlsx` (Sheet: `Customer_Menu`) gồm 38 cột chuẩn nghiệp vụ (Mã SAP, Mã món, Tên Món VN, Tên Món EN, Extra FoodItem, Mô tả, Số đĩa tối đa gọi/vào bếp, Kalo, Nhóm Kalo, Tên hiển thị BF, Vị trí combo, Độ lớn ảnh, Kiểu hiển thị, Số người ăn, Ẩn/hiện món, Ghi chú, Định lượng, lstNote, Món liên quan, Size kèm theo, Topping, Modifier, Nhãn, Ưu đãi, Ảnh đại diện, Ảnh một nửa, Ảnh topping, Ảnh 1/4, Ảnh Group, Ảnh Group Hidden, Ảnh 2x ngang, Ảnh 2x dọc, Ảnh vuông, Ảnh QR-Order, Ảnh Thumbnail, Thời gian hấp).
+     - Bổ sung 3 cột đối soát trực quan phía sau:
+       * Cột 39: `[Đối soát] Trạng thái kiểm tra` (mô tả lỗi chi tiết bằng tiếng Việt).
+       * Cột 40: `[Đối soát] Đường dẫn chuẩn trên Server` (đường dẫn gợi ý đồng nhất /resources/menu/...).
+       * Cột 41: `[Đối soát] Chi tiết thông báo lỗi`.
+  3. **Quy tắc bất di bất dịch về phạm vi menu**:
+     - **CHỈ XUẤT ĐÚNG THUỘC MENU ĐANG CHỌN**, tuyệt đối không xuất món của các menu khác.
+  4. **Ghi nhận Logs vết thao tác**:
+     - Tự động ghi nhận Logs vào `dbo.LOGS__New` với đầy đủ: User thực hiện, thời gian, tên menu, mã menu, IP nhà hàng, số lượng món sai ảnh, tên file xuất ra.
+
+- **Triển khai kỹ thuật**:
+  1. **Backend Service (`backend/app/services/image_server_service.py`)**:
+     - Hàm `export_mismatched_dishes_excel(host, port, menu_code, menu_name, force_refresh_cache)`:
+       * Gọi `mongo_menu_so_co_service.load_menu_items(host=clean_host, port=port, menu_codes=[clean_menu_code], search_all=False)` để chỉ lấy đúng món thuộc menu đang chọn từ `ORDER_MENU_CACHE_CATEGORY`.
+       * Chạy đối soát nhanh với cache máy chủ ảnh 192.168.201.116 qua `check_dishes_images_for_menu`.
+       * Lọc duy nhất các món có `is_match == False`.
+       * Đọc thông tin đầy đủ 38 trường từ collection `CO_MENU_ITEM` trong MongoDB `G_ORDER` theo danh sách mã RK7 / mã SAP.
+       * Tận dụng file mẫu gốc `D:\1.Download\SO.CO\File_goc\3 CO_GOC.xlsx` (nếu tồn tại) bằng `openpyxl`, xóa các dòng mẫu cũ và ghi các dòng dữ liệu món sai với định dạng chuẩn xác, hoặc tự động tạo mới workbook nếu không tìm thấy file mẫu.
+       * Lưu vào buffer `io.BytesIO()` và trả về buffer, số lượng món sai và tên file gợi nhớ `Mon_Sai_Link_Anh_Menu_{code}_{name}_{timestamp}.xlsx`.
+  2. **Backend API Route (`backend/app/api/v1/mongodb.py`)**:
+     - Thêm endpoint: `POST /api/v1/mongodb/image-server/export-mismatches` (nhận `ExportMismatchedDishesRequest`).
+     - Tự động gọi `LogService.record_log` (`force_log=True`, màn hình `GPOS_IMAGE_EXPORT`, hành động `EXPORT`).
+     - Trả về `StreamingResponse` kèm headers `Content-Disposition`, `X-Mismatched-Count`.
+  3. **Frontend Service (`frontend/src/services/mongoService.ts`)**:
+     - Thêm hàm `exportMismatchedDishesExcel` gửi payload và nhận file blob, bóc tách filename từ Content-Disposition header và mismatchedCount từ header X-Mismatched-Count.
+  4. **Frontend UI (`frontend/src/pages/app/AndroidEmulatorTab.tsx`)**:
+     - Bổ sung `menuCode` vào interface `DishItem` và ánh xạ khi tải thực đơn.
+     - Thêm state `exportingExcel` và hàm `handleExportMismatchedExcel` tải file trực tiếp qua URL blob và thông báo toast kết quả.
+     - Thêm nút `📊 Xuất Excel Món Sai Ảnh` trên thanh header CO trong Tab 3 (Sơ Đồ Bàn Theo Khu - View 3 Thực Đơn Menu) ngay kế nút `Check Toàn Bộ Ảnh` và `Đồng Nhất Toàn Bộ`.
+
+- **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
+  - Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.12s`), zero TypeScript errors (TS6133 sạch sẽ). Đã cập nhật bản build sạch vào `frontend/dist/` (kèm `web.config` cho IIS).
+  - Backend: `python -m compileall backend/app` hoàn thành 100% không cảnh báo; kiểm thử import Router và Service thành công 100%.

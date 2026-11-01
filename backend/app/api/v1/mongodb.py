@@ -2574,7 +2574,8 @@ from app.schemas.mongodb import (
     ImageServerConfigResponse,
     UpdateImageServerConfigRequest,
     TestImageServerConnectionRequest,
-    TestImageServerConnectionResponse
+    TestImageServerConnectionResponse,
+    ExportMismatchedDishesRequest
 )
 
 
@@ -2673,6 +2674,67 @@ def sync_dish_images(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Loi dong nhat hinh anh: {str(e)}"
         )
+
+
+@router.post("/image-server/export-mismatches")
+def export_mismatched_dish_images(
+    payload: ExportMismatchedDishesRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Xuất file Excel các món bị sai link hoặc tên hình ảnh của ĐÚNG MENU ĐƯỢC CHỌN (menu_code),
+    tuyệt đối không xuất của các menu khác.
+    Định dạng file tuân thủ 100% theo 38 cột chuẩn File 3 (D:\\1.Download\\SO.CO\\File_goc\\3 CO_GOC.xlsx).
+    """
+    try:
+        from urllib.parse import quote
+        bio, mismatched_count, filename = image_server_service.export_mismatched_dishes_excel(
+            host=payload.host,
+            port=payload.port,
+            menu_code=payload.menu_code,
+            menu_name=payload.menu_name or "",
+            force_refresh_cache=payload.force_refresh
+        )
+
+        user_uname = getattr(current_user, "username", "SYSTEM")
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        noi_dung = (
+            f"[XUẤT EXCEL MÓN SAI ẢNH CO] User '{user_uname}' lúc {now_str} đã xuất file Excel "
+            f"{mismatched_count} món bị sai link/tên ảnh của menu '{payload.menu_name or payload.menu_code}' "
+            f"(Mã: {payload.menu_code}) tại nhà hàng {payload.host} ({payload.restaurant_name or 'N/A'}) "
+            f"theo định dạng chuẩn File 3 (Customer_Menu). File: {filename}"
+        )
+
+        LogService.record_log(
+            db=db,
+            nhom_quyen="APP",
+            man_hinh="GPOS_IMAGE_EXPORT",
+            hanh_dong="EXPORT",
+            noi_dung=noi_dung,
+            user_thuchien=user_uname,
+            current_user=current_user,
+            force_log=True
+        )
+
+        encoded_filename = quote(filename)
+
+        return StreamingResponse(
+            bio,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}; filename=\"{filename}\"",
+                "Access-Control-Expose-Headers": "Content-Disposition, X-Mismatched-Count",
+                "X-Mismatched-Count": str(mismatched_count)
+            }
+        )
+    except Exception as e:
+        logger.error(f"Lỗi xuất Excel món sai ảnh: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi xuất file Excel món sai ảnh: {str(e)}"
+        )
+
 
 
 

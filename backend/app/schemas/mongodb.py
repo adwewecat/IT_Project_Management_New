@@ -1799,3 +1799,12 @@ class TestImageServerConnectionResponse(BaseModel):
     total_files: int = 0
     message: str
     latency_ms: Optional[float] = None
+
+
+class ExportMismatchedDishesRequest(BaseModel):
+    host: str
+    port: int = 27017
+    menu_code: str
+    menu_name: Optional[str] = ""
+    restaurant_name: Optional[str] = ""
+    force_refresh: bool = False

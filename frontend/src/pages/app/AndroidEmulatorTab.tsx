@@ -63,6 +63,7 @@ const getValidMongoHost = (rawHost?: string | null): string => {
 export interface DishItem {
   id: string;
   name: string;
+  menuCode?: string; // Mã menu sở hữu (vd: '115', '102')
   price: number; // > 0: Alacarte, = 0: Buffet
   group: string; // Tên nhóm (vd: 'Combo', 'ALC.GÀ RÁN NHẬT BẢN', 'ALC.Mỳ'...)
   groupCode?: string; // Mã nhóm (vd: 'CK_ALC001_1')
@@ -311,6 +312,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
   const [checkingAllMenu, setCheckingAllMenu] = useState<boolean>(false);
   const [syncingImages, setSyncingImages] = useState<boolean>(false);
   const [menuImagesSummary, setMenuImagesSummary] = useState<CheckMenuImagesResponse | null>(null);
+  const [exportingExcel, setExportingExcel] = useState<boolean>(false);
 
 
 
@@ -496,6 +498,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
             uniqueDishMap.set(dedupKey, {
               id: `${it.menu_code || ''}_${it.group_code || ''}_${rk7Str || sapStr || it.name}_${idx}`,
               name: it.name,
+              menuCode: it.menu_code || '',
               price: it.price || 0,
               group: groupClean,
               groupCode: it.group_code || '',
@@ -990,6 +993,64 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
       setSyncingImages(false);
     }
   };
+
+  // Xuất file Excel các món bị sai link hoặc tên hình ảnh của ĐÚNG MENU ĐƯỢC CHỌN (theo chuẩn File 3 Customer_Menu)
+  const handleExportMismatchedExcel = async () => {
+    const rawHost = connectedHost || selectedRestaurant?.ip;
+    const cleanHost = getValidMongoHost(rawHost);
+    if (!cleanHost) {
+      if (onToastRef.current) onToastRef.current('Chưa xác định IP kết nối MongoDB máy trạm!', 'error');
+      return;
+    }
+
+    if (!selectedCategory?.code) {
+      if (onToastRef.current) onToastRef.current('Vui lòng chọn một menu để xuất đối soát hình ảnh!', 'info');
+      return;
+    }
+
+    setExportingExcel(true);
+    try {
+      const { blob, filename, mismatchedCount } = await mongoService.exportMismatchedDishesExcel({
+        host: cleanHost,
+        port: 27017,
+        menu_code: selectedCategory.code,
+        menu_name: selectedCategory.name,
+        restaurant_name: selectedRestaurant?.name || ''
+      });
+
+      // Tạo URL download file Excel trực tiếp trên trình duyệt
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      if (onToastRef.current) {
+        if (mismatchedCount > 0) {
+          onToastRef.current(
+            `Đã xuất thành công ${mismatchedCount} món sai link/tên ảnh của menu "${selectedCategory.name}" ra file Excel (${filename})!`,
+            'success'
+          );
+        } else {
+          onToastRef.current(
+            `Tuyệt vời! Toàn bộ món của menu "${selectedCategory.name}" đều khớp ảnh chuẩn trên server (0 món lệch).`,
+            'info'
+          );
+        }
+      }
+    } catch (err: any) {
+      console.error('Lỗi xuất Excel món sai ảnh:', err);
+      if (onToastRef.current) {
+        onToastRef.current('Lỗi xuất file Excel đối soát ảnh: ' + (err.response?.data?.detail || err.message), 'error');
+      }
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
 
   // Thêm nhanh các nhóm SO chưa có lên CO
   const handleBulkAddMissingGroupsToCo = async (groupCodes: string[]) => {
@@ -2608,6 +2669,31 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                     <span>⚡ Đồng Nhất Toàn Bộ ({menuImagesSummary.fixable_count} món lệch về DB)</span>
                   </button>
                 )}
+
+{/* Nút Xuất Excel Các Món Sai Ảnh Của Đúng Menu Đang Chọn (Theo Chuẩn File 3) */}
+                <button
+                  type="button"
+                  onClick={handleExportMismatchedExcel}
+                  disabled={exportingExcel}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '5px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #16a34a',
+                    backgroundColor: '#f0fdf4',
+                    color: '#15803d',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    cursor: exportingExcel ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                  }}
+                  title={`Xuất file Excel các món bị sai link hoặc tên hình ảnh của riêng menu "${selectedCategory.name}" theo đúng 38 cột chuẩn File 3`}
+                >
+                  <FileSpreadsheet size={13} className={exportingExcel ? 'animate-spin' : ''} />
+                  <span>{exportingExcel ? 'Đang xuất Excel...' : '📊 Xuất Excel Món Sai Ảnh'}</span>
+                </button>
 
                 {canConfigImageServer && (
                   <button

@@ -1363,6 +1363,30 @@ export const mongoService = {
   testImageServerConnection: async (payload: TestImageServerConnectionRequest): Promise<TestImageServerConnectionResponse> => {
     const res = await api.post<TestImageServerConnectionResponse>('/mongodb/image-server/test-connection', payload);
     return res.data;
+  },
+
+  exportMismatchedDishesExcel: async (payload: {
+    host: string;
+    port?: number;
+    menu_code: string;
+    menu_name?: string;
+    restaurant_name?: string;
+    force_refresh?: boolean;
+  }): Promise<{ blob: Blob; filename: string; mismatchedCount: number }> => {
+    const res = await api.post('/mongodb/image-server/export-mismatches', payload, {
+      responseType: 'blob'
+    });
+    const disposition = (res.headers && (res.headers['content-disposition'] || res.headers['Content-Disposition'])) || '';
+    let filename = `Mon_Sai_Link_Anh_Menu_${payload.menu_code}.xlsx`;
+    if (disposition && disposition.includes('filename=')) {
+      const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      if (match && match[1]) {
+        filename = match[1].replace(/['"]/g, '').trim();
+      }
+    }
+    const countHeader = (res.headers && (res.headers['x-mismatched-count'] || res.headers['X-Mismatched-Count'])) || '0';
+    const mismatchedCount = parseInt(countHeader, 10) || 0;
+    return { blob: res.data, filename, mismatchedCount };
   }
 };
 

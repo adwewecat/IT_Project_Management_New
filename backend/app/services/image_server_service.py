@@ -1,5 +1,6 @@
 import re
 import os
+import io
 import time
 import json
 import ftplib
@@ -9,6 +10,8 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 import paramiko
 from pymongo import MongoClient
 
@@ -647,3 +650,285 @@ def sync_dish_images_to_mongo(
         }
     finally:
         client.close()
+
+
+# Danh sách 38 cột tiêu chuẩn của File 3 (Customer_Menu)
+COLUMNS_38 = [
+    "Mã SAP",
+    "Mã món",
+    "Tên Món VN",
+    "Tên Món EN",
+    "Extra FoodItem",
+    "Mô tả TV",
+    "Mô tả EN",
+    "Số đĩa tối đa được gọi",
+    "Số đĩa tối đa được gửi vào bếp",
+    "Kalo",
+    "Nhóm Kalo",
+    "Tên hiển thị BF",
+    "Vị trí trong combo",
+    "Độ lớn ảnh trên CO (0:Bình thường, 1: 2x ngang, 2: Full size, 3: 2x dọc)",
+    "Kiểu hiển thị(0: hiển thị bình thường, 1: hiển thị theo size)",
+    "Thông tin số người ăn của món",
+    "Khai báo ẩn/hiện món (0: hiển thị, 1: ẩn)",
+    "Ghi chú",
+    "Định lượng",
+    'Các ghi chú cho món ăn (Sử dụng dấu "&&" để phân cách)',
+    'Món liên quan (Ngon nhất khi ăn cùng - Sử dụng "&&" để ngăn cách])',
+    'Size kèm theo (Mã món-Tên size. Các cặp ngăn cách bởi dấu "&&")',
+    'Các topping kèm theo (Mã món-Mã modifier. Các cặp ngăn cách bởi dấu "&&")',
+    'Modifier (Mã Modifier-Loại[0:Loại thường, 1: Loại cay]-Cấp độ cay[Không có thì để rỗng]. Các nhóm cách nhau bởi dấu "&&")',
+    "Nhãn(cay, bán nhiêu,...)",
+    'Các món ưu đãi (Mã foodItem, ngăn cách bởi dấu "&&")',
+    "Ảnh đại diện",
+    "Ảnh một nửa",
+    "Ảnh topping",
+    "Ảnh 1/4",
+    "Ảnh Group",
+    "Ảnh Group Hidden",
+    "Ảnh 2x ngang",
+    "Ảnh 2x dọc",
+    "Ảnh vuông (đồ uống...)",
+    "Ảnh QR-Order",
+    "Ảnh Thumbnail",
+    "Thời gian hấp (phút)",
+]
+
+TEMPLATE_FILE_3_PATH = r"D:\1.Download\SO.CO\File_goc\3 CO_GOC.xlsx"
+
+
+def export_mismatched_dishes_excel(
+    host: str,
+    port: int,
+    menu_code: str,
+    menu_name: str = "",
+    force_refresh_cache: bool = False
+) -> Tuple[io.BytesIO, int, str]:
+    """
+    Xuất file Excel các món bị sai link hoặc tên hình ảnh của ĐÚNG MENU ĐƯỢC CHỌN (menu_code),
+    tuyệt đối không xuất của các menu khác theo đúng quy định.
+    Cấu trúc file bám sát 100% theo File 3 (D:\\1.Download\\SO.CO\\File_goc\\3 CO_GOC.xlsx - Sheet: Customer_Menu)
+    với 38 cột chuẩn nghiệp vụ và bổ sung 3 cột đối soát:
+      39: [Đối soát] Trạng thái kiểm tra
+      40: [Đối soát] Đường dẫn chuẩn trên Server
+      41: [Đối soát] Chi tiết thông báo lỗi
+    """
+    # Import service tránh phụ thuộc vòng lặp
+    from app.services import mongo_menu_so_co_service
+
+    clean_host = (host or "").strip()
+    clean_menu_code = str(menu_code or "").strip()
+
+    if not clean_host:
+        raise ValueError("Chưa cung cấp địa chỉ IP máy trạm MongoDB!")
+    if not clean_menu_code:
+        raise ValueError("Chưa cung cấp mã Menu cần xuất đối soát hình ảnh!")
+
+    # 1. Tải danh sách món ăn CHỈ THUỘC ĐÚNG MENU NÀY từ ORDER_MENU_CACHE_CATEGORY
+    loaded = mongo_menu_so_co_service.load_menu_items(
+        host=clean_host,
+        port=port,
+        menu_codes=[clean_menu_code],
+        search_all=False
+    )
+    menu_items = loaded.get("items", []) or []
+
+    # 2. Kiểm tra đối chiếu hình ảnh với máy chủ ảnh 192.168.201.116 (cache nhanh <1ms)
+    check_res = check_dishes_images_for_menu(
+        dishes=menu_items,
+        force_refresh_cache=force_refresh_cache
+    )
+    all_results = check_res.get("results", []) or []
+
+    # 3. Lọc duy nhất các món KHÔNG KHỚP (is_match == False: sai link, lệch chữ hoa/thường, không có trên server, chưa có hình)
+    mismatches = [r for r in all_results if not r.get("is_match")]
+
+    # 4. Tra cứu thông tin đầy đủ 38 trường từ CO_MENU_ITEM trong MongoDB G_ORDER
+    client = get_mongo_client(clean_host, port)
+    co_docs_by_rk7: Dict[str, Dict[str, Any]] = {}
+    co_docs_by_sap: Dict[str, Dict[str, Any]] = {}
+
+    try:
+        db = client["G_ORDER"]
+        rk7_list = [str(m.get("rk7_code", "")).strip() for m in mismatches if m.get("rk7_code")]
+        sap_list = [str(m.get("sap_code", "")).strip() for m in mismatches if m.get("sap_code")]
+
+        query_conditions = []
+        if rk7_list:
+            query_conditions.append({"code": {"$in": rk7_list}})
+        if sap_list:
+            query_conditions.append({"sapCode": {"$in": sap_list}})
+
+        if query_conditions:
+            or_filter = {"$or": query_conditions} if len(query_conditions) > 1 else query_conditions[0]
+            for doc in db["CO_MENU_ITEM"].find(or_filter):
+                c = str(doc.get("code") or "").strip()
+                s = str(doc.get("sapCode") or "").strip()
+                if c:
+                    co_docs_by_rk7[c] = doc
+                if s:
+                    co_docs_by_sap[s] = doc
+    except Exception as e:
+        logger.warning(f"Lỗi đọc CO_MENU_ITEM khi xuất Excel đối soát ({clean_host}): {e}")
+    finally:
+        client.close()
+
+    # 5. Khởi tạo Workbook theo khuôn mẫu File 3
+    wb = None
+    if os.path.exists(TEMPLATE_FILE_3_PATH):
+        try:
+            wb = openpyxl.load_workbook(TEMPLATE_FILE_3_PATH)
+            logger.info(f"Đã nạp file mẫu gốc File 3 từ {TEMPLATE_FILE_3_PATH}")
+        except Exception as ex_load:
+            logger.warning(f"Không thể đọc file mẫu {TEMPLATE_FILE_3_PATH}: {ex_load}, tạo mới workbook")
+            wb = None
+
+    if wb is None:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Customer_Menu"
+        # Ghi 38 cột tiêu chuẩn
+        header_font = Font(name="Arial", size=10, bold=True, color="000000")
+        header_fill = PatternFill(start_color="E2E8F0", end_color="E2E8F0", fill_type="solid")
+        for col_idx, col_name in enumerate(COLUMNS_38, 1):
+            c = ws.cell(1, col_idx, value=col_name)
+            c.font = header_font
+            c.fill = header_fill
+    else:
+        ws = wb["Customer_Menu"] if "Customer_Menu" in wb.sheetnames else wb.active
+        # Xóa các dòng dữ liệu mẫu cũ (từ dòng 2 trở đi)
+        if ws.max_row > 1:
+            ws.delete_rows(2, ws.max_row - 1)
+
+    # Đảm bảo 3 cột đối soát (39, 40, 41) có tiêu đề nổi bật
+    audit_header_font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+    audit_header_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
+    audit_titles = [
+        (39, "[Đối soát] Trạng thái kiểm tra"),
+        (40, "[Đối soát] Đường dẫn chuẩn trên Server"),
+        (41, "[Đối soát] Chi tiết thông báo lỗi")
+    ]
+    for col_idx, col_title in audit_titles:
+        c = ws.cell(1, col_idx, value=col_title)
+        c.font = audit_header_font
+        c.fill = audit_header_fill
+
+    # Bản đồ nhãn trạng thái tiếng Việt thân thiện
+    status_vietnamese = {
+        "PREFIX_MISMATCH": "Sai tiền tố đường dẫn (/menu/ thay vì /resources/menu/)",
+        "CASE_MISMATCH": "Lệch chữ hoa/thường so với file thực tế trên Server",
+        "CANDIDATE_FOUND": "Tên file lệch nhưng tìm thấy ảnh theo mã RK7/SAP",
+        "NOT_FOUND": "Không tìm thấy file ảnh trên Server",
+        "NO_IMAGE": "Chưa có cấu hình đường dẫn ảnh",
+    }
+
+    # 6. Ghi dữ liệu từng món sai vào các dòng Excel
+    for m in mismatches:
+        rk7 = str(m.get("rk7_code") or "").strip()
+        sap = str(m.get("sap_code") or "").strip()
+        dish_name = m.get("name") or ""
+
+        co_doc = co_docs_by_rk7.get(rk7) or co_docs_by_sap.get(sap) or {}
+
+        # Tra cứu kalo
+        details = co_doc.get("coMenuItemDetails", []) or []
+        kalo = 100.0
+        if details and isinstance(details, list) and len(details) > 0 and isinstance(details[0], dict):
+            kalo = float(details[0].get("kalo", 100.0) or 100.0)
+
+        st_code = m.get("status", "")
+        st_text = status_vietnamese.get(st_code, st_code)
+
+        # Định dạng chuỗi danh sách nối dấu &&
+        def join_amp(val: Any) -> str:
+            if isinstance(val, list):
+                return "&&".join([str(x) for x in val if str(x).strip()])
+            return str(val or "")
+
+        def join_dict_amp(val: Any, key1: str, key2: str) -> str:
+            if isinstance(val, list):
+                parts = []
+                for x in val:
+                    if isinstance(x, dict):
+                        parts.append(f"{x.get(key1, '')}-{x.get(key2, '')}")
+                    else:
+                        parts.append(str(x))
+                return "&&".join(parts)
+            return str(val or "")
+
+        def join_modifiers(val: Any) -> str:
+            if isinstance(val, list):
+                parts = []
+                for x in val:
+                    if isinstance(x, dict):
+                        parts.append(f"{x.get('code', '')}-{x.get('type', 0)}-{x.get('spicyLevel', '')}")
+                    else:
+                        parts.append(str(x))
+                return "&&".join(parts)
+            return str(val or "")
+
+        final_sap = str(co_doc.get("sapCode") or sap or "")
+        if final_sap == "0":
+            final_sap = ""
+
+        row = [
+            final_sap,                                                            # 1. Mã SAP
+            str(co_doc.get("code") or rk7 or ""),                                 # 2. Mã món
+            co_doc.get("nameVn") or dish_name,                                    # 3. Tên Món VN
+            co_doc.get("nameEn") or co_doc.get("nameVn") or dish_name,            # 4. Tên Món EN
+            co_doc.get("extraFoodItem", "") or "",                                # 5. Extra FoodItem
+            co_doc.get("descVn", "") or "",                                       # 6. Mô tả TV
+            co_doc.get("descEn", "") or "",                                       # 7. Mô tả EN
+            co_doc.get("maxDishOnSession", 0),                                    # 8. Số đĩa tối đa được gọi
+            co_doc.get("maxDishToKit", 0),                                        # 9. Số đĩa tối đa được gửi vào bếp
+            kalo,                                                                 # 10. Kalo
+            co_doc.get("caloGroup", "") or "",                                    # 11. Nhóm Kalo
+            co_doc.get("otherName", "") or "",                                    # 12. Tên hiển thị BF
+            co_doc.get("positionNumber", 0),                                      # 13. Vị trí trong combo
+            co_doc.get("imgSize", 0),                                             # 14. Độ lớn ảnh trên CO
+            co_doc.get("viewType", 0),                                            # 15. Kiểu hiển thị
+            co_doc.get("numberOfPeopleEat", co_doc.get("numberOfPeople", 0)),     # 16. Thông tin số người ăn
+            co_doc.get("hiddenIconChooseItem", 0),                                # 17. Khai báo ẩn/hiện món
+            co_doc.get("note", "") or "",                                         # 18. Ghi chú
+            co_doc.get("noteQuantitative", co_doc.get("quantitative", 0)),        # 19. Định lượng
+            join_amp(co_doc.get("lstNote")),                                      # 20. Các ghi chú cho món ăn
+            join_amp(co_doc.get("relatedItems")),                                 # 21. Món liên quan
+            join_dict_amp(co_doc.get("lstItemSize"), "code", "name"),             # 22. Size kèm theo
+            join_dict_amp(co_doc.get("lstTopping"), "code", "modifierCode"),      # 23. Các topping kèm theo
+            join_modifiers(co_doc.get("modifiers")),                              # 24. Modifier
+            join_amp(co_doc.get("itemSpecialTypes")),                             # 25. Nhãn
+            join_amp(co_doc.get("promotionalLst") or co_doc.get("promotionItems")), # 26. Các món ưu đãi
+            co_doc.get("srcImg") or m.get("given_path") or "",                    # 27. Ảnh đại diện
+            co_doc.get("srcImgHalf", "") or "",                                   # 28. Ảnh một nửa
+            co_doc.get("srcImgTopping", "") or "",                                # 29. Ảnh topping
+            co_doc.get("srcImgQuarter", "") or "",                                # 30. Ảnh 1/4
+            co_doc.get("srcImgGroup", "") or "",                                  # 31. Ảnh Group
+            co_doc.get("srcImgGroupHidden", "") or "",                            # 32. Ảnh Group Hidden
+            co_doc.get("srcImg2xHorizontal", "") or "",                           # 33. Ảnh 2x ngang
+            co_doc.get("srcImg2xVertical", "") or "",                             # 34. Ảnh 2x dọc
+            co_doc.get("srcImgSquare", "") or "",                                 # 35. Ảnh vuông
+            co_doc.get("urlImgQr") or co_doc.get("srcImgQr", "") or "",           # 36. Ảnh QR-Order
+            co_doc.get("srcImgThumbnail", "") or "",                              # 37. Ảnh Thumbnail
+            co_doc.get("steamingTime", "") or "",                                 # 38. Thời gian hấp
+            st_text,                                                              # 39. [Đối soát] Trạng thái kiểm tra
+            m.get("suggested_fix_path") or m.get("server_filename") or "",        # 40. [Đối soát] Đường dẫn chuẩn trên Server
+            m.get("message") or ""                                                # 41. [Đối soát] Chi tiết thông báo lỗi
+        ]
+        ws.append(row)
+
+    # 7. Xuất ra buffer bytes
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+
+    # Tạo tên file gợi nhớ, sạch ký tự đặc biệt
+    clean_menu_title = re.sub(r'[^a-zA-Z0-9_\-]', '_', menu_name or clean_menu_code)
+    clean_menu_title = re.sub(r'_+', '_', clean_menu_title).strip('_')
+    date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_name = f"Mon_Sai_Link_Anh_Menu_{clean_menu_code}_{clean_menu_title}_{date_str}.xlsx"
+
+    logger.info(
+        f"Đã xuất thành công file Excel {file_name} gồm {len(mismatches)}/{len(menu_items)} món sai ảnh "
+        f"cho Menu '{menu_name}' ({clean_menu_code}) tại nhà hàng {clean_host}."
+    )
+    return bio, len(mismatches), file_name
