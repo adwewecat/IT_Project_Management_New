@@ -12,8 +12,36 @@ from urllib.parse import urlparse
 
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-import paramiko
 from pymongo import MongoClient
+
+# Hỗ trợ Lazy Import paramiko để tránh lỗi khởi động nếu server chưa cài đặt thư viện
+_paramiko_module = None
+
+
+def _get_paramiko():
+    global _paramiko_module
+    if _paramiko_module is not None:
+        return _paramiko_module
+    try:
+        import paramiko
+        _paramiko_module = paramiko
+        return _paramiko_module
+    except ImportError:
+        pass
+
+    # Thử tự động cài đặt qua pip cho môi trường máy chủ
+    try:
+        import subprocess
+        import sys
+        logger.info("Chưa tìm thấy paramiko, đang tự động cài đặt: pip install paramiko...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "paramiko"], timeout=60)
+        import paramiko
+        _paramiko_module = paramiko
+        logger.info("Cài đặt paramiko thành công!")
+        return _paramiko_module
+    except Exception as ex:
+        logger.warning(f"Không thể tự động cài paramiko: {ex}")
+        return None
 
 logger = logging.getLogger(__name__)
 
@@ -187,8 +215,19 @@ def test_connection(config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
                     pass
     else:
         # Mặc định kết nối qua SSH / SFTP (Port 22)
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        pm = _get_paramiko()
+        if pm is None:
+            return {
+                "success": False,
+                "total_files": 0,
+                "latency_ms": None,
+                "message": (
+                    "Môi trường Python trên máy chủ chưa cài đặt thư viện 'paramiko'. "
+                    "Vui lòng chạy lệnh: pip install paramiko trên CMD máy chủ (hoặc chuyển Server Type sang FTP port 21)."
+                )
+            }
+        ssh = pm.SSHClient()
+        ssh.set_missing_host_key_policy(pm.AutoAddPolicy())
         try:
             ssh.connect(
                 hostname=host,
@@ -283,8 +322,14 @@ def get_server_file_list(force_refresh: bool = False) -> Tuple[Set[str], Dict[st
                     pass
     else:
         # Kết nối SSH/SFTP
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        pm = _get_paramiko()
+        if pm is None:
+            raise RuntimeError(
+                "Môi trường Python trên máy chủ chưa cài đặt thư viện 'paramiko'. "
+                "Vui lòng chạy lệnh trên CMD máy chủ: pip install paramiko (hoặc chuyển Server Type sang FTP port 21)."
+            )
+        ssh = pm.SSHClient()
+        ssh.set_missing_host_key_policy(pm.AutoAddPolicy())
         try:
             ssh.connect(
                 hostname=host,

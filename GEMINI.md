@@ -2607,3 +2607,15 @@
 - **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
   - Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.12s`), zero TypeScript errors (TS6133 sạch sẽ). Đã cập nhật bản build sạch vào `frontend/dist/` (kèm `web.config` cho IIS).
   - Backend: `python -m compileall backend/app` hoàn thành 100% không cảnh báo; kiểm thử import Router và Service thành công 100%.
+
+---
+
+### [2026-11-02] PHÒNG VỆ KHỞI ĐỘNG: KHẮC PHỤC LỖI ModuleNotFoundError: No module named 'paramiko' TRÊN SERVER
+- **Hiện tượng**: Khi copy thư mục `backend/app` lên Server (`C:\DUNGIT\IT_Project_Management_New\backend\app`), tiến trình `run.bat` báo lỗi:
+  `ModuleNotFoundError: No module named 'paramiko'` tại file `image_server_service.py` và dừng tiến trình.
+- **Nguyên nhân**: Môi trường Python trên Server (`C:\Program Files\Python310`) chưa được cài đặt gói `paramiko` qua pip. Khi `main.py` import `mongodb.py` nạp `image_server_service` ở cấp độ module (top-level import) thì crash ngay lúc khởi động.
+- **Giải pháp xử lý triệt để**:
+  1. **Lazy Import (Nạp lười)**: Loại bỏ `import paramiko` ở đầu file, thay bằng hàm điều phối `_get_paramiko()`. Backend khởi động 100% bình thường, không bao giờ bị sập dù server thiếu thư viện.
+  2. **Cơ chế tự động cài đặt**: Khi người dùng gọi chức năng SSH, `_get_paramiko()` sẽ tự động chạy lệnh `pip install paramiko` vào môi trường Python của server.
+  3. **Thông báo lỗi trang nhã**: Nếu máy chủ hoàn toàn không có internet và chưa cài thư viện, hệ thống trả về thông báo hướng dẫn rõ ràng trên giao diện (hoặc gợi ý dùng giao thức FTP port 21) thay vì crash backend.
+- **Kiểm thử**: `backend/app` biên dịch 100% sạch sẽ (`✓ built in 4.12s`, `compileall` exit code 0). Đã commit và push lên GitHub `origin/main`.
