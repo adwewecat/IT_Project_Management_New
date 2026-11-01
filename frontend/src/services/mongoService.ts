@@ -1348,8 +1348,63 @@ export const mongoService = {
   syncDishImagesToMongo: async (payload: SyncDishImagesRequest): Promise<SyncDishImagesResponse> => {
     const res = await api.post<SyncDishImagesResponse>('/mongodb/image-server/sync-images', payload);
     return res.data;
+  },
+
+  getImageServerConfig: async (): Promise<ImageServerConfig> => {
+    const res = await api.get<ImageServerConfig>('/mongodb/image-server/config');
+    return res.data;
+  },
+
+  saveImageServerConfig: async (payload: UpdateImageServerConfigRequest): Promise<ImageServerConfig> => {
+    const res = await api.post<ImageServerConfig>('/mongodb/image-server/config', payload);
+    return res.data;
+  },
+
+  testImageServerConnection: async (payload: TestImageServerConnectionRequest): Promise<TestImageServerConnectionResponse> => {
+    const res = await api.post<TestImageServerConnectionResponse>('/mongodb/image-server/test-connection', payload);
+    return res.data;
   }
 };
+
+export interface ImageServerConfig {
+  server_type: 'SSH_SFTP' | 'FTP';
+  host: string;
+  port: number;
+  username: string;
+  password?: string;
+  remote_dir: string;
+  standard_prefix: string;
+  is_privileged: boolean;
+  can_edit: boolean;
+  updated_at?: string;
+  updated_by?: string;
+}
+
+export interface UpdateImageServerConfigRequest {
+  server_type?: 'SSH_SFTP' | 'FTP';
+  host: string;
+  port: number;
+  username: string;
+  password?: string;
+  remote_dir: string;
+  standard_prefix: string;
+}
+
+export interface TestImageServerConnectionRequest {
+  server_type?: 'SSH_SFTP' | 'FTP';
+  host: string;
+  port: number;
+  username: string;
+  password?: string;
+  remote_dir: string;
+}
+
+export interface TestImageServerConnectionResponse {
+  success: boolean;
+  total_files: number;
+  message: string;
+  latency_ms?: number;
+}
 
 export interface RestaurantGposInfoResponse {
   restaurant_name: string;

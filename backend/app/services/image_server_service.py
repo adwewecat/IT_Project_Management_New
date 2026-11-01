@@ -1,8 +1,11 @@
 import re
 import os
 import time
+import json
+import ftplib
 import logging
 import threading
+from datetime import datetime
 from typing import Dict, Any, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
@@ -10,6 +13,32 @@ import paramiko
 from pymongo import MongoClient
 
 logger = logging.getLogger(__name__)
+
+# File cấu hình máy chủ hình ảnh lưu trong thư mục data/
+CONFIG_FILE_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "data",
+    "image_server_config.json"
+)
+
+# Cấu hình mặc định máy chủ hình ảnh GPOS (Read-Only)
+DEFAULT_CONFIG: Dict[str, Any] = {
+    "server_type": "SSH_SFTP",  # "SSH_SFTP" (Port 22) hoặc "FTP" (Port 21)
+    "host": "192.168.201.116",
+    "port": 22,
+    "username": "dung.na",
+    "password": "bp7em2zmQP",
+    "remote_dir": "/opt/gpos/gmonitor/resources/menu",
+    "standard_prefix": "/resources/menu/"
+}
+
+# Cache danh sách file trên server để tối ưu tốc độ, tránh gọi kết nối lặp lại
+_cache_lock = threading.Lock()
+_cached_exact_files: Optional[Set[str]] = None
+_cached_lower_map: Optional[Dict[str, str]] = None
+_cache_timestamp: float = 0.0
+CACHE_TTL_SECONDS = 300.0  # 5 phút cache
+
 
 def get_mongo_client(host: str, port: int = 27017, timeout_ms: int = 3500) -> MongoClient:
     """Khởi tạo MongoClient với timeout ngắn để tránh treo ứng dụng"""
@@ -21,25 +50,187 @@ def get_mongo_client(host: str, port: int = 27017, timeout_ms: int = 3500) -> Mo
         socketTimeoutMS=timeout_ms,
     )
 
-# Cấu hình SSH Server hình ảnh GPOS (Read-Only)
-IMAGE_SERVER_HOST = "192.168.201.116"
-IMAGE_SERVER_PORT = 22
-IMAGE_SERVER_USER = "dung.na"
-IMAGE_SERVER_PASS = "bp7em2zmQP"
-IMAGE_SERVER_DIR = "/opt/gpos/gmonitor/resources/menu"
-STANDARD_IMAGE_PREFIX = "/resources/menu/"
 
-# Cache danh sách file trên server để tối ưu tốc độ, tránh gọi SSH lặp lại
-_cache_lock = threading.Lock()
-_cached_exact_files: Optional[Set[str]] = None
-_cached_lower_map: Optional[Dict[str, str]] = None
-_cache_timestamp: float = 0.0
-CACHE_TTL_SECONDS = 300.0  # 5 phút cache
+def clear_cache() -> None:
+    """Xóa cache danh sách file để tải mới ở lần gọi tiếp theo"""
+    global _cached_exact_files, _cached_lower_map, _cache_timestamp
+    with _cache_lock:
+        _cached_exact_files = None
+        _cached_lower_map = None
+        _cache_timestamp = 0.0
+    logger.info("Đã xóa cache danh sách file của máy chủ hình ảnh.")
+
+
+def load_config() -> Dict[str, Any]:
+    """
+    Đọc cấu hình máy chủ hình ảnh từ file JSON.
+    Nếu chưa có, tự động tạo mới với cấu hình mặc định (192.168.201.116:22).
+    """
+    try:
+        if os.path.exists(CONFIG_FILE_PATH):
+            with open(CONFIG_FILE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                merged = {**DEFAULT_CONFIG, **data}
+                return merged
+    except Exception as e:
+        logger.error(f"Lỗi đọc file cấu hình máy chủ hình ảnh ({CONFIG_FILE_PATH}): {e}")
+
+    return dict(DEFAULT_CONFIG)
+
+
+def save_config(new_config: Dict[str, Any], updated_by: str = "") -> Dict[str, Any]:
+    """
+    Lưu cấu hình máy chủ hình ảnh (chỉ Super Admin hoặc dung.nguyenanh mới được gọi).
+    Nếu mật khẩu để trống hoặc chứa ký tự che dấu ('🔒', '•'), giữ nguyên mật khẩu cũ.
+    """
+    current = load_config()
+    
+    server_type = (new_config.get("server_type") or current.get("server_type", "SSH_SFTP")).strip()
+    host = (new_config.get("host") or current.get("host", "192.168.201.116")).strip()
+    try:
+        port = int(new_config.get("port") or current.get("port", 22))
+    except (ValueError, TypeError):
+        port = 22
+
+    username = (new_config.get("username") or current.get("username", "dung.na")).strip()
+    
+    # Kiểm tra mật khẩu mới
+    input_pass = new_config.get("password")
+    if input_pass and not input_pass.startswith("🔒") and "•" not in input_pass:
+        password = input_pass.strip()
+    else:
+        password = current.get("password", "bp7em2zmQP")
+
+    remote_dir = (new_config.get("remote_dir") or current.get("remote_dir", "/opt/gpos/gmonitor/resources/menu")).strip()
+    standard_prefix = (new_config.get("standard_prefix") or current.get("standard_prefix", "/resources/menu/")).strip()
+    if not standard_prefix.endswith("/"):
+        standard_prefix += "/"
+
+    saved_data = {
+        "server_type": server_type,
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": password,
+        "remote_dir": remote_dir,
+        "standard_prefix": standard_prefix,
+        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "updated_by": updated_by or "system"
+    }
+
+    try:
+        os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
+        with open(CONFIG_FILE_PATH, "w", encoding="utf-8") as f:
+            json.dump(saved_data, f, ensure_ascii=False, indent=2)
+        logger.info(f"Đã lưu cấu hình máy chủ hình ảnh bởi {updated_by}")
+        # Xóa cache để áp dụng ngay máy chủ mới
+        clear_cache()
+    except Exception as e:
+        logger.error(f"Lỗi ghi cấu hình máy chủ hình ảnh: {e}")
+        raise RuntimeError(f"Không thể lưu cấu hình máy chủ: {e}")
+
+    return saved_data
+
+
+def test_connection(config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Kiểm tra kết nối và liệt kê thử thư mục trên máy chủ (SFTP/SSH hoặc FTP).
+    Tuyệt đối chỉ đọc (Read-Only), không can thiệp hay sửa đổi bất kỳ file nào trên server.
+    """
+    cfg = dict(DEFAULT_CONFIG)
+    if config:
+        cfg.update(config)
+    else:
+        cfg = load_config()
+
+    server_type = cfg.get("server_type", "SSH_SFTP")
+    host = cfg.get("host", "192.168.201.116")
+    port = int(cfg.get("port", 22))
+    username = cfg.get("username", "dung.na")
+    password = cfg.get("password", "bp7em2zmQP")
+    remote_dir = cfg.get("remote_dir", "/opt/gpos/gmonitor/resources/menu")
+
+    start_time = time.time()
+
+    if server_type == "FTP":
+        # Kết nối qua giao thức FTP
+        ftp = None
+        try:
+            ftp = ftplib.FTP()
+            ftp.connect(host=host, port=port, timeout=8)
+            ftp.login(user=username, passwd=password)
+            if remote_dir:
+                ftp.cwd(remote_dir)
+            files = [f for f in ftp.nlst() if f and f not in (".", "..")]
+            elapsed_ms = round((time.time() - start_time) * 1000, 1)
+            return {
+                "success": True,
+                "total_files": len(files),
+                "latency_ms": elapsed_ms,
+                "message": f"Kết nối FTP thành công tới {host}:{port}. Tìm thấy {len(files)} file trong thư mục '{remote_dir}'."
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "total_files": 0,
+                "latency_ms": None,
+                "message": f"Lỗi kết nối FTP tới {host}:{port}: {str(e)}"
+            }
+        finally:
+            if ftp:
+                try:
+                    ftp.quit()
+                except Exception:
+                    pass
+    else:
+        # Mặc định kết nối qua SSH / SFTP (Port 22)
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            ssh.connect(
+                hostname=host,
+                port=port,
+                username=username,
+                password=password,
+                timeout=8
+            )
+            stdin, stdout, stderr = ssh.exec_command(f"ls -1 {remote_dir}", timeout=10)
+            raw_output = stdout.read().decode("utf-8", errors="replace")
+            err_output = stderr.read().decode("utf-8", errors="replace").strip()
+            
+            if err_output and not raw_output:
+                return {
+                    "success": False,
+                    "total_files": 0,
+                    "latency_ms": None,
+                    "message": f"Không thể truy cập thư mục '{remote_dir}': {err_output}"
+                }
+
+            files = [line.strip() for line in raw_output.split("\n") if line.strip() and line.strip() not in (".", "..")]
+            elapsed_ms = round((time.time() - start_time) * 1000, 1)
+            return {
+                "success": True,
+                "total_files": len(files),
+                "latency_ms": elapsed_ms,
+                "message": f"Kết nối SSH/SFTP thành công tới {host}:{port}. Tìm thấy {len(files)} file trong thư mục '{remote_dir}'."
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "total_files": 0,
+                "latency_ms": None,
+                "message": f"Lỗi kết nối SSH tới {host}:{port}: {str(e)}"
+            }
+        finally:
+            try:
+                ssh.close()
+            except Exception:
+                pass
 
 
 def get_server_file_list(force_refresh: bool = False) -> Tuple[Set[str], Dict[str, str]]:
     """
-    Kết nối SSH tới máy chủ 192.168.201.116 và lấy toàn bộ danh sách file trong /opt/gpos/gmonitor/resources/menu.
+    Kết nối máy chủ ảnh (theo cấu hình đã lưu) và lấy toàn bộ danh sách file trong thư mục hình ảnh.
     Lưu cache trong bộ nhớ RAM 5 phút để các lần check tiếp theo phản hồi tức thì (<1ms).
     Tuyệt đối chỉ đọc (Read-Only), không thực hiện bất kỳ lệnh ghi/sửa nào trên máy chủ.
     """
@@ -55,53 +246,84 @@ def get_server_file_list(force_refresh: bool = False) -> Tuple[Set[str], Dict[st
         ):
             return _cached_exact_files, _cached_lower_map
 
-    # Kết nối SSH lấy danh sách file
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    try:
-        ssh.connect(
-            hostname=IMAGE_SERVER_HOST,
-            port=IMAGE_SERVER_PORT,
-            username=IMAGE_SERVER_USER,
-            password=IMAGE_SERVER_PASS,
-            timeout=8
-        )
-        # Lệnh ls -1 liệt kê từng tên file 1 dòng
-        stdin, stdout, stderr = ssh.exec_command(f"ls -1 {IMAGE_SERVER_DIR}", timeout=10)
-        raw_output = stdout.read().decode("utf-8", errors="replace")
-        lines = [line.strip() for line in raw_output.split("\n") if line.strip()]
+    cfg = load_config()
+    server_type = cfg.get("server_type", "SSH_SFTP")
+    host = cfg.get("host", "192.168.201.116")
+    port = int(cfg.get("port", 22))
+    username = cfg.get("username", "dung.na")
+    password = cfg.get("password", "bp7em2zmQP")
+    remote_dir = cfg.get("remote_dir", "/opt/gpos/gmonitor/resources/menu")
 
-        exact_set: Set[str] = set()
-        lower_map: Dict[str, str] = {}
+    lines: List[str] = []
 
-        for filename in lines:
-            # Bỏ qua các mục rỗng hoặc dấu chấm
-            if not filename or filename in (".", ".."):
-                continue
-            exact_set.add(filename)
-            # Giữ tên file xuất hiện đầu tiên nếu trùng chữ hoa thường
-            if filename.lower() not in lower_map:
-                lower_map[filename.lower()] = filename
-
-        with _cache_lock:
-            _cached_exact_files = exact_set
-            _cached_lower_map = lower_map
-            _cache_timestamp = time.time()
-
-        logger.info(f"Đã tải {len(exact_set)} file ảnh từ máy chủ {IMAGE_SERVER_HOST}:{IMAGE_SERVER_DIR}")
-        return exact_set, lower_map
-    except Exception as e:
-        logger.error(f"Lỗi kết nối SSH tới {IMAGE_SERVER_HOST}: {e}")
-        # Nếu đã có cache cũ thì tạm dùng cache cũ
-        with _cache_lock:
-            if _cached_exact_files is not None and _cached_lower_map is not None:
-                return _cached_exact_files, _cached_lower_map
-        raise RuntimeError(f"Không thể kết nối máy chủ hình ảnh {IMAGE_SERVER_HOST}: {e}")
-    finally:
+    if server_type == "FTP":
+        # Kết nối FTP
+        ftp = None
         try:
-            ssh.close()
-        except Exception:
-            pass
+            ftp = ftplib.FTP()
+            ftp.connect(host=host, port=port, timeout=8)
+            ftp.login(user=username, passwd=password)
+            if remote_dir:
+                ftp.cwd(remote_dir)
+            lines = [f for f in ftp.nlst() if f and f not in (".", "..")]
+        except Exception as e:
+            logger.error(f"Lỗi kết nối FTP tới {host}:{port}: {e}")
+            with _cache_lock:
+                if _cached_exact_files is not None and _cached_lower_map is not None:
+                    return _cached_exact_files, _cached_lower_map
+            raise RuntimeError(f"Không thể kết nối máy chủ hình ảnh FTP {host}:{port}: {e}")
+        finally:
+            if ftp:
+                try:
+                    ftp.quit()
+                except Exception:
+                    pass
+    else:
+        # Kết nối SSH/SFTP
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            ssh.connect(
+                hostname=host,
+                port=port,
+                username=username,
+                password=password,
+                timeout=8
+            )
+            stdin, stdout, stderr = ssh.exec_command(f"ls -1 {remote_dir}", timeout=10)
+            raw_output = stdout.read().decode("utf-8", errors="replace")
+            lines = [line.strip() for line in raw_output.split("\n") if line.strip()]
+        except Exception as e:
+            logger.error(f"Lỗi kết nối SSH tới {host}:{port}: {e}")
+            # Nếu đã có cache cũ thì tạm dùng cache cũ
+            with _cache_lock:
+                if _cached_exact_files is not None and _cached_lower_map is not None:
+                    return _cached_exact_files, _cached_lower_map
+            raise RuntimeError(f"Không thể kết nối máy chủ hình ảnh {host}:{port}: {e}")
+        finally:
+            try:
+                ssh.close()
+            except Exception:
+                pass
+
+    exact_set: Set[str] = set()
+    lower_map: Dict[str, str] = {}
+
+    for filename in lines:
+        if not filename or filename in (".", ".."):
+            continue
+        exact_set.add(filename)
+        # Giữ tên file xuất hiện đầu tiên nếu trùng chữ hoa thường
+        if filename.lower() not in lower_map:
+            lower_map[filename.lower()] = filename
+
+    with _cache_lock:
+        _cached_exact_files = exact_set
+        _cached_lower_map = lower_map
+        _cache_timestamp = time.time()
+
+    logger.info(f"Đã tải {len(exact_set)} file ảnh từ máy chủ {host}:{remote_dir}")
+    return exact_set, lower_map
 
 
 def extract_filename_and_prefix(raw_path: str) -> Tuple[str, str]:
@@ -147,10 +369,13 @@ def compare_single_image(
 ) -> Dict[str, Any]:
     """
     So sánh đường dẫn và tên hình ảnh của một món với danh sách file thực tế trên server:
-    1. Kiểm tra tiền tố có đúng là /resources/menu/ hay không.
+    1. Kiểm tra tiền tố có đúng là standard_prefix (mặc định /resources/menu/) hay không.
     2. Kiểm tra tên hình (có phân biệt hoa/thường) có tồn tại trên máy chủ hay không.
     3. Nếu lệch chữ hoa/thường hoặc sai tiền tố, gợi ý đường dẫn chuẩn để đồng nhất.
     """
+    cfg = load_config()
+    standard_prefix = cfg.get("standard_prefix", "/resources/menu/")
+
     if exact_set is None or lower_map is None:
         exact_set, lower_map = get_server_file_list()
 
@@ -169,7 +394,7 @@ def compare_single_image(
             "suggested_fix_path": ""
         }
 
-    has_standard_prefix = (prefix == STANDARD_IMAGE_PREFIX)
+    has_standard_prefix = (prefix == standard_prefix)
 
     # 1. Khớp chính xác 100% (cả chữ hoa/thường)
     if filename in exact_set:
@@ -178,24 +403,24 @@ def compare_single_image(
                 "status": "MATCH",
                 "is_match": True,
                 "is_fixable": False,
-                "message": "Khớp hoàn toàn 100% cả tên hình và đường dẫn /resources/menu/",
+                "message": f"Khớp hoàn toàn 100% cả tên hình và đường dẫn {standard_prefix}",
                 "given_path": raw_path,
                 "given_filename": filename,
                 "given_prefix": prefix,
                 "server_filename": filename,
-                "suggested_fix_path": f"{STANDARD_IMAGE_PREFIX}{filename}"
+                "suggested_fix_path": f"{standard_prefix}{filename}"
             }
         else:
             return {
                 "status": "PREFIX_MISMATCH",
                 "is_match": False,
                 "is_fixable": True,
-                "message": f"Tên hình khớp trên server nhưng sai đường dẫn (hiện tại: '{prefix}', chuẩn: '{STANDARD_IMAGE_PREFIX}')",
+                "message": f"Tên hình khớp trên server nhưng sai đường dẫn (hiện tại: '{prefix}', chuẩn: '{standard_prefix}')",
                 "given_path": raw_path,
                 "given_filename": filename,
                 "given_prefix": prefix,
                 "server_filename": filename,
-                "suggested_fix_path": f"{STANDARD_IMAGE_PREFIX}{filename}"
+                "suggested_fix_path": f"{standard_prefix}{filename}"
             }
 
     # 2. Lệch chữ hoa / thường
@@ -211,7 +436,7 @@ def compare_single_image(
             "given_filename": filename,
             "given_prefix": prefix,
             "server_filename": server_exact_name,
-            "suggested_fix_path": f"{STANDARD_IMAGE_PREFIX}{server_exact_name}"
+            "suggested_fix_path": f"{standard_prefix}{server_exact_name}"
         }
 
     # 3. Không tìm thấy đúng tên file, thử tìm ứng viên theo mã RK7 / SAP nếu có
@@ -241,15 +466,16 @@ def compare_single_image(
             "given_filename": filename,
             "given_prefix": prefix,
             "server_filename": candidate_found,
-            "suggested_fix_path": f"{STANDARD_IMAGE_PREFIX}{candidate_found}"
+            "suggested_fix_path": f"{standard_prefix}{candidate_found}"
         }
 
     # 4. Hoàn toàn không tìm thấy trên server
+    server_host = cfg.get("host", "192.168.201.116")
     return {
         "status": "NOT_FOUND",
         "is_match": False,
         "is_fixable": False,
-        "message": f"Hình '{filename}' không tồn tại trên máy chủ {IMAGE_SERVER_HOST}",
+        "message": f"Hình '{filename}' không tồn tại trên máy chủ {server_host}",
         "given_path": raw_path,
         "given_filename": filename,
         "given_prefix": prefix,
@@ -263,9 +489,13 @@ def check_dishes_images_for_menu(
     force_refresh_cache: bool = False
 ) -> Dict[str, Any]:
     """
-    Kiểm tra danh sách món của một menu với toàn bộ file ảnh trên server 192.168.201.116.
+    Kiểm tra danh sách món của một menu với toàn bộ file ảnh trên máy chủ ảnh.
     Tận dụng cache trong RAM để xử lý toàn bộ menu chỉ trong vài miligiây.
     """
+    cfg = load_config()
+    server_host = cfg.get("host", "192.168.201.116")
+    server_dir = cfg.get("remote_dir", "/opt/gpos/gmonitor/resources/menu")
+
     exact_set, lower_map = get_server_file_list(force_refresh=force_refresh_cache)
 
     results: List[Dict[str, Any]] = []
@@ -319,8 +549,8 @@ def check_dishes_images_for_menu(
         })
 
     return {
-        "server_host": IMAGE_SERVER_HOST,
-        "server_dir": IMAGE_SERVER_DIR,
+        "server_host": server_host,
+        "server_dir": server_dir,
         "total_dishes": len(dishes),
         "total_server_files": len(exact_set),
         "match_count": match_count,
@@ -351,6 +581,11 @@ def sync_dish_images_to_mongo(
     if not fixes:
         return {"updated_count": 0, "message": "Không có món nào cần cập nhật"}
 
+    cfg = load_config()
+    standard_prefix = cfg.get("standard_prefix", "/resources/menu/")
+    if not standard_prefix.endswith("/"):
+        standard_prefix += "/"
+
     client = get_mongo_client(host, port)
     try:
         db = client["G_ORDER"]
@@ -367,13 +602,13 @@ def sync_dish_images_to_mongo(
             if not target_path or (not rk7 and not sap):
                 continue
 
-            # Đảm bảo target_path có tiền tố /resources/menu/
-            if not target_path.startswith("/resources/menu/"):
+            # Đảm bảo target_path có tiền tố standard_prefix
+            if not target_path.startswith(standard_prefix):
                 clean_name = os.path.basename(target_path)
-                target_path = f"/resources/menu/{clean_name}"
+                target_path = f"{standard_prefix}{clean_name}"
 
             # Chuẩn hóa link gateway
-            clean_filename = target_path.replace("/resources/menu/", "")
+            clean_filename = target_path.replace(standard_prefix, "")
             gateway_url = f"https://gposgateway-hcm.ggg.com.vn:8443/resources/menu/{clean_filename}"
 
             query: Dict[str, Any] = {}

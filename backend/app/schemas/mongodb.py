@@ -1756,3 +1756,43 @@ class SyncDishImagesResponse(BaseModel):
     total_requested: int
     message: str
     errors: List[str] = []
+
+
+class ImageServerConfigResponse(BaseModel):
+    server_type: str = "SSH_SFTP"  # "SSH_SFTP" hoặc "FTP"
+    host: str
+    port: int
+    username: str
+    password: Optional[str] = None
+    remote_dir: str
+    standard_prefix: str
+    is_privileged: bool = False
+    can_edit: bool = False
+    updated_at: Optional[str] = None
+    updated_by: Optional[str] = None
+
+
+class UpdateImageServerConfigRequest(BaseModel):
+    server_type: Optional[str] = "SSH_SFTP"
+    host: str
+    port: int = 22
+    username: str
+    password: Optional[str] = None
+    remote_dir: str = "/opt/gpos/gmonitor/resources/menu"
+    standard_prefix: str = "/resources/menu/"
+
+
+class TestImageServerConnectionRequest(BaseModel):
+    server_type: Optional[str] = "SSH_SFTP"
+    host: str
+    port: int = 22
+    username: str
+    password: Optional[str] = None
+    remote_dir: str = "/opt/gpos/gmonitor/resources/menu"
+
+
+class TestImageServerConnectionResponse(BaseModel):
+    success: bool
+    total_files: int = 0
+    message: str
+    latency_ms: Optional[float] = None

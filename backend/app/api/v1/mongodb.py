@@ -2570,7 +2570,11 @@ from app.schemas.mongodb import (
     CheckMenuImagesRequest,
     CheckMenuImagesResponse,
     SyncDishImagesRequest,
-    SyncDishImagesResponse
+    SyncDishImagesResponse,
+    ImageServerConfigResponse,
+    UpdateImageServerConfigRequest,
+    TestImageServerConnectionRequest,
+    TestImageServerConnectionResponse
 )
 
 
@@ -2654,3 +2658,99 @@ def sync_dish_images(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Loi dong nhat hinh anh: {str(e)}"
         )
+
+
+
+@router.get("/image-server/config", response_model=ImageServerConfigResponse)
+def get_image_server_config(
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Lay cau hinh may chu hinh anh FTP / SSH.
+    Chon loc phan quyen:
+      - Chi dung.nguyenanh va Super Admin moi xem duoc mat khau thuc te va co quyen chinh sua.
+      - Cac user khac nhan mat khau bi che: [🔒 Bi an theo phan quyen], can_edit = False.
+    """
+    is_priv = _check_is_dung_or_super_admin(current_user)
+    cfg = image_server_service.load_config()
+    
+    password_val = cfg.get("password", "") if is_priv else "🔒 Bị ẩn theo phân quyền"
+
+    return ImageServerConfigResponse(
+        server_type=cfg.get("server_type", "SSH_SFTP"),
+        host=cfg.get("host", "192.168.201.116"),
+        port=int(cfg.get("port", 22)),
+        username=cfg.get("username", "dung.na"),
+        password=password_val,
+        remote_dir=cfg.get("remote_dir", "/opt/gpos/gmonitor/resources/menu"),
+        standard_prefix=cfg.get("standard_prefix", "/resources/menu/"),
+        is_privileged=is_priv,
+        can_edit=is_priv,
+        updated_at=cfg.get("updated_at"),
+        updated_by=cfg.get("updated_by")
+    )
+
+
+@router.post("/image-server/config", response_model=ImageServerConfigResponse)
+def save_image_server_config(
+    payload: UpdateImageServerConfigRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Cap nhat cau hinh ket noi may chu hinh anh (FTP / SSH).
+    BAT BUOC chi Super Admin hoac user dung.nguyenanh moi co quyen luu.
+    """
+    if not _check_is_dung_or_super_admin(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ tài khoản Super Admin hoặc dung.nguyenanh mới có quyền cấu hình kết nối và user FTP/SSH máy chủ ảnh."
+        )
+
+    saved = image_server_service.save_config(
+        new_config=payload.model_dump(),
+        updated_by=current_user.username
+    )
+
+    LogService.record_log(
+        db=db,
+        nhom_quyen="ADMIN",
+        man_hinh="IMAGE_SERVER_CONFIG",
+        hanh_dong="UPDATE",
+        noi_dung=f"Cap nhat cau hinh may chu hinh anh: {saved.get('server_type')} {saved.get('host')}:{saved.get('port')} (user: {saved.get('username')})",
+        user_thuchien=current_user.username,
+        current_user=current_user
+    )
+
+    return ImageServerConfigResponse(
+        server_type=saved.get("server_type", "SSH_SFTP"),
+        host=saved.get("host", "192.168.201.116"),
+        port=int(saved.get("port", 22)),
+        username=saved.get("username", "dung.na"),
+        password=saved.get("password", ""),
+        remote_dir=saved.get("remote_dir", "/opt/gpos/gmonitor/resources/menu"),
+        standard_prefix=saved.get("standard_prefix", "/resources/menu/"),
+        is_privileged=True,
+        can_edit=True,
+        updated_at=saved.get("updated_at"),
+        updated_by=saved.get("updated_by")
+    )
+
+
+@router.post("/image-server/test-connection", response_model=TestImageServerConnectionResponse)
+def test_image_server_connection(
+    payload: TestImageServerConnectionRequest,
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Kiem tra ket noi va doc danh sach file thu muc tu xa (Read-Only).
+    BAT BUOC chi Super Admin hoac user dung.nguyenanh moi co quyen kiem tra.
+    """
+    if not _check_is_dung_or_super_admin(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ tài khoản Super Admin hoặc dung.nguyenanh mới có quyền kiểm tra kết nối FTP/SSH máy chủ ảnh."
+        )
+
+    res = image_server_service.test_connection(payload.model_dump())
+    return TestImageServerConnectionResponse(**res)

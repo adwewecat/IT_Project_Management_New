@@ -20,8 +20,23 @@ import {
   CheckSquare,
   Square,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Eye,
+  Settings,
+  Server,
+  Lock,
+  AlertCircle,
+  CheckCircle,
+  Loader2
 } from 'lucide-react';
+import { Modal } from '../../components/ui/Modal';
+import { useAuth } from '../../contexts/AuthContext';
+import { checkIsDungOrSuperAdmin } from '../../utils/authUtils';
+import {
+  ImageServerConfig,
+  UpdateImageServerConfigRequest,
+  TestImageServerConnectionResponse
+} from '../../services/mongoService';
 import { Button } from '../../components/ui/Button';
 import { RestaurantItem } from '../../types/restaurant';
 import { mongoService, LockedTableItem, CheckDishImageResult, CheckMenuImagesResponse, MenuGroupsCoDetailResponse } from '../../services/mongoService';
@@ -230,6 +245,28 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
 
   // Ref theo dõi host đã đồng bộ để tuyệt đối không gọi lặp lại
   const syncedHostRef = useRef<string>('');
+
+  // Xác thực quyền cấu hình FTP/SSH máy chủ ảnh (chỉ Super Admin hoặc dung.nguyenanh)
+  const { user } = useAuth();
+  const canConfigImageServer = checkIsDungOrSuperAdmin(user);
+
+  // State cho Modal Cấu hình máy chủ hình ảnh FTP/SSH
+  const [showConfigModal, setShowConfigModal] = useState<boolean>(false);
+  const [configLoading, setConfigLoading] = useState<boolean>(false);
+  const [configSaving, setConfigSaving] = useState<boolean>(false);
+  const [configTesting, setConfigTesting] = useState<boolean>(false);
+  const [serverConfig, setServerConfig] = useState<ImageServerConfig | null>(null);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [testResult, setTestResult] = useState<TestImageServerConnectionResponse | null>(null);
+  const [configForm, setConfigForm] = useState<UpdateImageServerConfigRequest>({
+    server_type: 'SSH_SFTP',
+    host: '192.168.201.116',
+    port: 22,
+    username: 'dung.na',
+    password: '',
+    remote_dir: '/opt/gpos/gmonitor/resources/menu',
+    standard_prefix: '/resources/menu/'
+  });
 
   // ── Flow View State: 'table_map' | 'select_category' | 'menu_order' ──
   const [currentView, setCurrentView] = useState<'table_map' | 'select_category' | 'menu_order'>('table_map');
@@ -779,6 +816,92 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
       if (onToastRef.current) {
         onToastRef.current('Lỗi đồng nhất: ' + (err.response?.data?.detail || err.message), 'error');
       }
+    }
+  };
+
+  // Mở popup cấu hình máy chủ ảnh
+  const handleOpenConfigModal = async () => {
+    if (!canConfigImageServer) {
+      if (onToastRef.current) {
+        onToastRef.current('Chỉ tài khoản Super Admin hoặc dung.nguyenanh mới có quyền cấu hình kết nối FTP/SSH!', 'error');
+      }
+      return;
+    }
+    setShowConfigModal(true);
+    setConfigLoading(true);
+    setTestResult(null);
+    try {
+      const data = await mongoService.getImageServerConfig();
+      setServerConfig(data);
+      setConfigForm({
+        server_type: data.server_type || 'SSH_SFTP',
+        host: data.host || '',
+        port: data.port || 22,
+        username: data.username || '',
+        password: data.password || '',
+        remote_dir: data.remote_dir || '',
+        standard_prefix: data.standard_prefix || '/resources/menu/'
+      });
+    } catch (err: any) {
+      if (onToastRef.current) {
+        onToastRef.current('Lỗi tải cấu hình máy chủ ảnh: ' + (err.response?.data?.detail || err.message), 'error');
+      }
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+
+  // Test kết nối tới máy chủ ảnh (Read-Only)
+  const handleTestConnection = async () => {
+    setConfigTesting(true);
+    setTestResult(null);
+    try {
+      const res = await mongoService.testImageServerConnection({
+        server_type: configForm.server_type,
+        host: configForm.host,
+        port: Number(configForm.port),
+        username: configForm.username,
+        password: configForm.password,
+        remote_dir: configForm.remote_dir
+      });
+      setTestResult(res);
+      if (onToastRef.current) {
+        onToastRef.current(res.message, res.success ? 'success' : 'error');
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || err.message;
+      setTestResult({
+        success: false,
+        total_files: 0,
+        message: msg
+      });
+      if (onToastRef.current) {
+        onToastRef.current('Kiểm tra kết nối thất bại: ' + msg, 'error');
+      }
+    } finally {
+      setConfigTesting(false);
+    }
+  };
+
+  // Lưu cấu hình máy chủ ảnh
+  const handleSaveConfig = async () => {
+    setConfigSaving(true);
+    try {
+      const saved = await mongoService.saveImageServerConfig({
+        ...configForm,
+        port: Number(configForm.port)
+      });
+      setServerConfig(saved);
+      if (onToastRef.current) {
+        onToastRef.current('Đã lưu cấu hình máy chủ hình ảnh thành công!', 'success');
+      }
+      setShowConfigModal(false);
+    } catch (err: any) {
+      if (onToastRef.current) {
+        onToastRef.current('Lỗi lưu cấu hình: ' + (err.response?.data?.detail || err.message), 'error');
+      }
+    } finally {
+      setConfigSaving(false);
     }
   };
 
@@ -2466,6 +2589,31 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                   </button>
                 )}
 
+                {canConfigImageServer && (
+                  <button
+                    type="button"
+                    onClick={handleOpenConfigModal}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '5px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid #d97706',
+                      backgroundColor: '#fffbeb',
+                      color: '#b45309',
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                    }}
+                    title="Cấu hình kết nối & tài khoản máy chủ hình ảnh FTP/SSH (Chỉ Super Admin & dung.nguyenanh)"
+                  >
+                    <Settings size={13} />
+                    <span>⚙️ Cấu Hình Máy Chủ Ảnh</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setIsCoGroupsBarExpanded(!isCoGroupsBarExpanded)}
@@ -3183,6 +3331,344 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
           )}
         </div>
       </div>
+
+
+      {/* ───────────────────────────────────────────────────────────────── */}
+      {/* MODAL CẤU HÌNH KẾT NỐI & USER MÁY CHỦ ẢNH (FTP / SSH) */}
+      {/* Chỉ Super Admin hoặc dung.nguyenanh mới có quyền truy cập */}
+      {/* ───────────────────────────────────────────────────────────────── */}
+      {showConfigModal && (
+        <Modal
+          isOpen={showConfigModal}
+          onClose={() => setShowConfigModal(false)}
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Server size={18} color="#d97706" />
+              <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Cấu Hình Kết Nối & User Máy Chủ Ảnh (FTP / SSH)
+              </span>
+            </div>
+          }
+          maxWidth="640px"
+          footer={
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={configTesting || configSaving || configLoading}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 14px',
+                  borderRadius: '6px',
+                  border: '1px solid #3b82f6',
+                  backgroundColor: '#eff6ff',
+                  color: '#1d4ed8',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: (configTesting || configLoading) ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {configTesting ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                <span>{configTesting ? 'Đang kiểm tra...' : '🔌 Kiểm Tra Kết Nối'}</span>
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowConfigModal(false)}
+                  style={{
+                    padding: '7px 14px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: '#f8fafc',
+                    color: '#475569',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Đóng
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveConfig}
+                  disabled={configSaving || configLoading}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 16px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: '#d97706',
+                    color: '#ffffff',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: (configSaving || configLoading) ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  {configSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                  <span>{configSaving ? 'Đang lưu...' : '💾 Lưu Cấu Hình'}</span>
+                </button>
+              </div>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '4px 0' }}>
+            {/* Hộp cảnh báo phân quyền */}
+            <div
+              style={{
+                padding: '10px 12px',
+                backgroundColor: '#fffbeb',
+                border: '1px solid #fde68a',
+                borderRadius: '6px',
+                fontSize: '12px',
+                color: '#92400e',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px'
+              }}
+            >
+              <Lock size={16} style={{ marginTop: '2px', flexShrink: 0, color: '#d97706' }} />
+              <div>
+                <strong>Quyền Hạn Đặc Quyền:</strong> Chỉ tài khoản <strong>dung.nguyenanh</strong> và <strong>Super Admin</strong> mới có quyền xem mật khẩu, cấu hình kết nối và user FTP/SSH này.
+                <div style={{ fontSize: '11px', color: '#b45309', marginTop: '2px' }}>
+                  Hệ thống chỉ đọc (Read-Only) để so khớp file, tuyệt đối không chỉnh sửa gì trên máy chủ ảnh.
+                </div>
+              </div>
+            </div>
+
+            {configLoading ? (
+              <div style={{ padding: '30px', textAlign: 'center', color: '#64748b' }}>
+                <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto 8px' }} />
+                <div>Đang tải cấu hình máy chủ ảnh...</div>
+              </div>
+            ) : (
+              <>
+                {/* Loại kết nối */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                    Giao Thức / Loại Kết Nối *
+                  </label>
+                  <div style={{ display: 'flex', gap: '16px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="server_type"
+                        value="SSH_SFTP"
+                        checked={configForm.server_type === 'SSH_SFTP'}
+                        onChange={() => setConfigForm({ ...configForm, server_type: 'SSH_SFTP', port: 22 })}
+                      />
+                      <span>SSH / SFTP (Linux - Port 22 mặc định)</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="server_type"
+                        value="FTP"
+                        checked={configForm.server_type === 'FTP'}
+                        onChange={() => setConfigForm({ ...configForm, server_type: 'FTP', port: 21 })}
+                      />
+                      <span>FTP Server (Port 21 mặc định)</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Host & Port */}
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Địa Chỉ Host / IP Máy Chủ *
+                    </label>
+                    <input
+                      type="text"
+                      value={configForm.host}
+                      onChange={(e) => setConfigForm({ ...configForm, host: e.target.value })}
+                      placeholder="vd: 192.168.201.116"
+                      style={{
+                        width: '100%',
+                        padding: '7px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '12.5px',
+                        fontFamily: 'monospace'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Cổng (Port) *
+                    </label>
+                    <input
+                      type="number"
+                      value={configForm.port}
+                      onChange={(e) => setConfigForm({ ...configForm, port: Number(e.target.value) || 22 })}
+                      placeholder="22"
+                      style={{
+                        width: '100%',
+                        padding: '7px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '12.5px',
+                        fontFamily: 'monospace'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* User & Password */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Tài Khoản (Username) *
+                    </label>
+                    <input
+                      type="text"
+                      value={configForm.username}
+                      onChange={(e) => setConfigForm({ ...configForm, username: e.target.value })}
+                      placeholder="vd: dung.na"
+                      style={{
+                        width: '100%',
+                        padding: '7px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '12.5px'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Mật Khẩu *
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={configForm.password || ''}
+                        onChange={(e) => setConfigForm({ ...configForm, password: e.target.value })}
+                        placeholder="Nhập mật khẩu máy chủ..."
+                        style={{
+                          width: '100%',
+                          padding: '7px 34px 7px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid #cbd5e1',
+                          fontSize: '12.5px',
+                          fontFamily: 'monospace'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        style={{
+                          position: 'absolute',
+                          right: '6px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: '#64748b',
+                          padding: '2px'
+                        }}
+                        title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                      >
+                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Remote Directory & Standard Prefix */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                    Đường Dẫn Thư Mục Hình Ảnh Trên Máy Chủ *
+                  </label>
+                  <input
+                    type="text"
+                    value={configForm.remote_dir}
+                    onChange={(e) => setConfigForm({ ...configForm, remote_dir: e.target.value })}
+                    placeholder="/opt/gpos/gmonitor/resources/menu"
+                    style={{
+                      width: '100%',
+                      padding: '7px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '12.5px',
+                      fontFamily: 'monospace'
+                    }}
+                  />
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                    Thư mục chứa các file ảnh món (.jpg, .png) trên máy chủ remote.
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                    Tiền Tố Đường Dẫn Chuẩn (Standard Prefix) *
+                  </label>
+                  <input
+                    type="text"
+                    value={configForm.standard_prefix}
+                    onChange={(e) => setConfigForm({ ...configForm, standard_prefix: e.target.value })}
+                    placeholder="/resources/menu/"
+                    style={{
+                      width: '100%',
+                      padding: '7px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '12.5px',
+                      fontFamily: 'monospace'
+                    }}
+                  />
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                    Đường dẫn tương đối chuẩn lưu trên MongoDB (mặc định: <code>/resources/menu/</code>).
+                  </div>
+                </div>
+
+                {/* Thông tin cập nhật lần cuối */}
+                {serverConfig && serverConfig.updated_at && (
+                  <div style={{ fontSize: '11px', color: '#64748b', textAlign: 'right' }}>
+                    Lần cập nhật cuối: <strong>{serverConfig.updated_at}</strong> {serverConfig.updated_by ? `bởi ${serverConfig.updated_by}` : ''}
+                  </div>
+                )}
+
+                {/* Kết quả kiểm tra kết nối */}
+                {testResult && (
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      backgroundColor: testResult.success ? '#ecfdf5' : '#fef2f2',
+                      border: `1px solid ${testResult.success ? '#a7f3d0' : '#fecaca'}`,
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      color: testResult.success ? '#065f46' : '#991b1b',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    {testResult.success ? (
+                      <CheckCircle size={16} color="#10b981" style={{ flexShrink: 0 }} />
+                    ) : (
+                      <AlertCircle size={16} color="#ef4444" style={{ flexShrink: 0 }} />
+                    )}
+                    <div>
+                      <strong>{testResult.message}</strong>
+                      {testResult.latency_ms !== null && testResult.latency_ms !== undefined && (
+                        <span style={{ marginLeft: '6px', color: testResult.success ? '#047857' : '#b91c1c' }}>
+                          ({testResult.latency_ms} ms)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
 
       {/* ───────────────────────────────────────────────────────────────── */}
           </div>

@@ -2483,3 +2483,48 @@
   - Frontend: `cmd /c "npm run build"` tại `frontend/` hoàn thành sạch sẽ 100% với exit code 0 (`✓ built in 4.19s`). Bản build mới đã tạo sẵn trong `frontend/dist/`.
   - Backend: `python -m compileall app` hoàn thành 100% sạch lỗi; Backend Smoke Test vượt qua 100%.
   - Cơ sở dữ liệu: Tác vụ thao tác trên MongoDB nhà hàng và server ảnh SSH, không thêm bảng/cột mới nào trên SQL Server DB .25.
+
+
+---
+
+### PHIÊN LÀM VIỆC NGÀY 01/11/2026: PHÂN QUYỀN VÀ CẤU HÌNH KẾT NỐI MÁY CHỦ HÌNH ẢNH (FTP / SSH)
+- **Yêu cầu nghiệp vụ**:
+  - `user dung.nguyenanh và super admin mới có quyền cấu hình kết nối và user ftp`:
+    + Chỉ tài khoản `dung.nguyenanh` và người dùng có quyền `Super Admin` (`is_super_admin === true`, `username in ['admin', 'administrator', 'dung.nguyenanh']`, `phanquyen === '0'`, hoặc vai trò chứa `'super admin'`) mới có quyền:
+      1. Xem mật khẩu thực tế máy chủ ảnh.
+      2. Mở popup giao diện và thực hiện chỉnh sửa cấu hình kết nối (loại kết nối SSH/SFTP hoặc FTP, IP host, port, username, password, remote_dir, standard_prefix).
+      3. Kiểm tra kết nối thử nghiệm (Test connection).
+      4. Lưu cấu hình mới vào hệ thống.
+    + Đối với các nhóm tài khoản khác (App, Helpdesk, Inventory, User thường):
+      1. Không nhìn thấy nút `⚙️ Cấu Hình Máy Chủ Ảnh` trên thanh điều khiển CO.
+      2. Khi truy vấn API lấy cấu hình: Mật khẩu bị che lại bằng nhãn `🔒 Bị ẩn theo phân quyền`, cờ `can_edit = False`, `is_privileged = False`.
+      3. Nếu cố tình gọi API lưu cấu hình hoặc kiểm tra kết nối: Backend từ chối ngay lập tức với mã lỗi HTTP 403 Forbidden.
+      4. Vẫn cho phép kiểm tra và so khớp hình ảnh bình thường từ Tab 3 (hệ thống backend tự sử dụng cấu hình bảo mật được lưu ngầm).
+- **Triển khai kỹ thuật**:
+  1. **Backend Schemas (`backend/app/schemas/mongodb.py`)**:
+     - `ImageServerConfigResponse`: Thông tin cấu hình (server_type, host, port, username, password đã che hoặc thực tế, remote_dir, standard_prefix, is_privileged, can_edit, updated_at, updated_by).
+     - `UpdateImageServerConfigRequest`: Dữ liệu gửi lên khi lưu cấu hình.
+     - `TestImageServerConnectionRequest` & `TestImageServerConnectionResponse`: Dữ liệu kiểm tra kết nối (success, total_files, message, latency_ms).
+  2. **Backend Service (`backend/app/services/image_server_service.py`)**:
+     - Lưu cấu hình vào `backend/data/image_server_config.json` (tự động fallback mặc định: `192.168.201.116:22`, `dung.na`, `bp7em2zmQP`, `/opt/gpos/gmonitor/resources/menu`, `/resources/menu/`).
+     - Hàm `load_config()`, `save_config(new_config, updated_by)`: Nếu mật khẩu gửi lên để trống hoặc chứa ký tự che (`🔒`, `•`), tự động giữ nguyên mật khẩu cũ để không làm mất kết nối. Tự động xóa cache RAM khi lưu.
+     - Hỗ trợ cả 2 giao thức: `SSH_SFTP` (Paramiko port 22) và `FTP` (`ftplib.FTP` port 21).
+     - Hàm `test_connection()`: Đo latency thực tế và đếm số lượng file trong thư mục từ xa. Kiểm tra thực tế trên `192.168.201.116:22` phản hồi thành công 12,297 files trong 354.5ms.
+  3. **Backend API (`backend/app/api/v1/mongodb.py`)**:
+     - `GET /api/v1/mongodb/image-server/config`: Kiểm tra `_check_is_dung_or_super_admin(current_user)` để trả về thông tin mật khẩu thực tế hoặc nhãn che `🔒 Bị ẩn theo phân quyền`.
+     - `POST /api/v1/mongodb/image-server/config`: Chặn 403 Forbidden nếu không phải `dung.nguyenanh` hoặc `Super Admin`. Ghi nhật ký vào `LogService`.
+     - `POST /api/v1/mongodb/image-server/test-connection`: Chặn 403 Forbidden nếu không phải `dung.nguyenanh` hoặc `Super Admin`.
+  4. **Frontend Service (`frontend/src/services/mongoService.ts`)**:
+     - Bổ sung các interface và hàm `getImageServerConfig()`, `saveImageServerConfig()`, `testImageServerConnection()`.
+  5. **Frontend Tab 3 (`frontend/src/pages/app/AndroidEmulatorTab.tsx`)**:
+     - Kiểm tra quyền `canConfigImageServer = checkIsDungOrSuperAdmin(user)` từ `useAuth()`.
+     - Hiển thị nút `⚙️ Cấu Hình Máy Chủ Ảnh` trên thanh header CO khi người dùng có quyền.
+     - Tích hợp Modal cấu hình kết nối chuẩn `Modal` (hỗ trợ Escape LIFO):
+       * Form chọn giao thức SSH/SFTP hoặc FTP, nhập Host, Port, Username, Password (kèm nút con mắt ẩn/hiện), Thư mục từ xa, Tiền tố chuẩn.
+       * Hộp cảnh báo phân quyền màu vàng với icon Lock.
+       * Nút `🔌 Kiểm Tra Kết Nối`: Hiển thị trạng thái kết nối trực tiếp với latency ms và số file tìm thấy.
+       * Nút `💾 Lưu Cấu Hình` và `Đóng`.
+- **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
+  - Frontend: `cmd /c "npm run build"` tại `frontend/` hoàn thành 100% exit code 0 (`✓ built in 4.41s`). Tạo sẵn bản build mới trong `frontend/dist/`.
+  - Backend: `python -m compileall app` biên dịch 100% không có lỗi; Smoke Test vượt qua 100%.
+  - Kết nối thực tế tới `192.168.201.116:22` đã kiểm tra và phản hồi thành công 12,297 files.
