@@ -640,14 +640,16 @@ def sync_dish_images_to_mongo(
         col = db["CO_MENU_ITEM"]
 
         updated_count = 0
+        total_modified_docs = 0
         errors: List[str] = []
 
         for fix in fixes:
             rk7 = str(fix.get("rk7_code") or "").strip()
             sap = str(fix.get("sap_code") or "").strip()
+            name = str(fix.get("dish_name") or fix.get("name") or "").strip()
             target_path = str(fix.get("target_image_path") or "").strip()
 
-            if not target_path or (not rk7 and not sap):
+            if not target_path or (not rk7 and not sap and not name):
                 continue
 
             # Đảm bảo target_path có tiền tố standard_prefix
@@ -659,39 +661,72 @@ def sync_dish_images_to_mongo(
             clean_filename = target_path.replace(standard_prefix, "")
             gateway_url = f"https://gposgateway-hcm.ggg.com.vn:8443/resources/menu/{clean_filename}"
 
-            query: Dict[str, Any] = {}
+            # Xây dựng bộ lọc OR để quét và cập nhật TẤT CẢ các bản ghi của món này dù ở bất kỳ menu nào
+            or_conditions: List[Dict[str, Any]] = []
             if rk7:
-                query["code"] = rk7
-            elif sap:
-                query["sapCode"] = sap
+                or_conditions.append({"code": rk7})
+                try:
+                    or_conditions.append({"code": int(rk7)})
+                except Exception:
+                    pass
+            if sap:
+                or_conditions.append({"sapCode": sap})
+            if name:
+                or_conditions.append({"nameVn": name})
+                or_conditions.append({"name": name})
+
+            if not or_conditions:
+                continue
+
+            match_query = {"$or": or_conditions}
 
             update_fields: Dict[str, Any] = {
                 "srcImg": target_path,
                 "srcImgThumbnail": target_path,
+                "srcImgSquare": target_path,
                 "srcImgQr": target_path,
                 "urlImgQr": gateway_url,
                 "timeModify": int(time.time() * 1000)
             }
 
             try:
-                res = col.update_one(query, {"$set": update_fields})
+                # Dùng update_many để đồng bộ toàn bộ các món cùng mã RK7/SAP hoặc cùng tên ở mọi menu
+                res = col.update_many(match_query, {"$set": update_fields})
                 if res.matched_count > 0:
                     updated_count += 1
-                else:
-                    # Nếu chưa có trong CO_MENU_ITEM, thử tìm theo sapCode
-                    if rk7 and sap:
-                        res2 = col.update_one({"sapCode": sap}, {"$set": update_fields})
-                        if res2.matched_count > 0:
-                            updated_count += 1
+                    total_modified_docs += res.modified_count
+
+                # Đồng bộ thêm vào bảng MENU_ITEM nếu có bảng này trong G_ORDER
+                if "MENU_ITEM" in db.list_collection_names():
+                    try:
+                        db["MENU_ITEM"].update_many(
+                            match_query,
+                            {"$set": {"srcImg": target_path, "timeModify": int(time.time() * 1000)}}
+                        )
+                    except Exception:
+                        pass
             except Exception as ex:
-                errors.append(f"Mã {rk7 or sap}: {ex}")
+                errors.append(f"Món {name or rk7 or sap}: {ex}")
+
+        # Tăng VERSION_MENU_CO trong SYNC_VERSION để máy tính bảng POS CO nhận diện cập nhật ngay
+        try:
+            co_sync = db["SYNC_VERSION"].find_one({"refName": "VERSION_MENU_CO"})
+            cur_ver = co_sync.get("version", 0) if co_sync else 0
+            db["SYNC_VERSION"].update_one(
+                {"refName": "VERSION_MENU_CO"},
+                {"$set": {"timeModify": int(time.time() * 1000), "version": cur_ver + 1}},
+                upsert=True
+            )
+        except Exception:
+            pass
 
         return {
             "success": True,
             "updated_count": updated_count,
+            "total_modified_docs": total_modified_docs,
             "total_requested": len(fixes),
             "errors": errors,
-            "message": f"Đã đồng nhất thành công {updated_count}/{len(fixes)} món trên MongoDB từ máy chủ ảnh!"
+            "message": f"Đã đồng nhất thành công {updated_count}/{len(fixes)} món ({total_modified_docs} bản ghi trên toàn bộ DB) từ máy chủ ảnh!"
         }
     finally:
         client.close()

@@ -2569,6 +2569,10 @@ export interface CheckDishImageResult {
   given_prefix: string;
   server_filename: string;
   suggested_fix_path: string;
+  dish_id?: string;
+  rk7_code?: string;
+  sap_code?: string;
+  name?: string;
 }
 
 export interface CheckMenuImagesResponse {
@@ -2594,6 +2598,7 @@ export interface CheckMenuImagesResponse {
 export interface DishImageFixItem {
   rk7_code: string;
   sap_code?: string;
+  dish_name?: string;
   target_image_path: string;
 }
 

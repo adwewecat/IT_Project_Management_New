@@ -17,6 +17,7 @@ import {
   Zap,
   FileSpreadsheet,
   Check,
+  X,
   Copy,
   CheckSquare,
   Square,
@@ -262,10 +263,11 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [testResult, setTestResult] = useState<TestImageServerConnectionResponse | null>(null);
 
-  // State cảnh báo 2 bước khi đồng nhất hình ảnh toàn bộ
-  const [showSyncConfirmModal, setShowSyncConfirmModal] = useState<boolean>(false);
-  const [syncConfirmStep, setSyncConfirmStep] = useState<1 | 2>(1);
-  const [syncConfirmKeyword, setSyncConfirmKeyword] = useState<string>('');
+  // State quản lý Modal Chọn Món Đồng Bộ Ảnh Server (5 Cột + Checkbox + Multi-Search)
+  const [showSyncSelectionModal, setShowSyncSelectionModal] = useState<boolean>(false);
+  const [syncSelectionStep, setSyncSelectionStep] = useState<1 | 2>(1);
+  const [syncSearchQuery, setSyncSearchQuery] = useState<string>('');
+  const [selectedFixKeys, setSelectedFixKeys] = useState<Set<string>>(new Set());
   const [configForm, setConfigForm] = useState<UpdateImageServerConfigRequest>({
     server_type: 'SSH_SFTP',
     host: '192.168.201.116',
@@ -805,11 +807,25 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
       });
       setCheckedDishImagesMap((prev) => ({ ...prev, ...newMap }));
 
-      if (onToastRef.current) {
-        onToastRef.current(
-          `Đã check ${res.total_dishes} món: ${res.match_count} khớp • ${res.case_mismatch_count} lệch hoa thường • ${res.prefix_mismatch_count} sai tiền tố • ${res.not_found_count} không có`,
-          res.fixable_count > 0 ? 'info' : 'success'
-        );
+      if (res.fixable_count > 0) {
+        // Tự động mở Popup chọn món đồng bộ theo yêu cầu người dùng
+        setSyncSelectionStep(1);
+        setSyncSearchQuery('');
+        setSelectedFixKeys(new Set());
+        setShowSyncSelectionModal(true);
+        if (onToastRef.current) {
+          onToastRef.current(
+            `Đã check ${res.total_dishes} món: Phát hiện ${res.fixable_count} món sai lệch hình ảnh!`,
+            'info'
+          );
+        }
+      } else {
+        if (onToastRef.current) {
+          onToastRef.current(
+            `Tuyệt vời! Toàn bộ ${res.total_dishes} món đều khớp 100% với ảnh trên server!`,
+            'success'
+          );
+        }
       }
     } catch (err: any) {
       if (onToastRef.current) {
@@ -834,6 +850,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
           {
             rk7_code: String(dish.rk7Code || ''),
             sap_code: dish.sapCode || '',
+            dish_name: dish.name || '',
             target_image_path: targetPath
           }
         ]
@@ -962,41 +979,99 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
     }
   };
 
-  // Đồng nhất toàn bộ các món bị lệch trong menu: Kích hoạt Modal Cảnh Báo 2 Bước
-  const handleSyncAllFixableImages = () => {
-    if (!menuImagesSummary || menuImagesSummary.fixable_count === 0) return;
-    const rawHost = connectedHost || selectedRestaurant?.ip;
-    const cleanHost = getValidMongoHost(rawHost);
-    if (!cleanHost) {
-      if (onToastRef.current) onToastRef.current('Chưa xác định IP kết nối MongoDB máy trạm!', 'error');
-      return;
+  // Danh sách các món bị sai/lệch link hình ảnh có thể đồng bộ từ máy chủ
+  const fixableItems = useMemo(() => {
+    if (!menuImagesSummary || !menuImagesSummary.results) return [];
+    return menuImagesSummary.results.filter((r) => r.is_fixable && r.suggested_fix_path);
+  }, [menuImagesSummary]);
+
+  // Bộ lọc tìm kiếm đa năng (hỗ trợ 1 hoặc nhiều mã SAP, RK7, Tên món phân cách bởi phẩy, chấm phẩy, khoảng trắng, xuống dòng)
+  const filteredFixableItems = useMemo(() => {
+    const query = syncSearchQuery.trim();
+    if (!query) return fixableItems;
+
+    let tokens: string[] = [];
+    if (/[,;\n\r]/.test(query)) {
+      tokens = query
+        .split(/[,;\n\r]+/)
+        .map((t) => t.trim())
+        .filter(Boolean);
+    } else {
+      const parts = query.split(/\s+/).map((p) => p.trim()).filter(Boolean);
+      if (parts.length > 1 && parts.every((p) => /^[a-zA-Z0-9_\-]+$/.test(p))) {
+        tokens = parts;
+      } else {
+        tokens = [query];
+      }
     }
 
-    const fixableItems = menuImagesSummary.results.filter((r) => r.is_fixable && r.suggested_fix_path);
-    if (fixableItems.length === 0) return;
+    if (tokens.length === 0) return fixableItems;
+    const normalizedTokens = tokens.map((t) => removeVietnameseTones(t).toLowerCase());
 
-    // Mở popup cảnh báo 2 bước chống click nhầm và chống mất hình hàng loạt
-    setSyncConfirmStep(1);
-    setSyncConfirmKeyword('');
-    setShowSyncConfirmModal(true);
+    return fixableItems.filter((item) => {
+      const rk7 = String(item.rk7_code || '').toLowerCase();
+      const sap = String(item.sap_code || '').toLowerCase();
+      const nameNorm = removeVietnameseTones(item.name || '').toLowerCase();
+
+      return normalizedTokens.some(
+        (tok) => rk7.includes(tok) || sap.includes(tok) || nameNorm.includes(tok)
+      );
+    });
+  }, [fixableItems, syncSearchQuery]);
+
+  const getFixItemKey = (item: { dish_id?: string; rk7_code?: string; sap_code?: string; name?: string }): string => {
+    return item.dish_id || `${item.rk7_code || ''}_${item.sap_code || ''}_${item.name || ''}`;
   };
 
-  // Thực thi đồng nhất hình ảnh toàn bộ sau khi đã xác thực 2 bước
-  const executeSyncAllFixableImages = async () => {
-    if (!menuImagesSummary || menuImagesSummary.fixable_count === 0) return;
+  const isAllFilteredSelected =
+    filteredFixableItems.length > 0 &&
+    filteredFixableItems.every((it) => selectedFixKeys.has(getFixItemKey(it)));
+
+  const handleToggleSelectAllFiltered = () => {
+    setSelectedFixKeys((prev) => {
+      const next = new Set(prev);
+      if (isAllFilteredSelected) {
+        filteredFixableItems.forEach((it) => next.delete(getFixItemKey(it)));
+      } else {
+        filteredFixableItems.forEach((it) => next.add(getFixItemKey(it)));
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSingleItem = (item: CheckDishImageResult) => {
+    const key = getFixItemKey(item);
+    setSelectedFixKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const handleClearAllSelection = () => {
+    setSelectedFixKeys(new Set());
+  };
+
+  // Thực thi đồng bộ các món đã được người dùng tích chọn
+  const executeSyncSelectedImages = async () => {
+    if (selectedFixKeys.size === 0) return;
     const rawHost = connectedHost || selectedRestaurant?.ip;
     const cleanHost = getValidMongoHost(rawHost);
     if (!cleanHost) return;
 
-    const fixableItems = menuImagesSummary.results.filter((r) => r.is_fixable && r.suggested_fix_path);
-    if (fixableItems.length === 0) return;
+    const selectedItems = fixableItems.filter((it) => selectedFixKeys.has(getFixItemKey(it)));
+    if (selectedItems.length === 0) return;
 
-    setShowSyncConfirmModal(false);
     setSyncingImages(true);
     try {
-      const fixes = fixableItems.map((item) => ({
-        rk7_code: item.rk7_code,
-        sap_code: item.sap_code,
+      const fixes = selectedItems.map((item) => ({
+        rk7_code: String(item.rk7_code || ''),
+        sap_code: item.sap_code || '',
+        dish_name: item.name || '',
         target_image_path: item.suggested_fix_path
       }));
 
@@ -1013,30 +1088,57 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
         onToastRef.current(res.message, 'success');
       }
 
+      setShowSyncSelectionModal(false);
+      setSyncSelectionStep(1);
+
       await loadDishesFromMongo(cleanHost);
 
       setCheckedDishImagesMap((prev) => {
         const updated = { ...prev };
-        fixableItems.forEach((it) => {
+        selectedItems.forEach((it) => {
           if (it.dish_id) {
             updated[it.dish_id] = {
               ...it,
-              status: 'MATCH',
+              status: 'MATCH' as const,
               is_match: true,
               is_fixable: false,
-              message: 'Đã đồng nhất khớp chuẩn với máy chủ ảnh',
-              given_path: it.suggested_fix_path,
-              given_filename: it.server_filename
+              message: `Đã đồng nhất thành công theo server: ${it.suggested_fix_path}`
             };
           }
         });
         return updated;
       });
 
-      setMenuImagesSummary(null);
+      setMenuImagesSummary((prev) => {
+        if (!prev) return null;
+        const selectedIdSet = new Set(selectedItems.map((it) => it.dish_id));
+        const updatedResults = prev.results.map((r) => {
+          if (selectedIdSet.has(r.dish_id)) {
+            return {
+              ...r,
+              status: 'MATCH' as const,
+              is_match: true,
+              is_fixable: false,
+              message: `Đã đồng nhất thành công theo server: ${r.suggested_fix_path}`
+            };
+          }
+          return r;
+        });
+        const remainingFixable = updatedResults.filter((r) => r.is_fixable).length;
+        return {
+          ...prev,
+          match_count: prev.match_count + selectedItems.length,
+          case_mismatch_count: updatedResults.filter((r) => r.status === 'CASE_MISMATCH').length,
+          prefix_mismatch_count: updatedResults.filter((r) => r.status === 'PREFIX_MISMATCH').length,
+          fixable_count: remainingFixable,
+          results: updatedResults
+        };
+      });
+
+      setSelectedFixKeys(new Set());
     } catch (err: any) {
       if (onToastRef.current) {
-        onToastRef.current('Lỗi đồng nhất hàng loạt: ' + (err.response?.data?.detail || err.message), 'error');
+        onToastRef.current('Lỗi khi đồng nhất hình ảnh: ' + (err.response?.data?.detail || err.message), 'error');
       }
     } finally {
       setSyncingImages(false);
@@ -2696,7 +2798,10 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                 {menuImagesSummary && menuImagesSummary.fixable_count > 0 && (
                   <button
                     type="button"
-                    onClick={handleSyncAllFixableImages}
+                    onClick={() => {
+                      setSyncSelectionStep(1);
+                      setShowSyncSelectionModal(true);
+                    }}
                     disabled={syncingImages}
                     style={{
                       display: 'inline-flex',
@@ -2712,10 +2817,10 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                       cursor: syncingImages ? 'not-allowed' : 'pointer',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                     }}
-                    title="Cập nhật đồng nhất tất cả các tên hình bị lệch từ Server về MongoDB (Server chỉ đọc)"
+                    title="Mở danh sách các món lệch để chọn từng món hoặc chọn tất cả đồng bộ về MongoDB"
                   >
                     <Zap size={13} color="#059669" />
-                    <span>⚡ Đồng Nhất Toàn Bộ ({menuImagesSummary.fixable_count} món lệch về DB)</span>
+                    <span>⚡ Chọn Món Đồng Bộ ({menuImagesSummary.fixable_count} món lệch)</span>
                   </button>
                 )}
 
@@ -3566,91 +3671,104 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
 
 
       {/* ───────────────────────────────────────────────────────────────── */}
-      {/* MODAL CẢNH BÁO 2 BƯỚC ĐỒNG NHẤT HÌNH ẢNH TOÀN BỘ (CHỐNG MẤT HÌNH) */}
+      {/* MODAL CHỌN MÓN ĐỒNG BỘ LINK ẢNH TỪ SERVER (5 CỘT + CHECKBOX + SEARCH) */}
       {/* ───────────────────────────────────────────────────────────────── */}
-      {showSyncConfirmModal && menuImagesSummary && (
+      {showSyncSelectionModal && (
         <Modal
-          isOpen={showSyncConfirmModal}
-          onClose={() => setShowSyncConfirmModal(false)}
+          isOpen={showSyncSelectionModal}
+          onClose={() => {
+            if (!syncingImages) {
+              setShowSyncSelectionModal(false);
+              setSyncSelectionStep(1);
+            }
+          }}
           title={
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {syncConfirmStep === 1 ? (
-                <AlertCircle size={20} color="#d97706" />
-              ) : (
-                <AlertCircle size={20} color="#dc2626" />
-              )}
-              <span style={{ fontSize: '15px', fontWeight: 700, color: syncConfirmStep === 1 ? '#b45309' : '#dc2626' }}>
-                {syncConfirmStep === 1
-                  ? '⚠️ BƯỚC 1/2: XÁC NHẬN ĐỒNG NHẤT HÌNH ẢNH TOÀN BỘ'
-                  : '🚨 BƯỚC 2/2: CẢNH BÁO NGUY HIỂM - XÁC THỰC LẦN CUỐI'}
+              <Zap size={18} color="#059669" />
+              <span style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
+                {syncSelectionStep === 1
+                  ? 'Chọn Món Đồng Bộ Link Ảnh Từ Server Về MongoDB'
+                  : 'Xác Nhận Cập Nhật Đồng Bộ Link Ảnh Vào MongoDB'}
               </span>
             </div>
           }
-          maxWidth="680px"
+          maxWidth="980px"
           footer={
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '8px' }}>
-              {syncConfirmStep === 1 ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '8px', flexWrap: 'wrap' }}>
+              {syncSelectionStep === 1 ? (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => setShowSyncConfirmModal(false)}
-                    style={{
-                      padding: '7px 14px',
-                      borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
-                      backgroundColor: '#f8fafc',
-                      color: '#475569',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Hủy Bỏ
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSyncConfirmStep(2)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '7px 16px',
-                      borderRadius: '6px',
-                      border: 'none',
-                      backgroundColor: '#2563eb',
-                      color: '#ffffff',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                    }}
-                  >
-                    <span>Tiếp Tục Sang Bước 2</span>
-                    <span>→</span>
-                  </button>
+                  <div style={{ fontSize: '12px', color: '#475569' }}>
+                    Đã chọn: <strong style={{ color: '#047857', fontSize: '13px' }}>{selectedFixKeys.size}</strong> / {fixableItems.length} món
+                    {syncSearchQuery && (
+                      <span style={{ color: '#64748b', marginLeft: '6px' }}>
+                        (Đang hiển thị {filteredFixableItems.length} món)
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowSyncSelectionModal(false)}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        backgroundColor: '#f8fafc',
+                        color: '#475569',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Đóng
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSyncSelectionStep(2)}
+                      disabled={selectedFixKeys.size === 0}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 16px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        backgroundColor: selectedFixKeys.size > 0 ? '#059669' : '#cbd5e1',
+                        color: '#ffffff',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: selectedFixKeys.size > 0 ? 'pointer' : 'not-allowed',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                      }}
+                    >
+                      <span>Tiếp Tục Đồng Bộ ({selectedFixKeys.size} món)</span>
+                      <span>→</span>
+                    </button>
+                  </div>
                 </>
               ) : (
                 <>
                   <button
                     type="button"
-                    onClick={() => setSyncConfirmStep(1)}
+                    onClick={() => setSyncSelectionStep(1)}
+                    disabled={syncingImages}
                     style={{
-                      padding: '7px 14px',
+                      padding: '6px 14px',
                       borderRadius: '6px',
                       border: '1px solid #cbd5e1',
                       backgroundColor: '#f8fafc',
                       color: '#475569',
                       fontSize: '12px',
                       fontWeight: 600,
-                      cursor: 'pointer'
+                      cursor: syncingImages ? 'not-allowed' : 'pointer'
                     }}
                   >
-                    ← Quay Lại Bước 1
+                    ← Quay Lại Chọn Tiếp
                   </button>
                   <button
                     type="button"
-                    onClick={executeSyncAllFixableImages}
-                    disabled={syncConfirmKeyword.trim().toUpperCase() !== 'DONG NHAT' || syncingImages}
+                    onClick={executeSyncSelectedImages}
+                    disabled={syncingImages || selectedFixKeys.size === 0}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -3658,192 +3776,328 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                       padding: '7px 18px',
                       borderRadius: '6px',
                       border: 'none',
-                      backgroundColor:
-                        syncConfirmKeyword.trim().toUpperCase() === 'DONG NHAT' ? '#dc2626' : '#cbd5e1',
+                      backgroundColor: '#dc2626',
                       color: '#ffffff',
                       fontSize: '12px',
                       fontWeight: 800,
-                      cursor:
-                        syncConfirmKeyword.trim().toUpperCase() === 'DONG NHAT' && !syncingImages
-                          ? 'pointer'
-                          : 'not-allowed',
+                      cursor: syncingImages ? 'not-allowed' : 'pointer',
                       boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
                     }}
                   >
                     {syncingImages ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-                    <span>⚡ XÁC NHẬN ĐỒNG NHẤT ({menuImagesSummary.fixable_count} MÓN)</span>
+                    <span>⚡ XÁC NHẬN ĐỒNG BỘ ({selectedFixKeys.size} MÓN) VÀO MONGODB</span>
                   </button>
                 </>
               )}
             </div>
           }
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {syncConfirmStep === 1 ? (
-              <>
-                {/* Tóm tắt thông tin đồng nhất */}
-                <div
-                  style={{
-                    backgroundColor: '#fffbeb',
-                    border: '1px solid #fde68a',
-                    borderRadius: '6px',
-                    padding: '10px 12px',
-                    fontSize: '12px',
-                    color: '#92400e'
-                  }}
-                >
-                  <div style={{ fontWeight: 700, marginBottom: '4px', fontSize: '13px' }}>
-                    📋 Thông Tin Đợt Đồng Nhất Hình Ảnh
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '6px' }}>
-                    <div>
-                      Menu: <strong>{selectedCategory.name}</strong> (Mã: <code>{selectedCategory.code}</code>)
-                    </div>
-                    <div>
-                      Nhà hàng: <strong>{selectedRestaurant?.name || 'Chi nhánh'}</strong>
-                    </div>
-                    <div>
-                      IP Kết nối: <code>{getValidMongoHost(connectedHost || selectedRestaurant?.ip)}</code>
-                    </div>
-                    <div>
-                      Số lượng món lệch sẽ cập nhật: <strong style={{ color: '#dc2626', fontSize: '13px' }}>{menuImagesSummary.fixable_count} món</strong>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#b45309', marginTop: '6px', borderTop: '1px dashed #fcd34d', paddingTop: '4px' }}>
-                    ⚠️ Thao tác sẽ cập nhật trực tiếp các trường <code>srcImg</code>, <code>srcImgThumbnail</code>, <code>srcImgQr</code>, <code>urlImgQr</code> trên bảng <code>CO_MENU_ITEM</code> MongoDB nhà hàng theo tên hình chuẩn từ máy chủ. Máy chủ ảnh chỉ đọc và không bị thay đổi.
-                  </div>
-                </div>
-
-                {/* Danh sách các món sẽ được cập nhật */}
+          {syncSelectionStep === 1 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {/* Thẻ thông tin Menu & Hướng dẫn */}
+              <div
+                style={{
+                  backgroundColor: '#f0fdf4',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: '6px',
+                  padding: '8px 12px',
+                  fontSize: '12px',
+                  color: '#166534',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '6px'
+                }}
+              >
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                    Danh Sách Món Lệch Cần Đồng Nhất ({menuImagesSummary.results.filter((r) => r.is_fixable).length} món):
-                  </div>
-                  <div
-                    style={{
-                      maxHeight: '220px',
-                      overflowY: 'auto',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '6px',
-                      backgroundColor: '#f8fafc',
-                      fontSize: '11px'
-                    }}
-                  >
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
-                          <th style={{ padding: '6px 8px', width: '35px' }}>#</th>
-                          <th style={{ padding: '6px 8px' }}>Tên Món</th>
-                          <th style={{ padding: '6px 8px', width: '80px' }}>Mã RK7</th>
-                          <th style={{ padding: '6px 8px' }}>Hình Hiện Tại (DB)</th>
-                          <th style={{ padding: '6px 8px' }}>Hình Chuẩn (Server)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {menuImagesSummary.results
-                          .filter((r) => r.is_fixable)
-                          .map((item, idx) => (
-                            <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                              <td style={{ padding: '4px 8px', color: '#64748b' }}>{idx + 1}</td>
-                              <td style={{ padding: '4px 8px', fontWeight: 600, color: '#0f172a' }}>{item.name}</td>
-                              <td style={{ padding: '4px 8px', fontFamily: 'monospace' }}>{item.rk7_code || item.sap_code}</td>
-                              <td style={{ padding: '4px 8px', color: '#c2410c', fontFamily: 'monospace', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.given_path}>
-                                {item.given_filename || item.given_path}
-                              </td>
-                              <td style={{ padding: '4px 8px', color: '#047857', fontWeight: 700, fontFamily: 'monospace', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.suggested_fix_path}>
-                                {item.suggested_fix_path}
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  Menu: <strong>{selectedCategory.name}</strong> (Mã: <code>{selectedCategory.code}</code>) • Tổng số món sai link ảnh: <strong style={{ color: '#dc2626' }}>{fixableItems.length} món</strong>
                 </div>
-              </>
-            ) : (
-              <>
-                {/* Bước 2: Cảnh báo nguy hiểm & bắt nhập từ khóa */}
-                <div
-                  style={{
-                    backgroundColor: '#fef2f2',
-                    border: '1px solid #fecaca',
-                    borderRadius: '6px',
-                    padding: '12px',
-                    color: '#991b1b',
-                    fontSize: '12px'
-                  }}
-                >
-                  <div style={{ fontWeight: 800, fontSize: '13.5px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <AlertCircle size={18} color="#dc2626" />
-                    <span>CẢNH BÁO NGUY CƠ CAO: THAO TÁC CẬP NHẬT HÀNG LOẠT VÀO DATABASE</span>
-                  </div>
-                  <div>
-                    Bạn đang chuẩn bị cập nhật đồng nhất link ảnh cho <strong>{menuImagesSummary.fixable_count} món</strong> của Menu <strong>{selectedCategory.name}</strong>.
-                  </div>
-                  <div style={{ marginTop: '4px', fontWeight: 600 }}>
-                    Để tránh việc thao tác nhầm hoặc mất link hình hàng loạt, vui lòng gõ chính xác cụm từ <code style={{ backgroundColor: '#fee2e2', padding: '1px 6px', borderRadius: '3px', color: '#991b1b', fontWeight: 800, border: '1px solid #fca5a5' }}>DONG NHAT</code> vào ô bên dưới:
-                  </div>
+                <div style={{ fontSize: '11px', color: '#15803d' }}>
+                  💡 <em>Tất cả món cùng mã SAP, RK7 hoặc cùng tên ở mọi menu sẽ được cập nhật đồng thời.</em>
                 </div>
+              </div>
 
-                {/* Ô nhập từ khóa xác thực */}
-                <div style={{ padding: '6px 0' }}>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#1e293b', marginBottom: '4px' }}>
-                    Nhập từ khóa xác nhận: <span style={{ color: '#dc2626' }}>*</span>
-                  </label>
+              {/* Thanh tìm kiếm đa năng & nút chọn nhanh */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', flex: 1, minWidth: '260px' }}>
+                  <Search size={14} style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                   <input
                     type="text"
-                    value={syncConfirmKeyword}
-                    onChange={(e) => setSyncConfirmKeyword(e.target.value)}
-                    placeholder="Gõ đúng: DONG NHAT"
+                    value={syncSearchQuery}
+                    onChange={(e) => setSyncSearchQuery(e.target.value)}
+                    placeholder="🔍 Tìm kiếm (1 hoặc nhiều mã SAP, RK7, Tên món cách nhau bởi dấu phẩy, khoảng trắng, xuống dòng)..."
                     style={{
                       width: '100%',
-                      padding: '9px 12px',
+                      padding: '6px 28px 6px 30px',
+                      fontSize: '12px',
                       borderRadius: '6px',
-                      border: `2px solid ${syncConfirmKeyword.trim().toUpperCase() === 'DONG NHAT' ? '#10b981' : '#cbd5e1'}`,
-                      fontSize: '14px',
-                      fontWeight: 700,
-                      fontFamily: 'monospace',
-                      letterSpacing: '1px',
-                      outline: 'none'
+                      border: '1px solid #cbd5e1',
+                      outline: 'none',
+                      backgroundColor: '#ffffff'
                     }}
-                    autoFocus
                   />
-                  {syncConfirmKeyword && syncConfirmKeyword.trim().toUpperCase() !== 'DONG NHAT' && (
-                    <div style={{ fontSize: '11px', color: '#dc2626', marginTop: '3px' }}>
-                      ❌ Từ khóa chưa khớp, vui lòng gõ đúng <code>DONG NHAT</code>
-                    </div>
-                  )}
-                  {syncConfirmKeyword.trim().toUpperCase() === 'DONG NHAT' && (
-                    <div style={{ fontSize: '11px', color: '#059669', marginTop: '3px', fontWeight: 700 }}>
-                      ✅ Từ khóa chính xác! Bạn có thể bấm xác nhận bên dưới.
-                    </div>
+                  {syncSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSyncSearchQuery('')}
+                      style={{
+                        position: 'absolute',
+                        right: '7px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#94a3b8',
+                        padding: 0,
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                      title="Xóa tìm kiếm"
+                    >
+                      <X size={14} />
+                    </button>
                   )}
                 </div>
 
-                {/* Thông tin user và lưu vết logs */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectAllFiltered}
+                    style={{
+                      padding: '5px 10px',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      borderRadius: '5px',
+                      border: '1px solid #bbf7d0',
+                      backgroundColor: isAllFilteredSelected ? '#dcfce7' : '#ffffff',
+                      color: '#15803d',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                    title={isAllFilteredSelected ? 'Bỏ chọn các món đang hiển thị' : 'Chọn tất cả các món đang hiển thị'}
+                  >
+                    {isAllFilteredSelected ? <CheckSquare size={13} /> : <Square size={13} />}
+                    <span>{isAllFilteredSelected ? 'Bỏ chọn hiển thị' : `Chọn tất cả (${filteredFixableItems.length})`}</span>
+                  </button>
+
+                  {selectedFixKeys.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearAllSelection}
+                      style={{
+                        padding: '5px 10px',
+                        fontSize: '11.5px',
+                        fontWeight: 600,
+                        borderRadius: '5px',
+                        border: '1px solid #e2e8f0',
+                        backgroundColor: '#ffffff',
+                        color: '#64748b',
+                        cursor: 'pointer'
+                      }}
+                      title="Bỏ chọn toàn bộ các món"
+                    >
+                      Bỏ chọn tất cả ({selectedFixKeys.size})
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Bảng danh sách 5 cột món sai link hình ảnh */}
+              <div
+                style={{
+                  maxHeight: '380px',
+                  overflowY: 'auto',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                  backgroundColor: '#ffffff'
+                }}
+              >
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
+                  <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f1f5f9', zIndex: 5, borderBottom: '1px solid #cbd5e1' }}>
+                    <tr>
+                      <th style={{ padding: '6px 8px', width: '36px', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={isAllFilteredSelected}
+                          onChange={handleToggleSelectAllFiltered}
+                          title="Chọn / Bỏ chọn toàn bộ món đang hiển thị"
+                          style={{ cursor: 'pointer' }}
+                        />
+                      </th>
+                      <th style={{ padding: '6px 8px', width: '90px', color: '#475569' }}>Mã SAP</th>
+                      <th style={{ padding: '6px 8px', width: '80px', color: '#475569' }}>Mã RK7</th>
+                      <th style={{ padding: '6px 8px', color: '#0f172a' }}>TÊN MÓN</th>
+                      <th style={{ padding: '6px 8px', color: '#c2410c' }}>Link Hình Của File (DB)</th>
+                      <th style={{ padding: '6px 8px', color: '#047857' }}>Link Hình Của Server</th>
+                      <th style={{ padding: '6px 8px', width: '95px', textAlign: 'center', color: '#475569' }}>Phân Loại</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredFixableItems.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>
+                          {syncSearchQuery
+                            ? 'Không tìm thấy món ăn nào khớp với từ khóa tìm kiếm.'
+                            : 'Không có món nào bị lệch hình ảnh cần đồng bộ.'}
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredFixableItems.map((item, idx) => {
+                        const key = getFixItemKey(item);
+                        const isSelected = selectedFixKeys.has(key);
+                        return (
+                          <tr
+                            key={key}
+                            onClick={() => handleToggleSingleItem(item)}
+                            style={{
+                              borderBottom: '1px solid #e2e8f0',
+                              backgroundColor: isSelected ? '#f0fdf4' : idx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                              cursor: 'pointer',
+                              transition: 'background-color 0.1s ease'
+                            }}
+                          >
+                            <td style={{ padding: '5px 8px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleSingleItem(item)}
+                                style={{ cursor: 'pointer' }}
+                              />
+                            </td>
+                            <td style={{ padding: '5px 8px', fontFamily: 'monospace', color: '#475569' }}>
+                              {item.sap_code || '—'}
+                            </td>
+                            <td style={{ padding: '5px 8px', fontFamily: 'monospace', fontWeight: 700, color: '#1e293b' }}>
+                              {item.rk7_code || '—'}
+                            </td>
+                            <td style={{ padding: '5px 8px', fontWeight: 600, color: '#0f172a' }}>
+                              {item.name}
+                            </td>
+                            <td
+                              style={{
+                                padding: '5px 8px',
+                                fontFamily: 'monospace',
+                                color: '#c2410c',
+                                maxWidth: '180px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title={item.given_path}
+                            >
+                              {item.given_filename || item.given_path}
+                            </td>
+                            <td
+                              style={{
+                                padding: '5px 8px',
+                                fontFamily: 'monospace',
+                                fontWeight: 700,
+                                color: '#047857',
+                                maxWidth: '200px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title={item.suggested_fix_path}
+                            >
+                              {item.suggested_fix_path}
+                            </td>
+                            <td style={{ padding: '5px 8px', textAlign: 'center' }}>
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  padding: '1px 5px',
+                                  borderRadius: '3px',
+                                  whiteSpace: 'nowrap',
+                                  backgroundColor: item.status === 'CASE_MISMATCH' ? '#fef3c7' : '#ffedd5',
+                                  color: item.status === 'CASE_MISMATCH' ? '#b45309' : '#c2410c',
+                                  border: `1px solid ${item.status === 'CASE_MISMATCH' ? '#fde68a' : '#fed7aa'}`
+                                }}
+                              >
+                                {item.status === 'CASE_MISMATCH' ? '⚠️ Lệch chữ' : '⚠️ Sai link'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            /* Bước 2: Xác nhận an toàn trước khi thực thi */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div
+                style={{
+                  backgroundColor: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  color: '#991b1b',
+                  fontSize: '12px'
+                }}
+              >
+                <div style={{ fontWeight: 800, fontSize: '13px', marginBottom: '6px' }}>
+                  🚨 XÁC NHẬN ĐỒNG BỘ {selectedFixKeys.size} MÓN ĐÃ CHỌN VÀO MONGODB
+                </div>
+                <div>
+                  Bạn đang chuẩn bị cập nhật đường dẫn hình ảnh chuẩn từ máy chủ ảnh cho <strong>{selectedFixKeys.size} món</strong> thuộc Menu <strong>{selectedCategory.name}</strong>.
+                </div>
+                <div style={{ marginTop: '4px', color: '#b91c1c' }}>
+                  ⚠️ <strong>Cơ chế tự động:</strong> Do mỗi món ăn chỉ có 1 hình ảnh duy nhất, hệ thống sẽ tự động cập nhật tất cả các vị trí trùng mã SAP, mã RK7 hoặc cùng tên trên toàn bộ database nhà hàng (kể cả ở các menu khác).
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                  Danh Sách {selectedFixKeys.size} Món Sẽ Được Đồng Bộ:
+                </div>
                 <div
                   style={{
-                    backgroundColor: '#f8fafc',
+                    maxHeight: '260px',
+                    overflowY: 'auto',
                     border: '1px solid #e2e8f0',
                     borderRadius: '6px',
-                    padding: '8px 12px',
-                    fontSize: '11.5px',
-                    color: '#64748b'
+                    backgroundColor: '#f8fafc',
+                    fontSize: '11px'
                   }}
                 >
-                  <div>
-                    👤 Người thực hiện: <strong style={{ color: '#0f172a' }}>{user?.username || 'SYSTEM'}</strong>
-                  </div>
-                  <div style={{ marginTop: '2px' }}>
-                    🕒 Thời gian: <strong style={{ color: '#0f172a' }}>{new Date().toLocaleString('vi-VN')}</strong>
-                  </div>
-                  <div style={{ marginTop: '4px', color: '#047857', fontWeight: 600 }}>
-                    🛡️ Thao tác này sẽ được ghi nhận bắt buộc vào nhật ký hệ thống (Audit Logs) để đối soát.
-                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f1f5f9', zIndex: 2 }}>
+                      <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
+                        <th style={{ padding: '5px 8px', width: '30px' }}>#</th>
+                        <th style={{ padding: '5px 8px', width: '90px' }}>Mã SAP</th>
+                        <th style={{ padding: '5px 8px', width: '80px' }}>Mã RK7</th>
+                        <th style={{ padding: '5px 8px' }}>Tên Món</th>
+                        <th style={{ padding: '5px 8px' }}>Link Chuẩn (Server)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fixableItems
+                        .filter((it) => selectedFixKeys.has(getFixItemKey(it)))
+                        .map((item, idx) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                            <td style={{ padding: '4px 8px', color: '#64748b' }}>{idx + 1}</td>
+                            <td style={{ padding: '4px 8px', fontFamily: 'monospace' }}>{item.sap_code || '—'}</td>
+                            <td style={{ padding: '4px 8px', fontFamily: 'monospace', fontWeight: 600 }}>{item.rk7_code || '—'}</td>
+                            <td style={{ padding: '4px 8px', fontWeight: 600, color: '#0f172a' }}>{item.name}</td>
+                            <td style={{ padding: '4px 8px', color: '#047857', fontWeight: 700, fontFamily: 'monospace' }}>
+                              {item.suggested_fix_path}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
                 </div>
-              </>
-            )}
-          </div>
+              </div>
+            </div>
+          )}
         </Modal>
       )}
 

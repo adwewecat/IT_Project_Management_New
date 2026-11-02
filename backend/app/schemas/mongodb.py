@@ -1741,6 +1741,7 @@ class CheckMenuImagesResponse(BaseModel):
 class DishImageFixItem(BaseModel):
     rk7_code: str
     sap_code: Optional[str] = ''
+    dish_name: Optional[str] = ''
     target_image_path: str
 
 

@@ -6119,3 +6119,35 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
 - **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.37s`, 0 lỗi TypeScript TS6133). Đã tạo sẵn bản build sạch mới nhất trong `frontend/dist/`.
   * Backend: `python -m compileall backend/app` hoàn thành 100%, Smoke test `>>> PASSED 100%`.
+
+---
+
+### [2026-11-02] NÂNG CẤP CHỌN MÓN ĐỒNG BỘ ẢNH CO (POPUP 5 CỘT + CHECKBOX + MULTI-SEARCH + CƠ CHẾ ĐỒNG BỘ TOÀN DIỆN)
+- **Yêu cầu nghiệp vụ**:
+  * Thay vì đồng nhất toàn bộ ồ ạt dễ phát sinh rủi ro, chuyển đổi tính năng sang cơ chế **chủ động chọn từng món cần đồng bộ qua checkbox** hoặc chọn tất cả.
+  * Sau khi bấm `🔍 Check Toàn Bộ Ảnh Server (Menu này)`, nếu phát hiện món sai lệch link ảnh thì tự động hiển thị Popup gồm 5 cột chính:
+    1. **Mã SAP**
+    2. **Mã RK7**
+    3. **TÊN MÓN**
+    4. **Link hình của file (DB)**
+    5. **Link hình của server (Chuẩn)**
+  * Trang bị ô tìm kiếm đa năng: Hỗ trợ tìm kiếm 1 món hoặc nhiều món (phân cách bởi dấu phẩy, chấm phẩy, khoảng trắng, hoặc xuống dòng khi copy cả cột từ Excel), tìm linh hoạt theo Mã SAP, Mã RK7 hoặc Tên món (có dấu hoặc không dấu).
+  * **Cơ chế cập nhật độc nhất 1 món 1 hình**: Tất cả món dù ở menu nào thì cũng chỉ duy nhất 1 món 1 hình. Do đó, khi đồng bộ một món ăn, hệ thống sẽ tự động cập nhật tất cả các bản ghi có cùng mã SAP, cùng mã RK7, hoặc cùng tên trên toàn bộ database nhà hàng (kể cả ở các menu khác).
+- **Triển khai kỹ thuật**:
+  1. **Backend (`backend/app/schemas/mongodb.py` & `backend/app/services/image_server_service.py`)**:
+     * Bổ sung `dish_name` vào schema `DishImageFixItem`.
+     * Nâng cấp hàm `sync_dish_images_to_mongo`: Xây dựng bộ lọc OR linh hoạt (`code`, `sapCode`, `nameVn`, `name`), áp dụng `col.update_many` trên bảng `CO_MENU_ITEM` và đồng thời cập nhật bảng `MENU_ITEM` nếu có trong `G_ORDER`.
+     * Tự động tăng `VERSION_MENU_CO` trong `SYNC_VERSION` để máy tính bảng POS CO nhận diện cập nhật ngay.
+     * Lưu vết kiểm toán bắt buộc qua `LogService.record_log` vào SQL Server.
+  2. **Frontend UI (`frontend/src/pages/app/AndroidEmulatorTab.tsx` & `frontend/src/services/mongoService.ts`)**:
+     * Bổ sung `dish_name` vào interface `DishImageFixItem` và `CheckDishImageResult`.
+     * Thiết kế Modal `showSyncSelectionModal` chuẩn giao diện hiện đại:
+       - Tự động hiển thị ngay khi check phát hiện món lệch.
+       - Nút trên thanh công cụ chuyển thành `⚡ Chọn Món Đồng Bộ (X món lệch)` để mở lại bất kỳ lúc nào.
+       - Ô tìm kiếm đa năng lọc thời gian thực kèm nút xóa tìm kiếm `✕`.
+       - Nút bấm thao tác nhanh: `[✓ Chọn tất cả đang lọc]`, `[Bỏ chọn tất cả]`.
+       - Bảng dữ liệu 5 cột chuẩn chỉnh, sticky header cố định, độc lập scroll dọc, highlight màu xanh các dòng được tích chọn.
+       - Bước 2 xác nhận an toàn trước khi bấm cập nhật vào MongoDB.
+- **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn tất 100% exit code 0 (`✓ built in 4.50s`), 0 lỗi TypeScript TS6133. Đã tạo sẵn bản build sạch mới nhất trong `frontend/dist/`.
+  * Backend: `python -m compileall backend/app` hoàn thành 100%, Smoke test `>>> PASSED 100%`.
