@@ -6186,3 +6186,33 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
 - **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 3.99s`), 0 lỗi TypeScript TS6133. Bản build sạch mới nhất đã sẵn sàng trong `frontend/dist/`.
   * Backend: `python -m compileall backend/app` hoàn thành 100%, Smoke test `>>> BACKEND SMOKE TEST PASSED 100%`.
+
+
+---
+
+### [2026-11-03] KHÓA CỐ ĐỊNH THƯ MỤC ẢNH SERVER /opt/gpos/gmonitor/resources/menu & LOẠI BỎ TÌM KIẾM CANDIDATE BỪA BÃI
+- **Yêu cầu & Làm rõ nghiệp vụ từ người dùng**:
+  * Link hình của Server chỉ được lấy duy nhất trong thư mục cố định: `/opt/gpos/gmonitor/resources/menu`.
+  * Nếu trong thư mục này không có file thì phải ghi rõ ràng: `server /opt/gpos/gmonitor/resources/menu chưa có ảnh`.
+  * Tuyệt đối không quét toàn bộ server hoặc tìm kiếm candidate theo mã RK7/SAP (tránh lỗi match substring số như mã `685` của Bia Tiger bị gán nhầm sang `1685_kem_hong_tra.png`, hoặc gán sang các đường dẫn lạ như `/resources/co-food-item/qr_order/...`).
+- **Triển khai kỹ thuật**:
+  1. **Backend (`backend/app/services/image_server_service.py`)**:
+     * Xóa bỏ hoàn toàn khối logic tìm kiếm ứng viên `candidate_found` theo mã RK7/SAP.
+     * Cập nhật `compare_single_image`:
+       - Chỉ kiểm tra tên file (có phân biệt hoa/thường) trong tập file của thư mục `/opt/gpos/gmonitor/resources/menu`.
+       - Nếu khớp hoàn toàn: Trả về `MATCH` (Khớp 100%).
+       - Nếu lệch chữ hoa/thường: Trả về `CASE_MISMATCH`, `is_fixable=True`, gợi ý tên đúng từ server ghép với tiền tố của nhà hàng.
+       - Nếu không có: Trả về `status='NOT_FOUND'`, `is_fixable=False`, `suggested_fix_path=''`, và `message='server /opt/gpos/gmonitor/resources/menu chưa có ảnh'`.
+     * Cập nhật hàm xuất Excel `export_mismatched_dishes_excel`: Cột 39 và 41 ghi rõ `server /opt/gpos/gmonitor/resources/menu chưa có ảnh`.
+  2. **Frontend UI (`frontend/src/pages/app/AndroidEmulatorTab.tsx`)**:
+     * Bảng Popup "Chọn Món Đồng Bộ Link Ảnh Từ Server Về MongoDB":
+       - Cột "Link Hình Của Server": Nếu món chưa có ảnh trên server, hiển thị trực tiếp chữ màu đỏ: `server /opt/gpos/gmonitor/resources/menu chưa có ảnh`.
+       - Checkbox: Chỉ cho phép tích chọn đối với món có ảnh thực tế (`is_fixable=True`). Món chưa có ảnh trên server sẽ vô hiệu hóa checkbox (`disabled`) kèm tooltip giải thích.
+       - Nút chọn nhanh "Chọn tất cả có ảnh" chỉ chọn các món có thể đồng bộ.
+       - Banner thống kê ghi rõ: Tổng số món cần kiểm tra và số món thực tế có thể đồng bộ.
+     * Thẻ món ăn (Dish card):
+       - Badge trạng thái: `❌ Chưa có ảnh trên server` (hoặc `⚠️ Lệch chữ`, `✅ Khớp server`).
+       - Chức năng Copy 1-chạm: Sao chép chính xác thông báo `server /opt/gpos/gmonitor/resources/menu chưa có ảnh` để gửi sang bộ phận cập nhật hình ảnh.
+- **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 3.95s`), 0 lỗi TypeScript TS6133. Thư mục `frontend/dist/` đã tạo mới sạch sẽ.
+  * Backend: `python -m compileall backend/app` hoàn thành 100%, 0 lỗi cú pháp.

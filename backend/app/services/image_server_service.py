@@ -457,10 +457,11 @@ def compare_single_image(
             "suggested_fix_path": raw_path
         }
 
-    # 2. Lệch chữ hoa / thường: Giữ nguyên tiền tố của nhà hàng (vd: /menu/), chỉ đổi tên file sang đúng server (vd: /menu/Mona.jpg)
+    # 2. Lệch chữ hoa / thường: File CÓ TỒN TẠI trong /opt/gpos/gmonitor/resources/menu nhưng khác hoa/thường
     filename_lower = filename.lower()
     if filename_lower in lower_map:
         server_exact_name = lower_map[filename_lower]
+        # Giữ nguyên tiền tố của nhà hàng (vd: /menu/), chỉ đổi tên file sang đúng server (vd: /menu/Mona.jpg)
         suggested_path = f"{prefix}{server_exact_name}" if prefix else server_exact_name
         return {
             "status": "CASE_MISMATCH",
@@ -474,44 +475,17 @@ def compare_single_image(
             "suggested_fix_path": suggested_path
         }
 
-    # 3. Không tìm thấy đúng tên file, thử tìm ứng viên theo mã RK7 / SAP nếu có
-    candidate_found = ""
-    clean_rk7 = str(rk7_code or "").strip()
-    clean_sap = str(sap_code or "").strip()
+    # 3. Hoàn toàn không có file trong thư mục cố định /opt/gpos/gmonitor/resources/menu
+    # TUYỆT ĐỐI chỉ kiểm tra tại thư mục cố định này, không quét bừa sang nơi khác, không match substring mã RK7/SAP
+    remote_dir = cfg.get("remote_dir", "/opt/gpos/gmonitor/resources/menu")
+    if not remote_dir:
+        remote_dir = "/opt/gpos/gmonitor/resources/menu"
 
-    if clean_rk7 and len(clean_rk7) >= 3:
-        for f in exact_set:
-            if clean_rk7 in f:
-                candidate_found = f
-                break
-
-    if not candidate_found and clean_sap and len(clean_sap) >= 4:
-        for f in exact_set:
-            if clean_sap in f:
-                candidate_found = f
-                break
-
-    if candidate_found:
-        suggested_path = f"{prefix}{candidate_found}" if prefix else candidate_found
-        return {
-            "status": "CANDIDATE_FOUND",
-            "is_match": False,
-            "is_fixable": True,
-            "message": f"Không tìm thấy '{filename}', nhưng tìm thấy file theo mã trên server: '{candidate_found}'",
-            "given_path": raw_path,
-            "given_filename": filename,
-            "given_prefix": prefix,
-            "server_filename": candidate_found,
-            "suggested_fix_path": suggested_path
-        }
-
-    # 4. Hoàn toàn không tìm thấy trên server
-    server_host = cfg.get("host", "192.168.201.116")
     return {
         "status": "NOT_FOUND",
         "is_match": False,
         "is_fixable": False,
-        "message": f"Hình '{filename}' không tồn tại trên máy chủ {server_host}",
+        "message": f"server {remote_dir} chưa có ảnh",
         "given_path": raw_path,
         "given_filename": filename,
         "given_prefix": prefix,
@@ -562,14 +536,8 @@ def check_dishes_images_for_menu(
         st = comp["status"]
         if st == "MATCH":
             match_count += 1
-        elif st == "PREFIX_MISMATCH":
-            prefix_mismatch_count += 1
-            fixable_count += 1
         elif st == "CASE_MISMATCH":
             case_mismatch_count += 1
-            fixable_count += 1
-        elif st == "CANDIDATE_FOUND":
-            candidate_count += 1
             fixable_count += 1
         elif st == "NO_IMAGE":
             no_image_count += 1
@@ -887,11 +855,11 @@ def export_mismatched_dishes_excel(
         c.fill = audit_header_fill
 
     # Bản đồ nhãn trạng thái tiếng Việt thân thiện
+    remote_dir_cfg = cfg.get("remote_dir", "/opt/gpos/gmonitor/resources/menu")
     status_vietnamese = {
-        "PREFIX_MISMATCH": "Sai tiền tố đường dẫn (/menu/ thay vì /resources/menu/)",
+        "MATCH": "Khớp server 100%",
         "CASE_MISMATCH": "Lệch chữ hoa/thường so với file thực tế trên Server",
-        "CANDIDATE_FOUND": "Tên file lệch nhưng tìm thấy ảnh theo mã RK7/SAP",
-        "NOT_FOUND": "Không tìm thấy file ảnh trên Server",
+        "NOT_FOUND": f"server {remote_dir_cfg} chưa có ảnh",
         "NO_IMAGE": "Chưa có cấu hình đường dẫn ảnh",
     }
 

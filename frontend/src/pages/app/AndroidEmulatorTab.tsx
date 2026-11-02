@@ -807,22 +807,30 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
       });
       setCheckedDishImagesMap((prev) => ({ ...prev, ...newMap }));
 
-      if (res.fixable_count > 0) {
+      const totalMismatches = (res.case_mismatch_count || 0) + (res.not_found_count || 0) + (res.no_image_count || 0);
+      if (totalMismatches > 0) {
         // Tự động mở Popup chọn món đồng bộ theo yêu cầu người dùng
         setSyncSelectionStep(1);
         setSyncSearchQuery('');
         setSelectedFixKeys(new Set());
         setShowSyncSelectionModal(true);
         if (onToastRef.current) {
-          onToastRef.current(
-            `Đã check ${res.total_dishes} món: Phát hiện ${res.fixable_count} món sai lệch hình ảnh!`,
-            'info'
-          );
+          if (res.fixable_count > 0) {
+            onToastRef.current(
+              `Đã check ${res.total_dishes} món: Có ${res.fixable_count} món lệch chữ có thể đồng bộ, ${res.not_found_count} món server chưa có ảnh!`,
+              'info'
+            );
+          } else {
+            onToastRef.current(
+              `Đã check ${res.total_dishes} món: Có ${res.not_found_count} món server /opt/gpos/gmonitor/resources/menu chưa có ảnh!`,
+              'info'
+            );
+          }
         }
       } else {
         if (onToastRef.current) {
           onToastRef.current(
-            `Tuyệt vời! Toàn bộ ${res.total_dishes} món đều khớp 100% với ảnh trên server!`,
+            `Tuyệt vời! Toàn bộ ${res.total_dishes} món đều khớp 100% với ảnh trong /opt/gpos/gmonitor/resources/menu!`,
             'success'
           );
         }
@@ -979,16 +987,21 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
     }
   };
 
-  // Danh sách các món bị sai/lệch link hình ảnh có thể đồng bộ từ máy chủ
-  const fixableItems = useMemo(() => {
+  // Danh sách toàn bộ các món bị sai lệch / chưa có ảnh trên server
+  const mismatchedItems = useMemo(() => {
     if (!menuImagesSummary || !menuImagesSummary.results) return [];
-    return menuImagesSummary.results.filter((r) => r.is_fixable && r.suggested_fix_path);
+    return menuImagesSummary.results.filter((r) => !r.is_match);
   }, [menuImagesSummary]);
 
+  // Các món CÓ THỂ ĐỒNG BỘ: Chỉ những món thực sự có ảnh trên server /opt/gpos/gmonitor/resources/menu
+  const fixableItems = useMemo(() => {
+    return mismatchedItems.filter((r) => r.is_fixable && r.suggested_fix_path);
+  }, [mismatchedItems]);
+
   // Bộ lọc tìm kiếm đa năng (hỗ trợ 1 hoặc nhiều mã SAP, RK7, Tên món phân cách bởi phẩy, chấm phẩy, khoảng trắng, xuống dòng)
-  const filteredFixableItems = useMemo(() => {
+  const filteredMismatchedItems = useMemo(() => {
     const query = syncSearchQuery.trim();
-    if (!query) return fixableItems;
+    if (!query) return mismatchedItems;
 
     let tokens: string[] = [];
     if (/[,;\n\r]/.test(query)) {
@@ -1005,10 +1018,10 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
       }
     }
 
-    if (tokens.length === 0) return fixableItems;
+    if (tokens.length === 0) return mismatchedItems;
     const normalizedTokens = tokens.map((t) => removeVietnameseTones(t).toLowerCase());
 
-    return fixableItems.filter((item) => {
+    return mismatchedItems.filter((item) => {
       const rk7 = String(item.rk7_code || '').toLowerCase();
       const sap = String(item.sap_code || '').toLowerCase();
       const nameNorm = removeVietnameseTones(item.name || '').toLowerCase();
@@ -1017,29 +1030,40 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
         (tok) => rk7.includes(tok) || sap.includes(tok) || nameNorm.includes(tok)
       );
     });
-  }, [fixableItems, syncSearchQuery]);
+  }, [mismatchedItems, syncSearchQuery]);
 
   const getFixItemKey = (item: { dish_id?: string; rk7_code?: string; sap_code?: string; name?: string }): string => {
     return item.dish_id || `${item.rk7_code || ''}_${item.sap_code || ''}_${item.name || ''}`;
   };
 
+  // Các món trong danh sách lọc có thể tích chọn đồng bộ
+  const fixableInFiltered = useMemo(() => {
+    return filteredMismatchedItems.filter((it) => it.is_fixable);
+  }, [filteredMismatchedItems]);
+
   const isAllFilteredSelected =
-    filteredFixableItems.length > 0 &&
-    filteredFixableItems.every((it) => selectedFixKeys.has(getFixItemKey(it)));
+    fixableInFiltered.length > 0 &&
+    fixableInFiltered.every((it) => selectedFixKeys.has(getFixItemKey(it)));
 
   const handleToggleSelectAllFiltered = () => {
     setSelectedFixKeys((prev) => {
       const next = new Set(prev);
       if (isAllFilteredSelected) {
-        filteredFixableItems.forEach((it) => next.delete(getFixItemKey(it)));
+        fixableInFiltered.forEach((it) => next.delete(getFixItemKey(it)));
       } else {
-        filteredFixableItems.forEach((it) => next.add(getFixItemKey(it)));
+        fixableInFiltered.forEach((it) => next.add(getFixItemKey(it)));
       }
       return next;
     });
   };
 
   const handleToggleSingleItem = (item: CheckDishImageResult) => {
+    if (!item.is_fixable) {
+      if (onToastRef.current) {
+        onToastRef.current(`Món "${item.name}" server /opt/gpos/gmonitor/resources/menu chưa có ảnh nên không thể đồng bộ!`, 'info');
+      }
+      return;
+    }
     const key = getFixItemKey(item);
     setSelectedFixKeys((prev) => {
       const next = new Set(prev);
@@ -2816,7 +2840,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                   <span>{checkingAllMenu ? 'Đang check toàn bộ...' : '🔍 Check Toàn Bộ Ảnh Server (Menu này)'}</span>
                 </button>
 
-                {menuImagesSummary && menuImagesSummary.fixable_count > 0 && (
+                {menuImagesSummary && mismatchedItems.length > 0 && (
                   <button
                     type="button"
                     onClick={() => {
@@ -2838,10 +2862,14 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                       cursor: syncingImages ? 'not-allowed' : 'pointer',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                     }}
-                    title="Mở danh sách các món lệch để chọn từng món hoặc chọn tất cả đồng bộ về MongoDB"
+                    title="Mở danh sách các món bị lệch hoặc server chưa có ảnh để xem và đồng bộ về MongoDB"
                   >
                     <Zap size={13} color="#059669" />
-                    <span>⚡ Chọn Món Đồng Bộ ({menuImagesSummary.fixable_count} món lệch)</span>
+                    <span>
+                      {fixableItems.length > 0
+                        ? `⚡ Chọn Món Đồng Bộ (${fixableItems.length} món)`
+                        : `📋 Xem ${mismatchedItems.length} Món Chưa Có Ảnh`}
+                    </span>
                   </button>
                 )}
 
@@ -3600,11 +3628,9 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                                         ? '✅ Khớp server'
                                         : serverCheck.status === 'CASE_MISMATCH'
                                         ? '⚠️ Lệch chữ'
-                                        : serverCheck.is_fixable
-                                        ? '⚠️ Sai link'
                                         : serverCheck.status === 'NO_IMAGE'
                                         ? 'Chưa có ảnh'
-                                        : '❌ Không có ảnh'}
+                                        : '❌ Chưa có ảnh trên server'}
                                     </span>
                                     {copiedCheckDishId === dish.id ? (
                                       <Check size={9} color="#16a34a" />
@@ -3722,7 +3748,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                     Đã chọn: <strong style={{ color: '#047857', fontSize: '13px' }}>{selectedFixKeys.size}</strong> / {fixableItems.length} món
                     {syncSearchQuery && (
                       <span style={{ color: '#64748b', marginLeft: '6px' }}>
-                        (Đang hiển thị {filteredFixableItems.length} món)
+                        (Đang hiển thị {filteredMismatchedItems.length} món)
                       </span>
                     )}
                   </div>
@@ -3832,10 +3858,19 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                 }}
               >
                 <div>
-                  Menu: <strong>{selectedCategory.name}</strong> (Mã: <code>{selectedCategory.code}</code>) • Tổng số món sai link ảnh: <strong style={{ color: '#dc2626' }}>{fixableItems.length} món</strong>
+                  Menu: <strong>{selectedCategory.name}</strong> (Mã: <code>{selectedCategory.code}</code>) • Tổng số món cần kiểm tra: <strong style={{ color: '#dc2626' }}>{mismatchedItems.length} món</strong>
+                  {fixableItems.length > 0 ? (
+                    <span style={{ marginLeft: '8px', color: '#15803d', fontWeight: 600 }}>
+                      (Có {fixableItems.length} món có ảnh trên server để đồng bộ)
+                    </span>
+                  ) : (
+                    <span style={{ marginLeft: '8px', color: '#dc2626', fontWeight: 600 }}>
+                      (Server /opt/gpos/gmonitor/resources/menu chưa có ảnh cho các món này)
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: '11px', color: '#15803d' }}>
-                  💡 <em>Tất cả món cùng mã SAP, RK7 hoặc cùng tên ở mọi menu sẽ được cập nhật đồng thời.</em>
+                  💡 <em>Link ảnh server chỉ lấy trong /opt/gpos/gmonitor/resources/menu.</em>
                 </div>
               </div>
 
@@ -3902,7 +3937,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                     title={isAllFilteredSelected ? 'Bỏ chọn các món đang hiển thị' : 'Chọn tất cả các món đang hiển thị'}
                   >
                     {isAllFilteredSelected ? <CheckSquare size={13} /> : <Square size={13} />}
-                    <span>{isAllFilteredSelected ? 'Bỏ chọn hiển thị' : `Chọn tất cả (${filteredFixableItems.length})`}</span>
+                    <span>{isAllFilteredSelected ? 'Bỏ chọn hiển thị' : `Chọn tất cả có ảnh (${fixableInFiltered.length})`}</span>
                   </button>
 
                   {selectedFixKeys.size > 0 && (
@@ -3958,7 +3993,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredFixableItems.length === 0 ? (
+                    {filteredMismatchedItems.length === 0 ? (
                       <tr>
                         <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>
                           {syncSearchQuery
@@ -3967,9 +4002,10 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                         </td>
                       </tr>
                     ) : (
-                      filteredFixableItems.map((item, idx) => {
+                      filteredMismatchedItems.map((item, idx) => {
                         const key = getFixItemKey(item);
                         const isSelected = selectedFixKeys.has(key);
+                        const canSync = Boolean(item.is_fixable && item.suggested_fix_path);
                         return (
                           <tr
                             key={key}
@@ -3977,17 +4013,28 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                             style={{
                               borderBottom: '1px solid #e2e8f0',
                               backgroundColor: isSelected ? '#f0fdf4' : idx % 2 === 0 ? '#ffffff' : '#f8fafc',
-                              cursor: 'pointer',
+                              cursor: canSync ? 'pointer' : 'default',
+                              opacity: canSync ? 1 : 0.85,
                               transition: 'background-color 0.1s ease'
                             }}
                           >
                             <td style={{ padding: '5px 8px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => handleToggleSingleItem(item)}
-                                style={{ cursor: 'pointer' }}
-                              />
+                              {canSync ? (
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => handleToggleSingleItem(item)}
+                                  style={{ cursor: 'pointer' }}
+                                />
+                              ) : (
+                                <input
+                                  type="checkbox"
+                                  disabled
+                                  checked={false}
+                                  style={{ opacity: 0.3, cursor: 'not-allowed' }}
+                                  title="server /opt/gpos/gmonitor/resources/menu chưa có ảnh nên không thể đồng bộ"
+                                />
+                              )}
                             </td>
                             <td style={{ padding: '5px 8px', fontFamily: 'monospace', color: '#475569' }}>
                               {item.sap_code || '—'}
@@ -4010,38 +4057,62 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                               }}
                               title={item.given_path}
                             >
-                              {item.given_filename || item.given_path}
+                              {item.given_filename || item.given_path || '—'}
                             </td>
                             <td
                               style={{
                                 padding: '5px 8px',
                                 fontFamily: 'monospace',
-                                fontWeight: 700,
-                                color: '#047857',
-                                maxWidth: '200px',
+                                maxWidth: '280px',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap'
                               }}
-                              title={item.suggested_fix_path}
+                              title={canSync ? item.suggested_fix_path : 'server /opt/gpos/gmonitor/resources/menu chưa có ảnh'}
                             >
-                              {item.suggested_fix_path}
+                              {canSync ? (
+                                <span style={{ color: '#047857', fontWeight: 700 }}>
+                                  {item.suggested_fix_path}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#dc2626', fontWeight: 600, fontSize: '11px' }}>
+                                  server /opt/gpos/gmonitor/resources/menu chưa có ảnh
+                                </span>
+                              )}
                             </td>
                             <td style={{ padding: '5px 8px', textAlign: 'center' }}>
-                              <span
-                                style={{
-                                  fontSize: '10px',
-                                  fontWeight: 700,
-                                  padding: '1px 5px',
-                                  borderRadius: '3px',
-                                  whiteSpace: 'nowrap',
-                                  backgroundColor: item.status === 'CASE_MISMATCH' ? '#fef3c7' : '#ffedd5',
-                                  color: item.status === 'CASE_MISMATCH' ? '#b45309' : '#c2410c',
-                                  border: `1px solid ${item.status === 'CASE_MISMATCH' ? '#fde68a' : '#fed7aa'}`
-                                }}
-                              >
-                                {item.status === 'CASE_MISMATCH' ? '⚠️ Lệch chữ' : '⚠️ Sai link'}
-                              </span>
+                              {item.status === 'CASE_MISMATCH' ? (
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    padding: '1px 5px',
+                                    borderRadius: '3px',
+                                    whiteSpace: 'nowrap',
+                                    backgroundColor: '#fef3c7',
+                                    color: '#b45309',
+                                    border: '1px solid #fde68a'
+                                  }}
+                                >
+                                  ⚠️ Lệch chữ
+                                </span>
+                              ) : (
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    padding: '1px 5px',
+                                    borderRadius: '3px',
+                                    whiteSpace: 'nowrap',
+                                    backgroundColor: '#fee2e2',
+                                    color: '#dc2626',
+                                    border: '1px solid #fecaca'
+                                  }}
+                                  title="server /opt/gpos/gmonitor/resources/menu chưa có ảnh"
+                                >
+                                  ❌ Chưa có ảnh
+                                </span>
+                              )}
                             </td>
                           </tr>
                         );
