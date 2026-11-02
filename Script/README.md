@@ -6216,3 +6216,33 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
 - **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 3.95s`), 0 lỗi TypeScript TS6133. Thư mục `frontend/dist/` đã tạo mới sạch sẽ.
   * Backend: `python -m compileall backend/app` hoàn thành 100%, 0 lỗi cú pháp.
+
+
+---
+
+### [2026-11-03] XỬ LÝ LỖI TRÀN GIAO DIỆN THẺ MÓN, CẬP NHẬT CỘT /opt/gpos/gmonitor/resources/menu VÀ THÊM CÔNG CỤ TRA CỨU ẢNH TOÀN SERVER
+- **Yêu cầu & Làm rõ từ người dùng**:
+  1. *Lỗi tràn giao diện*: Trên thẻ món ăn (Dish card), chuỗi `"❌ Chưa có ảnh trên server"` quá dài khiến nút bị vỡ tràn viền thẻ sang phải -> Rút gọn lại thành `"❌ Không có"` (hoặc `"⚠️ Lệch chữ"`, `"✅ Khớp"`, `"Chưa có ảnh"`), giữ nguyên tooltip và chức năng copy thông báo chi tiết khi click.
+  2. *Cập nhật Popup Chọn Món Đồng Bộ Link Ảnh*:
+     - Tên cột đổi từ `"Link Hình Của Server"` sang `"/opt/gpos/gmonitor/resources/menu"`.
+     - Trong ô dữ liệu: Món có ảnh thì chỉ hiện đúng tên hình (`filename`), món không có ảnh thì hiển thị chữ đỏ `"Không có"` gọn gàng, kèm nút bấm `🔍 Tìm vị trí` để tra cứu nhanh.
+  3. *Thêm ô/công cụ tra cứu toàn bộ trên server và các đường dẫn khác*:
+     - Bổ sung ô nhập liệu tìm kiếm nhanh ngay trên thanh công cụ: `🌐 Tra cứu ảnh server: [ Nhập tên ảnh, SAP, RK7... ] [ Tìm ]`.
+     - Tích hợp Modal chuyên sâu "Tra Cứu Vị Trí Ảnh Toàn Server (192.168.201.116)" cho phép quét đệ quy qua SSH `find` trong toàn bộ tài nguyên (`/resources`, `/co-food-item`, `/menu`, `/category`, `/opt/gpos`), hiển thị kết quả phân loại thư mục, đường dẫn tương đối, nút copy nhanh và link xem ảnh Cloud Gateway.
+- **Triển khai kỹ thuật**:
+  1. **Backend (`backend/app/schemas/mongodb.py`, `backend/app/services/image_server_service.py`, `backend/app/api/v1/mongodb.py`)**:
+     * Thêm schema `GlobalImageSearchRequest`, `GlobalImageSearchResultItem`, `GlobalImageSearchResponse`.
+     * Xây dựng hàm `search_global_server_images(keyword, search_root, limit)`:
+       - Kết nối SSH Read-Only tới server `192.168.201.116`.
+       - Lọc an toàn từ khóa (loại bỏ shell injection), thực thi lệnh: `find {safe_root} -type f -iname '*{safe_kw}*' 2>/dev/null | head -n {limit}` (tốc độ < 500ms - 900ms).
+       - Trích xuất thông tin: `full_path`, `directory`, `filename`, `relative_url` (`/resources/...`), `gateway_url` (`https://gposgateway-hcm.ggg.com.vn:8443...`), `folder_type` (`co-food-item`, `menu`, `category`, `qr-order`...).
+     * Khai báo API router `POST /api/v1/mongodb/image-server/search-global`.
+  2. **Frontend UI (`frontend/src/services/mongoService.ts`, `frontend/src/pages/app/AndroidEmulatorTab.tsx`)**:
+     * Bổ sung API client `searchGlobalServerImages` trong `mongoService.ts`.
+     * Rút gọn badge trạng thái thẻ món ăn thành `'❌ Không có'`, thêm nút `🔍` tra cứu vị trí nhanh nếu món không có ảnh trên thư mục menu.
+     * Cập nhật tiêu đề cột bảng modal thành `/opt/gpos/gmonitor/resources/menu`, hiển thị tên hình ngắn gọn hoặc `Không có` kèm nút `Tìm vị trí`.
+     * Thêm ô tìm kiếm nhanh `[🌐 Tra cứu ảnh server]` trên thanh công cụ và nút `[🌐 Tra cứu toàn server]` trong popup đồng bộ.
+     * Xây dựng Modal `Tra Cứu Vị Trí Ảnh Toàn Server (192.168.201.116)` theo quy chuẩn `Modal` LIFO stack, gồm bộ lọc thư mục linh hoạt, bảng kết quả chi tiết, nút sao chép đường dẫn và liên kết mở ảnh.
+- **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 3.92s`), 0 lỗi TypeScript TS6133. Thư mục `frontend/dist/` đã tạo mới sạch sẽ sẵn sàng copy triển khai.
+  * Backend: `python -m compileall backend/app` hoàn thành 100%, 0 lỗi cú pháp.

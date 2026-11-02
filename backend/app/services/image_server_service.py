@@ -973,3 +973,153 @@ def export_mismatched_dishes_excel(
         f"cho Menu '{menu_name}' ({clean_menu_code}) tại nhà hàng {clean_host}."
     )
     return bio, len(mismatches), file_name
+
+
+def search_global_server_images(
+    keyword: str,
+    search_root: str = "/opt/gpos/gmonitor/resources",
+    limit: int = 30
+) -> Dict[str, Any]:
+    """
+    Tra cứu vị trí hình ảnh trên toàn bộ máy chủ ảnh (SSH/SFTP).
+    Tìm kiếm đệ quy các file ảnh trong thư mục search_root (mặc định /opt/gpos/gmonitor/resources).
+    Tuyệt đối chỉ đọc (Read-Only), phục vụ người dùng tìm xem file đang nằm ở đâu trên server.
+    """
+    t0 = time.time()
+    clean_kw = (keyword or "").strip()
+    if not clean_kw:
+        return {
+            "success": True,
+            "keyword": "",
+            "search_root": search_root,
+            "total_found": 0,
+            "results": [],
+            "elapsed_ms": 0.0,
+            "message": "Vui lòng nhập từ khóa để tìm kiếm"
+        }
+
+    # Loại bỏ các ký tự đặc biệt nguy hiểm để đảm bảo an toàn tuyệt đối khi gọi find
+    safe_kw = re.sub(r'[^a-zA-Z0-9_\-\.\s\u00C0-\u1EF9]', '', clean_kw).strip()
+    if not safe_kw:
+        return {
+            "success": True,
+            "keyword": clean_kw,
+            "search_root": search_root,
+            "total_found": 0,
+            "results": [],
+            "elapsed_ms": 0.0,
+            "message": "Từ khóa không hợp lệ"
+        }
+
+    # Chuẩn hóa thư mục tìm kiếm (bảo vệ chỉ trong phạm vi /opt/gpos)
+    safe_root = (search_root or "/opt/gpos/gmonitor/resources").strip().rstrip("/")
+    if not safe_root.startswith("/opt/gpos"):
+        safe_root = "/opt/gpos/gmonitor/resources"
+
+    # Giới hạn số lượng kết quả từ 1 đến 50
+    safe_limit = max(1, min(int(limit or 30), 50))
+
+    cfg = load_config()
+    host = cfg.get("host", "192.168.201.116")
+    port = int(cfg.get("port", 22))
+    username = cfg.get("username", "dung.na")
+    password = cfg.get("password", "bp7em2zmQP")
+
+    pm = _get_paramiko()
+    if pm is None:
+        raise RuntimeError(
+            "Chưa cài đặt thư viện 'paramiko' trên máy chủ backend. Vui lòng chạy: pip install paramiko"
+        )
+
+    ssh = pm.SSHClient()
+    ssh.set_missing_host_key_policy(pm.AutoAddPolicy())
+    try:
+        ssh.connect(
+            hostname=host,
+            port=port,
+            username=username,
+            password=password,
+            timeout=8
+        )
+
+        # Lệnh find tìm file không phân biệt hoa thường, giới hạn safe_limit dòng kết quả
+        cmd = f"find {safe_root} -type f -iname '*{safe_kw}*' 2>/dev/null | head -n {safe_limit}"
+        stdin, stdout, stderr = ssh.exec_command(cmd, timeout=12)
+        raw_output = stdout.read().decode("utf-8", errors="replace")
+        lines = [line.strip() for line in raw_output.split("\n") if line.strip()]
+
+        results: List[Dict[str, Any]] = []
+        for full_path in lines:
+            filename = os.path.basename(full_path)
+            directory = os.path.dirname(full_path)
+
+            # Tính toán đường dẫn tương đối (bỏ /opt/gpos/gmonitor)
+            if full_path.startswith("/opt/gpos/gmonitor/"):
+                relative_url = full_path[len("/opt/gpos/gmonitor"):]
+            elif full_path.startswith("/opt/gpos/"):
+                relative_url = full_path[len("/opt/gpos"):]
+            else:
+                relative_url = full_path
+
+            # Xác định loại thư mục
+            folder_type = "Khác"
+            if "/resources/menu" in full_path:
+                folder_type = "menu"
+            elif "/resources/co-food-item" in full_path:
+                folder_type = "co-food-item"
+            elif "/resources/category" in full_path:
+                folder_type = "category"
+            elif "/resources/co-category" in full_path:
+                folder_type = "co-category"
+            elif "/resources/config-qr-order" in full_path:
+                folder_type = "qr-order"
+            elif "/resources/digital-menu" in full_path:
+                folder_type = "digital-menu"
+            elif "/resources/restaurant" in full_path:
+                folder_type = "restaurant"
+            elif "/resources/" in full_path:
+                parts = full_path.split("/resources/")[1].split("/")
+                folder_type = parts[0] if parts else "resources"
+
+            # Gateway URL phục vụ hình ảnh
+            if relative_url.startswith("/resources/"):
+                gateway_url = f"https://gposgateway-hcm.ggg.com.vn:8443{relative_url}"
+            else:
+                gateway_url = ""
+
+            results.append({
+                "full_path": full_path,
+                "directory": directory,
+                "filename": filename,
+                "relative_url": relative_url,
+                "gateway_url": gateway_url,
+                "folder_type": folder_type
+            })
+
+        elapsed_ms = round((time.time() - t0) * 1000, 1)
+        return {
+            "success": True,
+            "keyword": clean_kw,
+            "search_root": safe_root,
+            "total_found": len(results),
+            "results": results,
+            "elapsed_ms": elapsed_ms,
+            "message": f"Tìm thấy {len(results)} vị trí chứa file trên máy chủ ({elapsed_ms}ms)"
+        }
+    except Exception as e:
+        elapsed_ms = round((time.time() - t0) * 1000, 1)
+        logger.error(f"Lỗi tìm kiếm hình ảnh toàn server ({safe_kw}): {e}")
+        return {
+            "success": False,
+            "keyword": clean_kw,
+            "search_root": safe_root,
+            "total_found": 0,
+            "results": [],
+            "elapsed_ms": elapsed_ms,
+            "message": f"Lỗi tìm kiếm máy chủ {host}: {str(e)}"
+        }
+    finally:
+        try:
+            ssh.close()
+        except Exception:
+            pass

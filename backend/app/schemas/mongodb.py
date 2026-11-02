@@ -1810,3 +1810,28 @@ class ExportMismatchedDishesRequest(BaseModel):
     restaurant_name: Optional[str] = ""
     force_refresh: bool = False
     dishes: Optional[List[Dict[str, Any]]] = None
+
+
+class GlobalImageSearchRequest(BaseModel):
+    keyword: str
+    search_root: Optional[str] = "/opt/gpos/gmonitor/resources"
+    limit: Optional[int] = 30
+
+
+class GlobalImageSearchResultItem(BaseModel):
+    full_path: str
+    directory: str
+    filename: str
+    relative_url: str
+    gateway_url: str
+    folder_type: str
+
+
+class GlobalImageSearchResponse(BaseModel):
+    success: bool
+    keyword: str
+    search_root: str
+    total_found: int
+    results: List[GlobalImageSearchResultItem]
+    elapsed_ms: float
+    message: str

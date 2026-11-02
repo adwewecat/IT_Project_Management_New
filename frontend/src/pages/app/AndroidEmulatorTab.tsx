@@ -29,7 +29,9 @@ import {
   Lock,
   AlertCircle,
   CheckCircle,
-  Loader2
+  Loader2,
+  Globe,
+  ExternalLink
 } from 'lucide-react';
 import { copyToClipboard } from '../../utils/clipboard';
 import { Modal } from '../../components/ui/Modal';
@@ -42,7 +44,7 @@ import {
 } from '../../services/mongoService';
 import { Button } from '../../components/ui/Button';
 import { RestaurantItem } from '../../types/restaurant';
-import { mongoService, LockedTableItem, CheckDishImageResult, CheckMenuImagesResponse, MenuGroupsCoDetailResponse } from '../../services/mongoService';
+import { mongoService, LockedTableItem, CheckDishImageResult, CheckMenuImagesResponse, MenuGroupsCoDetailResponse, GlobalImageSearchResultItem } from '../../services/mongoService';
 
 export interface AndroidEmulatorTabProps {
   selectedRestaurant: RestaurantItem | null;
@@ -268,6 +270,17 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
   const [syncSelectionStep, setSyncSelectionStep] = useState<1 | 2>(1);
   const [syncSearchQuery, setSyncSearchQuery] = useState<string>('');
   const [selectedFixKeys, setSelectedFixKeys] = useState<Set<string>>(new Set());
+
+  // State Tra Cứu Vị Trí Ảnh Toàn Máy Chủ Server (192.168.201.116)
+  const [showGlobalSearchModal, setShowGlobalSearchModal] = useState<boolean>(false);
+  const [globalSearchKeyword, setGlobalSearchKeyword] = useState<string>('');
+  const [globalQuickInput, setGlobalQuickInput] = useState<string>('');
+  const [globalSearchRoot, setGlobalSearchRoot] = useState<string>('/opt/gpos/gmonitor/resources');
+  const [globalSearchResults, setGlobalSearchResults] = useState<GlobalImageSearchResultItem[]>([]);
+  const [globalSearchLoading, setGlobalSearchLoading] = useState<boolean>(false);
+  const [globalSearchMessage, setGlobalSearchMessage] = useState<string>('');
+  const [globalSearchElapsed, setGlobalSearchElapsed] = useState<number | null>(null);
+  const [copiedGlobalPath, setCopiedGlobalPath] = useState<string | null>(null);
   const [configForm, setConfigForm] = useState<UpdateImageServerConfigRequest>({
     server_type: 'SSH_SFTP',
     host: '192.168.201.116',
@@ -1167,6 +1180,57 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
     } finally {
       setSyncingImages(false);
     }
+  };
+
+  // Tra cứu vị trí hình ảnh trên toàn bộ máy chủ qua SSH
+  const handleExecuteGlobalSearch = async (kw?: string, root?: string) => {
+    const query = (kw !== undefined ? kw : globalSearchKeyword).trim();
+    if (!query) {
+      if (onToastRef.current) onToastRef.current('Vui lòng nhập tên file, mã SAP, RK7 hoặc từ khóa cần tìm', 'info');
+      return;
+    }
+    setGlobalSearchLoading(true);
+    setGlobalSearchMessage('');
+    try {
+      const res = await mongoService.searchGlobalServerImages({
+        keyword: query,
+        search_root: root || globalSearchRoot,
+        limit: 40
+      });
+      setGlobalSearchResults(res.results || []);
+      setGlobalSearchMessage(res.message);
+      setGlobalSearchElapsed(res.elapsed_ms);
+      if (!res.results || res.results.length === 0) {
+        if (onToastRef.current) onToastRef.current(`Không tìm thấy file nào khớp với "${query}" trên server`, 'info');
+      }
+    } catch (err: any) {
+      const errMsg = err?.response?.data?.detail || err.message || 'Lỗi tra cứu máy chủ';
+      setGlobalSearchMessage(errMsg);
+      if (onToastRef.current) onToastRef.current(`Lỗi tra cứu: ${errMsg}`, 'error');
+    } finally {
+      setGlobalSearchLoading(false);
+    }
+  };
+
+  // Mở popup tra cứu toàn server và tự động tìm nếu có từ khóa
+  const handleOpenGlobalSearch = (initialKeyword: string | number = '') => {
+    let cleanKw = String(initialKeyword ?? '').trim();
+    if (cleanKw.includes('/')) {
+      cleanKw = cleanKw.split('/').pop() || cleanKw;
+    }
+    setGlobalSearchKeyword(cleanKw);
+    setGlobalQuickInput(cleanKw);
+    setShowGlobalSearchModal(true);
+    if (cleanKw) {
+      handleExecuteGlobalSearch(cleanKw);
+    }
+  };
+
+  const handleCopyGlobalItem = (text: string, label: string) => {
+    copyToClipboard(text);
+    setCopiedGlobalPath(text);
+    if (onToastRef.current) onToastRef.current(`Đã sao chép ${label}!`, 'success');
+    setTimeout(() => setCopiedGlobalPath(null), 2000);
   };
 
   // Xuất file Excel các món bị sai link hoặc tên hình ảnh của ĐÚNG MENU ĐƯỢC CHỌN (theo chuẩn File 3 Customer_Menu)
@@ -2874,6 +2938,65 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                 )}
 
 {/* Nút Xuất Excel Các Món Sai Ảnh Của Đúng Menu Đang Chọn (Theo Chuẩn File 3) */}
+                {/* Ô tra cứu vị trí ảnh toàn server & các thư mục khác */}
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    backgroundColor: '#f8fafc',
+                    padding: '2px 4px 2px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid #0284c7'
+                  }}
+                >
+                  <span style={{ fontSize: '11px', color: '#0369a1', fontWeight: 700, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    <Globe size={12} />
+                    Tra cứu ảnh server:
+                  </span>
+                  <input
+                    type="text"
+                    value={globalQuickInput}
+                    onChange={(e) => setGlobalQuickInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleOpenGlobalSearch(globalQuickInput);
+                      }
+                    }}
+                    placeholder="Nhập tên ảnh, SAP, RK7..."
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '11px',
+                      borderRadius: '4px',
+                      border: '1px solid #cbd5e1',
+                      outline: 'none',
+                      width: '160px',
+                      backgroundColor: '#ffffff'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleOpenGlobalSearch(globalQuickInput)}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      borderRadius: '4px',
+                      border: 'none',
+                      backgroundColor: '#0284c7',
+                      color: '#ffffff',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '3px'
+                    }}
+                    title="Tra cứu toàn bộ server xem ảnh đang nằm ở thư mục nào"
+                  >
+                    <Search size={11} />
+                    <span>Tìm</span>
+                  </button>
+                </div>
+
                 <button
                   type="button"
                   onClick={handleExportMismatchedExcel}
@@ -3630,7 +3753,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                                         ? '⚠️ Lệch chữ'
                                         : serverCheck.status === 'NO_IMAGE'
                                         ? 'Chưa có ảnh'
-                                        : '❌ Chưa có ảnh trên server'}
+                                        : '❌ Không có'}
                                     </span>
                                     {copiedCheckDishId === dish.id ? (
                                       <Check size={9} color="#16a34a" />
@@ -3666,6 +3789,32 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                                       className={checkingDishId === dish.id ? 'animate-spin' : ''}
                                     />
                                   </button>
+
+                                  {/* Nút tra cứu nhanh vị trí ảnh trên toàn server nếu không có */}
+                                  {serverCheck.status === 'NOT_FOUND' && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenGlobalSearch(dish.srcImg || dish.name || String(dish.rk7Code || ''));
+                                      }}
+                                      title="Tra cứu toàn server xem ảnh món này đang nằm ở thư mục nào"
+                                      style={{
+                                        padding: '1px 3px',
+                                        borderRadius: '3px',
+                                        border: '1px solid #fed7aa',
+                                        backgroundColor: '#fff7ed',
+                                        color: '#c2410c',
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        lineHeight: 1
+                                      }}
+                                    >
+                                      <Search size={9} />
+                                    </button>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -3959,6 +4108,28 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                       Bỏ chọn tất cả ({selectedFixKeys.size})
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenGlobalSearch(syncSearchQuery)}
+                    style={{
+                      padding: '5px 10px',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      borderRadius: '5px',
+                      border: '1px solid #0284c7',
+                      backgroundColor: '#f0f9ff',
+                      color: '#0369a1',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                    title="Mở popup tra cứu vị trí ảnh trên toàn bộ các thư mục khác của server"
+                  >
+                    <Globe size={13} />
+                    <span>Tra cứu toàn server</span>
+                  </button>
                 </div>
               </div>
 
@@ -3988,7 +4159,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                       <th style={{ padding: '6px 8px', width: '80px', color: '#475569' }}>Mã RK7</th>
                       <th style={{ padding: '6px 8px', color: '#0f172a' }}>TÊN MÓN</th>
                       <th style={{ padding: '6px 8px', color: '#c2410c' }}>Link Hình Của File (DB)</th>
-                      <th style={{ padding: '6px 8px', color: '#047857' }}>Link Hình Của Server</th>
+                      <th style={{ padding: '6px 8px', color: '#047857' }}>/opt/gpos/gmonitor/resources/menu</th>
                       <th style={{ padding: '6px 8px', width: '95px', textAlign: 'center', color: '#475569' }}>Phân Loại</th>
                     </tr>
                   </thead>
@@ -4063,21 +4234,46 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                               style={{
                                 padding: '5px 8px',
                                 fontFamily: 'monospace',
-                                maxWidth: '280px',
+                                maxWidth: '240px',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap'
                               }}
-                              title={canSync ? item.suggested_fix_path : 'server /opt/gpos/gmonitor/resources/menu chưa có ảnh'}
+                              title={canSync ? (item.server_filename || item.suggested_fix_path) : 'Thư mục /opt/gpos/gmonitor/resources/menu chưa có ảnh cho món này'}
                             >
                               {canSync ? (
                                 <span style={{ color: '#047857', fontWeight: 700 }}>
-                                  {item.suggested_fix_path}
+                                  {item.server_filename || item.suggested_fix_path?.split('/').pop() || item.suggested_fix_path}
                                 </span>
                               ) : (
-                                <span style={{ color: '#dc2626', fontWeight: 600, fontSize: '11px' }}>
-                                  server /opt/gpos/gmonitor/resources/menu chưa có ảnh
-                                </span>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{ color: '#dc2626', fontWeight: 600, fontSize: '11px' }}>
+                                    Không có
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenGlobalSearch(item.given_filename || item.name || String(item.rk7_code || ''));
+                                    }}
+                                    title="Tra cứu toàn server xem ảnh này đang nằm ở thư mục nào"
+                                    style={{
+                                      padding: '1px 5px',
+                                      fontSize: '10px',
+                                      borderRadius: '3px',
+                                      border: '1px solid #fed7aa',
+                                      backgroundColor: '#fff7ed',
+                                      color: '#c2410c',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '2px'
+                                    }}
+                                  >
+                                    <Search size={10} />
+                                    <span>Tìm vị trí</span>
+                                  </button>
+                                </div>
                               )}
                             </td>
                             <td style={{ padding: '5px 8px', textAlign: 'center' }}>
@@ -4526,6 +4722,369 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                 )}
               </>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {/* ───────────────────────────────────────────────────────────────── */}
+      {/* MODAL TRA CỨU VỊ TRÍ ẢNH TOÀN MÁY CHỦ SERVER (192.168.201.116) */}
+      {/* ───────────────────────────────────────────────────────────────── */}
+      {showGlobalSearchModal && (
+        <Modal
+          isOpen={showGlobalSearchModal}
+          onClose={() => setShowGlobalSearchModal(false)}
+          maxWidth="980px"
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Globe size={18} color="#0284c7" />
+              <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Tra Cứu Vị Trí Ảnh Toàn Server (192.168.201.116)
+              </span>
+            </div>
+          }
+          footer={
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              <div style={{ fontSize: '11.5px', color: '#64748b' }}>
+                {globalSearchElapsed !== null && (
+                  <span>
+                    ⚡ Thời gian tìm kiếm: <strong>{globalSearchElapsed}ms</strong> • Kết quả: <strong>{globalSearchResults.length} vị trí</strong>
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGlobalSearchModal(false)}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#ffffff',
+                  color: '#475569',
+                  fontWeight: 600,
+                  fontSize: '12px',
+                  cursor: 'pointer'
+                }}
+              >
+                Đóng
+              </button>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* Thanh công cụ tìm kiếm */}
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ position: 'relative', flex: 1, minWidth: '260px' }}>
+                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                  type="text"
+                  value={globalSearchKeyword}
+                  onChange={(e) => setGlobalSearchKeyword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleExecuteGlobalSearch();
+                    }
+                  }}
+                  placeholder="Nhập tên file (vd: asm-chao-nhat.jpg, cachinhv), mã SAP, RK7 hoặc từ khóa..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 30px 8px 32px',
+                    fontSize: '12.5px',
+                    borderRadius: '6px',
+                    border: '1px solid #0284c7',
+                    outline: 'none',
+                    backgroundColor: '#ffffff',
+                    boxShadow: '0 1px 2px rgba(2, 132, 199, 0.08)'
+                  }}
+                />
+                {globalSearchKeyword && (
+                  <button
+                    type="button"
+                    onClick={() => setGlobalSearchKeyword('')}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#94a3b8',
+                      padding: 0
+                    }}
+                    title="Xóa từ khóa"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              {/* Lựa chọn thư mục tìm kiếm */}
+              <select
+                value={globalSearchRoot}
+                onChange={(e) => {
+                  setGlobalSearchRoot(e.target.value);
+                  if (globalSearchKeyword.trim()) {
+                    handleExecuteGlobalSearch(globalSearchKeyword, e.target.value);
+                  }
+                }}
+                style={{
+                  padding: '8px 10px',
+                  fontSize: '12px',
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#ffffff',
+                  outline: 'none',
+                  color: '#334155',
+                  cursor: 'pointer'
+                }}
+                title="Chọn phạm vi thư mục cần tìm kiếm trên máy chủ"
+              >
+                <option value="/opt/gpos/gmonitor/resources">Tất cả thư mục (/resources - Khuyên dùng)</option>
+                <option value="/opt/gpos/gmonitor/resources/co-food-item">Thư mục món ăn (/co-food-item)</option>
+                <option value="/opt/gpos/gmonitor/resources/menu">Thư mục menu (/menu)</option>
+                <option value="/opt/gpos/gmonitor/resources/co-category">Thư mục danh mục (/co-category)</option>
+                <option value="/opt/gpos">Toàn bộ máy chủ (/opt/gpos)</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={() => handleExecuteGlobalSearch()}
+                disabled={globalSearchLoading}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: '#0284c7',
+                  color: '#ffffff',
+                  cursor: globalSearchLoading ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.06)'
+                }}
+              >
+                {globalSearchLoading ? (
+                  <RefreshCw size={14} className="animate-spin" />
+                ) : (
+                  <Search size={14} />
+                )}
+                <span>{globalSearchLoading ? 'Đang tìm...' : 'Tìm Kiếm'}</span>
+              </button>
+            </div>
+
+            {/* Thông báo kết quả / gợi ý */}
+            {globalSearchMessage && (
+              <div
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  backgroundColor: globalSearchResults.length > 0 ? '#f0fdf4' : '#fffbeb',
+                  border: `1px solid ${globalSearchResults.length > 0 ? '#bbf7d0' : '#fde68a'}`,
+                  color: globalSearchResults.length > 0 ? '#15803d' : '#b45309',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                {globalSearchResults.length > 0 ? <Check size={14} /> : <AlertCircle size={14} />}
+                <span>{globalSearchMessage}</span>
+              </div>
+            )}
+
+            {/* Bảng kết quả tìm kiếm */}
+            <div
+              style={{
+                maxHeight: '400px',
+                overflowY: 'auto',
+                border: '1px solid #cbd5e1',
+                borderRadius: '6px',
+                backgroundColor: '#ffffff'
+              }}
+            >
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
+                <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f1f5f9', zIndex: 5, borderBottom: '1px solid #cbd5e1' }}>
+                  <tr>
+                    <th style={{ padding: '6px 8px', width: '36px', textAlign: 'center', color: '#64748b' }}>#</th>
+                    <th style={{ padding: '6px 8px', width: '160px', color: '#0f172a' }}>TÊN FILE</th>
+                    <th style={{ padding: '6px 8px', color: '#475569' }}>THƯ MỤC LƯU TRỮ TRÊN SERVER</th>
+                    <th style={{ padding: '6px 8px', width: '100px', textAlign: 'center', color: '#475569' }}>PHÂN LOẠI</th>
+                    <th style={{ padding: '6px 8px', color: '#0369a1' }}>ĐƯỜNG DẪN TƯƠNG ĐỐI</th>
+                    <th style={{ padding: '6px 8px', width: '120px', textAlign: 'center', color: '#475569' }}>HÀNH ĐỘNG</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {globalSearchResults.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>
+                        {globalSearchLoading
+                          ? 'Đang tìm kiếm vị trí file trên server 192.168.201.116 qua lệnh find SSH...'
+                          : globalSearchKeyword
+                          ? 'Không tìm thấy file hình ảnh nào khớp với từ khóa tìm kiếm trên server.'
+                          : 'Nhập tên file, mã món hoặc từ khóa rồi bấm Tìm Kiếm để tra cứu vị trí file.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    globalSearchResults.map((res, idx) => {
+                      const isPathCopied = copiedGlobalPath === res.full_path;
+                      const isRelCopied = copiedGlobalPath === res.relative_url;
+                      return (
+                        <tr
+                          key={idx}
+                          style={{
+                            borderBottom: '1px solid #e2e8f0',
+                            backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc'
+                          }}
+                        >
+                          <td style={{ padding: '6px 8px', textAlign: 'center', color: '#64748b' }}>
+                            {idx + 1}
+                          </td>
+                          <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontWeight: 700, color: '#0f172a' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span>{res.filename}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyGlobalItem(res.filename, 'tên file')}
+                                title="Sao chép tên file"
+                                style={{
+                                  border: 'none',
+                                  background: 'none',
+                                  cursor: 'pointer',
+                                  color: '#64748b',
+                                  padding: '1px'
+                                }}
+                              >
+                                <Copy size={11} />
+                              </button>
+                            </div>
+                          </td>
+                          <td
+                            style={{
+                              padding: '6px 8px',
+                              fontFamily: 'monospace',
+                              color: '#475569',
+                              maxWidth: '260px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={res.directory}
+                          >
+                            <span style={{ color: '#0f172a', fontWeight: 500 }}>{res.directory}</span>
+                          </td>
+                          <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                            <span
+                              style={{
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                backgroundColor:
+                                  res.folder_type === 'menu'
+                                    ? '#dcfce7'
+                                    : res.folder_type === 'co-food-item'
+                                    ? '#e0e7ff'
+                                    : '#f1f5f9',
+                                color:
+                                  res.folder_type === 'menu'
+                                    ? '#15803d'
+                                    : res.folder_type === 'co-food-item'
+                                    ? '#4338ca'
+                                    : '#475569'
+                              }}
+                            >
+                              {res.folder_type}
+                            </span>
+                          </td>
+                          <td
+                            style={{
+                              padding: '6px 8px',
+                              fontFamily: 'monospace',
+                              color: '#0369a1',
+                              fontWeight: 600,
+                              maxWidth: '220px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={res.relative_url}
+                          >
+                            {res.relative_url}
+                          </td>
+                          <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyGlobalItem(res.relative_url, 'đường dẫn tương đối')}
+                                title="Sao chép đường dẫn tương đối (vd: /resources/...)"
+                                style={{
+                                  padding: '2px 6px',
+                                  fontSize: '10.5px',
+                                  borderRadius: '3px',
+                                  border: '1px solid #bae6fd',
+                                  backgroundColor: isRelCopied ? '#dcfce7' : '#f0f9ff',
+                                  color: isRelCopied ? '#15803d' : '#0369a1',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '2px'
+                                }}
+                              >
+                                {isRelCopied ? <Check size={10} /> : <Copy size={10} />}
+                                <span>{isRelCopied ? 'Đã copy' : 'Copy link'}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleCopyGlobalItem(res.full_path, 'đường dẫn đầy đủ trên server')}
+                                title="Sao chép full path trên server (vd: /opt/gpos/...)"
+                                style={{
+                                  padding: '2px 5px',
+                                  fontSize: '10px',
+                                  borderRadius: '3px',
+                                  border: '1px solid #cbd5e1',
+                                  backgroundColor: isPathCopied ? '#dcfce7' : '#ffffff',
+                                  color: isPathCopied ? '#15803d' : '#475569',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '2px'
+                                }}
+                              >
+                                {isPathCopied ? <Check size={10} /> : <Copy size={10} />}
+                                <span>Full path</span>
+                              </button>
+
+                              {res.gateway_url && (
+                                <a
+                                  href={res.gateway_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title="Xem ảnh qua Gateway Cloud"
+                                  style={{
+                                    padding: '2px 4px',
+                                    borderRadius: '3px',
+                                    border: '1px solid #cbd5e1',
+                                    backgroundColor: '#ffffff',
+                                    color: '#2563eb',
+                                    display: 'inline-flex',
+                                    alignItems: 'center'
+                                  }}
+                                >
+                                  <ExternalLink size={11} />
+                                </a>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </Modal>
       )}

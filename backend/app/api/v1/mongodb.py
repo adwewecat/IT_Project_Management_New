@@ -2575,7 +2575,9 @@ from app.schemas.mongodb import (
     UpdateImageServerConfigRequest,
     TestImageServerConnectionRequest,
     TestImageServerConnectionResponse,
-    ExportMismatchedDishesRequest
+    ExportMismatchedDishesRequest,
+    GlobalImageSearchRequest,
+    GlobalImageSearchResponse
 )
 
 
@@ -2832,3 +2834,18 @@ def test_image_server_connection(
 
     res = image_server_service.test_connection(payload.model_dump())
     return TestImageServerConnectionResponse(**res)
+@router.post("/image-server/search-global", response_model=GlobalImageSearchResponse)
+def search_global_server_images(
+    payload: GlobalImageSearchRequest,
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Tra cuu vi tri hinh anh tren toan bo may chu anh 192.168.201.116 (Read-Only).
+    Tim kiem de quy cac thu muc con trong /opt/gpos/gmonitor/resources de xem anh dang nam o dau.
+    """
+    res = image_server_service.search_global_server_images(
+        keyword=payload.keyword,
+        search_root=payload.search_root or "/opt/gpos/gmonitor/resources",
+        limit=payload.limit or 30
+    )
+    return GlobalImageSearchResponse(**res)

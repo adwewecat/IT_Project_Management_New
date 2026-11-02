@@ -1388,6 +1388,15 @@ export const mongoService = {
     const countHeader = (res.headers && (res.headers['x-mismatched-count'] || res.headers['X-Mismatched-Count'])) || '0';
     const mismatchedCount = parseInt(countHeader, 10) || 0;
     return { blob: res.data, filename, mismatchedCount };
+  },
+
+  searchGlobalServerImages: async (payload: {
+    keyword: string;
+    search_root?: string;
+    limit?: number;
+  }): Promise<GlobalImageSearchResponse> => {
+    const res = await api.post<GlobalImageSearchResponse>('/mongodb/image-server/search-global', payload);
+    return res.data;
   }
 };
 
@@ -2618,4 +2627,23 @@ export interface SyncDishImagesResponse {
   total_requested: number;
   message: string;
   errors: string[];
+}
+
+export interface GlobalImageSearchResultItem {
+  full_path: string;
+  directory: string;
+  filename: string;
+  relative_url: string;
+  gateway_url: string;
+  folder_type: string;
+}
+
+export interface GlobalImageSearchResponse {
+  success: boolean;
+  keyword: string;
+  search_root: string;
+  total_found: number;
+  results: GlobalImageSearchResultItem[];
+  elapsed_ms: number;
+  message: string;
 }
