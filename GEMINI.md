@@ -2619,3 +2619,22 @@
   2. **Cơ chế tự động cài đặt**: Khi người dùng gọi chức năng SSH, `_get_paramiko()` sẽ tự động chạy lệnh `pip install paramiko` vào môi trường Python của server.
   3. **Thông báo lỗi trang nhã**: Nếu máy chủ hoàn toàn không có internet và chưa cài thư viện, hệ thống trả về thông báo hướng dẫn rõ ràng trên giao diện (hoặc gợi ý dùng giao thức FTP port 21) thay vì crash backend.
 - **Kiểm thử**: `backend/app` biên dịch 100% sạch sẽ (`✓ built in 4.12s`, `compileall` exit code 0). Đã commit và push lên GitHub `origin/main`.
+
+---
+
+### [2026-11-02] TÍNH NĂNG TÌM KIẾM THEO TÀI KHOẢN FTTH Ở DANH SÁCH NHÀ HÀNG
+- **Yêu cầu nghiệp vụ**:
+  * Tại màn hình **Danh Sách Nhà Hàng** (`/restaurants`), cho phép ô tìm kiếm nhanh hỗ trợ tìm kiếm thêm theo **Tài khoản FTTH** (`user_ftth`) và mã hợp đồng/thanh toán FTTH (`thanhtoan_ftth`).
+  * Áp dụng tìm kiếm không phân biệt chữ hoa/chữ thường, không phân biệt dấu tiếng Việt.
+- **Triển khai kỹ thuật**:
+  1. **Backend (`backend/app/services/restaurant_service.py`)**:
+     * Cập nhật hàm `apply_restaurant_search_filter` bổ sung:
+       - `Restaurant.user_ftth.collate("Latin1_General_CI_AI").like(u_term)`
+       - `Restaurant.thanhtoan_ftth.collate("Latin1_General_CI_AI").like(u_term)`
+     * Tự động áp dụng cho cả API danh sách nhà hàng (`get_restaurants`) và chức năng xuất Excel (`export_restaurants_excel`).
+  2. **Frontend (`frontend/src/pages/restaurants/RestaurantListPage.tsx` & `frontend/src/pages/mobile/MobileRestaurantPage.tsx`)**:
+     * Cập nhật placeholder ô tìm kiếm trên Desktop: `Nhập tên nhà hàng, mã SAP, RK7, Oracle, IP, TK FTTH, địa chỉ...`
+     * Cập nhật placeholder ô tìm kiếm trên Mobile: `Tìm mã SAP, tên nhà hàng, IP, RK7, TK FTTH...`
+- **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.06s`, 0 lỗi TypeScript). Cập nhật sẵn `frontend/dist/`.
+  * Backend: `python -m compileall backend/app` hoàn thành 100% không cảnh báo.

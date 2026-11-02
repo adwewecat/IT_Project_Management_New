@@ -221,6 +221,8 @@ def apply_restaurant_search_filter(query, search_text: Optional[str]):
             Restaurant.email.collate("Latin1_General_CI_AI").like(u_term),
             Restaurant.ip.like(f"%{raw_term}%"),
             Restaurant.ip_wan.like(f"%{raw_term}%"),
+            Restaurant.user_ftth.collate("Latin1_General_CI_AI").like(u_term),
+            Restaurant.thanhtoan_ftth.collate("Latin1_General_CI_AI").like(u_term),
         )
     )
 

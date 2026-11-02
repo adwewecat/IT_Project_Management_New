@@ -323,7 +323,7 @@ export const MobileRestaurantPage: React.FC = () => {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Tìm mã SAP, tên nhà hàng, IP, RK7..."
+            placeholder="Tìm mã SAP, tên nhà hàng, IP, RK7, TK FTTH..."
             autoFocus
             style={{
               width: '100%',

@@ -816,7 +816,7 @@ export const RestaurantListPage: React.FC = () => {
                 </span>
                 <input
                   type="text"
-                  placeholder="Nhập tên nhà hàng, mã SAP, RK7, Oracle, IP, địa chỉ..."
+                  placeholder="Nhập tên nhà hàng, mã SAP, RK7, Oracle, IP, TK FTTH, địa chỉ..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   style={{
