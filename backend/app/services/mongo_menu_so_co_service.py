@@ -344,6 +344,8 @@ def load_menu_items(
 
         for cat_code in target_codes:
             omc = db["ORDER_MENU_CACHE_CATEGORY"].find_one({"category-code": cat_code})
+            if not omc and cat_code.isdigit():
+                omc = db["ORDER_MENU_CACHE_CATEGORY"].find_one({"category-code": int(cat_code)})
             if not omc:
                 continue
 

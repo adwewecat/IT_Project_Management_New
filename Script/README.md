@@ -6151,3 +6151,38 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
 - **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn tất 100% exit code 0 (`✓ built in 4.50s`), 0 lỗi TypeScript TS6133. Đã tạo sẵn bản build sạch mới nhất trong `frontend/dist/`.
   * Backend: `python -m compileall backend/app` hoàn thành 100%, Smoke test `>>> PASSED 100%`.
+
+
+---
+
+### [2026-11-02] CHUẨN HÓA LOGIC SO SÁNH ẢNH CO, SỬA LỖI XUẤT EXCEL 500 & NÂNG CẤP THÔNG BÁO WEBMAIL
+- **Yêu cầu & Làm rõ nghiệp vụ từ người dùng**:
+  1. **Chuẩn hóa Logic So Sánh & Đồng Bộ Ảnh**:
+     * Không kiểm tra phần tiền tố `/menu/...` hay `/resources/menu/...`.
+     * Chỉ kiểm tra đúng tên file hình ảnh (có phân biệt hoa/thường) trên máy chủ ảnh `192.168.201.116`.
+     * Khi tên file khớp: Đánh dấu `Khớp server` (MATCH) 100%, giữ nguyên tiền tố của nhà hàng.
+     * Khi lệch hoa/thường (CASE_MISMATCH): Giữ nguyên đường dẫn mặc định của nhà hàng (ví dụ: `/menu/`), chỉ cập nhật lại tên hình bị sai (ví dụ: `/menu/mona.jpg` -> `/menu/Mona.jpg`).
+     * Khi đồng bộ về MongoDB nhà hàng: Giữ nguyên tiền tố của nhà hàng, tuyệt đối không ép về `/resources/menu/`.
+  2. **Khắc phục lỗi 500 khi bấm "Xuất Excel Món Sai Ảnh"**:
+     * Trước đây backend gọi lại `load_menu_items` từ MongoDB, dễ bị lỗi khi mã menu là dạng int/string hoặc khi mất kết nối tạm thời.
+     * Cần hỗ trợ nhận trực tiếp danh sách `dishes` của menu từ frontend truyền sang và tạo workbook an toàn phòng vệ nếu file template trên server không có sẵn.
+  3. **Nâng cấp thông báo lỗi gửi email trong Webmail**:
+     * Kiểm tra định dạng email To và Cc chặt chẽ (phát hiện địa chỉ gõ sai/thiếu như `ss.it.ir`).
+     * Hiển thị thông báo hướng dẫn rõ ràng khi phiên đăng nhập hết hạn (Mã 401) hoặc lỗi tệp (Mã 413).
+- **Triển khai kỹ thuật**:
+  1. **Backend (`backend/app/services/image_server_service.py` & `mongodb.py`)**:
+     * Cập nhật `compare_single_image`: Nếu `filename in exact_set`, trả về `MATCH` (Khớp 100%) và giữ nguyên `raw_path`. Nếu `CASE_MISMATCH` hoặc `CANDIDATE_FOUND`, xây dựng `suggested_fix_path` bằng `{prefix}{server_exact_name}`.
+     * Cập nhật `sync_dish_images_to_mongo`: Loại bỏ việc ép tiền tố `/resources/menu/` lên `target_path`, giữ nguyên tiền tố gốc của nhà hàng. Link Cloud Gateway (`urlImgQr`) vẫn sử dụng `https://gposgateway-hcm.ggg.com.vn:8443/resources/menu/{clean_filename}`.
+     * Cập nhật `export_mismatched_dishes_excel`: Bổ sung tham số `dishes: Optional[List[Dict[str, Any]]] = None`. Nếu frontend truyền sang, sử dụng trực tiếp. Khởi tạo workbook phòng vệ nếu template không tìm thấy trên server.
+     * Cập nhật `ExportMismatchedDishesRequest` trong `backend/app/schemas/mongodb.py`.
+     * Cập nhật `mongo_menu_so_co_service.py`: Hỗ trợ tìm kiếm `ORDER_MENU_CACHE_CATEGORY` ở cả dạng chuỗi và dạng số nguyên (`int(cat_code)`).
+  2. **Frontend (`frontend/src/pages/app/AndroidEmulatorTab.tsx` & `mongoService.ts`)**:
+     * Truyền danh sách `dishes` hiện có của menu vào `exportMismatchedDishesExcel`.
+     * Bóc tách nội dung lỗi từ Blob response (`err.response.data.text()`) để hiển thị thông báo chi tiết khi có sự cố.
+  3. **Webmail (`frontend/src/pages/webmail/WebmailComposeModal.tsx`)**:
+     * Thêm hàm kiểm tra định dạng email `To` và `Cc` qua regex trước khi gửi.
+     * Bắt mã 401 và hiển thị: *"Phiên làm việc của bạn đã hết hạn (Mã 401). Vui lòng đăng xuất ra và đăng nhập lại hệ thống để tiếp tục gửi email!"*.
+     * Bắt mã 413 và các lỗi mạng để hiển thị nguyên nhân chính xác.
+- **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 3.99s`), 0 lỗi TypeScript TS6133. Bản build sạch mới nhất đã sẵn sàng trong `frontend/dist/`.
+  * Backend: `python -m compileall backend/app` hoàn thành 100%, Smoke test `>>> BACKEND SMOKE TEST PASSED 100%`.

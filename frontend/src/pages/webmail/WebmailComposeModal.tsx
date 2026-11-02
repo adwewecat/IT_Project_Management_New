@@ -264,6 +264,25 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
       return;
     }
 
+    // Kiểm tra định dạng các địa chỉ email To và Cc
+    const parseEmails = (str: string) => str.replace(/;/g, ',').split(',').map((s) => s.trim()).filter(Boolean);
+    const toList = parseEmails(toClean);
+    const ccList = parseEmails(cc.trim());
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    for (const t of toList) {
+      if (!emailRegex.test(t)) {
+        setErrorMessage(`Địa chỉ email người nhận (To) '${t}' không đúng định dạng. Vui lòng kiểm tra lại.`);
+        return;
+      }
+    }
+    for (const c of ccList) {
+      if (!emailRegex.test(c)) {
+        setErrorMessage(`Địa chỉ email bản sao (Cc) '${c}' không đúng định dạng. Vui lòng kiểm tra lại.`);
+        return;
+      }
+    }
+
     const editorHtml = editorRef.current?.innerHTML || '';
     if (!editorHtml || editorHtml === '<p><br></p>') {
       setErrorMessage('Vui lòng nhập nội dung thư.');
@@ -288,7 +307,26 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
       if (onEmailSent) onEmailSent();
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.response?.data?.detail || 'Lỗi khi gửi email. Vui lòng kiểm tra lại kết nối mạng hoặc dung lượng file.');
+      let msg = 'Lỗi khi gửi email.';
+      const status = err.response?.status;
+      if (status === 401) {
+        msg = 'Phiên làm việc của bạn đã hết hạn (Mã 401). Vui lòng đăng xuất ra và đăng nhập lại hệ thống để tiếp tục gửi email!';
+      } else if (status === 413) {
+        msg = 'Dung lượng tệp hoặc nội dung email vượt quá giới hạn cho phép của máy chủ web (Mã 413). Vui lòng giảm kích thước tệp!';
+      } else if (err.response?.data?.detail) {
+        msg = err.response.data.detail;
+      } else if (typeof err.response?.data === 'string' && err.response.data.trim()) {
+        const raw = err.response.data;
+        const titleMatch = raw.match(/<title>(.*?)<\/title>/i);
+        if (titleMatch && titleMatch[1]) {
+          msg = `Lỗi máy chủ (${status || 500}): ${titleMatch[1]}`;
+        } else {
+          msg = `Lỗi máy chủ (${status || 500}): ${raw.replace(/<[^>]+>/g, ' ').slice(0, 200).trim()}`;
+        }
+      } else if (err.message) {
+        msg = `Lỗi gửi mail: ${err.message}. Nếu sự cố tiếp diễn, vui lòng thử đăng xuất ra và đăng nhập lại.`;
+      }
+      setErrorMessage(msg);
     } finally {
       setSending(false);
     }

@@ -1809,3 +1809,4 @@ class ExportMismatchedDishesRequest(BaseModel):
     menu_name: Optional[str] = ""
     restaurant_name: Optional[str] = ""
     force_refresh: bool = False
+    dishes: Optional[List[Dict[str, Any]]] = None

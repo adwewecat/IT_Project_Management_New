@@ -442,39 +442,26 @@ def compare_single_image(
             "suggested_fix_path": ""
         }
 
-    has_standard_prefix = (prefix == standard_prefix)
-
-    # 1. Khớp chính xác 100% (cả chữ hoa/thường)
+    # 1. Khớp chính xác 100% tên file trên máy chủ (cả chữ hoa/thường)
+    # Quy tắc: Không cần kiểm tra tiền tố /menu/ hay /resources/menu/, chỉ cần đúng tên hình là Khớp 100%!
     if filename in exact_set:
-        if has_standard_prefix:
-            return {
-                "status": "MATCH",
-                "is_match": True,
-                "is_fixable": False,
-                "message": f"Khớp hoàn toàn 100% cả tên hình và đường dẫn {standard_prefix}",
-                "given_path": raw_path,
-                "given_filename": filename,
-                "given_prefix": prefix,
-                "server_filename": filename,
-                "suggested_fix_path": f"{standard_prefix}{filename}"
-            }
-        else:
-            return {
-                "status": "PREFIX_MISMATCH",
-                "is_match": False,
-                "is_fixable": True,
-                "message": f"Tên hình khớp trên server nhưng sai đường dẫn (hiện tại: '{prefix}', chuẩn: '{standard_prefix}')",
-                "given_path": raw_path,
-                "given_filename": filename,
-                "given_prefix": prefix,
-                "server_filename": filename,
-                "suggested_fix_path": f"{standard_prefix}{filename}"
-            }
+        return {
+            "status": "MATCH",
+            "is_match": True,
+            "is_fixable": False,
+            "message": f"Tên hình khớp 100% trên máy chủ ({filename})",
+            "given_path": raw_path,
+            "given_filename": filename,
+            "given_prefix": prefix,
+            "server_filename": filename,
+            "suggested_fix_path": raw_path
+        }
 
-    # 2. Lệch chữ hoa / thường
+    # 2. Lệch chữ hoa / thường: Giữ nguyên tiền tố của nhà hàng (vd: /menu/), chỉ đổi tên file sang đúng server (vd: /menu/Mona.jpg)
     filename_lower = filename.lower()
     if filename_lower in lower_map:
         server_exact_name = lower_map[filename_lower]
+        suggested_path = f"{prefix}{server_exact_name}" if prefix else server_exact_name
         return {
             "status": "CASE_MISMATCH",
             "is_match": False,
@@ -484,7 +471,7 @@ def compare_single_image(
             "given_filename": filename,
             "given_prefix": prefix,
             "server_filename": server_exact_name,
-            "suggested_fix_path": f"{standard_prefix}{server_exact_name}"
+            "suggested_fix_path": suggested_path
         }
 
     # 3. Không tìm thấy đúng tên file, thử tìm ứng viên theo mã RK7 / SAP nếu có
@@ -505,6 +492,7 @@ def compare_single_image(
                 break
 
     if candidate_found:
+        suggested_path = f"{prefix}{candidate_found}" if prefix else candidate_found
         return {
             "status": "CANDIDATE_FOUND",
             "is_match": False,
@@ -514,7 +502,7 @@ def compare_single_image(
             "given_filename": filename,
             "given_prefix": prefix,
             "server_filename": candidate_found,
-            "suggested_fix_path": f"{standard_prefix}{candidate_found}"
+            "suggested_fix_path": suggested_path
         }
 
     # 4. Hoàn toàn không tìm thấy trên server
@@ -652,13 +640,9 @@ def sync_dish_images_to_mongo(
             if not target_path or (not rk7 and not sap and not name):
                 continue
 
-            # Đảm bảo target_path có tiền tố standard_prefix
-            if not target_path.startswith(standard_prefix):
-                clean_name = os.path.basename(target_path)
-                target_path = f"{standard_prefix}{clean_name}"
-
-            # Chuẩn hóa link gateway
-            clean_filename = target_path.replace(standard_prefix, "")
+            # Giữ nguyên tiền tố của target_path (ví dụ: /menu/Mona.jpg), KHÔNG ép về standard_prefix
+            clean_filename = os.path.basename(target_path)
+            # Cloud Gateway URL luôn phục vụ từ /resources/menu/
             gateway_url = f"https://gposgateway-hcm.ggg.com.vn:8443/resources/menu/{clean_filename}"
 
             # Xây dựng bộ lọc OR để quét và cập nhật TẤT CẢ các bản ghi của món này dù ở bất kỳ menu nào
@@ -782,7 +766,8 @@ def export_mismatched_dishes_excel(
     port: int,
     menu_code: str,
     menu_name: str = "",
-    force_refresh_cache: bool = False
+    force_refresh_cache: bool = False,
+    dishes: Optional[List[Dict[str, Any]]] = None
 ) -> Tuple[io.BytesIO, int, str]:
     """
     Xuất file Excel các món bị sai link hoặc tên hình ảnh của ĐÚNG MENU ĐƯỢC CHỌN (menu_code),
@@ -804,14 +789,20 @@ def export_mismatched_dishes_excel(
     if not clean_menu_code:
         raise ValueError("Chưa cung cấp mã Menu cần xuất đối soát hình ảnh!")
 
-    # 1. Tải danh sách món ăn CHỈ THUỘC ĐÚNG MENU NÀY từ ORDER_MENU_CACHE_CATEGORY
-    loaded = mongo_menu_so_co_service.load_menu_items(
-        host=clean_host,
-        port=port,
-        menu_codes=[clean_menu_code],
-        search_all=False
-    )
-    menu_items = loaded.get("items", []) or []
+    # 1. Tải danh sách món ăn: ưu tiên lấy từ dishes do frontend truyền vào
+    menu_items = dishes or []
+    if not menu_items:
+        try:
+            loaded = mongo_menu_so_co_service.load_menu_items(
+                host=clean_host,
+                port=port,
+                menu_codes=[clean_menu_code],
+                search_all=False
+            )
+            menu_items = loaded.get("items", []) or []
+        except Exception as e_load:
+            logger.warning(f"Lỗi tải món từ MongoDB {clean_host}: {e_load}")
+            menu_items = []
 
     # 2. Kiểm tra đối chiếu hình ảnh với máy chủ ảnh 192.168.201.116 (cache nhanh <1ms)
     check_res = check_dishes_images_for_menu(
@@ -835,7 +826,11 @@ def export_mismatched_dishes_excel(
 
         query_conditions = []
         if rk7_list:
-            query_conditions.append({"code": {"$in": rk7_list}})
+            rk7_vals: List[Any] = list(rk7_list)
+            for r in rk7_list:
+                if r.isdigit():
+                    rk7_vals.append(int(r))
+            query_conditions.append({"code": {"$in": rk7_vals}})
         if sap_list:
             query_conditions.append({"sapCode": {"$in": sap_list}})
 
@@ -859,8 +854,11 @@ def export_mismatched_dishes_excel(
         try:
             wb = openpyxl.load_workbook(TEMPLATE_FILE_3_PATH)
             logger.info(f"Đã nạp file mẫu gốc File 3 từ {TEMPLATE_FILE_3_PATH}")
+            ws = wb["Customer_Menu"] if "Customer_Menu" in wb.sheetnames else wb.active
+            if ws.max_row > 1:
+                ws.delete_rows(2, ws.max_row - 1)
         except Exception as ex_load:
-            logger.warning(f"Không thể đọc file mẫu {TEMPLATE_FILE_3_PATH}: {ex_load}, tạo mới workbook")
+            logger.warning(f"Không thể đọc hoặc xử lý file mẫu {TEMPLATE_FILE_3_PATH}: {ex_load}, tạo mới workbook hoàn toàn")
             wb = None
 
     if wb is None:
@@ -874,11 +872,6 @@ def export_mismatched_dishes_excel(
             c = ws.cell(1, col_idx, value=col_name)
             c.font = header_font
             c.fill = header_fill
-    else:
-        ws = wb["Customer_Menu"] if "Customer_Menu" in wb.sheetnames else wb.active
-        # Xóa các dòng dữ liệu mẫu cũ (từ dòng 2 trở đi)
-        if ws.max_row > 1:
-            ws.delete_rows(2, ws.max_row - 1)
 
     # Đảm bảo 3 cột đối soát (39, 40, 41) có tiêu đề nổi bật
     audit_header_font = Font(name="Arial", size=10, bold=True, color="FFFFFF")

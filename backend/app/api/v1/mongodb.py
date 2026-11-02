@@ -2694,7 +2694,8 @@ def export_mismatched_dish_images(
             port=payload.port,
             menu_code=payload.menu_code,
             menu_name=payload.menu_name or "",
-            force_refresh_cache=payload.force_refresh
+            force_refresh_cache=payload.force_refresh,
+            dishes=payload.dishes
         )
 
         user_uname = getattr(current_user, "username", "SYSTEM")

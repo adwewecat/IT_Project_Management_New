@@ -1372,6 +1372,7 @@ export const mongoService = {
     menu_name?: string;
     restaurant_name?: string;
     force_refresh?: boolean;
+    dishes?: any[];
   }): Promise<{ blob: Blob; filename: string; mismatchedCount: number }> => {
     const res = await api.post('/mongodb/image-server/export-mismatches', payload, {
       responseType: 'blob'

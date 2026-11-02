@@ -1166,7 +1166,16 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
         port: 27017,
         menu_code: selectedCategory.code,
         menu_name: selectedCategory.name,
-        restaurant_name: selectedRestaurant?.name || ''
+        restaurant_name: selectedRestaurant?.name || '',
+        dishes: dishes.map((d: DishItem) => ({
+          id: d.id,
+          name: d.name,
+          rk7_code: d.rk7Code,
+          sap_code: d.sapCode,
+          src_img: d.srcImg || '',
+          image_url: d.imageUrl || '',
+          url_img_qr: d.urlImgQr || ''
+        }))
       });
 
       // Tạo URL download file Excel trực tiếp trên trình duyệt
@@ -1194,8 +1203,20 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
       }
     } catch (err: any) {
       console.error('Lỗi xuất Excel món sai ảnh:', err);
+      let detailMsg = err.message || 'Lỗi không xác định';
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const parsed = JSON.parse(text);
+          detailMsg = parsed.detail || text;
+        } catch {
+          // fallback
+        }
+      } else if (err.response?.data?.detail) {
+        detailMsg = err.response.data.detail;
+      }
       if (onToastRef.current) {
-        onToastRef.current('Lỗi xuất file Excel đối soát ảnh: ' + (err.response?.data?.detail || err.message), 'error');
+        onToastRef.current('Lỗi xuất file Excel đối soát ảnh: ' + detailMsg, 'error');
       }
     } finally {
       setExportingExcel(false);
