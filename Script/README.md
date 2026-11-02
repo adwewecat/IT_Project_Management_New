@@ -6094,3 +6094,28 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
 - **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.06s`, 0 lỗi TypeScript). Cập nhật sẵn `frontend/dist/`.
   * Backend: `python -m compileall backend/app` hoàn thành 100% không cảnh báo.
+
+---
+
+### [2026-11-02] TÍNH NĂNG 1-CLICK SAO CHÉP THÔNG BÁO KIỂM TRA HÌNH ẢNH MÓN CO (GỬI NGƯỜI XỬ LÝ)
+- **Yêu cầu nghiệp vụ**:
+  * Tại Tab 3 (Sơ Đồ Bàn Theo Khu - View thực đơn CO) của màn hình Phân Tích MongoDB Nhà Hàng (`/app/mongo-analysis`), khi kiểm tra hình ảnh món với máy chủ ảnh `192.168.201.116`, các badge trạng thái (như `⚠️ Lệch chữ`, `⚠️ Sai link`, `❌ Không có ảnh`, `✅ Khớp server`) trước đây chỉ hiển thị tooltip HTML `title` trình duyệt nên không thể copy được.
+  * Người dùng cần 1-click copy nhanh nội dung thông báo lỗi chi tiết này để paste gửi cho nhân sự phụ trách xử lý/thiết kế hình ảnh (qua Zalo, Chat, Ticket...).
+- **Giải pháp & Triển khai kỹ thuật**:
+  1. **Tích hợp `copyToClipboard` an toàn & đa nền tảng**:
+     * Sử dụng helper chuẩn `copyToClipboard` từ `frontend/src/utils/clipboard.ts` (tự động hỗ trợ cả Clipboard API trên HTTPS/localhost và fallback `textarea` + `execCommand('copy')` khi truy cập qua mạng nội bộ IP HTTP máy chủ).
+  2. **1-Click Copy Thông Minh với Ngữ Cảnh Đầy Đủ**:
+     * Khi bấm trực tiếp vào badge trạng thái Dòng 2 (`🌐 Server:`): Tự động định dạng văn bản đầy đủ ngữ cảnh để người nhận hiểu ngay:
+       `[<Tên món> (<Mã RK7> - <Mã SAP>)] <Nội dung thông báo lỗi>`
+       *Ví dụ thực tế*: `[Bia mix xoài (RK7: 10971 - SAP: 60006566)] Lệch chữ hoa/thường (File DB: 'SG_Bia_mix_xoai.jpg', Server thực tế: 'sg_bia_mix_xoai.jpg')`
+     * Hỗ trợ **Shift + Click**: Cho phép copy riêng nội dung thông báo lỗi thuần túy không kèm tiền tố tên món khi cần.
+  3. **Phản hồi Trực Quan Tức Thì (Instant Feedback)**:
+     * Icon trên badge chuyển từ `<Copy size={9} />` sang dấu tích xanh `<Check size={9} color="#16a34a" />` trong 1.5 giây.
+     * Kèm thông báo Toast góc màn hình thông báo văn bản đã được sao chép vào bộ nhớ tạm.
+  4. **Nút Kiểm Tra Lại Độc Lập Cho Từng Món (Re-check)**:
+     * Bổ sung nút refresh mini `<RefreshCw size={9} />` ngay cạnh badge, cho phép người dùng kiểm tra lại tức thì riêng món đó sau khi server đã được sửa đổi mà không cần phải quét lại toàn bộ hàng trăm món của menu.
+  5. **Hỗ Trợ Copy Đường Dẫn Ảnh Ở Dòng 1 (`📁 File:`)**:
+     * Cho phép click trực tiếp vào dòng `📁 File:` để copy nhanh đường dẫn file ảnh trong MongoDB kèm phản hồi icon và toast.
+- **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.37s`, 0 lỗi TypeScript TS6133). Đã tạo sẵn bản build sạch mới nhất trong `frontend/dist/`.
+  * Backend: `python -m compileall backend/app` hoàn thành 100%, Smoke test `>>> PASSED 100%`.

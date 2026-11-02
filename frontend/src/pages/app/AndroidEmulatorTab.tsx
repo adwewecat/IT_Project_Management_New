@@ -17,6 +17,7 @@ import {
   Zap,
   FileSpreadsheet,
   Check,
+  Copy,
   CheckSquare,
   Square,
   ChevronDown,
@@ -29,6 +30,7 @@ import {
   CheckCircle,
   Loader2
 } from 'lucide-react';
+import { copyToClipboard } from '../../utils/clipboard';
 import { Modal } from '../../components/ui/Modal';
 import { useAuth } from '../../contexts/AuthContext';
 import { checkIsDungOrSuperAdmin } from '../../utils/authUtils';
@@ -313,6 +315,10 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
   const [syncingImages, setSyncingImages] = useState<boolean>(false);
   const [menuImagesSummary, setMenuImagesSummary] = useState<CheckMenuImagesResponse | null>(null);
   const [exportingExcel, setExportingExcel] = useState<boolean>(false);
+
+  // Quản lý sao chép thông báo kiểm tra ảnh và đường dẫn (phục vụ gửi người xử lý)
+  const [copiedCheckDishId, setCopiedCheckDishId] = useState<string | null>(null);
+  const [copiedFileDishId, setCopiedFileDishId] = useState<string | null>(null);
 
 
 
@@ -717,6 +723,49 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
       }
     } finally {
       setCheckingDishId(null);
+    }
+  };
+
+  // Copy thông báo kết quả kiểm tra hình ảnh server (để gửi cho người xử lý)
+  const handleCopyCheckMessage = async (e: React.MouseEvent, dish: DishItem, message: string) => {
+    e.stopPropagation();
+    if (!message) return;
+
+    // Shift+Click: chỉ copy nội dung thông báo lỗi thuần
+    // Click thường: copy đầy đủ ngữ cảnh [Tên món (RK7 - SAP)] + Thông báo lỗi
+    const rk7Str = dish.rk7Code ? `RK7: ${dish.rk7Code}` : '';
+    const sapStr = dish.sapCode ? `SAP: ${dish.sapCode}` : '';
+    const codes = [rk7Str, sapStr].filter(Boolean).join(' - ');
+    const textToCopy = e.shiftKey
+      ? message
+      : `[${dish.name}${codes ? ` (${codes})` : ''}] ${message}`;
+
+    const ok = await copyToClipboard(textToCopy);
+    if (ok) {
+      setCopiedCheckDishId(dish.id);
+      setTimeout(() => {
+        setCopiedCheckDishId((prev) => (prev === dish.id ? null : prev));
+      }, 1500);
+      if (onToastRef.current) {
+        onToastRef.current(`Đã copy: ${textToCopy}`, 'success');
+      }
+    }
+  };
+
+  // Copy đường dẫn file ảnh trong DB
+  const handleCopyFilePath = async (e: React.MouseEvent, dish: DishItem, filePath: string) => {
+    e.stopPropagation();
+    if (!filePath) return;
+
+    const ok = await copyToClipboard(filePath);
+    if (ok) {
+      setCopiedFileDishId(dish.id);
+      setTimeout(() => {
+        setCopiedFileDishId((prev) => (prev === dish.id ? null : prev));
+      }, 1500);
+      if (onToastRef.current) {
+        onToastRef.current(`Đã copy đường dẫn: ${filePath}`, 'success');
+      }
     }
   };
 
@@ -3299,8 +3348,24 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                               gap: '3px'
                             }}
                           >
-                            {/* Dòng 1: Hình trên file */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden' }}>
+                            {/* Dòng 1: Hình trên file (Bấm để copy đường dẫn ảnh) */}
+                            <div
+                              onClick={(e) => {
+                                if (fileImg) {
+                                  handleCopyFilePath(e, dish, fileImg);
+                                }
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                overflow: 'hidden',
+                                cursor: fileImg ? 'pointer' : 'default',
+                                borderRadius: '3px',
+                                padding: '1px 2px'
+                              }}
+                              title={fileImg ? `Bấm để copy đường dẫn ảnh: ${fileImg}` : 'Chưa có cấu hình ảnh'}
+                            >
                               <span style={{ color: '#64748b', fontWeight: 700, flexShrink: 0 }}>📁 File:</span>
                               <span
                                 style={{
@@ -3309,15 +3374,24 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',
                                   whiteSpace: 'nowrap',
-                                  fontWeight: fileImg ? 600 : 400
+                                  fontWeight: fileImg ? 600 : 400,
+                                  flex: 1
                                 }}
-                                title={fileImg || 'Chưa có cấu hình ảnh'}
                               >
                                 {fileImg || '(Chưa cấu hình)'}
                               </span>
+                              {fileImg && (
+                                <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center' }}>
+                                  {copiedFileDishId === dish.id ? (
+                                    <Check size={9} color="#16a34a" />
+                                  ) : (
+                                    <Copy size={8} style={{ opacity: 0.45 }} />
+                                  )}
+                                </span>
+                              )}
                             </div>
 
-                            {/* Dòng 2: Hình trên server */}
+                            {/* Dòng 2: Hình trên server (Bấm badge để copy thông báo gửi người xử lý) */}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
                               <span style={{ color: '#64748b', fontWeight: 700, flexShrink: 0 }}>🌐 Server:</span>
 
@@ -3351,56 +3425,96 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                                   )}
                                   <span>Check hình</span>
                                 </button>
-                              ) : serverCheck.status === 'MATCH' ? (
-                                <span
-                                  style={{
-                                    color: '#15803d',
-                                    backgroundColor: '#dcfce7',
-                                    border: '1px solid #bbf7d0',
-                                    borderRadius: '3px',
-                                    padding: '1px 5px',
-                                    fontWeight: 700,
-                                    fontSize: '10px',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap'
-                                  }}
-                                  title={serverCheck.message}
-                                >
-                                  ✅ Khớp server
-                                </span>
-                              ) : serverCheck.is_fixable ? (
-                                <span
-                                  style={{
-                                    color: serverCheck.status === 'CASE_MISMATCH' ? '#b45309' : '#c2410c',
-                                    backgroundColor: serverCheck.status === 'CASE_MISMATCH' ? '#fef3c7' : '#ffedd5',
-                                    border: `1px solid ${serverCheck.status === 'CASE_MISMATCH' ? '#fde68a' : '#fed7aa'}`,
-                                    borderRadius: '3px',
-                                    padding: '1px 5px',
-                                    fontWeight: 700,
-                                    fontSize: '9.5px',
-                                    whiteSpace: 'nowrap'
-                                  }}
-                                  title={serverCheck.message}
-                                >
-                                  {serverCheck.status === 'CASE_MISMATCH' ? '⚠️ Lệch chữ' : '⚠️ Sai link'}
-                                </span>
                               ) : (
-                                <span
-                                  style={{
-                                    color: '#dc2626',
-                                    backgroundColor: '#fee2e2',
-                                    border: '1px solid #fecaca',
-                                    borderRadius: '3px',
-                                    padding: '1px 5px',
-                                    fontWeight: 600,
-                                    fontSize: '9.5px',
-                                    whiteSpace: 'nowrap'
-                                  }}
-                                  title={serverCheck.message}
-                                >
-                                  {serverCheck.status === 'NO_IMAGE' ? 'Chưa có ảnh' : '❌ Không có ảnh'}
-                                </span>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                  {/* Badge thông báo trạng thái: Bấm để copy thông báo gửi người xử lý */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleCopyCheckMessage(e, dish, serverCheck.message)}
+                                    title={`Bấm để copy thông báo gửi người xử lý (Shift+Click: chỉ copy nội dung lỗi):\n[${dish.name} - RK7: ${dish.rk7Code || '—'}] ${serverCheck.message}`}
+                                    style={{
+                                      color:
+                                        serverCheck.status === 'MATCH'
+                                          ? '#15803d'
+                                          : serverCheck.status === 'CASE_MISMATCH'
+                                          ? '#b45309'
+                                          : serverCheck.is_fixable
+                                          ? '#c2410c'
+                                          : '#dc2626',
+                                      backgroundColor:
+                                        serverCheck.status === 'MATCH'
+                                          ? '#dcfce7'
+                                          : serverCheck.status === 'CASE_MISMATCH'
+                                          ? '#fef3c7'
+                                          : serverCheck.is_fixable
+                                          ? '#ffedd5'
+                                          : '#fee2e2',
+                                      border: `1px solid ${
+                                        serverCheck.status === 'MATCH'
+                                          ? '#bbf7d0'
+                                          : serverCheck.status === 'CASE_MISMATCH'
+                                          ? '#fde68a'
+                                          : serverCheck.is_fixable
+                                          ? '#fed7aa'
+                                          : '#fecaca'
+                                      }`,
+                                      borderRadius: '3px',
+                                      padding: '1px 5px',
+                                      fontWeight: 700,
+                                      fontSize: '9.5px',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                  >
+                                    <span>
+                                      {serverCheck.status === 'MATCH'
+                                        ? '✅ Khớp server'
+                                        : serverCheck.status === 'CASE_MISMATCH'
+                                        ? '⚠️ Lệch chữ'
+                                        : serverCheck.is_fixable
+                                        ? '⚠️ Sai link'
+                                        : serverCheck.status === 'NO_IMAGE'
+                                        ? 'Chưa có ảnh'
+                                        : '❌ Không có ảnh'}
+                                    </span>
+                                    {copiedCheckDishId === dish.id ? (
+                                      <Check size={9} color="#16a34a" />
+                                    ) : (
+                                      <Copy size={9} style={{ opacity: 0.65 }} />
+                                    )}
+                                  </button>
+
+                                  {/* Nút kiểm tra lại hình ảnh riêng cho món này */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleCheckSingleDish(dish);
+                                    }}
+                                    disabled={checkingDishId === dish.id}
+                                    title="Kiểm tra lại hình ảnh món này trên server 192.168.201.116"
+                                    style={{
+                                      padding: '1px 3px',
+                                      borderRadius: '3px',
+                                      border: '1px solid #cbd5e1',
+                                      backgroundColor: '#ffffff',
+                                      color: '#475569',
+                                      cursor: checkingDishId === dish.id ? 'not-allowed' : 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      lineHeight: 1
+                                    }}
+                                  >
+                                    <RefreshCw
+                                      size={9}
+                                      className={checkingDishId === dish.id ? 'animate-spin' : ''}
+                                    />
+                                  </button>
+                                </div>
                               )}
                             </div>
 
