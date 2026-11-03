@@ -780,8 +780,26 @@ def export_mismatched_dishes_excel(
     )
     all_results = check_res.get("results", []) or []
 
-    # 3. Lọc duy nhất các món KHÔNG KHỚP (is_match == False: sai link, lệch chữ hoa/thường, không có trên server, chưa có hình)
-    mismatches = [r for r in all_results if not r.get("is_match")]
+    # 3. Lọc duy nhất các món KHÔNG KHỚP và khử trùng lặp (mỗi món chỉ xuất 1 dòng duy nhất theo mã RK7 / SAP)
+    raw_mismatches = [r for r in all_results if not r.get("is_match")]
+    seen_dedup: Set[str] = set()
+    mismatches: List[Dict[str, Any]] = []
+
+    for r in raw_mismatches:
+        rk7 = str(r.get("rk7_code") or "").strip()
+        sap = str(r.get("sap_code") or "").strip()
+        name = str(r.get("name") or "").strip().lower()
+
+        if rk7 and rk7 != "-" and rk7 != "0":
+            dedup_key = f"rk7_{rk7}__sap_{sap}" if (sap and sap != "-" and sap != "0") else f"rk7_{rk7}"
+        elif sap and sap != "-" and sap != "0":
+            dedup_key = f"sap_{sap}__name_{name}"
+        else:
+            dedup_key = f"name_{name}"
+
+        if dedup_key not in seen_dedup:
+            seen_dedup.add(dedup_key)
+            mismatches.append(r)
 
     # 4. Tra cứu thông tin đầy đủ 38 trường từ CO_MENU_ITEM trong MongoDB G_ORDER
     client = get_mongo_client(clean_host, port)

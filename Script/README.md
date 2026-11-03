@@ -128,6 +128,31 @@ npm run dev
      + Modal/Popup co giãn full-width (`max-height: 94vh`, `margin: 8px`), chân trang có `flex-wrap: wrap`.
      + Tuyệt đối không hard-code `min-width > 360px` gây tràn viewport.
 
+### [2026-11-03] - Chuẩn Hóa Hiển Thị Hình Ảnh & Đồng Bộ Món Vào MongoDB: Khử Trùng Lặp 1 Dòng / 1 Món (Theo Mã RK7 & SAP) & Đồng Bộ Toàn Bộ Các Menu
+- **Yêu cầu người dùng**:
+  1. Với hình ảnh món ăn: mỗi món có mã RK7 thì chỉ có 1 hình ảnh tương ứng. Vì vậy trong popup "Chọn Món Đồng Bộ Link Ảnh Từ Server Về MongoDB", chỉ hiển thị 1 dòng cho 1 món nếu có cùng mã SAP và mã RK7 (tránh trường hợp một món như "Tôm Càng Sen" xuất hiện 7 lần do nằm trong nhiều nhóm/combo khác nhau, "Tok phô mai" xuất hiện 2 lần, "Tôm thẻ" xuất hiện nhiều lần).
+  2. Khi người dùng chọn và đồng bộ hình ảnh cho món đó, hệ thống tự động xử lý và cập nhật toàn bộ tất cả các bản ghi/vị trí của món đó trên toàn bộ MongoDB nhà hàng (kể cả ở các menu khác), vì file số 3 (Customer_Menu) dưới nhà hàng khi tải về cũng chỉ là 1 item - 1 link.
+  3. Trong file Excel đối soát xuất ra (`export_mismatched_dishes_excel` - File 3 Customer_Menu), cũng khử trùng lặp theo `(rk7_code, sap_code)` để mỗi món chỉ xuất hiện đúng 1 dòng.
+- **Chi tiết thực hiện**:
+  1. **Frontend (`frontend/src/pages/app/AndroidEmulatorTab.tsx`)**:
+     - Thêm helper `getDishDedupKey(item)`: Sinh key duy nhất theo ưu tiên `rk7_{rk7}__sap_{sap}`, `rk7_{rk7}`, `sap_{sap}__name_{name}` hoặc `name_{name}`.
+     - Hàm `getFixItemKey`: Chuẩn hóa dùng `getDishDedupKey(item)` thay vì dùng riêng `dish_id`.
+     - Danh sách `mismatchedItems`: Sử dụng `Map<string, ...>` để gom nhóm các bản ghi trùng lặp:
+       + Gom tất cả các `dish_id` trùng lặp vào mảng `all_dish_ids: string[]`.
+       + Kế thừa thông tin tối ưu (mã SAP, `given_path`, trạng thái `is_fixable`, `suggested_fix_path`, `server_filename`).
+       + Sắp xếp hiển thị ưu tiên: các món có ảnh trên server đưa lên trước để người dùng chọn nhanh.
+     - Trong `executeSyncSelectedImages`:
+       + Khi đồng bộ thành công, cập nhật toàn bộ các `dish_id` trong `all_dish_ids` và tất cả các mục có cùng mã RK7 / mã SAP trong `checkedDishImagesMap`.
+       + Cập nhật đồng loạt toàn bộ các bản ghi trong `menuImagesSummary.results` (dù ở bất kỳ menu/nhóm nào) có cùng mã RK7 hoặc mã SAP để chuyển sang trạng thái `MATCH` (khớp hoàn toàn) và cập nhật bộ đếm.
+  2. **Backend (`backend/app/services/image_server_service.py`)**:
+     - Cập nhật hàm `export_mismatched_dishes_excel`: Khử trùng lặp danh sách món không khớp theo `dedup_key` (mã RK7 & mã SAP), đảm bảo sheet `Customer_Menu` của File 3 chỉ xuất 1 dòng duy nhất cho mỗi món.
+     - Hàm `sync_dish_images_to_mongo`: Sử dụng `update_many` với bộ lọc `$or` gồm mã RK7 (dạng chuỗi và số nguyên), mã SAP và tên món, đồng bộ cập nhật trên toàn bộ `CO_MENU_ITEM` và `MENU_ITEM` trong database `G_ORDER` của nhà hàng, đồng thời tăng `VERSION_MENU_CO` trong `SYNC_VERSION`.
+  3. **Kiểm thử & Đóng gói**:
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.52s`), bản build sạch sẽ trong `frontend/dist/`.
+     - Backend: `compileall` sạch 100%, import kiểm thử không lỗi.
+
+---
+
 ### [2026-10-23] - Nâng Cấp Tính Năng "⚡ Đồng Nhất Nhóm Bếp Theo Quầy" (Tác Vụ 4 KDS): Tự Động Gỡ Bỏ Món Không Có Nhóm Bếp, Quầy Bếp (ACCOUNT) & Máy In Khỏi KDS (CONFIG_COOKING)
 - **Bối cảnh & Yêu cầu người dùng**:
   + Tại màn hình **Phân Tích MongoDB Nhà Hàng**, tác vụ **4. Check / xử lý KDS**, mục **Các Tính Năng Quản Trị KDS**:

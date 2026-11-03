@@ -1010,11 +1010,65 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
     }
   };
 
-  // Danh sách toàn bộ các món bị sai lệch / chưa có ảnh trên server (Sắp xếp: Món có ảnh trên server lên trước)
+  // Khóa định danh duy nhất cho từng món ăn (Deduplication: 1 món = 1 mã RK7/SAP = 1 hình)
+  const getDishDedupKey = (item: { rk7_code?: string; sap_code?: string; name?: string }): string => {
+    const rk7 = String(item.rk7_code || '').trim();
+    const sap = String(item.sap_code || '').trim();
+    const name = String(item.name || '').trim().toLowerCase();
+
+    if (rk7 && rk7 !== '-' && rk7 !== '0') {
+      if (sap && sap !== '-' && sap !== '0') {
+        return `rk7_${rk7}__sap_${sap}`;
+      }
+      return `rk7_${rk7}`;
+    }
+    if (sap && sap !== '-' && sap !== '0') {
+      return `sap_${sap}__name_${name}`;
+    }
+    return `name_${name}`;
+  };
+
+  const getFixItemKey = (item: { dish_id?: string; rk7_code?: string; sap_code?: string; name?: string }): string => {
+    return getDishDedupKey(item);
+  };
+
+  // Danh sách các món bị sai lệch / chưa có ảnh trên server
+  // ĐÃ KHỬ TRÙNG LẶP: Mỗi món (cùng mã RK7 hoặc cùng mã SAP) CHỈ HIỂN THỊ 1 DÒNG DUY NHẤT
+  // Sắp xếp: Món có ảnh trên server lên trước
   const mismatchedItems = useMemo(() => {
     if (!menuImagesSummary || !menuImagesSummary.results) return [];
     const list = menuImagesSummary.results.filter((r) => !r.is_match);
-    return [...list].sort((a, b) => {
+
+    // Gom nhóm khử trùng lặp theo getDishDedupKey
+    const seen = new Map<string, typeof list[0] & { all_dish_ids: string[] }>();
+    list.forEach((item) => {
+      const key = getDishDedupKey(item);
+      const existing = seen.get(key);
+      if (!existing) {
+        seen.set(key, { ...item, all_dish_ids: item.dish_id ? [item.dish_id] : [] });
+      } else {
+        if (item.dish_id && !existing.all_dish_ids.includes(item.dish_id)) {
+          existing.all_dish_ids.push(item.dish_id);
+        }
+        if ((!existing.sap_code || existing.sap_code === '-') && item.sap_code && item.sap_code !== '-') {
+          existing.sap_code = item.sap_code;
+        }
+        if ((!existing.given_path || existing.given_path === '-') && item.given_path && item.given_path !== '-') {
+          existing.given_path = item.given_path;
+        }
+        if (!existing.is_fixable && item.is_fixable) {
+          existing.is_fixable = true;
+          existing.suggested_fix_path = item.suggested_fix_path;
+          existing.server_filename = item.server_filename;
+          existing.status = item.status;
+          existing.message = item.message;
+        }
+      }
+    });
+
+    const uniqueList = Array.from(seen.values());
+
+    return uniqueList.sort((a, b) => {
       // Ưu tiên 1: Các món có ảnh trên server (is_fixable hoặc có server_filename) lên đầu bảng
       const aHas = (a.is_fixable || Boolean(a.server_filename)) ? 1 : 0;
       const bHas = (b.is_fixable || Boolean(b.server_filename)) ? 1 : 0;
@@ -1063,10 +1117,6 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
       );
     });
   }, [mismatchedItems, syncSearchQuery]);
-
-  const getFixItemKey = (item: { dish_id?: string; rk7_code?: string; sap_code?: string; name?: string }): string => {
-    return item.dish_id || `${item.rk7_code || ''}_${item.sap_code || ''}_${item.name || ''}`;
-  };
 
   // Các món trong danh sách lọc có thể tích chọn đồng bộ
   const fixableInFiltered = useMemo(() => {
@@ -1152,38 +1202,80 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
       setCheckedDishImagesMap((prev) => {
         const updated = { ...prev };
         selectedItems.forEach((it) => {
-          if (it.dish_id) {
-            updated[it.dish_id] = {
+          const ids = (it as any).all_dish_ids || (it.dish_id ? [it.dish_id] : []);
+          ids.forEach((did: string) => {
+            updated[did] = {
               ...it,
+              dish_id: did,
               status: 'MATCH' as const,
               is_match: true,
               is_fixable: false,
               message: `Đã đồng nhất thành công theo server: ${it.suggested_fix_path}`
             };
-          }
+          });
+
+          // Đồng bộ tất cả các món trên bàn/thực đơn có cùng mã RK7 hoặc mã SAP
+          const rk7 = String(it.rk7_code || '').trim();
+          const sap = String(it.sap_code || '').trim();
+          const name = String(it.name || '').trim().toLowerCase();
+          Object.keys(updated).forEach((did) => {
+            const entry = updated[did];
+            if (
+              (rk7 && String(entry.rk7_code || '').trim() === rk7) ||
+              (sap && sap !== '-' && String(entry.sap_code || '').trim() === sap) ||
+              (name && String(entry.name || '').trim().toLowerCase() === name)
+            ) {
+              updated[did] = {
+                ...entry,
+                status: 'MATCH' as const,
+                is_match: true,
+                is_fixable: false,
+                message: `Đã đồng nhất thành công theo server: ${it.suggested_fix_path}`
+              };
+            }
+          });
         });
         return updated;
       });
 
       setMenuImagesSummary((prev) => {
         if (!prev) return null;
-        const selectedIdSet = new Set(selectedItems.map((it) => it.dish_id));
+        const syncedRk7s = new Set(selectedItems.map((it) => String(it.rk7_code || '').trim()).filter(Boolean));
+        const syncedSaps = new Set(selectedItems.map((it) => String(it.sap_code || '').trim()).filter((s) => s && s !== '-'));
+        const syncedNames = new Set(selectedItems.map((it) => String(it.name || '').trim().toLowerCase()).filter(Boolean));
+
         const updatedResults = prev.results.map((r) => {
-          if (selectedIdSet.has(r.dish_id)) {
+          const rk7 = String(r.rk7_code || '').trim();
+          const sap = String(r.sap_code || '').trim();
+          const name = String(r.name || '').trim().toLowerCase();
+
+          const isSynced =
+            (rk7 && syncedRk7s.has(rk7)) ||
+            (sap && sap !== '-' && syncedSaps.has(sap)) ||
+            (name && syncedNames.has(name));
+
+          if (isSynced) {
+            const matchingFix = selectedItems.find((it) =>
+              (rk7 && String(it.rk7_code || '').trim() === rk7) ||
+              (sap && sap !== '-' && String(it.sap_code || '').trim() === sap) ||
+              (name && String(it.name || '').trim().toLowerCase() === name)
+            );
+            const targetPath = matchingFix?.suggested_fix_path || r.suggested_fix_path;
             return {
               ...r,
               status: 'MATCH' as const,
               is_match: true,
               is_fixable: false,
-              message: `Đã đồng nhất thành công theo server: ${r.suggested_fix_path}`
+              message: `Đã đồng nhất thành công theo server: ${targetPath}`
             };
           }
           return r;
         });
+
         const remainingFixable = updatedResults.filter((r) => r.is_fixable).length;
         return {
           ...prev,
-          match_count: prev.match_count + selectedItems.length,
+          match_count: updatedResults.filter((r) => r.is_match).length,
           case_mismatch_count: updatedResults.filter((r) => r.status === 'CASE_MISMATCH').length,
           prefix_mismatch_count: updatedResults.filter((r) => r.status === 'PREFIX_MISMATCH').length,
           fixable_count: remainingFixable,
