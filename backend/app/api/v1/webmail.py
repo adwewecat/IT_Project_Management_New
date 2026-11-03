@@ -228,7 +228,7 @@ def update_user_signature(
 
 
 # ==========================================
-# SOẠN & GỬI EMAIL TỪ WEB (KÈM FILE TỐI ĐA 4MB)
+# SOẠN & GỬI EMAIL TỪ WEB (KÈM FILE TỐI ĐA 30MB)
 # ==========================================
 
 @router.post("/send")
@@ -237,7 +237,7 @@ async def send_webmail(
     cc: Optional[str] = Form("", description="Danh sách email CC"),
     subject: str = Form(..., description="Tiêu đề email"),
     body_html: str = Form(..., description="Nội dung email định dạng HTML"),
-    files: Optional[List[UploadFile]] = File(None, description="Danh sách tệp đính kèm (tổng tối đa 4MB)"),
+    files: Optional[List[UploadFile]] = File(None, description="Danh sách tệp đính kèm (hỗ trợ dung lượng lớn tối đa 30MB)"),
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(get_current_user)
 ):
@@ -245,7 +245,7 @@ async def send_webmail(
     Soạn và gửi email trực tiếp từ Web:
     - To: địa chỉ người nhận.
     - CC: mặc định có hcm.it.appsupport@ggg.com.vn ; tuan.pham@ggg.com.vn ;, có thể thêm/bớt.
-    - Đính kèm file tối đa 4MB.
+    - Đính kèm file tối đa 30MB (chuẩn Office 365).
     - Tự động chèn chữ ký theo user đang đăng nhập.
     """
     to_list = [t.strip() for t in to.replace(";", ",").split(",") if t.strip()]

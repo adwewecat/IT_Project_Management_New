@@ -34,7 +34,7 @@ interface WebmailComposeModalProps {
   onEmailSent?: () => void;
 }
 
-const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024; // 4MB
+const MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024; // 30MB (Hỗ trợ đính kèm dung lượng lớn theo Office 365)
 
 export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
   isOpen,
@@ -172,7 +172,7 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
     document.execCommand('insertHTML', false, tableHtml);
   };
 
-  // Xử lý chọn tệp đính kèm với kiểm tra kích thước tối đa 4MB
+  // Xử lý chọn tệp đính kèm với kiểm tra kích thước tối đa 30MB
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     const newFiles = Array.from(e.target.files);
@@ -185,13 +185,13 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
     // Kiểm tra từng file
     for (const f of newFiles) {
       if (f.size > MAX_ATTACHMENT_BYTES) {
-        setErrorMessage(`Tệp "${f.name}" có dung lượng ${(f.size / (1024 * 1024)).toFixed(2)}MB vượt quá giới hạn 4MB cho phép.`);
+        setErrorMessage(`Tệp "${f.name}" có dung lượng ${(f.size / (1024 * 1024)).toFixed(2)}MB vượt quá giới hạn 30MB cho phép.`);
         return;
       }
     }
 
     if (currentTotal + addedTotal > MAX_ATTACHMENT_BYTES) {
-      setErrorMessage(`Tổng dung lượng các tệp đính kèm (${((currentTotal + addedTotal) / (1024 * 1024)).toFixed(2)}MB) vượt quá giới hạn tối đa 4MB.`);
+      setErrorMessage(`Tổng dung lượng các tệp đính kèm (${((currentTotal + addedTotal) / (1024 * 1024)).toFixed(2)}MB) vượt quá giới hạn tối đa 30MB.`);
       return;
     }
 
@@ -370,7 +370,7 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
             <Paperclip size={14} />
             <span>
-              {files.length} tệp đính kèm ({((totalBytes) / (1024 * 1024)).toFixed(2)}MB / tối đa 4.0MB)
+              {files.length} tệp đính kèm ({((totalBytes) / (1024 * 1024)).toFixed(2)}MB / tối đa 30MB)
             </span>
           </div>
 
@@ -521,7 +521,7 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            title="Đính kèm tệp (tối đa 4MB)"
+            title="Đính kèm tệp (tối đa 30MB)"
             style={{
               display: 'flex',
               alignItems: 'center',

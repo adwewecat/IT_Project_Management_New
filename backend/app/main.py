@@ -4,6 +4,45 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from functools import wraps
+
+# Mở rộng giới hạn multipart form data (cho phép dán ảnh lớn Base64 và upload tệp không giới hạn 1024KB mặc định của Starlette)
+try:
+    import starlette.formparsers
+    import starlette.requests
+
+    LARGE_PART_SIZE = 100 * 1024 * 1024  # 100MB cho trường form (body_html chứa ảnh base64 chụp màn hình)
+
+    # 1. Patch Request._get_form & Request.form
+    _orig_form = starlette.requests.Request.form
+    @wraps(_orig_form)
+    def _patched_form(self, *, max_files=1000, max_fields=10000, max_part_size=LARGE_PART_SIZE):
+        return _orig_form(self, max_files=max_files, max_fields=max_fields, max_part_size=max_part_size)
+    starlette.requests.Request.form = _patched_form
+
+    _orig_get_form = starlette.requests.Request._get_form
+    @wraps(_orig_get_form)
+    async def _patched_get_form(self, *, max_files=1000, max_fields=10000, max_part_size=LARGE_PART_SIZE):
+        return await _orig_get_form(self, max_files=max_files, max_fields=max_fields, max_part_size=max_part_size)
+    starlette.requests.Request._get_form = _patched_get_form
+
+    # 2. Patch MultiPartParser.__init__ & FormParser.__init__
+    _orig_multipart_init = starlette.formparsers.MultiPartParser.__init__
+    @wraps(_orig_multipart_init)
+    def _patched_multipart_init(self, headers, stream, *, max_files=1000, max_fields=10000, max_part_size=LARGE_PART_SIZE):
+        return _orig_multipart_init(self, headers, stream, max_files=max_files, max_fields=max_fields, max_part_size=max_part_size)
+    starlette.formparsers.MultiPartParser.__init__ = _patched_multipart_init
+
+    _orig_form_init = starlette.formparsers.FormParser.__init__
+    @wraps(_orig_form_init)
+    def _patched_form_init(self, headers, stream, *, max_fields=10000, max_part_size=LARGE_PART_SIZE):
+        return _orig_form_init(self, headers, stream, max_fields=max_fields, max_part_size=max_part_size)
+    starlette.formparsers.FormParser.__init__ = _patched_form_init
+
+    starlette.formparsers.MultiPartParser.max_part_size = LARGE_PART_SIZE
+    starlette.formparsers.FormParser.max_part_size = LARGE_PART_SIZE
+except Exception as _patch_err:
+    logging.getLogger('app').warning('Không thể cấu hình mở rộng Starlette form parser: %s', _patch_err)
 
 from app.core.config import settings
 from app.core.database import test_db_connection

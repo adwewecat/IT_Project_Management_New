@@ -37,7 +37,7 @@ from app.models.user import User
 logger = logging.getLogger(__name__)
 
 # Giới hạn kích thước file đính kèm tối đa: 4MB (4 * 1024 * 1024 bytes)
-MAX_ATTACHMENT_SIZE_BYTES = 4 * 1024 * 1024
+MAX_ATTACHMENT_SIZE_BYTES = 30 * 1024 * 1024  # 30MB (Hỗ trợ dung lượng đính kèm lớn theo chuẩn Office 365 SMTP)
 
 # Bộ nhớ đệm token truy cập Microsoft Graph API
 _TOKEN_CACHE: Dict[str, Any] = {
@@ -1314,13 +1314,13 @@ class WebmailService:
                 if fsize > MAX_ATTACHMENT_SIZE_BYTES:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Tệp '{fname}' có dung lượng ({fsize / (1024*1024):.2f}MB) vượt quá giới hạn tối đa cho phép là 4MB."
+                        detail=f"Tệp '{fname}' có dung lượng ({fsize / (1024*1024):.2f}MB) vượt quá giới hạn tối đa cho phép là 30MB."
                     )
 
             if total_attachment_bytes > MAX_ATTACHMENT_SIZE_BYTES:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Tổng dung lượng các tệp đính kèm ({total_attachment_bytes / (1024*1024):.2f}MB) vượt quá giới hạn 4MB."
+                    detail=f"Tổng dung lượng các tệp đính kèm ({total_attachment_bytes / (1024*1024):.2f}MB) vượt quá giới hạn 30MB."
                 )
 
         # Lấy chữ ký của user hiện tại để gắn vào cuối email nếu chưa có

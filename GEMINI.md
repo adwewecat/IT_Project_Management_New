@@ -2857,3 +2857,13 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.22s`), 0 lỗi TypeScript TS6133. Thư mục `frontend/dist/` đã tạo mới sạch sẽ.
   * Backend: `python -m compileall backend/app` hoàn thành 100%, 0 cảnh báo/lỗi cú pháp.
   * Backend daemon đã khởi động trên port 8000.
+
+
+---
+
+### [2026-11-03] MỞ RỘNG DUNG LƯỢNG WEBMAIL: KHẮC PHỤC TRIỆT ĐỂ LỖI "Part exceeded maximum size of 1024KB" & NÂNG HẠN MỨC ĐÍNH KÈM LÊN 30MB
+- **Nguyên nhân cốt lõi**: `starlette.formparsers.MultiPartParser` và `starlette.requests.Request.form` mặc định giới hạn form fields tối đa 1024KB (1MB). Khi dán ảnh chụp màn hình base64 vào trình soạn thảo rich-text, chuỗi `body_html` vượt quá 1024KB gây lỗi `Part exceeded maximum size of 1024KB`.
+- **Giải pháp**:
+  * Monkey patch tự động trong `backend/app/main.py`: Nâng `max_part_size` của Starlette form parser lên 100MB cho trường form.
+  * Backend `webmail_service.py` & `webmail.py`: Nâng hạn mức đính kèm `MAX_ATTACHMENT_SIZE_BYTES` lên 30MB (hạn mức an toàn của Office 365 SMTP).
+  * Frontend `WebmailComposeModal.tsx`: Nâng `MAX_ATTACHMENT_BYTES` lên 30MB, cập nhật giao diện hiển thị tối đa 30MB.

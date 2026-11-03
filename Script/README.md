@@ -6310,3 +6310,35 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.22s`), 0 lỗi TypeScript TS6133. Thư mục `frontend/dist/` đã tạo mới sạch sẽ.
   * Backend: `python -m compileall backend/app` hoàn thành 100%, 0 cảnh báo/lỗi cú pháp.
   * Backend daemon đã khởi động trên port 8000.
+
+
+---
+
+### [2026-11-03] MỞ RỘNG DUNG LƯỢNG WEBMAIL: KHẮC PHỤC TRIỆT ĐỂ LỖI "Part exceeded maximum size of 1024KB" & NÂNG HẠN MỨC ĐÍNH KÈM LÊN 30MB
+- **Bối cảnh & Yêu cầu người dùng**:
+  * Khi người dùng chụp ảnh màn hình hoặc dán các bảng dữ liệu kèm ảnh vào trình soạn thảo email của Modal "Soạn Email Trực Tiếp Trên Web" rồi bấm gửi, hệ thống báo lỗi: `⚠️ Part exceeded maximum size of 1024KB.`
+  * Người dùng yêu cầu: *"mở giới hạn ra không giới hạn cho tôi nhé"*.
+- **Nguyên nhân cốt lõi (Root Cause)**:
+  * Trong thư viện `starlette` (`starlette/formparsers.py` và `starlette/requests.py`), thuộc tính `max_part_size` mặc định áp dụng giới hạn nghiêm ngặt **1024KB (1MB)** cho bất kỳ trường dữ liệu non-file nào trong `multipart/form-data`.
+  * FastAPI gọi `await request.form()` mà không truyền tham số override, kế thừa mặc định 1024KB của Starlette.
+  * Khi dán ảnh chụp màn hình trực tiếp vào trình soạn thảo HTML, ảnh được mã hóa dạng `data:image/png;base64,...` nằm trong chuỗi `body_html` gửi lên qua form field. Khi dung lượng chuỗi vượt quá 1024KB, Starlette lập tức ngắt request và ném ra ngoại lệ `HTTPException(400, "Part exceeded maximum size of 1024KB.")` trước cả khi đến controller.
+  * Đồng thời, trong hệ thống trước đây đang đặt giới hạn cứng file đính kèm là 4MB (`MAX_ATTACHMENT_SIZE_BYTES = 4 * 1024 * 1024`).
+- **Triển khai kỹ thuật**:
+  1. **Backend - Monkey Patch Mở Rộng Starlette Form Parser (`backend/app/main.py`)**:
+     * Áp dụng monkey patch tự động ngay lúc khởi động FastAPI:
+       - Patch `starlette.requests.Request.form` & `starlette.requests.Request._get_form`: Thay thế giá trị mặc định `max_part_size` thành `100 * 1024 * 1024` (100MB) và `max_fields=10000`.
+       - Patch `starlette.formparsers.MultiPartParser.__init__` & `starlette.formparsers.FormParser.__init__`: Đặt `max_part_size=100MB`.
+       - Thiết lập thuộc tính lớp `MultiPartParser.max_part_size = 100MB` và `FormParser.max_part_size = 100MB`.
+     * Cho phép nhận chuỗi HTML chứa ảnh base64 dung lượng lớn lên đến 100MB mà không bị Starlette chặn.
+  2. **Backend - Nâng hạn mức tệp đính kèm Email (`backend/app/services/webmail_service.py` & `backend/app/api/v1/webmail.py`)**:
+     * Nâng `MAX_ATTACHMENT_SIZE_BYTES` từ 4MB lên **30MB** (`30 * 1024 * 1024`), tối đa hóa hạn mức an toàn của giao thức SMTP Microsoft Office 365 (giới hạn 35MB MIME envelope).
+     * Cập nhật thông báo lỗi chi tiết khi file vượt quá 30MB.
+  3. **Frontend - Nâng hạn mức giao diện Modal (`frontend/src/pages/webmail/WebmailComposeModal.tsx`)**:
+     * Nâng `MAX_ATTACHMENT_BYTES` từ `4 * 1024 * 1024` lên **30MB** (`30 * 1024 * 1024`).
+     * Cập nhật thông báo kiểm tra dung lượng từng file và tổng dung lượng lên 30MB.
+     * Cập nhật nhãn footer: `{files.length} tệp đính kèm (...MB / tối đa 30MB)` và tooltip `title="Đính kèm tệp (tối đa 30MB)"`.
+- **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Backend: `backend\.venv\Scripts\python.exe -m compileall backend\app` hoàn thành 100%, 0 lỗi.
+  * Backend Smoke Test: `from app.main import app; print('>>> PASSED 100%')` đạt 100% PASSED.
+  * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.61s`), 0 lỗi TypeScript TS6133. Thư mục `frontend/dist/` đã tạo mới sạch sẽ.
+  * Backend daemon đã khởi động trên port 8000.
