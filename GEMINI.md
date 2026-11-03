@@ -2867,3 +2867,11 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
   * Monkey patch tự động trong `backend/app/main.py`: Nâng `max_part_size` của Starlette form parser lên 100MB cho trường form.
   * Backend `webmail_service.py` & `webmail.py`: Nâng hạn mức đính kèm `MAX_ATTACHMENT_SIZE_BYTES` lên 30MB (hạn mức an toàn của Office 365 SMTP).
   * Frontend `WebmailComposeModal.tsx`: Nâng `MAX_ATTACHMENT_BYTES` lên 30MB, cập nhật giao diện hiển thị tối đa 30MB.
+
+
+---
+
+### [2026-11-03] KHẮC PHỤC TRIỆT ĐỂ LỖI 500 KHI XUẤT EXCEL MÓN SAI ẢNH (NAMEERROR: DATETIME & LOGGER)
+- **Nguyên nhân cốt lõi**: `datetime` và `logger` chưa được import ở đầu file `backend/app/api/v1/mongodb.py`, khiến dòng 2710 gọi `datetime.now()` phát sinh `NameError: name 'datetime' is not defined` và ngoại lệ fallback gọi `logger.error` phát sinh `NameError: name 'logger' is not defined` gây crash HTTP 500.
+- **Giải pháp**: Khai báo `import logging`, `from datetime import datetime`, và `logger = logging.getLogger(__name__)` ở đầu file `mongodb.py`.
+- **Kiểm thử**: TestClient POST `/api/v1/mongodb/image-server/export-mismatches` trả về mã `200 OK` tải file Excel chuẩn.

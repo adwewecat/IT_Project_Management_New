@@ -6342,3 +6342,26 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
   * Backend Smoke Test: `from app.main import app; print('>>> PASSED 100%')` đạt 100% PASSED.
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.61s`), 0 lỗi TypeScript TS6133. Thư mục `frontend/dist/` đã tạo mới sạch sẽ.
   * Backend daemon đã khởi động trên port 8000.
+
+
+---
+
+### [2026-11-03] KHẮC PHỤC TRIỆT ĐỂ LỖI 500 KHI XUẤT EXCEL MÓN SAI ẢNH (NAMEERROR: DATETIME & LOGGER)
+- **Vấn đề phát sinh**: Khi người dùng bấm nút `"📊 Xuất Excel Món Sai Ảnh"` tại Tab 3 (Sơ Đồ Bàn Theo Khu) của nhà hàng Shogun Grand Park (hoặc bất kỳ nhà hàng nào), hệ thống báo lỗi: `Lỗi xuất file Excel đối soát ảnh: Request failed with status code 500`.
+- **Nguyên nhân cốt lõi (Root Cause)**:
+  * Trong file [`backend/app/api/v1/mongodb.py`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/api/v1/mongodb.py), hàm xử lý endpoint `POST /mongodb/image-server/export-mismatches` gọi `image_server_service.export_mismatched_dishes_excel(...)` sinh file Excel hoàn tất thành công.
+  * Tuy nhiên, ngay sau đó khi chuẩn bị ghi log hệ thống (`LogService.record_log`):
+    - Dòng 2710 gọi `now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")` nhưng `datetime` chưa được import ở phạm vi module của `mongodb.py` (chỉ có import cục bộ bên trong một hàm khác ở dòng 2186). Gây ra lỗi `NameError: name 'datetime' is not defined`.
+    - Khi khối `except Exception as e` bắt lỗi này, dòng 2741 lại gọi `logger.error(f"Lỗi xuất Excel món sai ảnh: {e}")`, nhưng `logger` cũng chưa hề được khai báo ở đầu file `mongodb.py`. Lỗi `NameError: name 'logger' is not defined` lần 2 phát sinh khiến FastAPI ném HTTP 500 Internal Server Error về client.
+- **Giải pháp xử lý**:
+  * Bổ sung đầy đủ ở đầu file [`backend/app/api/v1/mongodb.py`](file:///d:/LAPTRINH/IT_Project_Management_New/backend/app/api/v1/mongodb.py):
+    ```python
+    import logging
+    from datetime import datetime
+
+    logger = logging.getLogger(__name__)
+    ```
+- **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Đã kiểm thử trực tiếp qua API TestClient: Request `POST /api/v1/mongodb/image-server/export-mismatches` trả về mã `200 OK`, header `Content-Disposition: attachment; filename="Mon_Sai_Link_Anh_Menu_61_BUFFET_YATAI_...xlsx"`, file Excel hợp lệ 6.1KB, 0 lỗi.
+  * Backend: `backend\.venv\Scripts\python.exe -m compileall backend\app` hoàn thành 100%, 0 lỗi cú pháp.
+  * Tiến trình backend đã khởi động lại trên port 8000.
