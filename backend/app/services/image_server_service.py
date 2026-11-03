@@ -751,6 +751,7 @@ def export_mismatched_dishes_excel(
 
     clean_host = (host or "").strip()
     clean_menu_code = str(menu_code or "").strip()
+    cfg = load_config()
 
     if not clean_host:
         raise ValueError("Chưa cung cấp địa chỉ IP máy trạm MongoDB!")

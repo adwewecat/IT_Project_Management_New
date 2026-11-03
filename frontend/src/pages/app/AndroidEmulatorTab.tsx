@@ -3461,6 +3461,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                     flexDirection: 'column',
                     justifyContent: 'space-between',
                     cursor: 'pointer',
+                    overflow: 'hidden',
                     boxShadow: isHighlighted
                       ? '0 0 0 4px rgba(234, 88, 12, 0.35), 0 8px 20px rgba(234, 88, 12, 0.25)'
                       : '0 1px 2px rgba(0,0,0,0.04)',
@@ -3622,7 +3623,8 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                               fontSize: '10.5px',
                               display: 'flex',
                               flexDirection: 'column',
-                              gap: '3px'
+                              gap: '3px',
+                              overflow: 'hidden'
                             }}
                           >
                             {/* Dòng 1: Hình trên file (Bấm để copy đường dẫn ảnh) */}
@@ -3748,7 +3750,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                                   >
                                     <span>
                                       {serverCheck.status === 'MATCH'
-                                        ? '✅ Khớp server'
+                                        ? '✅ Khớp'
                                         : serverCheck.status === 'CASE_MISMATCH'
                                         ? '⚠️ Lệch chữ'
                                         : serverCheck.status === 'NO_IMAGE'
@@ -3790,36 +3792,43 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                                     />
                                   </button>
 
-                                  {/* Nút tra cứu nhanh vị trí ảnh trên toàn server nếu không có */}
-                                  {serverCheck.status === 'NOT_FOUND' && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleOpenGlobalSearch(dish.srcImg || dish.name || String(dish.rk7Code || ''));
-                                      }}
-                                      title="Tra cứu toàn server xem ảnh món này đang nằm ở thư mục nào"
-                                      style={{
-                                        padding: '1px 3px',
-                                        borderRadius: '3px',
-                                        border: '1px solid #fed7aa',
-                                        backgroundColor: '#fff7ed',
-                                        color: '#c2410c',
-                                        cursor: 'pointer',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        lineHeight: 1
-                                      }}
-                                    >
-                                      <Search size={9} />
-                                    </button>
-                                  )}
                                 </div>
                               )}
                             </div>
 
-                            {/* Dòng 3: Nút Đồng nhất xuống hẳn 1 dòng riêng để không tràn viền */}
+                            {/* Dòng 3a: Nút Tra cứu toàn server nếu hoàn toàn không có ảnh trên server (chiếm trọn 1 dòng, tuyệt đối không tràn viền) */}
+                            {serverCheck && serverCheck.status === 'NOT_FOUND' && (
+                              <div style={{ marginTop: '3px' }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenGlobalSearch(dish.srcImg || dish.name || String(dish.rk7Code || ''));
+                                  }}
+                                  title="Tra cứu toàn server xem ảnh món này đang nằm ở thư mục nào"
+                                  style={{
+                                    width: '100%',
+                                    padding: '2px 4px',
+                                    fontSize: '9px',
+                                    fontWeight: 600,
+                                    borderRadius: '3px',
+                                    border: '1px solid #fed7aa',
+                                    backgroundColor: '#fff7ed',
+                                    color: '#c2410c',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '3px'
+                                  }}
+                                >
+                                  <Search size={9} />
+                                  <span>Tìm vị trí trên server</span>
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Dòng 3b: Nút Đồng nhất xuống hẳn 1 dòng riêng để không tràn viền */}
                             {serverCheck && serverCheck.is_fixable && (
                               <div style={{ marginTop: '3px' }}>
                                 <button

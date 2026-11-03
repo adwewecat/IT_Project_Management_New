@@ -6246,3 +6246,23 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
 - **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 3.92s`), 0 lỗi TypeScript TS6133. Thư mục `frontend/dist/` đã tạo mới sạch sẽ sẵn sàng copy triển khai.
   * Backend: `python -m compileall backend/app` hoàn thành 100%, 0 lỗi cú pháp.
+
+
+---
+
+### [2026-11-03] KHẮC PHỤC LỖI 500 XUẤT EXCEL MÓN SAI ẢNH & SỬA TRIỆT ĐỂ TRÀN VIỀN THẺ MÓN TAB 3
+- **Nguyên nhân lỗi**:
+  1. *Lỗi 500 khi xuất Excel đối soát ảnh*: Trong hàm `export_mismatched_dishes_excel` (`image_server_service.py`), dòng 858 gọi `remote_dir_cfg = cfg.get(...)` nhưng biến `cfg` chưa được khởi tạo (`cfg = load_config()`), dẫn đến lỗi `NameError: name 'cfg' is not defined`.
+  2. *Lỗi tràn giao diện thẻ món*: Nút kính lúp `[🔍]` đặt cùng hàng trên dòng 2 với `🌐 Server:`, Badge `❌ Không có` và nút `[🔄]`, khiến tổng chiều rộng (~175px) vượt quá bề ngang hiển thị của thẻ (~155px) dẫn đến nút `[🔍]` bị thò ra ngoài viền thẻ bên phải.
+- **Giải pháp xử lý**:
+  1. **Backend (`backend/app/services/image_server_service.py`)**:
+     * Bổ sung `cfg = load_config()` ngay đầu hàm `export_mismatched_dishes_excel`.
+     * Kiểm thử thực tế qua Python test script: Đã xuất thành công file Excel mẫu (6.3KB, 2 món sai) với status code 200 hoàn toàn sạch lỗi.
+  2. **Frontend UI (`frontend/src/pages/app/AndroidEmulatorTab.tsx`)**:
+     * Bỏ nút `[🔍]` bị nhồi nhét trên dòng 2. Dòng 2 chỉ giữ lại `🌐 Server:`, badge `❌ Không có` và nút `[🔄]`, chiều rộng luôn <110px, hoàn toàn nằm gọn trong thẻ.
+     * Chuyển nút `[🔍 Tìm vị trí trên server]` xuống hẳn một dòng riêng biệt (Dòng 3a, tương tự nút `⚡ Đồng nhất link chuẩn` ở Dòng 3b) với chiều rộng 100% của khung xám, vừa vặn tuyệt đối, thẩm mỹ và dễ bấm.
+     * Rút gọn badge `✅ Khớp server` thành `✅ Khớp`.
+     * Bổ sung `overflow: 'hidden'` cho cả thẻ món ăn và khung xám thông tin ảnh.
+- **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.48s`), 0 lỗi TypeScript. Thư mục `frontend/dist/` đã tạo mới sạch sẽ.
+  * Backend: `python -m compileall backend/app` hoàn thành 100%, 0 lỗi cú pháp.
