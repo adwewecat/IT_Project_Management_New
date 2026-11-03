@@ -1397,6 +1397,47 @@ export const mongoService = {
   }): Promise<GlobalImageSearchResponse> => {
     const res = await api.post<GlobalImageSearchResponse>('/mongodb/image-server/search-global', payload);
     return res.data;
+  },
+
+  checkRestaurantFiles: async (payload: {
+    target_ip: string;
+    target_folder?: string;
+    filenames: string[];
+    sql_port?: number;
+    sql_user?: string;
+    sql_password?: string;
+  }): Promise<CheckRestaurantFilesResponse> => {
+    const res = await api.post<CheckRestaurantFilesResponse>('/mongodb/image-server/check-restaurant-files', payload);
+    return res.data;
+  },
+
+  pushImageToRestaurant: async (payload: {
+    target_ip: string;
+    target_folder?: string;
+    remote_source_path: string;
+    filename: string;
+    relative_url?: string;
+    gateway_url?: string;
+    overwrite?: boolean;
+    sql_port?: number;
+    sql_user?: string;
+    sql_password?: string;
+  }): Promise<PushImageToRestaurantResponse> => {
+    const res = await api.post<PushImageToRestaurantResponse>('/mongodb/image-server/push-to-restaurant', payload);
+    return res.data;
+  },
+
+  bulkPushImagesToRestaurant: async (payload: {
+    target_ip: string;
+    target_folder?: string;
+    items: BulkPushRestaurantItem[];
+    overwrite?: boolean;
+    sql_port?: number;
+    sql_user?: string;
+    sql_password?: string;
+  }): Promise<BulkPushImagesToRestaurantResponse> => {
+    const res = await api.post<BulkPushImagesToRestaurantResponse>('/mongodb/image-server/bulk-push-to-restaurant', payload);
+    return res.data;
   }
 };
 
@@ -2645,5 +2686,47 @@ export interface GlobalImageSearchResponse {
   total_found: number;
   results: GlobalImageSearchResultItem[];
   elapsed_ms: number;
+  message: string;
+}
+
+
+export interface CheckRestaurantFilesResponse {
+  success: boolean;
+  target_ip: string;
+  target_folder: string;
+  folder_exists: boolean;
+  results: Record<string, { exists: boolean; size: number }>;
+  message: string;
+}
+
+export interface PushImageToRestaurantResponse {
+  success: boolean;
+  target_ip: string;
+  target_folder: string;
+  filename: string;
+  size_bytes: number;
+  message: string;
+}
+
+export interface BulkPushRestaurantItem {
+  remote_source_path: string;
+  filename: string;
+  relative_url?: string;
+  gateway_url?: string;
+}
+
+export interface BulkPushImagesToRestaurantResponse {
+  success: boolean;
+  target_ip: string;
+  target_folder: string;
+  total_requested: number;
+  total_success: number;
+  total_failed: number;
+  results: Array<{
+    filename: string;
+    success: boolean;
+    size_bytes: number;
+    message: string;
+  }>;
   message: string;
 }

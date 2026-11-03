@@ -31,7 +31,8 @@ import {
   CheckCircle,
   Loader2,
   Globe,
-  ExternalLink
+  ExternalLink,
+  Send
 } from 'lucide-react';
 import { copyToClipboard } from '../../utils/clipboard';
 import { Modal } from '../../components/ui/Modal';
@@ -281,6 +282,14 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
   const [globalSearchMessage, setGlobalSearchMessage] = useState<string>('');
   const [globalSearchElapsed, setGlobalSearchElapsed] = useState<number | null>(null);
   const [copiedGlobalPath, setCopiedGlobalPath] = useState<string | null>(null);
+
+  // Quản lý truyền & kiểm tra ảnh dưới nhà hàng (Phương án 2)
+  const [restaurantTargetIp, setRestaurantTargetIp] = useState<string>('');
+  const [restaurantTargetFolder, setRestaurantTargetFolder] = useState<string>('D:\\GPOS-Setup\\app\\img\\menu');
+  const [restaurantFileStatus, setRestaurantFileStatus] = useState<Record<string, { exists: boolean; size: number }>>({});
+  const [checkingRestaurantFiles, setCheckingRestaurantFiles] = useState<boolean>(false);
+  const [pushingFileKey, setPushingFileKey] = useState<string | null>(null);
+  const [bulkPushing, setBulkPushing] = useState<boolean>(false);
   const [configForm, setConfigForm] = useState<UpdateImageServerConfigRequest>({
     server_type: 'SSH_SFTP',
     host: '192.168.201.116',
@@ -1001,10 +1010,19 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
     }
   };
 
-  // Danh sách toàn bộ các món bị sai lệch / chưa có ảnh trên server
+  // Danh sách toàn bộ các món bị sai lệch / chưa có ảnh trên server (Sắp xếp: Món có ảnh trên server lên trước)
   const mismatchedItems = useMemo(() => {
     if (!menuImagesSummary || !menuImagesSummary.results) return [];
-    return menuImagesSummary.results.filter((r) => !r.is_match);
+    const list = menuImagesSummary.results.filter((r) => !r.is_match);
+    return [...list].sort((a, b) => {
+      // Ưu tiên 1: Các món có ảnh trên server (is_fixable hoặc có server_filename) lên đầu bảng
+      const aHas = (a.is_fixable || Boolean(a.server_filename)) ? 1 : 0;
+      const bHas = (b.is_fixable || Boolean(b.server_filename)) ? 1 : 0;
+      if (aHas !== bHas) {
+        return bHas - aHas;
+      }
+      return (a.name || '').localeCompare(b.name || '');
+    });
   }, [menuImagesSummary]);
 
   // Các món CÓ THỂ ĐỒNG BỘ: Chỉ những món thực sự có ảnh trên server /opt/gpos/gmonitor/resources/menu
@@ -1198,11 +1216,15 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
         search_root: root || globalSearchRoot,
         limit: 40
       });
-      setGlobalSearchResults(res.results || []);
+      const foundList = res.results || [];
+      setGlobalSearchResults(foundList);
       setGlobalSearchMessage(res.message);
       setGlobalSearchElapsed(res.elapsed_ms);
-      if (!res.results || res.results.length === 0) {
+      if (!foundList || foundList.length === 0) {
         if (onToastRef.current) onToastRef.current(`Không tìm thấy file nào khớp với "${query}" trên server`, 'info');
+      } else {
+        // Tự động kiểm tra xem các file này đã có trong thư mục nhà hàng chưa
+        handleCheckRestaurantFiles(undefined, undefined, foundList.map((r) => r.filename));
       }
     } catch (err: any) {
       const errMsg = err?.response?.data?.detail || err.message || 'Lỗi tra cứu máy chủ';
@@ -1213,11 +1235,141 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
     }
   };
 
+  // Kiểm tra danh sách file đã tồn tại trong thư mục máy trạm nhà hàng chưa (Phương án 2)
+  const handleCheckRestaurantFiles = async (
+    targetIp?: string,
+    targetFolder?: string,
+    filesToCheck?: string[]
+  ) => {
+    const defaultHost = getValidMongoHost(connectedHost) || selectedRestaurant?.ip || '';
+    const ip = (targetIp || restaurantTargetIp || defaultHost || '').trim();
+    const folder = (targetFolder || restaurantTargetFolder || 'D:\\GPOS-Setup\\app\\img\\menu').trim();
+    const filenames = filesToCheck || globalSearchResults.map((r) => r.filename);
+
+    if (!ip || filenames.length === 0) return;
+
+    if (!restaurantTargetIp) setRestaurantTargetIp(ip);
+
+    setCheckingRestaurantFiles(true);
+    try {
+      const res = await mongoService.checkRestaurantFiles({
+        target_ip: ip,
+        target_folder: folder,
+        filenames: filenames
+      });
+      if (res && res.results) {
+        setRestaurantFileStatus((prev) => ({ ...prev, ...res.results }));
+      }
+    } catch (err: any) {
+      console.warn('Lỗi kiểm tra file tại nhà hàng:', err);
+    } finally {
+      setCheckingRestaurantFiles(false);
+    }
+  };
+
+  // Truyền 1 file hình ảnh từ server xuống nhà hàng (Phương án 2)
+  const handlePushImageToRestaurant = async (item: GlobalImageSearchResultItem) => {
+    const defaultHost = getValidMongoHost(connectedHost) || selectedRestaurant?.ip || '';
+    const ip = (restaurantTargetIp || defaultHost || '').trim();
+    const folder = (restaurantTargetFolder || 'D:\\GPOS-Setup\\app\\img\\menu').trim();
+
+    if (!ip) {
+      if (onToastRef.current) onToastRef.current('Vui lòng nhập IP máy trạm nhà hàng cần truyền ảnh', 'error');
+      return;
+    }
+
+    setPushingFileKey(item.filename);
+    try {
+      const res = await mongoService.pushImageToRestaurant({
+        target_ip: ip,
+        target_folder: folder,
+        remote_source_path: item.full_path,
+        filename: item.filename,
+        relative_url: item.relative_url,
+        gateway_url: item.gateway_url,
+        overwrite: true
+      });
+
+      if (res.success) {
+        if (onToastRef.current) onToastRef.current(res.message || `Đã truyền thành công ${item.filename} xuống nhà hàng`, 'success');
+        setRestaurantFileStatus((prev) => ({
+          ...prev,
+          [item.filename]: { exists: true, size: res.size_bytes }
+        }));
+      } else {
+        if (onToastRef.current) onToastRef.current(res.message || `Lỗi truyền file ${item.filename}`, 'error');
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err.message || 'Lỗi truyền file xuống nhà hàng';
+      if (onToastRef.current) onToastRef.current(msg, 'error');
+    } finally {
+      setPushingFileKey(null);
+    }
+  };
+
+  // Truyền tất cả các file đã tìm thấy xuống nhà hàng
+  const handleBulkPushAllFoundImages = async () => {
+    const defaultHost = getValidMongoHost(connectedHost) || selectedRestaurant?.ip || '';
+    const ip = (restaurantTargetIp || defaultHost || '').trim();
+    const folder = (restaurantTargetFolder || 'D:\\GPOS-Setup\\app\\img\\menu').trim();
+
+    if (!ip) {
+      if (onToastRef.current) onToastRef.current('Vui lòng nhập IP máy trạm nhà hàng cần truyền ảnh', 'error');
+      return;
+    }
+
+    if (globalSearchResults.length === 0) {
+      if (onToastRef.current) onToastRef.current('Không có file ảnh nào để truyền', 'info');
+      return;
+    }
+
+    setBulkPushing(true);
+    try {
+      const items = globalSearchResults.map((r) => ({
+        remote_source_path: r.full_path,
+        filename: r.filename,
+        relative_url: r.relative_url,
+        gateway_url: r.gateway_url
+      }));
+
+      const res = await mongoService.bulkPushImagesToRestaurant({
+        target_ip: ip,
+        target_folder: folder,
+        items: items,
+        overwrite: true
+      });
+
+      if (res.success) {
+        if (onToastRef.current) onToastRef.current(res.message || `Đã truyền thành công ${res.total_success} file xuống nhà hàng`, 'success');
+        setRestaurantFileStatus((prev) => {
+          const updated = { ...prev };
+          (res.results || []).forEach((r) => {
+            if (r.success) {
+              updated[r.filename] = { exists: true, size: r.size_bytes };
+            }
+          });
+          return updated;
+        });
+      } else {
+        if (onToastRef.current) onToastRef.current(res.message || 'Truyền file xuống nhà hàng thất bại', 'error');
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err.message || 'Lỗi truyền file xuống nhà hàng';
+      if (onToastRef.current) onToastRef.current(msg, 'error');
+    } finally {
+      setBulkPushing(false);
+    }
+  };
+
   // Mở popup tra cứu toàn server và tự động tìm nếu có từ khóa
   const handleOpenGlobalSearch = (initialKeyword: string | number = '') => {
     let cleanKw = String(initialKeyword ?? '').trim();
     if (cleanKw.includes('/')) {
       cleanKw = cleanKw.split('/').pop() || cleanKw;
+    }
+    const defaultHost = getValidMongoHost(connectedHost) || selectedRestaurant?.ip || '';
+    if (defaultHost && !restaurantTargetIp) {
+      setRestaurantTargetIp(defaultHost);
     }
     setGlobalSearchKeyword(cleanKw);
     setGlobalQuickInput(cleanKw);
@@ -4770,12 +4922,12 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
         <Modal
           isOpen={showGlobalSearchModal}
           onClose={() => setShowGlobalSearchModal(false)}
-          maxWidth="980px"
+          maxWidth="1100px"
           title={
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Globe size={18} color="#0284c7" />
               <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                Tra Cứu Vị Trí Ảnh Toàn Server (192.168.201.116)
+                Tra Cứu Vị Trí Ảnh Toàn Server (192.168.201.116) & Truyền Xuống Nhà Hàng
               </span>
             </div>
           }
@@ -4785,6 +4937,11 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                 {globalSearchElapsed !== null && (
                   <span>
                     ⚡ Thời gian tìm kiếm: <strong>{globalSearchElapsed}ms</strong> • Kết quả: <strong>{globalSearchResults.length} vị trí</strong>
+                  </span>
+                )}
+                {restaurantTargetIp && (
+                  <span style={{ marginLeft: '12px', color: '#0369a1', fontWeight: 600 }}>
+                    🏠 Máy trạm NH: {restaurantTargetIp} ({restaurantTargetFolder})
                   </span>
                 )}
               </div>
@@ -4808,6 +4965,120 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
           }
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* Khung cấu hình mục tiêu Nhà Hàng (Phương án 2: Kéo từ Server truyền xuống NH) */}
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                backgroundColor: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '6px',
+                fontSize: '11.5px'
+              }}
+            >
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 700, color: '#0f172a' }}>
+                <Server size={13} color="#0284c7" />
+                <span>Mục tiêu Nhà Hàng:</span>
+              </div>
+
+              {/* Ô IP Máy Trạm */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ color: '#475569', fontSize: '11px' }}>IP Trạm:</span>
+                <input
+                  type="text"
+                  value={restaurantTargetIp}
+                  onChange={(e) => setRestaurantTargetIp(e.target.value)}
+                  placeholder="10.8.x.41 hoặc 11..."
+                  style={{
+                    padding: '3px 8px',
+                    fontSize: '11px',
+                    borderRadius: '4px',
+                    border: '1px solid #cbd5e1',
+                    width: '120px',
+                    fontFamily: 'monospace',
+                    fontWeight: 600,
+                    backgroundColor: '#ffffff'
+                  }}
+                  title="IP máy trạm nhà hàng (thường là .41, .11 hoặc IP POS)"
+                />
+              </div>
+
+              {/* Ô Thư Mục Lưu Trữ */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flex: 1, minWidth: '220px' }}>
+                <span style={{ color: '#475569', fontSize: '11px' }}>Thư mục:</span>
+                <input
+                  type="text"
+                  value={restaurantTargetFolder}
+                  onChange={(e) => setRestaurantTargetFolder(e.target.value)}
+                  placeholder="D:\GPOS-Setup\app\img\menu"
+                  style={{
+                    padding: '3px 8px',
+                    fontSize: '11px',
+                    borderRadius: '4px',
+                    border: '1px solid #cbd5e1',
+                    width: '100%',
+                    fontFamily: 'monospace',
+                    backgroundColor: '#ffffff'
+                  }}
+                  title="Thư mục lưu trữ hình ảnh trên máy trạm nhà hàng (mặc định D:\GPOS-Setup\app\img\menu)"
+                />
+              </div>
+
+              {/* Nút Kiểm tra lại sự tồn tại dưới NH */}
+              <button
+                type="button"
+                onClick={() => handleCheckRestaurantFiles()}
+                disabled={checkingRestaurantFiles || globalSearchResults.length === 0}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px 10px',
+                  borderRadius: '5px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#ffffff',
+                  color: '#334155',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: checkingRestaurantFiles || globalSearchResults.length === 0 ? 'not-allowed' : 'pointer'
+                }}
+                title="Kiểm tra lại xem các file trong danh sách bên dưới đã có trong thư mục nhà hàng chưa"
+              >
+                <RefreshCw size={11} className={checkingRestaurantFiles ? 'animate-spin' : ''} />
+                <span>{checkingRestaurantFiles ? 'Đang ktra...' : 'Ktra dưới NH'}</span>
+              </button>
+
+              {/* Nút Truyền hàng loạt xuống nhà hàng */}
+              {globalSearchResults.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleBulkPushAllFoundImages}
+                  disabled={bulkPushing}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '4px 12px',
+                    borderRadius: '5px',
+                    border: 'none',
+                    backgroundColor: '#16a34a',
+                    color: '#ffffff',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: bulkPushing ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                  }}
+                  title={`Truyền tất cả ${globalSearchResults.length} file ảnh tìm thấy xuống ${restaurantTargetFolder}`}
+                >
+                  <Send size={11} className={bulkPushing ? 'animate-spin' : ''} />
+                  <span>{bulkPushing ? 'Đang truyền...' : `Truyền tất cả (${globalSearchResults.length} file)`}</span>
+                </button>
+              )}
+            </div>
+
             {/* Thanh công cụ tìm kiếm */}
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
               <div style={{ position: 'relative', flex: 1, minWidth: '260px' }}>
@@ -4944,12 +5215,12 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
                 <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f1f5f9', zIndex: 5, borderBottom: '1px solid #cbd5e1' }}>
                   <tr>
-                    <th style={{ padding: '6px 8px', width: '36px', textAlign: 'center', color: '#64748b' }}>#</th>
-                    <th style={{ padding: '6px 8px', width: '160px', color: '#0f172a' }}>TÊN FILE</th>
-                    <th style={{ padding: '6px 8px', color: '#475569' }}>THƯ MỤC LƯU TRỮ TRÊN SERVER</th>
-                    <th style={{ padding: '6px 8px', width: '100px', textAlign: 'center', color: '#475569' }}>PHÂN LOẠI</th>
-                    <th style={{ padding: '6px 8px', color: '#0369a1' }}>ĐƯỜNG DẪN TƯƠNG ĐỐI</th>
-                    <th style={{ padding: '6px 8px', width: '120px', textAlign: 'center', color: '#475569' }}>HÀNH ĐỘNG</th>
+                    <th style={{ padding: '6px 8px', width: '32px', textAlign: 'center', color: '#64748b' }}>#</th>
+                    <th style={{ padding: '6px 8px', width: '170px', color: '#0f172a' }}>TÊN FILE</th>
+                    <th style={{ padding: '6px 8px', color: '#475569' }}>THƯ MỤC LƯU TRỮ SERVER</th>
+                    <th style={{ padding: '6px 8px', width: '90px', textAlign: 'center', color: '#475569' }}>PHÂN LOẠI</th>
+                    <th style={{ padding: '6px 8px', width: '120px', textAlign: 'center', color: '#0369a1' }}>DƯỚI NHÀ HÀNG</th>
+                    <th style={{ padding: '6px 8px', width: '220px', textAlign: 'center', color: '#475569' }}>HÀNH ĐỘNG</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -5050,15 +5321,114 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                           >
                             {res.relative_url}
                           </td>
+                          {/* Cột trạng thái file dưới nhà hàng */}
                           <td style={{ padding: '6px 8px', textAlign: 'center' }}>
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            {(() => {
+                              const restStatus = restaurantFileStatus[res.filename];
+                              if (checkingRestaurantFiles && !restStatus) {
+                                return (
+                                  <span style={{ fontSize: '10px', color: '#0284c7', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                    <RefreshCw size={10} className="animate-spin" />
+                                    <span>Ktra...</span>
+                                  </span>
+                                );
+                              }
+                              if (restStatus?.exists) {
+                                return (
+                                  <span
+                                    style={{
+                                      display: 'inline-block',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      fontSize: '10px',
+                                      fontWeight: 700,
+                                      backgroundColor: '#dcfce7',
+                                      color: '#15803d',
+                                      border: '1px solid #bbf7d0',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                    title={`Đã có trong ${restaurantTargetFolder} (${restStatus.size} bytes)`}
+                                  >
+                                    🟢 Đã có ({restStatus.size > 0 ? `${Math.round(restStatus.size / 1024)}KB` : 'OK'})
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span
+                                  style={{
+                                    display: 'inline-block',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontSize: '10px',
+                                    fontWeight: 600,
+                                    backgroundColor: '#f1f5f9',
+                                    color: '#64748b',
+                                    border: '1px solid #e2e8f0',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  title={`Chưa có trong ${restaurantTargetFolder}`}
+                                >
+                                  ⚪ Chưa có
+                                </span>
+                              );
+                            })()}
+                          </td>
+
+                          {/* Cột hành động: Copy, Xem ảnh & Truyền xuống Nhà Hàng */}
+                          <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                              {/* Nút truyền xuống nhà hàng */}
+                              {(() => {
+                                const restStatus = restaurantFileStatus[res.filename];
+                                const isPushing = pushingFileKey === res.filename;
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePushImageToRestaurant(res)}
+                                    disabled={isPushing}
+                                    style={{
+                                      padding: '3px 8px',
+                                      fontSize: '10.5px',
+                                      fontWeight: 700,
+                                      borderRadius: '4px',
+                                      border: restStatus?.exists ? '1px solid #cbd5e1' : '1px solid #0284c7',
+                                      backgroundColor: isPushing ? '#f1f5f9' : restStatus?.exists ? '#ffffff' : '#0284c7',
+                                      color: isPushing ? '#94a3b8' : restStatus?.exists ? '#0369a1' : '#ffffff',
+                                      cursor: isPushing ? 'not-allowed' : 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                                    }}
+                                    title={restStatus?.exists ? `File đã có, bấm để ghi đè lại file từ server xuống ${restaurantTargetFolder}` : `Truyền file này từ server xuống ${restaurantTargetFolder}`}
+                                  >
+                                    {isPushing ? (
+                                      <>
+                                        <RefreshCw size={10} className="animate-spin" />
+                                        <span>Đang gửi...</span>
+                                      </>
+                                    ) : restStatus?.exists ? (
+                                      <>
+                                        <RefreshCw size={10} />
+                                        <span>Ghi đè NH</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Send size={10} />
+                                        <span>Truyền xuống NH</span>
+                                      </>
+                                    )}
+                                  </button>
+                                );
+                              })()}
+
                               <button
                                 type="button"
                                 onClick={() => handleCopyGlobalItem(res.relative_url, 'đường dẫn tương đối')}
                                 title="Sao chép đường dẫn tương đối (vd: /resources/...)"
                                 style={{
-                                  padding: '2px 6px',
-                                  fontSize: '10.5px',
+                                  padding: '2px 5px',
+                                  fontSize: '10px',
                                   borderRadius: '3px',
                                   border: '1px solid #bae6fd',
                                   backgroundColor: isRelCopied ? '#dcfce7' : '#f0f9ff',
@@ -5070,7 +5440,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                                 }}
                               >
                                 {isRelCopied ? <Check size={10} /> : <Copy size={10} />}
-                                <span>{isRelCopied ? 'Đã copy' : 'Copy link'}</span>
+                                <span>{isRelCopied ? 'Đã copy' : 'Copy'}</span>
                               </button>
 
                               <button
@@ -5091,7 +5461,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                                 }}
                               >
                                 {isPathCopied ? <Check size={10} /> : <Copy size={10} />}
-                                <span>Full path</span>
+                                <span>{isPathCopied ? 'Đã copy' : 'Full path'}</span>
                               </button>
 
                               {res.gateway_url && (
@@ -5101,7 +5471,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                                   rel="noreferrer"
                                   title="Xem ảnh qua Gateway Cloud"
                                   style={{
-                                    padding: '2px 4px',
+                                    padding: '2px 5px',
                                     borderRadius: '3px',
                                     border: '1px solid #cbd5e1',
                                     backgroundColor: '#ffffff',

@@ -1124,3 +1124,353 @@ def search_global_server_images(
             ssh.close()
         except Exception:
             pass
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHƯƠNG ÁN 2: KIỂM TRA & TRUYỀN HÌNH ẢNH XUỐNG THƯ MỤC NHÀ HÀNG (D:\\GPOS-Setup\app\img\menu)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def check_restaurant_menu_files(
+    target_ip: str,
+    target_folder: str = "D:\\GPOS-Setup\\app\\img\\menu",
+    filenames: Optional[List[str]] = None,
+    sql_port: int = 1433,
+    sql_user: str = "rk7",
+    sql_password: str = "rk7"
+) -> Dict[str, Any]:
+    r"""
+    Kiểm tra sự tồn tại của danh sách file ảnh trong thư mục máy trạm nhà hàng (vd: D:\\GPOS-Setup\app\img\menu).
+    Thực thi siêu tốc qua SQL Server xp_cmdshell (port 1433) hoặc UNC share trực tiếp.
+    """
+    clean_ip = (target_ip or "").strip()
+    clean_folder = (target_folder or "D:\\GPOS-Setup\\app\\img\\menu").strip().rstrip("\\/")
+    target_files = [f.strip() for f in (filenames or []) if f and f.strip()]
+
+    if not clean_ip:
+        return {
+            "success": False,
+            "target_ip": "",
+            "target_folder": clean_folder,
+            "folder_exists": False,
+            "results": {},
+            "message": "Vui lòng cung cấp IP máy trạm nhà hàng"
+        }
+
+    results: Dict[str, Dict[str, Any]] = {}
+    folder_exists = False
+
+    try:
+        import pyodbc
+        import base64
+        conn_str = f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={clean_ip},{sql_port};DATABASE=master;UID={sql_user};PWD={sql_password};TrustServerCertificate=yes;"
+        with pyodbc.connect(conn_str, timeout=3, autocommit=True) as conn:
+            with conn.cursor() as cur:
+                try:
+                    cur.execute("EXEC sp_configure 'show advanced options', 1; RECONFIGURE;")
+                    cur.execute("EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;")
+                except Exception:
+                    pass
+
+                files_json = json.dumps(target_files)
+                ps_script = f"""
+$folder = "{clean_folder}"
+$f_exists = Test-Path -LiteralPath $folder
+Write-Output "FOLDER_STATUS:$f_exists"
+if ($f_exists -and '{files_json}' -ne '[]') {{
+    $files = '{files_json}' | ConvertFrom-Json
+    foreach ($f in $files) {{
+        $p = Join-Path $folder $f
+        $exists = Test-Path -LiteralPath $p
+        $size = 0
+        if ($exists) {{
+            try {{ $size = (Get-Item -LiteralPath $p).Length }} catch {{}}
+        }}
+        Write-Output "FILE_RES:$f|$exists|$size"
+    }}
+}}
+"""
+                enc = base64.b64encode(ps_script.encode("utf-16le")).decode("ascii")
+                cur.execute(f"EXEC xp_cmdshell 'powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand {enc}'")
+                rows = cur.fetchall()
+                for r in rows:
+                    line = (r[0] or "").strip()
+                    if line.startswith("FOLDER_STATUS:"):
+                        val = line[len("FOLDER_STATUS:"):].strip().lower()
+                        folder_exists = (val == "true")
+                    elif line.startswith("FILE_RES:"):
+                        parts = line[len("FILE_RES:"):].split("|")
+                        if len(parts) >= 3:
+                            fname = parts[0].strip()
+                            ex = (parts[1].strip().lower() == "true")
+                            sz = int(parts[2].strip()) if parts[2].strip().isdigit() else 0
+                            results[fname] = {"exists": ex, "size": sz}
+
+        return {
+            "success": True,
+            "target_ip": clean_ip,
+            "target_folder": clean_folder,
+            "folder_exists": folder_exists,
+            "results": results,
+            "message": f"Kiểm tra thành công tại {clean_ip} ({len(results)} file)"
+        }
+    except Exception as e:
+        logger.warning(f"Lỗi kiểm tra file tại nhà hàng qua SQL {clean_ip}: {e}")
+        return {
+            "success": False,
+            "target_ip": clean_ip,
+            "target_folder": clean_folder,
+            "folder_exists": False,
+            "results": results,
+            "message": f"Không thể kết nối máy trạm {clean_ip}: {str(e)}"
+        }
+
+
+def push_image_to_restaurant(
+    target_ip: str,
+    target_folder: str = "D:\\GPOS-Setup\\app\\img\\menu",
+    remote_source_path: str = "",
+    filename: str = "",
+    relative_url: Optional[str] = None,
+    gateway_url: Optional[str] = None,
+    overwrite: bool = True,
+    sql_port: int = 1433,
+    sql_user: str = "rk7",
+    sql_password: str = "rk7"
+) -> Dict[str, Any]:
+    """
+    Truyền 1 file hình ảnh từ Server ảnh xuống thư mục nhà hàng (Phương án 2).
+    """
+    clean_ip = (target_ip or "").strip()
+    clean_folder = (target_folder or "D:\\GPOS-Setup\\app\\img\\menu").strip().rstrip("\\/")
+    clean_filename = (filename or "").strip()
+
+    if not clean_ip or not clean_filename:
+        return {
+            "success": False,
+            "target_ip": clean_ip,
+            "target_folder": clean_folder,
+            "filename": clean_filename,
+            "size_bytes": 0,
+            "message": "Thiếu thông tin IP nhà hàng hoặc tên file cần truyền"
+        }
+
+    dl_url = (gateway_url or "").strip()
+    if not dl_url:
+        rel = (relative_url or "").strip()
+        if not rel and remote_source_path:
+            if "/opt/gpos/gmonitor" in remote_source_path:
+                rel = remote_source_path.split("/opt/gpos/gmonitor")[1]
+            elif "/opt/gpos" in remote_source_path:
+                rel = remote_source_path.split("/opt/gpos")[1]
+        if rel and rel.startswith("/resources/"):
+            dl_url = f"https://gposgateway-hcm.ggg.com.vn:8443{rel}"
+
+    if not dl_url:
+        dl_url = f"https://gposgateway-hcm.ggg.com.vn:8443/resources/menu/{clean_filename}"
+
+    dest_path = f"{clean_folder}\\{clean_filename}"
+
+    try:
+        import pyodbc
+        import base64
+        conn_str = f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={clean_ip},{sql_port};DATABASE=master;UID={sql_user};PWD={sql_password};TrustServerCertificate=yes;"
+        with pyodbc.connect(conn_str, timeout=4, autocommit=True) as conn:
+            with conn.cursor() as cur:
+                try:
+                    cur.execute("EXEC sp_configure 'show advanced options', 1; RECONFIGURE;")
+                    cur.execute("EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;")
+                except Exception:
+                    pass
+
+                ps_script = f"""
+$folder = "{clean_folder}"
+if (-not (Test-Path -LiteralPath $folder)) {{
+    New-Item -ItemType Directory -Force -Path $folder | Out-Null
+}}
+$dest = "{dest_path}"
+[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {{$true}}
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls
+try {{
+    (New-Object System.Net.WebClient).DownloadFile('{dl_url}', $dest)
+    if (Test-Path -LiteralPath $dest) {{
+        $len = (Get-Item -LiteralPath $dest).Length
+        Write-Output "PUSH_RES:SUCCESS|$len"
+    }} else {{
+        Write-Output "PUSH_RES:FAILED|0|File not saved"
+    }}
+}} catch {{
+    Write-Output "PUSH_RES:FAILED|0|$($_.Exception.Message)"
+}}
+"""
+                enc = base64.b64encode(ps_script.encode("utf-16le")).decode("ascii")
+                cur.execute(f"EXEC xp_cmdshell 'powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand {enc}'")
+                rows = cur.fetchall()
+                for r in rows:
+                    line = (r[0] or "").strip()
+                    if line.startswith("PUSH_RES:"):
+                        parts = line[len("PUSH_RES:"):].split("|")
+                        if parts[0] == "SUCCESS":
+                            sz = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+                            return {
+                                "success": True,
+                                "target_ip": clean_ip,
+                                "target_folder": clean_folder,
+                                "filename": clean_filename,
+                                "size_bytes": sz,
+                                "message": f"Đã truyền thành công file {clean_filename} ({round(sz/1024, 1)} KB) xuống {clean_folder}"
+                            }
+                        else:
+                            err_msg = parts[2] if len(parts) > 2 else "Lỗi không xác định khi tải file"
+                            return {
+                                "success": False,
+                                "target_ip": clean_ip,
+                                "target_folder": clean_folder,
+                                "filename": clean_filename,
+                                "size_bytes": 0,
+                                "message": f"Máy trạm không thể tải file: {err_msg}"
+                            }
+
+        return {
+            "success": False,
+            "target_ip": clean_ip,
+            "target_folder": clean_folder,
+            "filename": clean_filename,
+            "size_bytes": 0,
+            "message": "Không nhận được phản hồi kết quả từ máy trạm"
+        }
+    except Exception as e:
+        logger.error(f"Lỗi truyền ảnh xuống nhà hàng {clean_ip}: {e}")
+        return {
+            "success": False,
+            "target_ip": clean_ip,
+            "target_folder": clean_folder,
+            "filename": clean_filename,
+            "size_bytes": 0,
+            "message": f"Lỗi kết nối máy trạm {clean_ip}: {str(e)}"
+        }
+
+
+def bulk_push_images_to_restaurant(
+    target_ip: str,
+    target_folder: str = "D:\\GPOS-Setup\\app\\img\\menu",
+    items: Optional[List[Dict[str, Any]]] = None,
+    overwrite: bool = True,
+    sql_port: int = 1433,
+    sql_user: str = "rk7",
+    sql_password: str = "rk7"
+) -> Dict[str, Any]:
+    """
+    Truyền hàng loạt file hình ảnh xuống thư mục nhà hàng.
+    """
+    clean_ip = (target_ip or "").strip()
+    clean_folder = (target_folder or "D:\\GPOS-Setup\\app\\img\\menu").strip().rstrip("\\/")
+    raw_items = items or []
+
+    if not clean_ip or not raw_items:
+        return {
+            "success": False,
+            "target_ip": clean_ip,
+            "target_folder": clean_folder,
+            "total_requested": len(raw_items),
+            "total_success": 0,
+            "total_failed": len(raw_items),
+            "results": [],
+            "message": "Thiếu danh sách file hoặc IP nhà hàng"
+        }
+
+    batch_list = []
+    for it in raw_items:
+        fn = (it.get("filename") or "").strip()
+        if not fn:
+            continue
+        g_url = (it.get("gateway_url") or "").strip()
+        rel = (it.get("relative_url") or "").strip()
+        if not g_url:
+            if rel and rel.startswith("/resources/"):
+                g_url = f"https://gposgateway-hcm.ggg.com.vn:8443{rel}"
+            else:
+                g_url = f"https://gposgateway-hcm.ggg.com.vn:8443/resources/menu/{fn}"
+        batch_list.append({"filename": fn, "url": g_url})
+
+    results = []
+    success_cnt = 0
+    fail_cnt = 0
+
+    try:
+        import pyodbc
+        import base64
+        conn_str = f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={clean_ip},{sql_port};DATABASE=master;UID={sql_user};PWD={sql_password};TrustServerCertificate=yes;"
+        with pyodbc.connect(conn_str, timeout=6, autocommit=True) as conn:
+            with conn.cursor() as cur:
+                try:
+                    cur.execute("EXEC sp_configure 'show advanced options', 1; RECONFIGURE;")
+                    cur.execute("EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;")
+                except Exception:
+                    pass
+
+                items_json = json.dumps(batch_list)
+                ps_script = f"""
+$folder = "{clean_folder}"
+if (-not (Test-Path -LiteralPath $folder)) {{
+    New-Item -ItemType Directory -Force -Path $folder | Out-Null
+}}
+[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {{$true}}
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls
+$wc = New-Object System.Net.WebClient
+$items = '{items_json}' | ConvertFrom-Json
+foreach ($it in $items) {{
+    $dest = Join-Path $folder $it.filename
+    try {{
+        $wc.DownloadFile($it.url, $dest)
+        $len = (Get-Item -LiteralPath $dest).Length
+        Write-Output "ITEM_RES:$($it.filename)|1|$len|OK"
+    }} catch {{
+        Write-Output "ITEM_RES:$($it.filename)|0|0|$($_.Exception.Message)"
+    }}
+}}
+"""
+                enc = base64.b64encode(ps_script.encode("utf-16le")).decode("ascii")
+                cur.execute(f"EXEC xp_cmdshell 'powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand {enc}'")
+                rows = cur.fetchall()
+                for r in rows:
+                    line = (r[0] or "").strip()
+                    if line.startswith("ITEM_RES:"):
+                        parts = line[len("ITEM_RES:"):].split("|", 3)
+                        if len(parts) >= 4:
+                            fn = parts[0].strip()
+                            is_ok = (parts[1].strip() == "1")
+                            sz = int(parts[2].strip()) if parts[2].strip().isdigit() else 0
+                            msg = parts[3].strip()
+                            if is_ok:
+                                success_cnt += 1
+                            else:
+                                fail_cnt += 1
+                            results.append({
+                                "filename": fn,
+                                "success": is_ok,
+                                "size_bytes": sz,
+                                "message": msg
+                            })
+
+        return {
+            "success": success_cnt > 0,
+            "target_ip": clean_ip,
+            "target_folder": clean_folder,
+            "total_requested": len(batch_list),
+            "total_success": success_cnt,
+            "total_failed": fail_cnt,
+            "results": results,
+            "message": f"Đã truyền thành công {success_cnt}/{len(batch_list)} file xuống {clean_folder}"
+        }
+    except Exception as e:
+        logger.error(f"Lỗi bulk push hình ảnh xuống nhà hàng {clean_ip}: {e}")
+        return {
+            "success": False,
+            "target_ip": clean_ip,
+            "target_folder": clean_folder,
+            "total_requested": len(batch_list),
+            "total_success": 0,
+            "total_failed": len(batch_list),
+            "results": [],
+            "message": f"Lỗi kết nối máy trạm {clean_ip}: {str(e)}"
+        }

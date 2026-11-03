@@ -2577,7 +2577,13 @@ from app.schemas.mongodb import (
     TestImageServerConnectionResponse,
     ExportMismatchedDishesRequest,
     GlobalImageSearchRequest,
-    GlobalImageSearchResponse
+    GlobalImageSearchResponse,
+    CheckRestaurantFilesRequest,
+    CheckRestaurantFilesResponse,
+    PushImageToRestaurantRequest,
+    PushImageToRestaurantResponse,
+    BulkPushImagesToRestaurantRequest,
+    BulkPushImagesToRestaurantResponse
 )
 
 
@@ -2849,3 +2855,66 @@ def search_global_server_images(
         limit=payload.limit or 30
     )
     return GlobalImageSearchResponse(**res)
+
+
+@router.post("/image-server/check-restaurant-files", response_model=CheckRestaurantFilesResponse)
+def check_restaurant_files(
+    payload: CheckRestaurantFilesRequest,
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    r"""
+    Kiểm tra sự tồn tại của danh sách file ảnh trong thư mục máy trạm nhà hàng (Phương án 2).
+    Mặc định thư mục D:\\GPOS-Setup\app\img\menu.
+    """
+    res = image_server_service.check_restaurant_menu_files(
+        target_ip=payload.target_ip,
+        target_folder=payload.target_folder or "D:\\GPOS-Setup\\app\\img\\menu",
+        filenames=payload.filenames,
+        sql_port=payload.sql_port or 1433,
+        sql_user=payload.sql_user or "rk7",
+        sql_password=payload.sql_password or "rk7"
+    )
+    return CheckRestaurantFilesResponse(**res)
+
+
+@router.post("/image-server/push-to-restaurant", response_model=PushImageToRestaurantResponse)
+def push_image_to_restaurant_api(
+    payload: PushImageToRestaurantRequest,
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Truyền 1 file hình ảnh từ server ảnh xuống thư mục máy trạm nhà hàng (Phương án 2).
+    """
+    res = image_server_service.push_image_to_restaurant(
+        target_ip=payload.target_ip,
+        target_folder=payload.target_folder or "D:\\GPOS-Setup\\app\\img\\menu",
+        remote_source_path=payload.remote_source_path,
+        filename=payload.filename,
+        relative_url=payload.relative_url,
+        gateway_url=payload.gateway_url,
+        overwrite=payload.overwrite if payload.overwrite is not None else True,
+        sql_port=payload.sql_port or 1433,
+        sql_user=payload.sql_user or "rk7",
+        sql_password=payload.sql_password or "rk7"
+    )
+    return PushImageToRestaurantResponse(**res)
+
+
+@router.post("/image-server/bulk-push-to-restaurant", response_model=BulkPushImagesToRestaurantResponse)
+def bulk_push_images_to_restaurant_api(
+    payload: BulkPushImagesToRestaurantRequest,
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Truyền hàng loạt file hình ảnh từ server ảnh xuống thư mục máy trạm nhà hàng (Phương án 2).
+    """
+    res = image_server_service.bulk_push_images_to_restaurant(
+        target_ip=payload.target_ip,
+        target_folder=payload.target_folder or "D:\\GPOS-Setup\\app\\img\\menu",
+        items=[item.model_dump() for item in payload.items],
+        overwrite=payload.overwrite if payload.overwrite is not None else True,
+        sql_port=payload.sql_port or 1433,
+        sql_user=payload.sql_user or "rk7",
+        sql_password=payload.sql_password or "rk7"
+    )
+    return BulkPushImagesToRestaurantResponse(**res)

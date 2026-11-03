@@ -1,4 +1,4 @@
-# CẨM NANG TOÀN DIỆN VỀ KIẾN TRÚC, QUY ĐỊNH & TIÊU CHUẨN DỰ ÁN IT PROJECT MANAGEMENT
+/# CẨM NANG TOÀN DIỆN VỀ KIẾN TRÚC, QUY ĐỊNH & TIÊU CHUẨN DỰ ÁN IT PROJECT MANAGEMENT
 
 > **Tài liệu đặc tả kỹ thuật và quy định khắt khe dành cho AI Coding Assistant & Developer**  
 > *Khi bắt đầu một phiên làm việc mới hoặc chuyển sang môi trường máy mới, hãy đọc toàn bộ tài liệu này trước khi tiếp nhận và thực hiện bất kỳ yêu cầu nào.*
@@ -2829,3 +2829,31 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
 - **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.25s`), 0 cảnh báo/lỗi TypeScript TS6133. Thư mục `frontend/dist/` đã được build mới sạch sẽ.
   * Backend: `python -m compileall backend/app` hoàn thành 100%, 0 lỗi cú pháp.
+
+---
+
+### [2026-11-03] PHƯƠNG ÁN 2: TRUYỀN HÌNH ẢNH TỪ SERVER XUỐNG THƯ MỤC NHÀ HÀNG (D:\GPOS-Setup\app\img\menu) & SẮP XẾP MÓN CÓ ẢNH LÊN ĐẦU
+- **Yêu cầu người dùng**:
+  1. *Sắp xếp popup đồng bộ*: Trong màn hình "Chọn Món Đồng Bộ Link Ảnh Từ Server Về MongoDB", sắp xếp các món đã có ảnh trên server lên trước, giúp người dùng nhìn thấy ngay để xử lý thay vì bị chìm dưới hàng trăm món chưa có ảnh.
+  2. *Kiểm tra ảnh dưới nhà hàng*: Trong màn hình "Tra Cứu Vị Trí Ảnh Toàn Server", kiểm tra xem file ảnh tìm thấy đã có trong thư mục nhà hàng (`D:\GPOS-Setup\app\img\menu`) hay chưa.
+  3. *Truyền ảnh xuống nhà hàng (Phương án 2)*: Bổ sung nút truyền hình ảnh tìm thấy từ server xuống đúng thư mục `D:\GPOS-Setup\app\img\menu` của máy trạm nhà hàng, hỗ trợ cả truyền từng file lẻ và truyền hàng loạt.
+- **Triển khai kỹ thuật**:
+  1. **Sắp xếp món có ảnh lên đầu (`frontend/src/pages/app/AndroidEmulatorTab.tsx`)**:
+     * Cập nhật `mismatchedItems`: Dùng thuật toán so sánh ưu tiên `(is_fixable || server_filename) ? 1 : 0`, đẩy toàn bộ các món có ảnh lên đầu bảng; các món chưa có ảnh được xếp phía dưới theo thứ tự chữ cái tên món.
+  2. **Backend Services & APIs (`backend/app/schemas/mongodb.py`, `backend/app/services/image_server_service.py`, `backend/app/api/v1/mongodb.py`)**:
+     * Khai báo các schema: `CheckRestaurantFilesRequest`, `CheckRestaurantFilesResponse`, `PushImageToRestaurantRequest`, `PushImageToRestaurantResponse`, `BulkPushImagesToRestaurantRequest`, `BulkPushImagesToRestaurantResponse`.
+     * Xây dựng hàm `check_restaurant_menu_files`: Kết nối SQL Server trên máy trạm nhà hàng (port 1433, `rk7/rk7` hoặc UNC share), kiểm tra nhanh sự tồn tại của thư mục và từng file ảnh trong `D:\GPOS-Setup\app\img\menu`, trả về danh sách kèm dung lượng bytes.
+     * Xây dựng hàm `push_image_to_restaurant` và `bulk_push_images_to_restaurant`: Thực thi tải trực tiếp qua WebClient TLS 1.2 từ Gateway URL `https://gposgateway-hcm.ggg.com.vn:8443` thẳng vào `D:\GPOS-Setup\app\img\menu`, tự động tạo thư mục nếu chưa có, hoàn tất chỉ trong 1-2 giây.
+     * Khai báo 3 API router:
+       - `POST /api/v1/mongodb/image-server/check-restaurant-files`
+       - `POST /api/v1/mongodb/image-server/push-to-restaurant`
+       - `POST /api/v1/mongodb/image-server/bulk-push-to-restaurant`
+  3. **Frontend UI/UX (`frontend/src/services/mongoService.ts`, `frontend/src/pages/app/AndroidEmulatorTab.tsx`)**:
+     * Bổ sung API client `checkRestaurantFiles`, `pushImageToRestaurant`, `bulkPushImagesToRestaurant`.
+     * Tích hợp thanh điều khiển mục tiêu nhà hàng trong Modal "Tra Cứu Vị Trí Ảnh": Ô nhập IP trạm (mặc định lấy `connectedHost`), ô thư mục đích (mặc định `D:\GPOS-Setup\app\img\menu`), nút `[🔍 Ktra dưới NH]` và nút `[📤 Truyền tất cả xuống NH]`.
+     * Bổ sung cột "DƯỚI NHÀ HÀNG" hiển thị trực quan: `🟢 Đã có (xx KB)` hoặc `⚪ Chưa có` kèm tooltip chi tiết.
+     * Bổ sung nút `[📤 Truyền xuống NH]` (hoặc `[🔄 Ghi đè NH]` nếu đã có) tại từng dòng kết quả, có trạng thái spinner khi đang truyền và tự động cập nhật ngay sang `🟢 Đã có` khi hoàn tất.
+- **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.22s`), 0 lỗi TypeScript TS6133. Thư mục `frontend/dist/` đã tạo mới sạch sẽ.
+  * Backend: `python -m compileall backend/app` hoàn thành 100%, 0 cảnh báo/lỗi cú pháp.
+  * Backend daemon đã khởi động trên port 8000.

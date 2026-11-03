@@ -1835,3 +1835,73 @@ class GlobalImageSearchResponse(BaseModel):
     results: List[GlobalImageSearchResultItem]
     elapsed_ms: float
     message: str
+
+
+# ── Schemas phục vụ Kiểm Tra & Truyền Hình Ảnh Xuống Nhà Hàng (Phương Án 2) ──
+class CheckRestaurantFilesRequest(BaseModel):
+    target_ip: str
+    target_folder: Optional[str] = "D:\\GPOS-Setup\\app\\img\\menu"
+    filenames: List[str]
+    sql_port: Optional[int] = 1433
+    sql_user: Optional[str] = "rk7"
+    sql_password: Optional[str] = "rk7"
+
+
+class CheckRestaurantFilesResponse(BaseModel):
+    success: bool
+    target_ip: str
+    target_folder: str
+    folder_exists: bool
+    results: Dict[str, Dict[str, Any]]
+    message: str
+
+
+class PushImageToRestaurantRequest(BaseModel):
+    target_ip: str
+    target_folder: Optional[str] = "D:\\GPOS-Setup\\app\\img\\menu"
+    remote_source_path: str
+    filename: str
+    relative_url: Optional[str] = None
+    gateway_url: Optional[str] = None
+    overwrite: Optional[bool] = True
+    sql_port: Optional[int] = 1433
+    sql_user: Optional[str] = "rk7"
+    sql_password: Optional[str] = "rk7"
+
+
+class PushImageToRestaurantResponse(BaseModel):
+    success: bool
+    target_ip: str
+    target_folder: str
+    filename: str
+    size_bytes: int
+    message: str
+
+
+class BulkPushRestaurantItem(BaseModel):
+    remote_source_path: str
+    filename: str
+    relative_url: Optional[str] = None
+    gateway_url: Optional[str] = None
+
+
+class BulkPushImagesToRestaurantRequest(BaseModel):
+    target_ip: str
+    target_folder: Optional[str] = "D:\\GPOS-Setup\\app\\img\\menu"
+    items: List[BulkPushRestaurantItem]
+    overwrite: Optional[bool] = True
+    sql_port: Optional[int] = 1433
+    sql_user: Optional[str] = "rk7"
+    sql_password: Optional[str] = "rk7"
+
+
+class BulkPushImagesToRestaurantResponse(BaseModel):
+    success: bool
+    target_ip: str
+    target_folder: str
+    total_requested: int
+    total_success: int
+    total_failed: int
+    results: List[Dict[str, Any]]
+    message: str
+
