@@ -6266,3 +6266,19 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
 - **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.48s`), 0 lỗi TypeScript. Thư mục `frontend/dist/` đã tạo mới sạch sẽ.
   * Backend: `python -m compileall backend/app` hoàn thành 100%, 0 lỗi cú pháp.
+
+---
+
+### [2026-11-03] ẨN MẶC ĐỊNH KHUNG CHI TIẾT NHÓM CO & NHÓM SO TRÊN TAB 3 (TRÁNH RỐI MẮT, TIẾT KIỆM KHÔNG GIAN)
+- **Yêu cầu người dùng**:
+  * Ẩn đi khung lớn gồm 2 cột: `"Nhóm Hiển Thị Trên CO (xx nhóm):"` và `"Nhóm SO Chưa Lên CO (xx nhóm):"`.
+  * Chỉ để 1 icon / nút bấm để khi cần người dùng mới bấm mở ra xem hoặc xử lý, tránh việc hiển thị quá nhiều gây rối mắt và choán diện tích màn hình.
+- **Giải pháp xử lý**:
+  1. **Frontend (`frontend/src/pages/app/AndroidEmulatorTab.tsx`)**:
+     * Đặt giá trị mặc định của `isCoGroupsBarExpanded` thành `false` (`useState<boolean>(false)`).
+     * Khi người dùng mở Tab 3 hoặc chuyển các menu CO (Alacarte, Buffet, Đồ uống), khung 2 cột này sẽ được ẩn hoàn toàn theo mặc định, tiết kiệm hơn 150px chiều dọc, danh sách món ăn hiển thị ngay lập tức lên trên.
+     * Nâng cấp nhãn `({coDetail.co_group_codes.length} nhóm CO • {coDetail.so_groups.length} nhóm SO)` thành nút pill tương tác 1-chạm có icon `<Eye>` / `<EyeOff>` và `<ChevronDown>` / `<ChevronUp>` ngay cạnh tên menu.
+     * Cung cấp thêm nút bấm `[ 👁️ Xem Nhóm CO ▼ ]` / `[ 👁️ Ẩn Nhóm CO ▲ ]` trên thanh công cụ Header CO để người dùng dễ dàng bấm mở/đóng bất kỳ lúc nào.
+- **Kiểm thử & Bàn giao (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.25s`), 0 cảnh báo/lỗi TypeScript TS6133. Thư mục `frontend/dist/` đã được build mới sạch sẽ.
+  * Backend: `python -m compileall backend/app` hoàn thành 100%, 0 lỗi cú pháp.

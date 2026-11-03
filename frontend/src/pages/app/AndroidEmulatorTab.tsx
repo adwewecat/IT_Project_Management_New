@@ -321,7 +321,8 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
   const [loadingCoDetail, setLoadingCoDetail] = useState<boolean>(false);
   const [selectedMissingGroupCodes, setSelectedMissingGroupCodes] = useState<Set<string>>(new Set());
   const [manualGroupInput, setManualGroupInput] = useState<string>('');
-  const [isCoGroupsBarExpanded, setIsCoGroupsBarExpanded] = useState<boolean>(true);
+  // Mặc định ẩn khung chi tiết nhóm CO để giao diện gọn gàng, người dùng bấm icon mới mở ra
+  const [isCoGroupsBarExpanded, setIsCoGroupsBarExpanded] = useState<boolean>(false);
 
   // Quản lý kiểm tra hình ảnh món với máy chủ 192.168.201.116
   const [checkedDishImagesMap, setCheckedDishImagesMap] = useState<Record<string, CheckDishImageResult>>({});
@@ -2872,9 +2873,29 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                   Tên menu: {selectedCategory.name}
                 </span>
                 {coDetail && (
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
-                    ({coDetail.co_group_codes.length} nhóm CO • {coDetail.so_groups.length} nhóm SO)
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsCoGroupsBarExpanded(!isCoGroupsBarExpanded)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      border: isCoGroupsBarExpanded ? '1px solid #93c5fd' : '1px solid #cbd5e1',
+                      backgroundColor: isCoGroupsBarExpanded ? '#eff6ff' : '#ffffff',
+                      color: isCoGroupsBarExpanded ? '#1d4ed8' : '#475569',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                    title={isCoGroupsBarExpanded ? 'Bấm để ẩn khung chi tiết nhóm CO & SO' : 'Bấm để hiển thị chi tiết nhóm CO & SO'}
+                  >
+                    {isCoGroupsBarExpanded ? <EyeOff size={12} color="#1d4ed8" /> : <Eye size={12} color="#475569" />}
+                    <span>({coDetail.co_group_codes.length} nhóm CO • {coDetail.so_groups.length} nhóm SO)</span>
+                    {isCoGroupsBarExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  </button>
                 )}
               </div>
 
@@ -3050,17 +3071,24 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                   type="button"
                   onClick={() => setIsCoGroupsBarExpanded(!isCoGroupsBarExpanded)}
                   style={{
-                    border: 'none',
-                    background: 'none',
-                    color: '#64748b',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    border: isCoGroupsBarExpanded ? '1px solid #93c5fd' : '1px solid #cbd5e1',
+                    backgroundColor: isCoGroupsBarExpanded ? '#eff6ff' : '#ffffff',
+                    color: isCoGroupsBarExpanded ? '#1d4ed8' : '#475569',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
                     cursor: 'pointer',
-                    padding: '2px 4px',
-                    display: 'flex',
-                    alignItems: 'center'
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
                   }}
-                  title={isCoGroupsBarExpanded ? 'Thu gọn nhóm CO' : 'Mở rộng nhóm CO'}
+                  title={isCoGroupsBarExpanded ? 'Bấm để ẩn khung nhóm CO' : 'Bấm để xem/chỉnh sửa nhóm CO & nhóm SO chưa lên CO'}
                 >
-                  {isCoGroupsBarExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  {isCoGroupsBarExpanded ? <EyeOff size={13} /> : <Eye size={13} />}
+                  <span>{isCoGroupsBarExpanded ? 'Ẩn Nhóm CO' : 'Xem Nhóm CO'}</span>
+                  {isCoGroupsBarExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </button>
               </div>
             </div>
