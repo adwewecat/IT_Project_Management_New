@@ -363,6 +363,32 @@
   1. **Nút "Quét Lại (X) Nhà Lỗi"**: Cho phép kỹ thuật viên quét nhanh chỉ riêng các nhà đang bị lỗi/cảnh báo sau đợt kiểm tra ban đầu mà không cần phải quét lại toàn bộ 300+ nhà, giúp tiết kiệm thời gian và xác nhận nhanh các nhà đã phục hồi.
   2. **Nút "Quét lại" từng nhà riêng lẻ**: Ngay tại từng dòng của bảng danh sách kết quả kiểm tra, phải có nút quét riêng lẻ để kỹ thuật viên kiểm tra tức thì 1 nhà hàng cụ thể khi vừa can thiệp hoặc nghi ngờ kết quả chập chờn.
 
+
+### 6.6.1. Phân Hệ Quản Lý API (Managed APIs Gateway & Bật/Tắt API Linh Hoạt)
+- **Vị trí tích hợp**: Trang *Dashboard & Quản Lý Tác Vụ Ngầm (Jobs & Scheduler)* (`/admin/jobs`), tab **`🌐 Quản Lý API`** ngay sau tab `🔒 Tác Vụ Ẩn`.
+- **Mục đích**: Quản lý tập trung các liên kết API mở ra bên ngoài cho Nhà Cung Cấp (NCC), Đối tác hoặc các hệ thống vệ tinh tự động truy xuất dữ liệu (như API thông tin nhà hàng `/api/v1/restaurants/ncc`).
+- **Cơ chế Bật / Tắt API tức thì (API Toggle Switch)**:
+  - Khi API ở trạng thái **TẮT (`is_enabled = False`)**: Mọi request tới API này sẽ bị chặn ngay lập tức ở tầng gateway service và trả về mã lỗi `HTTP 503 Service Unavailable`:
+    ```json
+    {"detail": "API Thông Tin Nhà Hàng cho NCC hiện đang tạm khóa hoặc bảo trì bởi Quản trị viên."}
+    ```
+  - Khi API ở trạng thái **BẬT (`is_enabled = True`)**: API hoạt động bình thường, trả về dữ liệu đúng định dạng và số lượng (HTTP 200).
+- **Cấu trúc bảng Database (`dbo.MANAGED_APIS`)**:
+  - `id INT IDENTITY(1,1) PRIMARY KEY`
+  - `api_code NVARCHAR(100) UNIQUE NOT NULL`: Định danh mã API (vd: `ncc_restaurants`).
+  - `api_name NVARCHAR(255) NOT NULL`: Tên gợi nhớ của API.
+  - `endpoint_path NVARCHAR(500) NOT NULL`: Đường dẫn gốc (vd: `/api/v1/restaurants/ncc`).
+  - `alias_path NVARCHAR(500) NULL`: Đường dẫn bí danh rút gọn (vd: `/api/v1/partner/restaurants`).
+  - `method NVARCHAR(10) DEFAULT 'GET'`: Phương thức HTTP.
+  - `description NVARCHAR(MAX) NULL`: Mô tả chức năng và thông số kỹ thuật.
+  - `is_enabled BIT DEFAULT 1`: Trạng thái BẬT/TẮT API.
+  - `require_api_key BIT DEFAULT 0`: Có yêu cầu Header API Key hay không.
+  - `api_key NVARCHAR(255) NULL`: Khóa bí mật nếu cần.
+  - `created_by NVARCHAR(100)`: Người tạo.
+  - `created_at DATETIME`, `updated_at DATETIME`.
+- **Cơ chế tự phòng vệ (Self-Healing)**: Khởi tạo bảng và nạp bản ghi mặc định `ncc_restaurants` tự động trong `lifespan` tại `backend/app/main.py`.
+- **Tính năng Chạy Thử / Live Test**: Quản trị viên có thể bấm nút `⚡ Chạy Thử` ngay trên giao diện web để kiểm tra tức thì trạng thái phản hồi HTTP, thời gian phản hồi (ms) và nội dung JSON trả về trước khi bàn giao cho đối tác.
+
 ### 6.7. Tích Hợp Tổng Đài Hotline 3CX & Phân Quyền Tiếp Nhận Cuộc Gọi
 - **Kiến trúc tích hợp 3CX PWA / Desktop Webhook**:
   - 3CX Client cấu hình tại: `3CX Settings -> Integration -> Open Contact in Custom CRM`.

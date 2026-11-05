@@ -6432,3 +6432,60 @@ IP WAN
   * Kiểm thử TestClient: Đạt 100% qua 5 test case (GET /ncc, GET /partner, format=array, filter sap=4008, kiểm tra 0 bản ghi sai định dạng 4 số).
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn tất exit code 0 (`✓ built in 4.75s`), thư mục `frontend/dist/` sạch sẽ.
   * Backend: `python -m compileall app` đạt 100% không cảnh báo cú pháp.
+
+
+---
+
+### [2026-11-05] NÂNG CẤP DASHBOARD JOBS & SCHEDULER: BỔ SUNG PHÂN HỆ 'QUẢN LÝ API' VÀ TINH GỌN BỘ LỌC DANH MỤC
+
+- **Yêu cầu & Mục tiêu nghiệp vụ**:
+  1. Trong trang Dashboard & Quản Lý Tác Vụ Ngầm (Jobs & Scheduler) (/admin/jobs):
+     - Tinh gọn thanh danh mục bộ lọc: Loại bỏ các tab chia nhỏ gây rối mắt (Đồng Bộ Dữ Liệu, Báo Cáo & Biểu Đồ, Giám Sát Mạng & VPN, Tiện Ích Tự Động).
+     - Giữ lại các tab trọng tâm: Tất Cả, ⭐ Tiện Ích của Dũng, 🔒 Tác Vụ Ẩn.
+     - Bổ sung 1 tab mới ngay sau tab Tác Vụ Ẩn: **🌐 Quản Lý API**.
+  2. Phân hệ Quản Lý API (API Gateway & Managed APIs Management):
+     - Quản lý tập trung danh sách các Endpoint API đối ngoại (như API thông tin nhà hàng cho NCC, đối tác...).
+     - Hiển thị URL chính thức (/api/v1/restaurants/ncc), link bí danh (/api/v1/partner/restaurants), phương thức HTTP (GET, POST...).
+     - Sao chép nhanh đường dẫn 1-chạm kèm domain thực tế của hệ thống.
+     - **Tính năng BẬT / TẮT (Toggle Enable/Disable) API tức thì**:
+       + Khi Tắt: Hệ thống chặn ngay request từ bên ngoài và trả về mã HTTP 503 Service Unavailable cùng thông điệp 'API hiện đang tạm khóa hoặc bảo trì bởi Quản trị viên.'.
+       + Khi Bật: API hoạt động bình thường, phục vụ dữ liệu nhà hàng cho NCC / đối tác.
+     - Tích hợp công cụ **Kiểm Tra / Chạy Thử Trực Tiếp (Live API Test)**: Cho phép Quản trị viên gọi thử nghiệm API ngay trên giao diện web, đo lường độ trễ (latency ms), mã HTTP phản hồi và xem nội dung JSON trả về đẹp mắt có highlight cú pháp.
+     - Hỗ trợ modal **Thêm API Mới** và **Chỉnh Sửa Cấu Hình API** linh hoạt.
+
+- **Cơ sở dữ liệu & Cấu trúc bảng SQL Server**:
+  * Đã tạo bảng dbo.MANAGED_APIS trên SQL Server DB ITDEPT (và đồng bộ vào Script/Full_SCRIPT_SQL_TABLE.sql):
+    - id INT IDENTITY(1,1) PRIMARY KEY
+    - pi_code NVARCHAR(100) UNIQUE NOT NULL (ví dụ 
+cc_restaurants)
+    - pi_name NVARCHAR(255) NOT NULL
+    - endpoint_path NVARCHAR(500) NOT NULL
+    - lias_path NVARCHAR(500) NULL
+    - method NVARCHAR(10) DEFAULT 'GET'
+    - description NVARCHAR(MAX) NULL
+    - is_enabled BIT DEFAULT 1
+    - 
+equire_api_key BIT DEFAULT 0
+    - pi_key NVARCHAR(255) NULL
+    - created_by NVARCHAR(100) DEFAULT 'system'
+    - created_at DATETIME DEFAULT GETDATE()
+    - updated_at DATETIME DEFAULT GETDATE()
+  * Tự động bảo vệ khởi tạo bảng và seed bản ghi mặc định 
+cc_restaurants trong lifespan tại ackend/app/main.py.
+
+- **Mã nguồn Backend & Frontend**:
+  * Backend:
+    - Model: ackend/app/models/managed_api.py
+    - Schemas: ackend/app/schemas/managed_api.py
+    - Service: ackend/app/services/managed_api_service.py (list_managed_apis, 	oggle_managed_api, is_api_enabled...)
+    - Router: ackend/app/api/v1/managed_apis.py đăng ký vào ackend/app/api/v1/router.py.
+    - Hook bảo vệ: Đã tích hợp is_api_enabled(db, 'ncc_restaurants') vào cả 2 endpoint NCC (ackend/app/api/v1/restaurants.py và ackend/app/api/v1/partner.py).
+  * Frontend:
+    - Service: rontend/src/services/managedApiService.ts
+    - UI Component: rontend/src/components/admin/ApiManagementSection.tsx
+    - Page tích hợp: rontend/src/pages/admin/JobManagementPage.tsx (tinh gọn tab, chuyển đổi linh hoạt giữa Jobs List và Quản Lý API).
+
+- **Kiểm thử & Đóng gói (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Backend: Smoke Test và TestClient toàn diện (Bật -> HTTP 200, Tắt -> HTTP 503, Bật lại -> HTTP 200) đạt 100% PASSED.
+  * Backend: python -m compileall app đạt 100% sạch sẽ, 0 lỗi cú pháp. Tiến trình backend daemon đã nạp code mới trên port 8000.
+  * Frontend: cmd /c 'npm --prefix frontend run build' hoàn thành exit code 0 (dist/ sạch sẽ, sẵn sàng copy sang server IIS).

@@ -40,6 +40,7 @@ import {
   MongoMosquittoSummary
 } from '../../services/mongoMosquittoService';
 import { getRestaurants } from '../../services/restaurantService';
+import { ApiManagementSection } from '../../components/admin/ApiManagementSection';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { useAuth } from '../../contexts/AuthContext';
@@ -2583,12 +2584,9 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
           <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
             {[
               { id: 'all', label: 'Tất Cả' },
-              { id: 'sync_data', label: 'Đồng Bộ Dữ Liệu' },
-              { id: 'report', label: 'Báo Cáo & Biểu Đồ' },
-              { id: 'monitor', label: 'Giám Sát Mạng & VPN' },
-              { id: 'utility', label: 'Tiện Ích Tự Động' },
               ...(isDungOrSuperAdmin ? [{ id: 'dung_utility', label: '⭐ Tiện Ích của Dũng' }] : []),
-              ...(isDungOrSuperAdmin ? [{ id: 'hidden', label: `🔒 Tác Vụ Ẩn${hiddenJobsCount > 0 ? ` (${hiddenJobsCount})` : ''}` }] : [])
+              ...(isDungOrSuperAdmin ? [{ id: 'hidden', label: `🔒 Tác Vụ Ẩn${hiddenJobsCount > 0 ? ` (${hiddenJobsCount})` : ''}` }] : []),
+              { id: 'api_management', label: '🌐 Quản Lý API' }
             ].map((tab) => {
               const isActive = selectedCategory === tab.id;
               return (
@@ -2615,7 +2613,8 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
           </div>
 
           {/* Search & Status select */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {selectedCategory !== 'api_management' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
@@ -2654,11 +2653,15 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
               />
             </div>
           </div>
+          )}
         </div>
       </div>
 
-      {/* Jobs List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {/* Tab Quản Lý API hoặc Jobs List */}
+      {selectedCategory === 'api_management' ? (
+        <ApiManagementSection />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         {loading ? (
           <div style={{ backgroundColor: 'var(--bg-card, #fff)', padding: '50px', borderRadius: '12px', border: '1px solid var(--border-color)', textAlign: 'center', color: 'var(--text-muted)' }}>
             <RefreshCw size={26} style={{ animation: 'spin 1s linear infinite', marginBottom: '8px' }} />
@@ -3298,7 +3301,8 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
             );
           })
         )}
-      </div>
+        </div>
+      )}
 
       {/* Modal: Cài Đặt Giờ Chạy Tự Động */}
       {editingJob && (

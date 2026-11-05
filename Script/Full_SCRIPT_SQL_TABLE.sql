@@ -1832,5 +1832,32 @@ BEGIN
 END
 GO
 
+-- ----------------------------------------------------------------------------
+-- BẢNG: MANAGED_APIS (Cổng Quản Lý & Điều Khiển Bật / Tắt Các Link API Hệ Thống)
+-- ----------------------------------------------------------------------------
+IF OBJECT_ID(N'[dbo].[MANAGED_APIS]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[MANAGED_APIS] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [api_code] NVARCHAR(100) NOT NULL UNIQUE,
+        [api_name] NVARCHAR(250) NOT NULL,
+        [endpoint_path] NVARCHAR(255) NOT NULL,
+        [alias_path] NVARCHAR(255) NULL,
+        [method] NVARCHAR(20) NOT NULL DEFAULT 'GET',
+        [description] NVARCHAR(500) NULL,
+        [is_enabled] BIT NOT NULL DEFAULT 1,
+        [require_api_key] BIT NOT NULL DEFAULT 0,
+        [api_key] NVARCHAR(100) NULL,
+        [created_by] NVARCHAR(100) NULL,
+        [created_at] DATETIME NOT NULL DEFAULT GETDATE(),
+        [updated_at] DATETIME NULL DEFAULT GETDATE()
+    );
+    CREATE INDEX [IX_MANAGED_APIS_CODE] ON [dbo].[MANAGED_APIS] ([api_code]);
+    PRINT N'Table [dbo].[MANAGED_APIS] created successfully.';
 
-
+    INSERT INTO [dbo].[MANAGED_APIS] 
+    ([api_code], [api_name], [endpoint_path], [alias_path], [method], [description], [is_enabled], [require_api_key], [created_by])
+    VALUES
+    ('ncc_restaurants', N'API Thông Tin Nhà Hàng Cho NCC (Mã SAP 4 số, Tên NH, IP WAN)', '/api/v1/restaurants/ncc', '/api/v1/partner/restaurants', 'GET', N'Cung cấp danh sách nhà hàng đang hoạt động (trangthai = ON) có mã SAP đúng 4 số cho Nhà Cung Cấp (NCC) và đối tác tự động đồng bộ.', 1, 0, 'system');
+END
+GO

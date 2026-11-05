@@ -35,6 +35,14 @@ def get_partner_restaurants(
     - IP WAN: Địa chỉ IP WAN của nhà hàng.
     - Trạng thái: Chỉ lấy nhà hàng có trạng thái là ON (loại bỏ OFF, NEW).
     """
+    # Kiểm tra trạng thái Bật / Tắt API từ Cổng Quản Lý API
+    from app.services.managed_api_service import is_api_enabled
+    if not is_api_enabled(db, "ncc_restaurants"):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API Thông Tin Nhà Hàng cho NCC hiện đang tạm khóa hoặc bảo trì bởi Quản trị viên."
+        )
+
     configured_key = os.environ.get("NCC_API_KEY", "").strip()
     provided_key = (api_key or x_api_key or "").strip()
     if configured_key and provided_key != configured_key:

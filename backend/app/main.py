@@ -98,6 +98,7 @@ async def lifespan(app: FastAPI):
             AgentMultitaskPackageTemplate
         )
         from app.models.webmail import SystemEmailConfig, UserEmailSignature, WebmailSentLog, WebmailUserRead
+        from app.models.managed_api import ManagedAPI
         from sqlalchemy import text
         Base.metadata.create_all(engine, tables=[
             OvernightDeviceLog.__table__,
@@ -116,6 +117,7 @@ async def lifespan(app: FastAPI):
             UserEmailSignature.__table__,
             WebmailSentLog.__table__,
             WebmailUserRead.__table__,
+            ManagedAPI.__table__,
         ], checkfirst=True)
 
         # Tự động nạp mẫu kịch bản mặc định nếu bảng trống
@@ -132,6 +134,36 @@ async def lifespan(app: FastAPI):
                     """))
                     _tc.commit()
                     logger.info("Đã tự động khởi tạo các mẫu kịch bản script mặc định trong AGENT_MULTITASK_SCRIPT_TEMPLATES.")
+                # Kiểm tra phòng vệ bảng MANAGED_APIS & nạp API NCC mặc định
+                _tc.execute(text("""
+                    IF OBJECT_ID('dbo.MANAGED_APIS', 'U') IS NULL
+                    BEGIN
+                        CREATE TABLE dbo.MANAGED_APIS (
+                            id INT IDENTITY(1,1) PRIMARY KEY,
+                            api_code NVARCHAR(100) NOT NULL UNIQUE,
+                            api_name NVARCHAR(250) NOT NULL,
+                            endpoint_path NVARCHAR(255) NOT NULL,
+                            alias_path NVARCHAR(255) NULL,
+                            method NVARCHAR(20) NOT NULL DEFAULT 'GET',
+                            description NVARCHAR(500) NULL,
+                            is_enabled BIT NOT NULL DEFAULT 1,
+                            require_api_key BIT NOT NULL DEFAULT 0,
+                            api_key NVARCHAR(100) NULL,
+                            created_by NVARCHAR(100) NULL,
+                            created_at DATETIME NOT NULL DEFAULT GETDATE(),
+                            updated_at DATETIME NULL DEFAULT GETDATE()
+                        );
+                    END
+                    IF NOT EXISTS (SELECT 1 FROM dbo.MANAGED_APIS WHERE api_code = 'ncc_restaurants')
+                    BEGIN
+                        INSERT INTO dbo.MANAGED_APIS 
+                        (api_code, api_name, endpoint_path, alias_path, method, description, is_enabled, require_api_key, created_by)
+                        VALUES
+                        ('ncc_restaurants', N'API Thông Tin Nhà Hàng Cho NCC (Mã SAP 4 số, Tên NH, IP WAN)', '/api/v1/restaurants/ncc', '/api/v1/partner/restaurants', 'GET', N'Cung cấp danh sách nhà hàng đang hoạt động (trangthai = ON) có mã SAP đúng 4 số cho Nhà Cung Cấp (NCC) và đối tác tự động đồng bộ.', 1, 0, 'system');
+                    END
+                """))
+                _tc.commit()
+
 
                 # Kiểm tra phòng vệ bảng AGENT_MULTITASK_PACKAGE_TEMPLATES
                 _tc.execute(text("""
