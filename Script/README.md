@@ -6489,3 +6489,5 @@ cc_restaurants trong lifespan tại ackend/app/main.py.
   * Backend: Smoke Test và TestClient toàn diện (Bật -> HTTP 200, Tắt -> HTTP 503, Bật lại -> HTTP 200) đạt 100% PASSED.
   * Backend: python -m compileall app đạt 100% sạch sẽ, 0 lỗi cú pháp. Tiến trình backend daemon đã nạp code mới trên port 8000.
   * Frontend: cmd /c 'npm --prefix frontend run build' hoàn thành exit code 0 (dist/ sạch sẽ, sẵn sàng copy sang server IIS).
+  * Cơ sở dữ liệu Production: Đã kết nối trực tiếp và khởi tạo hoàn chỉnh bảng dbo.MANAGED_APIS (đủ 12 cột chuẩn, seed bản ghi mặc định 
+cc_restaurants) trên Database ITDEPT tại Server Production 172.16.8.25:1433.
