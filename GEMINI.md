@@ -2935,3 +2935,37 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
   * Backend: `backend\.venv\Scripts\python.exe -m compileall backend\app` sạch 100%, 0 lỗi.
   * Smoke Test: `from app.main import app; print('>>> PASSED 100%')` đạt 100% PASSED.
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.58s`), 0 lỗi TypeScript TS6133. Thư mục `frontend/dist/` đã tạo mới sạch sẽ sẵn sàng copy lên server.
+
+---
+
+### [2026-11-05] THIẾT KẾ LINK API THÔNG TIN NHÀ HÀNG CHO NHÀ CUNG CẤP (NCC) TỰ ĐỘNG ĐỒNG BỘ
+- **Yêu cầu & Mục tiêu**:
+  * Cung cấp đường dẫn API chuyên dụng để Nhà Cung Cấp (NCC) / Đối tác tự động kết nối và lấy thông tin nhà hàng định kỳ.
+  * Thông tin trả về gồm 3 trường chính:
+    1. **Mã SAP**: `sap` (kèm bí danh `ma_sap`).
+    2. **Tên Nhà Hàng**: `ten_nh` (kèm bí danh `ten_nha_hang`).
+    3. **IP WAN**: `ip_wan`.
+  * **Điều kiện lọc nghiệp vụ khắt khe**:
+    1. Trạng thái nhà hàng đang hoạt động: `trangthai = 'ON'` (loại bỏ hoàn toàn `OFF`, `NEW`, `NULL`...).
+    2. Không lấy các bản ghi đã xóa mềm (`status != 'OFF'`).
+    3. **Mã SAP bắt buộc có đúng 4 chữ số** (`^\d{4}$`), tự động loại bỏ các mã tạm (như `'1'`, `'12'`, `'123'`), kho trung chuyển, xưởng Central Kitchen (`'Khong Phai NH'`) hoặc mã không phải 4 số.
+- **Đặc tả Kỹ thuật Endpoint**:
+  * **Link API chính thức**: `GET /api/v1/restaurants/ncc`
+  * **Link API phụ (Alias)**: `GET /api/v1/partner/restaurants`
+  * **Các tham số tùy chọn hỗ trợ NCC**:
+    + `format`: Mặc định `json` (trả về JSON Object có `total` và mảng `data`). Nếu truyền `format=array` hoặc `format=raw`, API trả về trực tiếp mảng danh sách `[...]` để NCC dễ parse trực tiếp thành List/Array trong code của họ.
+    + `sap`: Lọc riêng theo một mã SAP 4 số cụ thể (ví dụ `?sap=4008`).
+    + `search`: Tìm kiếm nhanh theo từ khóa tên hoặc mã (ví dụ `?search=Gogi`).
+    + `api_key` hoặc Header `X-API-KEY`: Hỗ trợ kiểm tra bảo mật nếu có cấu hình biến môi trường `NCC_API_KEY`.
+- **Giao diện Web Portal**:
+  * Bổ sung nút `API Cho NCC` trên thanh công cụ trang Danh Sách Nhà Hàng (`frontend/src/pages/restaurants/RestaurantListPage.tsx`).
+  * Modal `RestaurantNccApiModal` (`frontend/src/components/restaurants/RestaurantNccApiModal.tsx`):
+    + Hiển thị sẵn link API động theo domain/IP hiện tại của máy chủ.
+    + Nút sao chép link 1-chạm (có thông báo "Đã sao chép!").
+    + Nút mở kiểm tra trực tiếp trên tab trình duyệt mới.
+    + Hiển thị số lượng nhà hàng thực tế thỏa điều kiện (hiện tại: **323 nhà hàng**).
+    + Khung xem trước dữ liệu mẫu (Live Preview) chuyển đổi linh hoạt giữa dạng Object và Array.
+- **Kiểm thử & Đóng gói**:
+  * Kiểm thử TestClient: Đạt 100% qua 5 test case (GET /ncc, GET /partner, format=array, filter sap=4008, kiểm tra 0 bản ghi sai định dạng 4 số).
+  * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn tất exit code 0 (`✓ built in 4.75s`), thư mục `frontend/dist/` sạch sẽ.
+  * Backend: `python -m compileall app` đạt 100% không cảnh báo cú pháp.

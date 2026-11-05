@@ -868,3 +868,4 @@ if (Test-Path -LiteralPath $fullPath) {{
             exit_code=1,
             elapsed_ms=elapsed
         )
+

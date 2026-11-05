@@ -1063,3 +1063,65 @@ def create_region(db: Session, current_user: UserInfo, data: RegionCreate) -> Re
         bienso=new_region.bienso,
         active=bool(new_region.active)
     )
+
+
+def get_ncc_restaurants(
+    db: Session,
+    sap: Optional[str] = None,
+    search: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    r"""
+    Cung cấp thông tin danh sách nhà hàng cho Nhà Cung Cấp (NCC) / Đối tác tự động truy vấn.
+    Quy tắc nghiệp vụ:
+    - Trạng thái nhà hàng (trangthai): Bắt buộc là 'ON'. Không lấy 'OFF', 'NEW' hay giá trị khác.
+    - Không lấy các bản ghi đã xóa mềm (status == 'OFF').
+    - Mã SAP: Bắt buộc có đúng 4 chữ số (^\d{4}$), không có 4 chữ số thì không lấy.
+    - Sắp xếp tăng dần theo mã SAP.
+    """
+    import re
+    from sqlalchemy import text
+
+    query_str = """
+        SELECT 
+            LTRIM(RTRIM(sap)) AS sap,
+            LTRIM(RTRIM(COALESCE(res, ''))) AS ten_nh,
+            LTRIM(RTRIM(COALESCE(ip_wan, ''))) AS ip_wan
+        FROM dbo.RESTAURANT
+        WHERE UPPER(LTRIM(RTRIM(COALESCE(trangthai, '')))) = 'ON'
+          AND (status IS NULL OR UPPER(LTRIM(RTRIM(status))) <> 'OFF')
+          AND sap IS NOT NULL
+          AND LEN(LTRIM(RTRIM(sap))) = 4
+          AND LTRIM(RTRIM(sap)) NOT LIKE '%[^0-9]%'
+    """
+    params: Dict[str, Any] = {}
+    if sap and sap.strip():
+        query_str += " AND LTRIM(RTRIM(sap)) = :sap"
+        params["sap"] = sap.strip()
+
+    if search and search.strip():
+        query_str += " AND (res LIKE :search OR sap LIKE :search)"
+        params["search"] = f"%{search.strip()}%"
+
+    query_str += " ORDER BY sap ASC"
+
+    rows = db.execute(text(query_str), params).fetchall()
+
+    digit4_pattern = re.compile(r"^\d{4}$")
+    results = []
+    for r in rows:
+        sap_code = str(r[0] or "").strip()
+        # Phòng vệ nghiêm ngặt: Kiểm tra đúng 4 chữ số
+        if not digit4_pattern.match(sap_code):
+            continue
+        restaurant_name = str(r[1] or "").strip()
+        ip_wan = str(r[2] or "").strip()
+
+        results.append({
+            "sap": sap_code,
+            "ten_nh": restaurant_name,
+            "ip_wan": ip_wan,
+            "ma_sap": sap_code,
+            "ten_nha_hang": restaurant_name,
+        })
+
+    return results

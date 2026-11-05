@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Store,
+  Share2,
   Search,
   Plus,
   Download,
@@ -40,6 +41,7 @@ import { VncSetupModal } from '../../components/restaurants/VncSetupModal';
 import { hotlineService } from '../../services/hotlineService';
 import { useHotline } from '../../contexts/HotlineContext';
 import { RestaurantAuditLogsModal } from '../../components/restaurants/RestaurantAuditLogsModal';
+import { RestaurantNccApiModal } from '../../components/restaurants/RestaurantNccApiModal';
 import { RestaurantSoftwareVersionsModal } from '../../components/restaurants/RestaurantSoftwareVersionsModal';
 import { DailyPendingTasksModal } from '../../components/dashboard/DailyPendingTasksModal';
 import { dashboardService, PendingSummaryResponse } from '../../services/dashboardService';
@@ -179,6 +181,7 @@ export const RestaurantListPage: React.FC = () => {
   const [formModalOpen, setFormModalOpen] = useState<boolean>(false);
   const [editingRestaurant, setEditingRestaurant] = useState<RestaurantItem | null>(null);
   const [logsModalOpen, setLogsModalOpen] = useState<boolean>(false);
+  const [nccApiModalOpen, setNccApiModalOpen] = useState<boolean>(false);
 
   // Copy notification state
   const [copiedId, setCopiedId] = useState<number | null>(null);
@@ -566,6 +569,15 @@ export const RestaurantListPage: React.FC = () => {
             title="Tải bộ cài Scrcpy (KDS) và file cấu hình Registry Windows"
           >
             Cài Đặt VNC / KDS
+          </Button>
+          <Button
+            variant="secondary"
+            leftIcon={<Share2 size={15} style={{ color: '#0284c7' }} />}
+            className="mobile-action-btn"
+            onClick={() => setNccApiModalOpen(true)}
+            title="Lấy link API thông tin nhà hàng cho Nhà Cung Cấp (NCC)"
+          >
+            API Cho NCC
           </Button>
           <Button
             variant="secondary"
@@ -1483,6 +1495,12 @@ export const RestaurantListPage: React.FC = () => {
       <VncSetupModal
         isOpen={vncSetupOpen}
         onClose={() => setVncSetupOpen(false)}
+      />
+
+      {/* Modal Link API Thông Tin Nhà Hàng Cho Nhà Cung Cấp (NCC) */}
+      <RestaurantNccApiModal
+        isOpen={nccApiModalOpen}
+        onClose={() => setNccApiModalOpen(false)}
       />
 
       {/* Restaurant Audit Logs Modal */}

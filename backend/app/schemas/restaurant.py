@@ -200,3 +200,17 @@ class RestaurantAuditLogsResponse(BaseModel):
     items: List[RestaurantAuditLogItem]
     total: int
 
+# Schema phục vụ API cho Nhà Cung Cấp (NCC) / Đối tác tự động lấy thông tin nhà hàng
+class RestaurantNCCItem(BaseModel):
+    sap: str = Field(..., description="Mã SAP nhà hàng (đúng 4 chữ số)")
+    ten_nh: str = Field(..., description="Tên nhà hàng")
+    ip_wan: str = Field("", description="Địa chỉ IP WAN của nhà hàng")
+    ma_sap: Optional[str] = Field(None, description="Bí danh mã SAP")
+    ten_nha_hang: Optional[str] = Field(None, description="Bí danh tên nhà hàng")
+
+
+class RestaurantNCCResponse(BaseModel):
+    success: bool = True
+    total: int = Field(..., description="Tổng số nhà hàng thỏa mãn điều kiện (ON và SAP 4 chữ số)")
+    filter: Dict[str, Any] = Field(default_factory=dict, description="Bộ lọc đã áp dụng")
+    data: List[RestaurantNCCItem] = Field(..., description="Danh sách thông tin nhà hàng")

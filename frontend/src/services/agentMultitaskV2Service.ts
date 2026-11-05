@@ -170,3 +170,4 @@ class AgentMultitaskV2Service {
 
 export const agentMultitaskV2Service = new AgentMultitaskV2Service();
 export default agentMultitaskV2Service;
+

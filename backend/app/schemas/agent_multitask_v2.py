@@ -142,3 +142,4 @@ class ExecuteRemoteActionResponse(BaseModel):
     output: str = ""
     exit_code: int = 0
     elapsed_ms: float = 0.0
+

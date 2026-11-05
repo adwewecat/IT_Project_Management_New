@@ -34,6 +34,7 @@ from app.api.v1.hotline import router as hotline_3cx_router
 from app.api.v1.agent_multitask import router as agent_multitask_router
 from app.api.v1.webmail import router as webmail_router
 from app.api.v1.agent_multitask_v2 import router as agent_multitask_v2_router
+from app.api.v1.partner import router as partner_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(auth_router)
@@ -71,6 +72,7 @@ api_v1_router.include_router(logs_router)
 api_v1_router.include_router(agent_multitask_router)
 api_v1_router.include_router(webmail_router)
 api_v1_router.include_router(agent_multitask_v2_router)
+api_v1_router.include_router(partner_router)
 
 
 
