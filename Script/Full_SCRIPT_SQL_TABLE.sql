@@ -1858,7 +1858,8 @@ BEGIN
     INSERT INTO [dbo].[MANAGED_APIS] 
     ([api_code], [api_name], [endpoint_path], [alias_path], [method], [description], [is_enabled], [require_api_key], [created_by])
     VALUES
-    ('ncc_restaurants', N'API Thông Tin Nhà Hàng Cho NCC (Mã SAP 4 số, Tên NH, IP WAN)', '/api/v1/restaurants/ncc', '/api/v1/partner/restaurants', 'GET', N'Cung cấp danh sách nhà hàng đang hoạt động (trangthai = ON) có mã SAP đúng 4 số cho Nhà Cung Cấp (NCC) và đối tác tự động đồng bộ.', 1, 0, 'system');
+    ('ncc_restaurants', N'API Thông Tin Nhà Hàng Cho NCC (Mã SAP 4 số, Tên NH, IP WAN)', '/api/v1/restaurants/ncc', '/api/v1/partner/restaurants', 'GET', N'Cung cấp danh sách nhà hàng đang hoạt động (trangthai = ON) có mã SAP đúng 4 số cho Nhà Cung Cấp (NCC) và đối tác tự động đồng bộ.', 1, 1, 'system');
+    UPDATE [dbo].[MANAGED_APIS] SET [require_api_key] = 1, [api_key] = 'ggg_ncc_secure_2026' WHERE [api_code] = 'ncc_restaurants';
 END
 GO
 

@@ -24,9 +24,10 @@ export const RestaurantNccApiModal: React.FC<RestaurantNccApiModalProps> = ({ is
 
   // Tu dong nhan dien Base URL API theo dung origin va port thuc te cua web/proxy (vd: http://14.161.33.122:5001)
   const apiBase = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1`;
-  const primaryApiUrl = `${apiBase}/restaurants/ncc`;
-  const aliasApiUrl = `${apiBase}/partner/restaurants`;
-  const arrayApiUrl = `${apiBase}/restaurants/ncc?format=array`;
+  const DEFAULT_API_KEY = 'ggg_ncc_secure_2026';
+  const primaryApiUrl = `${apiBase}/restaurants/ncc?api_key=${DEFAULT_API_KEY}`;
+  const aliasApiUrl = `${apiBase}/partner/restaurants?api_key=${DEFAULT_API_KEY}`;
+  const arrayApiUrl = `${apiBase}/restaurants/ncc?format=array&api_key=${DEFAULT_API_KEY}`;
 
   // Tải dữ liệu xem trước khi mở modal
   useEffect(() => {

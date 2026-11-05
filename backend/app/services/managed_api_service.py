@@ -67,6 +67,45 @@ def is_api_enabled(db: Session, api_code: str) -> bool:
         return True
 
 
+def validate_api_access(
+    db: Session,
+    api_code: str,
+    provided_key: Optional[str] = None
+) -> tuple[bool, Optional[str], int]:
+    """
+    Kiểm tra toàn diện quyền truy cập API:
+    1. Trạng thái BẬT / TẮT (is_enabled)
+    2. Xác thực API Key từ Database (hoặc fallback biến môi trường NCC_API_KEY)
+    Trả về: (is_valid: bool, error_message: Optional[str], status_code: int)
+    """
+    try:
+        api = db.query(ManagedAPI).filter(ManagedAPI.api_code == api_code).first()
+        if api and not api.is_enabled:
+            return False, "API hiện đang tạm khóa hoặc bảo trì bởi Quản trị viên.", 503
+
+        # Kiểm tra API Key nếu được yêu cầu
+        if api and api.require_api_key:
+            expected_key = (api.api_key or "").strip()
+            # Nếu chưa có trong DB, fallback sang env
+            if not expected_key:
+                import os
+                expected_key = os.environ.get("NCC_API_KEY", "").strip()
+
+            if expected_key:
+                clean_provided = (provided_key or "").strip()
+                if not clean_provided or clean_provided != expected_key:
+                    return (
+                        False,
+                        "API Key không hợp lệ hoặc chưa được cung cấp qua tham số '?api_key=' hoặc Header 'X-API-KEY'.",
+                        401
+                    )
+
+        return True, None, 200
+    except Exception as e:
+        logger.warning("Lỗi kiểm tra quyền truy cập API %s: %s", api_code, e)
+        return True, None, 200
+
+
 def log_api_request(
     db: Session,
     api_code: str,

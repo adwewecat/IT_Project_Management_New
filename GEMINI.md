@@ -364,7 +364,7 @@
   2. **Nút "Quét lại" từng nhà riêng lẻ**: Ngay tại từng dòng của bảng danh sách kết quả kiểm tra, phải có nút quét riêng lẻ để kỹ thuật viên kiểm tra tức thì 1 nhà hàng cụ thể khi vừa can thiệp hoặc nghi ngờ kết quả chập chờn.
 
 
-### 6.6.1. Phân Hệ Quản Lý API (Managed APIs Gateway & Bật/Tắt API Linh Hoạt)
+### 6.6.1. Phân Hệ Quản Lý API (Managed APIs Gateway, Bật/Tắt & Bảo Mật API Key)
 - **Vị trí tích hợp**: Trang *Dashboard & Quản Lý Tác Vụ Ngầm (Jobs & Scheduler)* (`/admin/jobs`), tab **`🌐 Quản Lý API`** ngay sau tab `🔒 Tác Vụ Ẩn`.
 - **Mục đích**: Quản lý tập trung các liên kết API mở ra bên ngoài cho Nhà Cung Cấp (NCC), Đối tác hoặc các hệ thống vệ tinh tự động truy xuất dữ liệu (như API thông tin nhà hàng `/api/v1/restaurants/ncc`).
 - **Cơ chế Bật / Tắt API tức thì (API Toggle Switch)**:
@@ -373,21 +373,30 @@
     {"detail": "API Thông Tin Nhà Hàng cho NCC hiện đang tạm khóa hoặc bảo trì bởi Quản trị viên."}
     ```
   - Khi API ở trạng thái **BẬT (`is_enabled = True`)**: API hoạt động bình thường, trả về dữ liệu đúng định dạng và số lượng (HTTP 200).
-- **Cấu trúc bảng Database (`dbo.MANAGED_APIS`)**:
-  - `id INT IDENTITY(1,1) PRIMARY KEY`
-  - `api_code NVARCHAR(100) UNIQUE NOT NULL`: Định danh mã API (vd: `ncc_restaurants`).
-  - `api_name NVARCHAR(255) NOT NULL`: Tên gợi nhớ của API.
-  - `endpoint_path NVARCHAR(500) NOT NULL`: Đường dẫn gốc (vd: `/api/v1/restaurants/ncc`).
-  - `alias_path NVARCHAR(500) NULL`: Đường dẫn bí danh rút gọn (vd: `/api/v1/partner/restaurants`).
-  - `method NVARCHAR(10) DEFAULT 'GET'`: Phương thức HTTP.
-  - `description NVARCHAR(MAX) NULL`: Mô tả chức năng và thông số kỹ thuật.
-  - `is_enabled BIT DEFAULT 1`: Trạng thái BẬT/TẮT API.
-  - `require_api_key BIT DEFAULT 0`: Có yêu cầu Header API Key hay không.
-  - `api_key NVARCHAR(255) NULL`: Khóa bí mật nếu cần.
-  - `created_by NVARCHAR(100)`: Người tạo.
-  - `created_at DATETIME`, `updated_at DATETIME`.
+- **Cơ chế Bảo Mật Xác Thực Bằng API Key (`require_api_key`)**:
+  - Hỗ trợ khóa API đối ngoại bằng mã khóa bí mật (API Key) lưu trong CSDL (`api_key`). Mặc định cho NCC: `ggg_ncc_secure_2026`.
+  - Phía NCC gọi qua:
+    + Tham số URL: `?api_key=ggg_ncc_secure_2026`
+    + Hoặc HTTP Header: `X-API-KEY: ggg_ncc_secure_2026`
+  - Nếu thiếu key hoặc sai key: Trả về mã lỗi `HTTP 401 Unauthorized` và ghi nhận nhật ký vi phạm để truy vết.
+- **Giám Sát Lưu Lượng 24 Giờ & Chống Spam / Quá Tải**:
+  - Tự động ghi nhận từng lượt request vào bảng `dbo.MANAGED_API_LOGS` (IP người gọi, endpoint, mã HTTP, latency ms, User-Agent, thời gian).
+  - Tự động đếm số request trong vòng 24 giờ qua:
+    + Dưới 500 req/24h: Trạng thái bình thường (Badge xanh lá).
+    + Trên 500 req/24h: Cảnh báo `Lưu lượng cao / Có dấu hiệu Spam` (Badge đỏ nhấp nháy).
+  - Modal **📋 Xem Nhật Ký 24h**: Hiển thị bảng chi tiết 50 lượt gọi gần nhất với bộ lọc và phân loại mã HTTP.
+- **Cấu trúc bảng Database (`dbo.MANAGED_APIS` & `dbo.MANAGED_API_LOGS`)**:
+  - Bảng `dbo.MANAGED_APIS`: `id`, `api_code`, `api_name`, `endpoint_path`, `alias_path`, `method`, `description`, `is_enabled`, `require_api_key`, `api_key`, `total_requests`, `last_requested_at`, `last_client_ip`, `created_by`, `created_at`, `updated_at`.
+  - Bảng `dbo.MANAGED_API_LOGS`: `id`, `api_code`, `endpoint_called`, `client_ip`, `method`, `status_code`, `response_time_ms`, `user_agent`, `query_params`, `requested_at`. Đã đánh Index kép tối ưu.
+  - Cả 2 bảng đã được đồng bộ đầy đủ trên cả Local Test DB và Server Production `.25` (`172.16.8.25:1433` DB `ITDEPT`).
 - **Cơ chế tự phòng vệ (Self-Healing)**: Khởi tạo bảng và nạp bản ghi mặc định `ncc_restaurants` tự động trong `lifespan` tại `backend/app/main.py`.
-- **Tính năng Chạy Thử / Live Test**: Quản trị viên có thể bấm nút `⚡ Chạy Thử` ngay trên giao diện web để kiểm tra tức thì trạng thái phản hồi HTTP, thời gian phản hồi (ms) và nội dung JSON trả về trước khi bàn giao cho đối tác.
+- **Tính năng Chạy Thử / Live Test**: Quản trị viên có thể bấm nút `⚡ Chạy Thử` ngay trên giao diện web để kiểm tra tức thì trạng thái phản hồi HTTP, thời gian phản hồi (ms) và nội dung JSON trả về (tự động gắn kèm API Key nếu có yêu cầu).
+- **Quy tắc Port Đối Ngoại & Proxy**:
+  - WAN Firewall chỉ mở port `5001`. IIS Reverse Proxy nhận request tại `5001` và chuyển tiếp nội bộ sang backend FastAPI `8000`.
+  - Tuyệt đối không hardcode port `8000` trên giao diện web hoặc URL cung cấp cho đối tác; luôn dùng port `5001` (hoặc `window.location.origin`).
+  - Đường dẫn chuẩn bàn giao NCC:
+    * Link chính: `http://14.161.33.122:5001/api/v1/restaurants/ncc?api_key=ggg_ncc_secure_2026`
+    * Link alias: `http://14.161.33.122:5001/api/v1/partner/restaurants?api_key=ggg_ncc_secure_2026`
 
 ### 6.7. Tích Hợp Tổng Đài Hotline 3CX & Phân Quyền Tiếp Nhận Cuộc Gọi
 - **Kiến trúc tích hợp 3CX PWA / Desktop Webhook**:

@@ -120,8 +120,8 @@ export const ApiManagementSection: React.FC = () => {
       method: 'GET',
       description: '',
       is_enabled: true,
-      require_api_key: false,
-      api_key: ''
+      require_api_key: true,
+      api_key: 'ggg_ncc_secure_2026'
     });
     setFormModalOpen(true);
   };
@@ -206,7 +206,11 @@ export const ApiManagementSection: React.FC = () => {
     setTestModalOpen(true);
     setTestLoading(true);
 
-    const testUrl = `${apiBaseUrl}${apiItem.endpoint_path}`;
+    // Nếu API có yêu cầu key, gắn sẵn vào query param để test thành công
+    const keyParam = apiItem.require_api_key && apiItem.api_key
+      ? (apiItem.endpoint_path.includes('?') ? `&api_key=${apiItem.api_key}` : `?api_key=${apiItem.api_key}`)
+      : '';
+    const testUrl = `${apiBaseUrl}${apiItem.endpoint_path}${keyParam}`;
     const startTime = performance.now();
     try {
       const response = await fetch(testUrl, {
@@ -300,7 +304,7 @@ export const ApiManagementSection: React.FC = () => {
               Cổng Quản Lý API & Giám Sát Lưu Lượng 24h
             </h2>
             <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
-              Quản lý tập trung các liên kết API mở ra bên ngoài, theo dõi số lượt request 24h, bắt spam và điều khiển BẬT/TẮT tức thì
+              Quản lý tập trung các liên kết API đối ngoại, bảo vệ bằng API Key, theo dõi lượt request 24h và điều khiển BẬT/TẮT tức thì
             </p>
           </div>
         </div>
@@ -364,10 +368,19 @@ export const ApiManagementSection: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {apis.map((item) => {
             const isToggling = togglingId === item.id;
-            const fullPrimaryUrl = `${apiBaseUrl}${item.endpoint_path}`;
-            const fullAliasUrl = item.alias_path ? `${apiBaseUrl}${item.alias_path}` : null;
             const requests24h = item.requests_24h || 0;
             const isHigh = item.is_high_traffic || requests24h >= 500;
+
+            // Link có kèm API Key tự động để NCC gọi trực tiếp
+            const keyQuery = item.require_api_key && item.api_key
+              ? (item.endpoint_path.includes('?') ? `&api_key=${item.api_key}` : `?api_key=${item.api_key}`)
+              : '';
+            const fullPrimaryUrl = `${apiBaseUrl}${item.endpoint_path}${keyQuery}`;
+
+            const aliasKeyQuery = item.require_api_key && item.api_key && item.alias_path
+              ? (item.alias_path.includes('?') ? `&api_key=${item.api_key}` : `?api_key=${item.api_key}`)
+              : '';
+            const fullAliasUrl = item.alias_path ? `${apiBaseUrl}${item.alias_path}${aliasKeyQuery}` : null;
 
             return (
               <div
@@ -421,15 +434,16 @@ export const ApiManagementSection: React.FC = () => {
                           fontSize: '11px',
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '3px',
+                          gap: '4px',
                           backgroundColor: '#fef3c7',
                           color: '#b45309',
-                          padding: '2px 6px',
+                          padding: '2px 8px',
                           borderRadius: '4px',
-                          fontWeight: 600
+                          fontWeight: 700,
+                          border: '1px solid #fde68a'
                         }}
                       >
-                        <KeyRound size={12} /> Yêu cầu API Key
+                        <KeyRound size={12} /> BẢO MẬT API KEY
                       </span>
                     )}
                   </div>
@@ -493,6 +507,53 @@ export const ApiManagementSection: React.FC = () => {
                   <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                     {item.description}
                   </p>
+                )}
+
+                {/* Khối Thông Tin API Key (nếu có bật) */}
+                {item.require_api_key && item.api_key && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      backgroundColor: '#fffbeb',
+                      padding: '7px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #fde68a',
+                      flexWrap: 'wrap'
+                    }}
+                  >
+                    <KeyRound size={14} color="#d97706" />
+                    <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#92400e' }}>
+                      Khóa API Key:
+                    </span>
+                    <code
+                      style={{
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        color: '#b45309',
+                        fontFamily: 'monospace',
+                        backgroundColor: '#fef3c7',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid #fcd34d'
+                      }}
+                    >
+                      {item.api_key}
+                    </code>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={copiedKey === `key-${item.id}` ? <Check size={12} /> : <Copy size={12} />}
+                      onClick={() => handleCopy(item.api_key!, `key-${item.id}`)}
+                      style={{ fontSize: '11px', padding: '2px 8px' }}
+                    >
+                      {copiedKey === `key-${item.id}` ? 'Đã chép Key' : 'Sao chép Key'}
+                    </Button>
+                    <span style={{ fontSize: '11px', color: '#78350f', marginLeft: 'auto' }}>
+                      NCC có thể truyền qua param <code>?api_key=...</code> hoặc Header <code>X-API-KEY: {item.api_key}</code>
+                    </span>
+                  </div>
                 )}
 
                 {/* Thanh Đo Lường Lượt Request 24h & Cảnh Báo Spam */}
@@ -605,8 +666,9 @@ export const ApiManagementSection: React.FC = () => {
                       leftIcon={copiedKey === `primary-${item.id}` ? <Check size={13} /> : <Copy size={13} />}
                       onClick={() => handleCopy(fullPrimaryUrl, `primary-${item.id}`)}
                       style={{ fontSize: '11px', padding: '3px 8px' }}
+                      title="Sao chép toàn bộ link có kèm API Key gửi cho NCC"
                     >
-                      {copiedKey === `primary-${item.id}` ? 'Đã chép' : 'Sao chép'}
+                      {copiedKey === `primary-${item.id}` ? 'Đã chép' : 'Sao chép Link'}
                     </Button>
 
                     <a href={fullPrimaryUrl} target="_blank" rel="noreferrer">
@@ -652,7 +714,7 @@ export const ApiManagementSection: React.FC = () => {
                         onClick={() => handleCopy(fullAliasUrl, `alias-${item.id}`)}
                         style={{ fontSize: '11px', padding: '3px 8px' }}
                       >
-                        {copiedKey === `alias-${item.id}` ? 'Đã chép' : 'Sao chép'}
+                        {copiedKey === `alias-${item.id}` ? 'Đã chép' : 'Sao chép Link'}
                       </Button>
 
                       <a href={fullAliasUrl} target="_blank" rel="noreferrer">
@@ -700,7 +762,7 @@ export const ApiManagementSection: React.FC = () => {
                       leftIcon={<Edit2 size={13} />}
                       onClick={() => handleOpenEdit(item)}
                       style={{ fontSize: '11.5px', padding: '3px 10px' }}
-                      title="Chỉnh sửa thông tin API"
+                      title="Chỉnh sửa thông tin API & đổi mã API Key"
                     >
                       Sửa
                     </Button>
@@ -841,7 +903,7 @@ export const ApiManagementSection: React.FC = () => {
                                 color: isOk ? '#15803d' : isBlocked ? '#b45309' : '#b91c1c'
                               }}
                             >
-                              {log.status_code} {isOk ? 'OK' : isBlocked ? 'Bị Khóa' : 'Lỗi'}
+                              {log.status_code} {isOk ? 'OK' : isBlocked ? 'Bị Khóa' : isAuthErr ? 'Sai Key' : 'Lỗi'}
                             </span>
                           </td>
                           <td style={{ padding: '8px 12px', textAlign: 'right', fontFamily: 'monospace' }}>
@@ -914,7 +976,7 @@ export const ApiManagementSection: React.FC = () => {
                 {testingApi.method}
               </span>
               <code style={{ fontSize: '12px', flex: 1, fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                {apiBaseUrl}{testingApi.endpoint_path}
+                {apiBaseUrl}{testingApi.endpoint_path}{testingApi.require_api_key && testingApi.api_key ? `?api_key=${testingApi.api_key}` : ''}
               </code>
               <Button
                 variant="outline"
@@ -1133,6 +1195,61 @@ export const ApiManagementSection: React.FC = () => {
                   boxSizing: 'border-box'
                 }}
               />
+            </div>
+
+            {/* BẢO MẬT API KEY */}
+            <div
+              style={{
+                padding: '12px',
+                backgroundColor: '#fffbeb',
+                borderRadius: '8px',
+                border: '1px solid #fde68a',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  id="require_api_key_check"
+                  checked={formData.require_api_key}
+                  onChange={(e) => setFormData({ ...formData, require_api_key: e.target.checked })}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <label htmlFor="require_api_key_check" style={{ fontSize: '13px', fontWeight: 700, color: '#92400e', cursor: 'pointer' }}>
+                  🔑 Bắt buộc xác thực bằng mã bảo mật (API Key)
+                </label>
+              </div>
+
+              {formData.require_api_key && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: '#78350f', marginBottom: '4px' }}>
+                    Mã API Key Bí Mật:
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.api_key || ''}
+                    onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                    placeholder="VD: ggg_ncc_secure_2026"
+                    style={{
+                      width: '100%',
+                      padding: '7px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #fcd34d',
+                      backgroundColor: '#ffffff',
+                      color: '#b45309',
+                      fontSize: '12.5px',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <span style={{ fontSize: '11px', color: '#92400e', marginTop: '3px', display: 'block' }}>
+                    * Người gọi bắt buộc phải truyền mã này qua tham số <code>?api_key=...</code> hoặc header <code>X-API-KEY</code>
+                  </span>
+                </div>
+              )}
             </div>
 
             <div>

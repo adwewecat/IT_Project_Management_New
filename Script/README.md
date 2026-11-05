@@ -6537,3 +6537,46 @@ equested_at (DATETIME).
   * Backend: TestClient và HTTP curl đạt 100% PASSED, tự động tăng bộ đếm 24h, ghi nhận đúng IP và độ trễ.
   * Backend: python -m compileall app sạch sẽ 100%, 0 lỗi.
   * Frontend: cmd /c 'npm --prefix frontend run build' hoàn thành exit code 0 (dist/ sạch sẽ, sẵn sàng copy sang server IIS).
+
+
+---
+
+### [2026-11-05] TÍCH HỢP XÁC THỰC BẢO MẬT BẰNG API KEY CHO CÁC API ĐỐI NGOẠI (API NCC)
+
+- **Bối cảnh & Yêu cầu**:
+  * Khi mở API ra bên ngoài Internet cho Nhà Cung Cấp (NCC), việc không có xác thực tiềm ẩn rủi ro lộ dữ liệu IP WAN trạm nhà hàng, hoặc bị bên thứ ba dò quét trái phép.
+  * Phương án sử dụng User / Password truyền thống (Basic Auth) gây bất tiện cho tích hợp tự động (automation/cronjob) của NCC.
+  * Chuẩn bảo mật công nghiệp quốc tế cho API B2B là **API Key (Mã Khóa Bí Mật)**: NCC chỉ cần gửi kèm API Key trong URL hoặc Header là có thể truy xuất dữ liệu an toàn.
+
+- **Cơ chế Triển khai**:
+  1. **Quản trị API Key linh hoạt trong Cơ sở dữ liệu**:
+     * Bảng `dbo.MANAGED_APIS` có sẵn 2 cột:
+       - `require_api_key (BIT)`: 1 = Bắt buộc có Key, 0 = Công khai không cần Key.
+       - `api_key (NVARCHAR(200))`: Lưu mã API Key bí mật cấp cho đối tác (mặc định cho NCC: `ggg_ncc_secure_2026`).
+     * Đã cập nhật trên cả CSDL Local và Production `.25` (`172.16.8.25:1433` DB `ITDEPT`).
+  2. **Backend Authentication & Logging**:
+     * Bổ sung hàm xác thực `validate_api_access(db, api_code, provided_key)` trong `backend/app/services/managed_api_service.py`.
+     * Hỗ trợ 2 phương thức truyền API Key từ phía NCC:
+       + **Cách 1 (Query Param - Khuyên dùng vì dễ gọi)**: `?api_key=ggg_ncc_secure_2026`
+       + **Cách 2 (HTTP Request Header)**: `X-API-KEY: ggg_ncc_secure_2026`
+     * Nếu không truyền hoặc truyền sai: Trả về HTTP 401 Unauthorized kèm thông báo lỗi rõ ràng. Mọi lượt gọi sai Key đều được ghi lại vào nhật ký `dbo.MANAGED_API_LOGS` để truy vết kẻ dò quét.
+  3. **Frontend UI/UX**:
+     * Cập nhật `ApiManagementSection.tsx`:
+       - Hiển thị badge vàng nổi bật: `🔑 BẢO MẬT API KEY`.
+       - Hiển thị ô xem mã API Key kèm nút sao chép 1-chạm.
+       - Tự động gắn kèm `?api_key=ggg_ncc_secure_2026` vào các URL hiển thị (Link Chính, Link Alias) và nút Test API để Admin click là chạy được ngay.
+       - Cho phép Admin chỉnh sửa trực tiếp cờ bật/tắt yêu cầu Key và đổi mã Key mới khi cần qua Modal "Sửa API".
+     * Cập nhật `RestaurantNccApiModal.tsx`:
+       - Tất cả các link mẫu (Link Chính, Link Alias, Link Array) đều tự động kèm `?api_key=ggg_ncc_secure_2026`.
+       - Hướng dẫn chi tiết cách dùng Header `X-API-KEY` cho lập trình viên phía NCC.
+
+- **Đường Dẫn Chính Thức Gửi Cho NCC**:
+  * **Link Chính (Khuyên dùng)**:
+    `http://14.161.33.122:5001/api/v1/restaurants/ncc?api_key=ggg_ncc_secure_2026`
+  * **Link Alias (Tùy chọn)**:
+    `http://14.161.33.122:5001/api/v1/partner/restaurants?api_key=ggg_ncc_secure_2026`
+
+- **Kiểm thử & Đóng gói**:
+  * TestClient Backend: Thử nghiệm không có key (401), key sai (401), key đúng qua query param (200 OK), key đúng qua header (200 OK). Tất cả đều chính xác 100%.
+  * Build Frontend: `cmd /c "npm --prefix frontend run build"` đạt exit code 0 (`✓ built in 4.63s`).
+  * Backend Compileall: `backend\.venv\Scripts\python.exe -m compileall backend\app` đạt 0 syntax error.
