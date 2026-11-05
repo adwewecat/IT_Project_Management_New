@@ -25,6 +25,7 @@ import { RestaurantMongoPage } from '../pages/app/RestaurantMongoPage';
 import { RestaurantMongoAnalysisPage } from '../pages/app/RestaurantMongoAnalysisPage';
 import { SsoManagementPage } from '../pages/app/SsoManagementPage';
 import { AgentMultitaskPage } from '../pages/app/AgentMultitaskPage';
+import { AgentMultitaskV2Page } from '../pages/app/AgentMultitaskV2Page';
 import { MobileRestaurantPage } from '../pages/mobile/MobileRestaurantPage';
 import { WebmailPage } from '../pages/webmail/WebmailPage';
 import { MainLayout } from '../components/layout/MainLayout';
@@ -156,6 +157,19 @@ export const AppRoutes: React.FC = () => {
         <Route path="agent-multitask" element={<Navigate to="/app/agent-multitask" replace />} />
         <Route path="app/multitask" element={<Navigate to="/app/agent-multitask" replace />} />
         <Route path="multitask" element={<Navigate to="/app/agent-multitask" replace />} />
+
+        {/* Màn hình mới: Agent Multitask 2 (Tạm thời chỉ dung.nguyenanh và Super Admin) */}
+        <Route
+          path="app/agent-multitask-2"
+          element={
+            <ProtectedRoute requiredPermission="agent_multitask_2" adminOnly>
+              <AgentMultitaskV2Page />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="agent-multitask-2" element={<Navigate to="/app/agent-multitask-2" replace />} />
+        <Route path="app/multitask-2" element={<Navigate to="/app/agent-multitask-2" replace />} />
+        <Route path="multitask-2" element={<Navigate to="/app/agent-multitask-2" replace />} />
 
         {/* Màn hình mới: Webmail & Soạn Email Tập Trung (Phân quyền webmail) */}
         <Route

@@ -28,6 +28,7 @@ import {
   KeyRound,
   ScrollText,
   Cpu,
+  Zap,
   Mail,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -65,6 +66,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Quyền truy cập Agent Multitask: CHỈ Super Admin mới thấy trên Sidebar, tài khoản khác chỉ thấy khi đã được Super Admin phân quyền
   const canAccessAgentMultitask = isSuperAdmin || Boolean(user?.permissions?.['agent_multitask'] || user?.permissions?.['view_agent_multitask']);
+  // Agent Multitask 2: Tạm thời CHỈ riêng dung.nguyenanh và Super Admin mới thấy
+  const canAccessAgentMultitask2 = isDungOrSuperAdmin;
 
 
   // Trạng thái đóng / mở cho từng nhóm đặc thù
@@ -365,6 +368,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <AlertOctagon size={15} style={{ color: '#EF4444' }} />
                         <span>Ghi Nhận Lỗi & Nghỉ Phép</span>
+                      </div>
+                    </NavLink>
+                  </li>
+                )}
+
+                {/* Phân hệ mới: Agent Multitask 2 (Tạm thời chỉ dung.nguyenanh và Super Admin) */}
+                {canAccessAgentMultitask2 && (
+                  <li>
+                    <NavLink
+                      to="/app/agent-multitask-2"
+                      className="sidebar-sub-item"
+                      style={({ isActive }) => getSubLinkStyle(isActive)}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Zap size={15} style={{ color: '#0ea5e9' }} />
+                        <span>Agent Multitask 2</span>
+                        <span
+                          style={{
+                            fontSize: '9px',
+                            fontWeight: 800,
+                            padding: '1px 5px',
+                            borderRadius: '4px',
+                            backgroundColor: '#e0f2fe',
+                            color: '#0284c7'
+                          }}
+                        >
+                          MỚI
+                        </span>
                       </div>
                     </NavLink>
                   </li>

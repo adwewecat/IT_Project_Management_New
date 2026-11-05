@@ -6390,3 +6390,38 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
   * Đã kiểm thử trực tiếp qua API TestClient: Request `POST /api/v1/mongodb/image-server/export-mismatches` trả về mã `200 OK`, header `Content-Disposition: attachment; filename="Mon_Sai_Link_Anh_Menu_61_BUFFET_YATAI_...xlsx"`, file Excel hợp lệ 6.1KB, 0 lỗi.
   * Backend: `backend\.venv\Scripts\python.exe -m compileall backend\app` hoàn thành 100%, 0 lỗi cú pháp.
   * Tiến trình backend đã khởi động lại trên port 8000.
+
+---
+
+### [2026-11-05] PHÁT TRIỂN PHÂN HỆ MỚI: AGENT MULTITASK 2 (HỖ TRỢ NHÀ HÀNG TỪ XA QUA SFTP & THỰC THI LỆNH MÁY TRẠM)
+- **Bối cảnh & Mục tiêu**:
+  * Đơn vị vận hành nhà hàng thường xuyên cần IT hỗ trợ kỹ thuật từ xa nhưng nhân viên nhà hàng (thu ngân, quản lý) không rành công nghệ, việc đọc ID/Pass TeamViewer/Ultraviewer mất nhiều thời gian và dễ gián đoạn bán hàng.
+  * Toàn bộ nhà hàng đều thông IP mạng WAN/LAN với hệ thống máy chủ nội bộ.
+  * Xây dựng phân hệ **Agent Multitask 2** cho phép kỹ sư IT lưu trữ sẵn các công cụ, file vá lỗi, script, tài liệu trên SFTP Server tập trung, truyền thẳng xuống thư mục tùy chọn trên máy trạm nhà hàng và ra lệnh thực thi từ xa (chạy `.bat`, `.exe`, giải nén `.zip`, mở file văn bản `.doc`/`.txt` trên màn hình người dùng, đọc log) mà không cần can thiệp tại chỗ.
+- **Phân quyền truy cập nghiêm ngặt**:
+  * Tạm thời **chỉ tài khoản `dung.nguyenanh` và Super Admin** nhìn thấy menu trên thanh Sidebar và truy cập vào Route `/app/agent-multitask-2`.
+  * Đã đăng ký đầy đủ các mã quyền `agent_multitask_2`, `view_agent_multitask_2`, `update_agent_multitask_2` trong `BASE_PERMISSION_DEFINITIONS` (`backend/app/services/role_service.py`), `ALL_PERMISSIONS` (`backend/app/services/auth_service.py`), và `BASE_LABELS` (`frontend/src/pages/admin/RolesPage.tsx`) theo chuẩn Immutable Rule 10 để Admin có thể phân quyền linh hoạt theo nhu cầu sau này.
+- **Kiến trúc Kho Lưu Trữ File SFTP Tập Trung (Centralized Repository)**:
+  * Máy chủ SFTP: `10.28.1.150:22`, tài khoản: `f_hcm`, mật khẩu: `GP05@St0o4E`.
+  * Thư mục lưu trữ: `/home/dung.na/Support` (kèm cơ chế tự động graceful fallback sang `/home/f_hcm/Support` nếu thư mục người dùng riêng chưa khởi tạo).
+  * Chức năng: Duyệt danh sách file, kiểm tra dung lượng, thời gian cập nhật, phân loại định dạng file thông minh (`.bat`, `.exe`, `.zip`, `.docx`, `.txt`...), tải file mới từ máy tính cá nhân lên SFTP server trực tiếp trên trình duyệt.
+- **Cơ chế Truyền File Xuống Máy Trạm Nhà Hàng (Direct Push)**:
+  * Cho phép người dùng dán bất kỳ đường dẫn thư mục nào trên máy trạm (ví dụ `D:\Support`, `D:\GPOS-Setup\app`, `C:\Setup`...).
+  * Tích hợp 4 nút dán nhanh đường dẫn thường dùng 1-chạm (`D:\Support`, `D:\GPOS-Setup\app\img\menu`, `C:\Support`, `D:\GPOS-Setup\app`).
+  * Backend sử dụng luồng nhị phân Base64 qua PowerShell T-SQL (`xp_cmdshell` SQL Server port 1433) hoặc Agent Heartbeat, tự động tạo thư mục đích nếu chưa tồn tại (`New-Item -ItemType Directory -Force`) và kiểm tra kích thước file sau khi truyền để đảm bảo toàn vẹn dữ liệu.
+- **Bộ Công Cụ Điều Khiển & Thực Thi Từ Xa (Remote Actions Engine)**:
+  * `RUN_SCRIPT`: Khởi chạy file script (`.bat`, `.cmd`, `.ps1`) với 2 chế độ:
+    - 🪟 *Hiện cửa sổ CMD*: Bật cửa sổ CMD trên màn hình Desktop của người dùng nhà hàng thông qua Scheduled Task (`-LogonType Interactive -RunLevel Highest`), kèm lệnh tự động thoát sau 3 giây hoặc bấm phím bất kỳ để đóng ngay.
+    - 🥷 *Chạy ngầm (Silent)*: Thực thi ngầm hoàn toàn không hiện cửa sổ.
+  * `EXECUTE_EXE`: Khởi chạy ứng dụng thực thi (`.exe`) từ xa.
+  * `EXTRACT_ARCHIVE`: Tự động giải nén các tệp nén (`.zip`, `.rar`, `.7z`) ngay tại thư mục chỉ định.
+  * `OPEN_DOCUMENT`: Mở tài liệu (`.txt`, `.doc`, `.docx`, `.pdf`, `.log`) trực tiếp lên màn hình Desktop để nhân viên nhà hàng xem hướng dẫn.
+  * `READ_TEXT`: Đọc 100 dòng đầu tiên của file văn bản / nhật ký từ xa và hiển thị trong Modal xem trước trên Web Portal.
+  * `DELETE_FILE`: Xóa file / dọn dẹp rác sau khi hoàn tất xử lý.
+- **Kiểm thử thực tế**:
+  * Đã kiểm thử trực tiếp trên máy chủ SFTP `10.28.1.150:22` (thành công).
+  * Đã kiểm thử live truyền file `test_script.bat` xuống máy trạm `10.8.160.41:1433` (Ashima Forest Thiso Mai Chi Thọ), tạo thư mục `D:\Support\test_script.bat` trong 1249ms, chạy script thành công (ExitCode 0), đọc nội dung text và xóa file an toàn.
+- **Đóng gói & Kiểm thử (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Backend: `backend\.venv\Scripts\python.exe -m compileall backend\app` sạch 100%, 0 lỗi.
+  * Smoke Test: `from app.main import app; print('>>> PASSED 100%')` đạt 100% PASSED.
+  * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành 100% exit code 0 (`✓ built in 4.58s`), 0 lỗi TypeScript TS6133. Thư mục `frontend/dist/` đã tạo mới sạch sẽ sẵn sàng copy lên server.

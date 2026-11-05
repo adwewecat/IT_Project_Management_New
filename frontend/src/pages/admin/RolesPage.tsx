@@ -81,6 +81,8 @@ const BASE_LABELS: Record<string, { label: string; module: string }> = {
   mobile_dedicated_view: { label: 'Quyền Sử Dụng Giao Diện Điện Thoại Riêng (Mobile Portal)', module: 'Màn Hình & Phân Hệ Mới' },
   // Màn Hình & Phân Hệ Mới: Hệ Thống Webmail Tập Trung
   webmail: { label: 'Hệ Thống Webmail & Soạn Email Tập Trung', module: 'Màn Hình & Phân Hệ Mới' },
+  // Màn Hình & Phân Hệ Mới: Agent Multitask 2
+  agent_multitask_2: { label: 'Quyền Quản Lý & Hỗ Trợ Từ Xa Agent Multitask 2', module: 'Màn Hình & Phân Hệ Mới' },
 };
 
 const PRESET_MODULE_OPTIONS = [

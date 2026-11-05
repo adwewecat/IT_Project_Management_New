@@ -141,6 +141,9 @@ BASE_PERMISSION_DEFINITIONS = [
     {"chucnang": "webmail", "module": "Màn Hình & Phân Hệ Mới", "action": "Quyền Sử Dụng Hệ Thống Webmail Tập Trung"},
     {"chucnang": "view_webmail", "module": "Màn Hình & Phân Hệ Mới", "action": "Xem Hộp Thư & Đọc Email Webmail"},
     {"chucnang": "update_webmail", "module": "Màn Hình & Phân Hệ Mới", "action": "Soạn & Gửi Email Webmail (Kèm File Đính Kèm)"},
+    {"chucnang": "agent_multitask_2", "module": "Màn Hình & Phân Hệ Mới", "action": "Quyền Quản Lý & Hỗ Trợ Từ Xa Agent Multitask 2"},
+    {"chucnang": "view_agent_multitask_2", "module": "Màn Hình & Phân Hệ Mới", "action": "Xem Màn Hình Hỗ Trợ Từ Xa Agent Multitask 2"},
+    {"chucnang": "update_agent_multitask_2", "module": "Màn Hình & Phân Hệ Mới", "action": "Truyền File & Thực Thi Lệnh Từ Xa Agent Multitask 2"},
 ]
 
 
