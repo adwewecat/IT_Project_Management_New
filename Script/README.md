@@ -6395,6 +6395,13 @@ IP WAN
 ---
 
 ### [2026-11-05] THIẾT KẾ LINK API THÔNG TIN NHÀ HÀNG CHO NHÀ CUNG CẤP (NCC) TỰ ĐỘNG ĐỒNG BỘ
+
+- **Cập nhật chuẩn hóa cấu trúc dữ liệu trả về**: Khử trùng lặp trường dữ liệu theo phản hồi của người dùng. Mỗi bản ghi nhà hàng chỉ gồm đúng 3 trường thông tin chuẩn:
+  1. `ma_sap`: Mã SAP nhà hàng (chuỗi 4 chữ số, ví dụ `"4032"`).
+  2. `ten_nha_hang`: Tên đầy đủ của nhà hàng (ví dụ `"Gogi SSG Văn Thánh"`).
+  3. `ip_wan`: Địa chỉ IP WAN của nhà hàng (ví dụ `"14.161.32.91"`).
+  (Đã loại bỏ các trường `sap` và `ten_nh` cũ để tránh dư thừa và trùng lặp).
+
 - **Yêu cầu & Mục tiêu**:
   * Cung cấp đường dẫn API chuyên dụng để Nhà Cung Cấp (NCC) / Đối tác tự động kết nối và lấy thông tin nhà hàng định kỳ.
   * Thông tin trả về gồm 3 trường chính:

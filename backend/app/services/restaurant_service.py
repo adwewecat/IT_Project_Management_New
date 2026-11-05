@@ -1068,6 +1068,7 @@ def create_region(db: Session, current_user: UserInfo, data: RegionCreate) -> Re
 def get_ncc_restaurants(
     db: Session,
     sap: Optional[str] = None,
+    ma_sap: Optional[str] = None,
     search: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     r"""
@@ -1094,9 +1095,10 @@ def get_ncc_restaurants(
           AND LTRIM(RTRIM(sap)) NOT LIKE '%[^0-9]%'
     """
     params: Dict[str, Any] = {}
-    if sap and sap.strip():
+    target_sap = (ma_sap or sap or "").strip()
+    if target_sap:
         query_str += " AND LTRIM(RTRIM(sap)) = :sap"
-        params["sap"] = sap.strip()
+        params["sap"] = target_sap
 
     if search and search.strip():
         query_str += " AND (res LIKE :search OR sap LIKE :search)"
@@ -1117,11 +1119,9 @@ def get_ncc_restaurants(
         ip_wan = str(r[2] or "").strip()
 
         results.append({
-            "sap": sap_code,
-            "ten_nh": restaurant_name,
-            "ip_wan": ip_wan,
             "ma_sap": sap_code,
             "ten_nha_hang": restaurant_name,
+            "ip_wan": ip_wan,
         })
 
     return results

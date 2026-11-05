@@ -524,6 +524,7 @@ async def ping_kds_endpoints(
 def get_restaurants_for_ncc(
     format: str = Query("json", description="Định dạng trả về: 'json' (mặc định dạng đối tượng) hoặc 'array' (danh sách mảng thuần túy)"),
     sap: Optional[str] = Query(None, description="Lọc theo mã SAP cụ thể (4 chữ số)"),
+    ma_sap: Optional[str] = Query(None, description="Lọc theo mã SAP cụ thể (4 chữ số)"),
     search: Optional[str] = Query(None, description="Tìm kiếm theo tên nhà hàng hoặc mã SAP"),
     api_key: Optional[str] = Query(None, description="Mã bảo mật API Key (tùy chọn)"),
     x_api_key: Optional[str] = Header(None, alias="X-API-KEY", description="Mã bảo mật API Key qua Header (tùy chọn)"),
@@ -544,7 +545,7 @@ def get_restaurants_for_ncc(
             detail="API Key không hợp lệ hoặc chưa được cấp quyền truy cập."
         )
 
-    results = restaurant_service.get_ncc_restaurants(db=db, sap=sap, search=search)
+    results = restaurant_service.get_ncc_restaurants(db=db, sap=sap, ma_sap=ma_sap, search=search)
 
     # Nếu bên NCC yêu cầu mảng JSON thuần túy để dễ parse trực tiếp
     if format and format.strip().lower() in ("array", "raw", "list"):

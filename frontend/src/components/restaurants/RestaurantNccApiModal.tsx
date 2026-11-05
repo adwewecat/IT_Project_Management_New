@@ -10,8 +10,8 @@ interface RestaurantNccApiModalProps {
 }
 
 interface NccItem {
-  sap: string;
-  ten_nh: string;
+  ma_sap: string;
+  ten_nha_hang: string;
   ip_wan: string;
 }
 
@@ -181,7 +181,7 @@ export const RestaurantNccApiModal: React.FC<RestaurantNccApiModalProps> = ({ is
             <span>Các tham số tùy chọn NCC có thể truyền thêm:</span>
           </div>
           <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: 1.6, color: '#475569' }}>
-            <li><code>?sap=4008</code>: Tra cứu riêng chính xác 1 nhà hàng theo mã SAP 4 chữ số.</li>
+            <li><code>?ma_sap=4008</code> (hoặc <code>?sap=4008</code>): Tra cứu riêng chính xác 1 nhà hàng theo mã SAP 4 chữ số.</li>
             <li><code>?search=Gogi</code>: Tìm kiếm nhanh theo tên nhà hàng hoặc mã SAP.</li>
             <li><code>?format=array</code>: Trả về trực tiếp mảng JSON thay vì object.</li>
             <li>Link Alias dự phòng: <code>{aliasApiUrl}</code>.</li>
@@ -279,3 +279,4 @@ export const RestaurantNccApiModal: React.FC<RestaurantNccApiModalProps> = ({ is
     </Modal>
   );
 };
+
