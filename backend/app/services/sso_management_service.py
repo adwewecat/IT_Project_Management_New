@@ -888,3 +888,631 @@ async def create_iam_ncc_user(
         finally:
             await browser.close()
 
+
+
+def generate_sso_bulk_template() -> bytes:
+    """Tạo file Excel mẫu theo chuẩn 7 cột cho Import Xử Lý Hàng Loạt IAM."""
+    import openpyxl
+    import io
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "DS_USER_IAM"
+
+    # 7 Cột chuẩn hóa khớp 100% giao diện yêu cầu của người dùng
+    headers = [
+        "User Name",
+        "Email",
+        "User Type (0-Local,1-AD,2-Empl)",
+        "User Phone Number",
+        "Pass",
+        "TRANG THAI",
+        "UPDATE QUYEN"
+    ]
+    ws.append(headers)
+
+    # Dòng mẫu hướng dẫn thực tế
+    samples = [
+        ["user_ncc_01", "ncc01@gmail.com", "0", "0908119345", "Ggg@2026!", "ON", "Hệ thống GChecklist, PoPortal_Hệ thống đặt hàng Hồ Chí Minh"],
+        ["user_ncc_02", "ncc02@gmail.com", "0", "0908119347", "", "ON", "Client Gương Thần API (Phân quyền người dùng), Hệ thống E-Bidding"],
+        ["000016", "g_000016@ggg.com.vn", "2", "0366093968", "MatKhauMoi@123", "", ""],
+        ["user_can_khoa", "", "", "", "", "KHOA", ""]
+    ]
+    for row in samples:
+        ws.append(row)
+
+    # Định dạng Header
+    header_fill = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    thin_border = Border(
+        left=Side(style='thin', color='D9D9D9'),
+        right=Side(style='thin', color='D9D9D9'),
+        top=Side(style='thin', color='D9D9D9'),
+        bottom=Side(style='thin', color='D9D9D9')
+    )
+
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = thin_border
+
+    widths = [20, 32, 28, 22, 18, 16, 45]
+    for idx, width in enumerate(widths, 1):
+        col_letter = openpyxl.utils.get_column_letter(idx)
+        ws.column_dimensions[col_letter].width = width
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def parse_sso_excel_file(file_bytes: bytes) -> List[Dict[str, Any]]:
+    """Phân tích dữ liệu từ file Excel upload lên thành danh sách bản ghi chuẩn."""
+    import openpyxl
+    import io
+
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    sheet = wb.active
+    rows = list(sheet.iter_rows(values_only=True))
+    if not rows:
+        return []
+
+    def _norm_hdr(s: Any) -> str:
+        if not s:
+            return ""
+        return re.sub(r"[^a-zA-Z0-9]", "", str(s).lower())
+
+    hdr_map: Dict[str, int] = {}
+    for idx, col_val in enumerate(rows[0]):
+        norm = _norm_hdr(col_val)
+        if "username" in norm or ("user" in norm and "name" in norm):
+            hdr_map["user_name"] = idx
+        elif "email" in norm or "mail" in norm:
+            hdr_map["email"] = idx
+        elif "type" in norm:
+            hdr_map["user_type"] = idx
+        elif "phone" in norm or "sdt" in norm:
+            hdr_map["phone_number"] = idx
+        elif "pass" in norm:
+            hdr_map["pass_word"] = idx
+        elif "trangthai" in norm or "status" in norm:
+            hdr_map["trang_thai"] = idx
+        elif "quyen" in norm or "client" in norm:
+            hdr_map["update_quyen"] = idx
+
+    results: List[Dict[str, Any]] = []
+    for r in rows[1:]:
+        if not any(r):
+            continue
+        uname_idx = hdr_map.get("user_name", 0)
+        u_name = str(r[uname_idx] or "").strip() if uname_idx < len(r) else ""
+        if not u_name:
+            continue
+
+        results.append({
+            "user_name": u_name,
+            "email": str(r[hdr_map["email"]] or "").strip() if "email" in hdr_map and hdr_map["email"] < len(r) else "",
+            "user_type": str(r[hdr_map["user_type"]] or "").strip() if "user_type" in hdr_map and hdr_map["user_type"] < len(r) else "0",
+            "phone_number": str(r[hdr_map["phone_number"]] or "").strip() if "phone_number" in hdr_map and hdr_map["phone_number"] < len(r) else "",
+            "pass_word": str(r[hdr_map["pass_word"]] or "").strip() if "pass_word" in hdr_map and hdr_map["pass_word"] < len(r) else "",
+            "trang_thai": str(r[hdr_map["trang_thai"]] or "").strip() if "trang_thai" in hdr_map and hdr_map["trang_thai"] < len(r) else "",
+            "update_quyen": str(r[hdr_map["update_quyen"]] or "").strip() if "update_quyen" in hdr_map and hdr_map["update_quyen"] < len(r) else "",
+        })
+
+    return results
+
+
+async def set_user_lockout_fields(
+    page: Page,
+    lockout_enabled: bool,
+    access_failed_count: int,
+    lockout_end: Optional[str] = None
+) -> None:
+    """Cập nhật các trường User Lockout Enabled, Access Failed Count và Lockout End trên trang UserProfile."""
+    # 1. User Lockout Enabled
+    lockout_chk = page.locator("#LockoutEnabled, #UserLockoutEnabled, input[name='LockoutEnabled'], input[name='UserLockoutEnabled']").first
+    if await lockout_chk.count() == 0:
+        label_loc = page.locator("label:has-text('User Lockout Enabled'), label:has-text('Lockout Enabled')").first
+        if await label_loc.count() > 0:
+            for_id = await label_loc.get_attribute("for")
+            if for_id:
+                lockout_chk = page.locator(f"#{for_id}").first
+            else:
+                cand = label_loc.locator("xpath=..").locator("input[type='checkbox']").first
+                if await cand.count() > 0:
+                    lockout_chk = cand
+                else:
+                    cand2 = label_loc.locator("xpath=../..").locator("input[type='checkbox']").first
+                    if await cand2.count() > 0:
+                        lockout_chk = cand2
+
+    if await lockout_chk.count() > 0:
+        is_cur_checked = await lockout_chk.is_checked()
+        if is_cur_checked != lockout_enabled:
+            # Click vào switch hoặc label để toggle
+            switch_label = lockout_chk.locator("xpath=..")
+            if await switch_label.count() > 0 and "switch" in (await switch_label.get_attribute("class") or ""):
+                await switch_label.click()
+            else:
+                if lockout_enabled:
+                    await lockout_chk.check(force=True)
+                else:
+                    await lockout_chk.uncheck(force=True)
+
+            try:
+                if await lockout_chk.is_checked() != lockout_enabled:
+                    await page.evaluate("""(data) => {
+                        const el = document.querySelector('#LockoutEnabled, input[name="LockoutEnabled"]');
+                        if (el) {
+                            el.checked = data.enabled;
+                            el.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    }""", {"enabled": lockout_enabled})
+            except Exception:
+                pass
+
+    # 2. User Access Failed Count
+    acc_failed_loc = page.locator("#AccessFailedCount, input[name='AccessFailedCount']").first
+    if await acc_failed_loc.count() > 0:
+        await acc_failed_loc.fill(str(access_failed_count))
+        try:
+            await acc_failed_loc.dispatch_event("input")
+            await acc_failed_loc.dispatch_event("change")
+        except Exception:
+            pass
+
+    # 3. User Lockout End
+    lockout_end_loc = page.locator("#LockoutEnd, input[name='LockoutEnd']").first
+    if await lockout_end_loc.count() > 0:
+        await lockout_end_loc.fill(lockout_end if lockout_end else "")
+        try:
+            await lockout_end_loc.dispatch_event("input")
+            await lockout_end_loc.dispatch_event("change")
+        except Exception:
+            pass
+
+
+async def find_iam_user_id(page: Page, username: str) -> Optional[str]:
+    """Tìm ID/GUID của User trên hệ thống IAM theo User Name."""
+    clean_username = username.strip()
+    encoded_user = urllib.parse.quote(clean_username)
+    search_url = f"https://iam.ggg.com.vn/Identity/Users?search={encoded_user}&UserType=99"
+    await page.goto(search_url, wait_until="networkidle", timeout=30000)
+
+    rows = page.locator("table tbody tr")
+    count = await rows.count()
+    if count == 0:
+        return None
+
+    for i in range(count):
+        row = rows.nth(i)
+        cells = row.locator("td")
+        if await cells.count() >= 3:
+            uname = (await cells.nth(2).inner_text()).strip()
+            if uname.lower() == clean_username.lower():
+                edit_link = cells.nth(0).locator("a")
+                if await edit_link.count() > 0:
+                    href = (await edit_link.get_attribute("href")) or ""
+                    return href.split("/")[-1] if "/" in href else href
+
+    # Nếu không khớp tuyệt đối nhưng có kết quả đầu tiên
+    first_row = rows.first
+    cells = first_row.locator("td")
+    if await cells.count() >= 1:
+        edit_link = cells.nth(0).locator("a")
+        if await edit_link.count() > 0:
+            href = (await edit_link.get_attribute("href")) or ""
+            return href.split("/")[-1] if "/" in href else href
+
+    return None
+
+
+async def update_user_clients_on_page(page: Page, user_id: str, client_names: List[str]) -> Tuple[bool, List[str]]:
+    """Phân quyền các client cho user trên màn hình UserClient."""
+    user_client_url = f"https://iam.ggg.com.vn/Identity/UserClient/{user_id}"
+    await page.goto(user_client_url, wait_until="networkidle", timeout=30000)
+
+    rows = page.locator("table tbody tr")
+    count = await rows.count()
+    if count == 0:
+        return False, []
+
+    clean_targets = [c.strip() for c in client_names if c.strip()]
+    normalized_targets = [_normalize_text(c) for c in clean_targets]
+    checked_clients: List[str] = []
+
+    for i in range(count):
+        row = rows.nth(i)
+        label_loc = row.locator("label.col-form-label")
+        if await label_loc.count() > 0:
+            label_text = (await label_loc.inner_text()).strip()
+        else:
+            tds = row.locator("td")
+            label_text = (await tds.nth(1).inner_text()).strip() if await tds.count() > 1 else (await row.inner_text()).strip()
+
+        norm_label = _normalize_text(label_text)
+        if not norm_label:
+            continue
+
+        matched_target = None
+        for orig_target, norm_target in zip(clean_targets, normalized_targets):
+            if norm_label == norm_target or norm_target in norm_label:
+                matched_target = orig_target
+                break
+
+        if matched_target:
+            chk = row.locator("input[type='checkbox']")
+            if await chk.count() > 0:
+                if not await chk.is_checked():
+                    switch_loc = row.locator("label.switch")
+                    if await switch_loc.count() > 0:
+                        await switch_loc.click()
+                    else:
+                        await chk.check(force=True)
+                    try:
+                        if not await chk.is_checked():
+                            await chk.check(force=True)
+                    except Exception:
+                        pass
+            if matched_target not in checked_clients:
+                checked_clients.append(matched_target)
+
+    # Save changes
+    save_btn = page.locator("button[type='submit']:has-text('Save changes'), button:has-text('Save changes'), input[type='submit'][value*='Save']").first
+    if await save_btn.count() > 0:
+        await save_btn.scroll_into_view_if_needed()
+        await save_btn.click()
+        await _safe_wait_network_idle(page, 15000)
+
+    return True, checked_clients
+
+
+async def process_bulk_sso_item(
+    system_username: str,
+    sso_user: str,
+    sso_pass: str,
+    action: str,
+    row: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Xử lý một dòng dữ liệu cho 1 trong 5 hành động:
+    1. 'create': Tạo mới tài khoản
+    2. 'update_pass': Update mật khẩu & mở khóa
+    3. 'lock': Khóa tài khoản
+    4. 'update_permissions': Update quyền User & Clients
+    5. 'update_info': Cập nhật thông tin (Email, SĐT, User Type)
+    """
+    user_name = str(row.get("user_name") or "").strip()
+    if not user_name:
+        return {"success": False, "user_name": "", "action": action, "message": "User Name không được để trống."}
+
+    email = str(row.get("email") or "").strip()
+    phone_number = str(row.get("phone_number") or "").strip()
+    user_type = str(row.get("user_type") or "0").strip()
+    pass_word = str(row.get("pass_word") or "").strip()
+    update_quyen = str(row.get("update_quyen") or "").strip()
+
+    async with async_playwright() as p:
+        browser, context = await _create_user_playwright_context(p, system_username)
+        try:
+            page = await context.new_page()
+
+            # Đảm bảo đã đăng nhập vào IAM
+            await page.goto("https://iam.ggg.com.vn/Identity/Users", wait_until="networkidle", timeout=30000)
+            await _ensure_iam_logged_in(page, context, system_username, sso_user, sso_pass)
+
+            # -------------------------------------------------------------
+            # HÀNH ĐỘNG 1: TẠO MỚI TÀI KHOẢN (CREATE)
+            # -------------------------------------------------------------
+            if action == "create":
+                # Kiểm tra SĐT nếu có
+                current_phone = phone_number
+                if current_phone:
+                    if await check_iam_phone_exists(page, current_phone):
+                        for _ in range(30):
+                            current_phone = increment_phone_number(current_phone, 2)
+                            if not await check_iam_phone_exists(page, current_phone):
+                                break
+
+                # Bấm Add User
+                await page.goto("https://iam.ggg.com.vn/Identity/Users", wait_until="networkidle", timeout=30000)
+                add_user_btn = page.locator("a:has-text('Add User'), button:has-text('Add User'), a[href*='Create']").first
+                if await add_user_btn.count() > 0:
+                    await add_user_btn.click()
+                    await _safe_wait_network_idle(page, 20000)
+                else:
+                    await page.goto("https://iam.ggg.com.vn/Identity/User/Create", wait_until="networkidle", timeout=30000)
+
+                await page.wait_for_selector("#UserName, input[name='UserName']", timeout=20000)
+
+                # Điền thông tin cơ bản
+                await page.fill("#UserName, input[name='UserName']", user_name)
+                await page.fill("#Email, input[name='Email']", email)
+
+                type_loc = page.locator("#UserType, input[name='UserType']").first
+                if await type_loc.count() > 0:
+                    await type_loc.fill(user_type or "0")
+
+                if current_phone:
+                    phone_loc = page.locator("#PhoneNumber, input[name='PhoneNumber']").first
+                    if await phone_loc.count() > 0:
+                        await phone_loc.fill(current_phone)
+
+                # Quy chuẩn: User Access Failed Count mặc định = 0, Lockout End xóa trắng
+                fail_loc = page.locator("#AccessFailedCount, input[name='AccessFailedCount']").first
+                if await fail_loc.count() > 0:
+                    await fail_loc.fill("0")
+
+                lock_end_loc = page.locator("#LockoutEnd, input[name='LockoutEnd']").first
+                if await lock_end_loc.count() > 0:
+                    await lock_end_loc.fill("")
+
+                # Nhấn Save User
+                save_btn = page.locator("button:has-text('Save User'), button[type='submit']:has-text('Save'), input[type='submit'][value*='Save']").first
+                await save_btn.scroll_into_view_if_needed()
+                await save_btn.click()
+                await _safe_wait_network_idle(page, 20000)
+
+                # Kiểm tra lỗi validation
+                val_errors = page.locator(".text-danger, .validation-summary-errors, .alert-danger")
+                if await val_errors.count() > 0:
+                    err_texts = []
+                    for idx in range(await val_errors.count()):
+                        txt = (await val_errors.nth(idx).inner_text()).strip()
+                        if txt and not txt.startswith("*") and txt not in err_texts:
+                            err_texts.append(txt)
+                    if err_texts:
+                        return {
+                            "success": False,
+                            "user_name": user_name,
+                            "action": action,
+                            "message": f"Không thể tạo user: {'; '.join(err_texts)}"
+                        }
+
+                # Tìm user_id vừa tạo
+                user_id = await find_iam_user_id(page, user_name)
+
+                # Mở trang UserProfile để đảm bảo Lockout Enabled = False
+                if user_id:
+                    profile_url = f"https://iam.ggg.com.vn/Identity/UserProfile/{user_id}"
+                    await page.goto(profile_url, wait_until="networkidle", timeout=30000)
+                    await set_user_lockout_fields(page, lockout_enabled=False, access_failed_count=0, lockout_end="")
+                    save_p = page.locator("button.btn:has-text('Save User'), button[type='submit']:has-text('Save')").first
+                    if await save_p.count() > 0:
+                        await save_p.scroll_into_view_if_needed()
+                        await save_p.click()
+                        await _safe_wait_network_idle(page, 15000)
+
+                # Đổi mật khẩu
+                new_pwd = pass_word if pass_word else generate_compliant_password(10)
+                if user_id:
+                    change_pwd_url = f"https://iam.ggg.com.vn/Identity/UserChangePassword/{user_id}"
+                    await page.goto(change_pwd_url, wait_until="networkidle", timeout=30000)
+                    await page.wait_for_selector("#Password", timeout=15000)
+                    await page.fill("#Password", new_pwd)
+                    await page.fill("#ConfirmPassword", new_pwd)
+                    submit_pwd = page.locator("button[type='submit']:has-text('Change Password')").first
+                    if await submit_pwd.count() > 0:
+                        await submit_pwd.click()
+                        await _safe_wait_network_idle(page, 15000)
+
+                # Phân quyền nếu có
+                assigned_clients: List[str] = []
+                if user_id and update_quyen:
+                    client_list = [c.strip() for c in re.split(r"[,;\n\r]+", update_quyen) if c.strip()]
+                    if client_list:
+                        _, assigned_clients = await update_user_clients_on_page(page, user_id, client_list)
+
+                return {
+                    "success": True,
+                    "user_name": user_name,
+                    "action": action,
+                    "new_password": new_pwd,
+                    "assigned_clients": assigned_clients,
+                    "message": f"Tạo user '{user_name}' thành công! Mật khẩu: {new_pwd}" + (f" | Phân {len(assigned_clients)} quyền" if assigned_clients else "")
+                }
+
+            # -------------------------------------------------------------
+            # HÀNH ĐỘNG 2: UPDATE PASS & MỞ KHÓA (UPDATE_PASS)
+            # -------------------------------------------------------------
+            elif action == "update_pass":
+                user_id = await find_iam_user_id(page, user_name)
+                if not user_id:
+                    return {
+                        "success": False,
+                        "user_name": user_name,
+                        "action": action,
+                        "message": f"Không tìm thấy tài khoản '{user_name}' trên hệ thống IAM."
+                    }
+
+                # Vào UserProfile: Kiểm tra UserType, xóa Lockout End, đặt AccessFailedCount = 0, LockoutEnabled = false
+                profile_url = f"https://iam.ggg.com.vn/Identity/UserProfile/{user_id}"
+                await page.goto(profile_url, wait_until="networkidle", timeout=30000)
+
+                # Kiểm tra LDAP/AD
+                type_loc = page.locator("#UserType, input[name='UserType']").first
+                if await type_loc.count() > 0:
+                    val = (await type_loc.input_value()).strip()
+                    if val == "1":
+                        return {
+                            "success": False,
+                            "user_name": user_name,
+                            "action": action,
+                            "is_ldap": True,
+                            "message": "Tài khoản đồng bộ từ LDAP (AD), vui lòng liên hệ Helpdesk đổi pass mail."
+                        }
+
+                await set_user_lockout_fields(page, lockout_enabled=False, access_failed_count=0, lockout_end="")
+
+                save_btn = page.locator("button.btn:has-text('Save User'), button[type='submit']:has-text('Save')").first
+                if await save_btn.count() > 0:
+                    await save_btn.scroll_into_view_if_needed()
+                    await save_btn.click()
+                    await _safe_wait_network_idle(page, 15000)
+
+                # Đổi mật khẩu
+                new_pwd = pass_word if pass_word else generate_compliant_password(10)
+                change_pwd_url = f"https://iam.ggg.com.vn/Identity/UserChangePassword/{user_id}"
+                await page.goto(change_pwd_url, wait_until="networkidle", timeout=30000)
+                await page.wait_for_selector("#Password", timeout=15000)
+                await page.fill("#Password", new_pwd)
+                await page.fill("#ConfirmPassword", new_pwd)
+                submit_pwd = page.locator("button[type='submit']:has-text('Change Password')").first
+                if await submit_pwd.count() > 0:
+                    await submit_pwd.click()
+                    await _safe_wait_network_idle(page, 15000)
+
+                val_errors = page.locator(".text-danger, .validation-summary-errors")
+                if await val_errors.count() > 0:
+                    err = (await val_errors.first.inner_text()).strip()
+                    if err:
+                        return {
+                            "success": False,
+                            "user_name": user_name,
+                            "action": action,
+                            "message": f"Đổi mật khẩu thất bại: {err}"
+                        }
+
+                return {
+                    "success": True,
+                    "user_name": user_name,
+                    "action": action,
+                    "new_password": new_pwd,
+                    "message": f"Đã mở khóa và đổi mật khẩu thành công: {new_pwd}"
+                }
+
+            # -------------------------------------------------------------
+            # HÀNH ĐỘNG 3: KHÓA TÀI KHOẢN (LOCK)
+            # -------------------------------------------------------------
+            elif action == "lock":
+                user_id = await find_iam_user_id(page, user_name)
+                if not user_id:
+                    return {
+                        "success": False,
+                        "user_name": user_name,
+                        "action": action,
+                        "message": f"Không tìm thấy tài khoản '{user_name}' trên hệ thống IAM."
+                    }
+
+                profile_url = f"https://iam.ggg.com.vn/Identity/UserProfile/{user_id}"
+                await page.goto(profile_url, wait_until="networkidle", timeout=30000)
+
+                # Quy chuẩn: User Lockout Enabled check button, User Access Failed Count nhập 4, User Lockout End nhập ngày hiện tại
+                now_str = datetime.now().strftime("%m/%d/%Y %I:%M %p")
+                await set_user_lockout_fields(page, lockout_enabled=True, access_failed_count=4, lockout_end=now_str)
+
+                save_btn = page.locator("button.btn:has-text('Save User'), button[type='submit']:has-text('Save')").first
+                if await save_btn.count() > 0:
+                    await save_btn.scroll_into_view_if_needed()
+                    await save_btn.click()
+                    await _safe_wait_network_idle(page, 15000)
+
+                return {
+                    "success": True,
+                    "user_name": user_name,
+                    "action": action,
+                    "detail": f"Lockout Enabled = TRUE, Access Failed Count = 4, Lockout End = {now_str}",
+                    "message": f"Đã khóa tài khoản '{user_name}' thành công!"
+                }
+
+            # -------------------------------------------------------------
+            # HÀNH ĐỘNG 4: UPDATE QUYỀN (UPDATE_PERMISSIONS)
+            # -------------------------------------------------------------
+            elif action == "update_permissions":
+                user_id = await find_iam_user_id(page, user_name)
+                if not user_id:
+                    return {
+                        "success": False,
+                        "user_name": user_name,
+                        "action": action,
+                        "message": f"Không tìm thấy tài khoản '{user_name}' trên hệ thống IAM."
+                    }
+
+                if not update_quyen:
+                    return {
+                        "success": False,
+                        "user_name": user_name,
+                        "action": action,
+                        "message": "Không có thông tin quyền cần gán (cột UPDATE QUYEN trống)."
+                    }
+
+                client_list = [c.strip() for c in re.split(r"[,;\n\r]+", update_quyen) if c.strip()]
+                ok, assigned_clients = await update_user_clients_on_page(page, user_id, client_list)
+                if not ok:
+                    return {
+                        "success": False,
+                        "user_name": user_name,
+                        "action": action,
+                        "message": "Không tải được bảng danh sách quyền client trên IAM."
+                    }
+
+                return {
+                    "success": True,
+                    "user_name": user_name,
+                    "action": action,
+                    "assigned_clients": assigned_clients,
+                    "message": f"Đã cập nhật thành công {len(assigned_clients)} quyền client cho user '{user_name}'!"
+                }
+
+            # -------------------------------------------------------------
+            # HÀNH ĐỘNG 5: CẬP NHẬT THÔNG TIN (UPDATE_INFO)
+            # -------------------------------------------------------------
+            elif action == "update_info":
+                user_id = await find_iam_user_id(page, user_name)
+                if not user_id:
+                    return {
+                        "success": False,
+                        "user_name": user_name,
+                        "action": action,
+                        "message": f"Không tìm thấy tài khoản '{user_name}' trên hệ thống IAM."
+                    }
+
+                profile_url = f"https://iam.ggg.com.vn/Identity/UserProfile/{user_id}"
+                await page.goto(profile_url, wait_until="networkidle", timeout=30000)
+
+                updated_fields = []
+                if email:
+                    email_loc = page.locator("#Email, input[name='Email']").first
+                    if await email_loc.count() > 0:
+                        await email_loc.fill(email)
+                        updated_fields.append(f"Email: {email}")
+
+                if phone_number:
+                    phone_loc = page.locator("#PhoneNumber, input[name='PhoneNumber']").first
+                    if await phone_loc.count() > 0:
+                        await phone_loc.fill(phone_number)
+                        updated_fields.append(f"SĐT: {phone_number}")
+
+                if user_type:
+                    type_loc = page.locator("#UserType, input[name='UserType']").first
+                    if await type_loc.count() > 0:
+                        await type_loc.fill(user_type)
+                        updated_fields.append(f"UserType: {user_type}")
+
+                save_btn = page.locator("button.btn:has-text('Save User'), button[type='submit']:has-text('Save')").first
+                if await save_btn.count() > 0:
+                    await save_btn.scroll_into_view_if_needed()
+                    await save_btn.click()
+                    await _safe_wait_network_idle(page, 15000)
+
+                msg = f"Đã cập nhật thông tin cho user '{user_name}' ({', '.join(updated_fields)})" if updated_fields else f"Không có thông tin mới cần cập nhật cho user '{user_name}'."
+                return {
+                    "success": True,
+                    "user_name": user_name,
+                    "action": action,
+                    "message": msg
+                }
+
+            else:
+                return {
+                    "success": False,
+                    "user_name": user_name,
+                    "action": action,
+                    "message": f"Hành động '{action}' không được hỗ trợ."
+                }
+
+        finally:
+            await browser.close()

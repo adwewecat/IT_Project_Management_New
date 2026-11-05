@@ -80,3 +80,53 @@ export interface SSOCreateNCCUserResponse {
   is_duplicate_phone?: boolean;
 }
 
+
+
+export interface SSOBulkRowItem {
+  user_name: string;
+  email?: string;
+  user_type?: string;
+  phone_number?: string;
+  pass_word?: string;
+  trang_thai?: string;
+  update_quyen?: string;
+}
+
+export interface SSOBulkParseResponse {
+  success: boolean;
+  message: string;
+  rows: SSOBulkRowItem[];
+  total_rows: number;
+}
+
+export type SSOBulkActionType = 'create' | 'update_pass' | 'lock' | 'update_permissions' | 'update_info';
+
+export interface SSOBulkProcessItemRequest {
+  action: SSOBulkActionType;
+  user_name: string;
+  email?: string;
+  user_type?: string;
+  phone_number?: string;
+  pass_word?: string;
+  trang_thai?: string;
+  update_quyen?: string;
+}
+
+export interface SSOBulkProcessItemResponse {
+  success: boolean;
+  user_name: string;
+  action: string;
+  message: string;
+  detail?: string;
+  new_password?: string;
+  assigned_clients?: string[];
+  is_ldap?: boolean;
+}
+
+export interface SSOBulkRowProgress extends SSOBulkRowItem {
+  id: string;
+  status: 'idle' | 'processing' | 'success' | 'error';
+  resultMessage?: string;
+  newPassword?: string;
+  assignedClients?: string[];
+}

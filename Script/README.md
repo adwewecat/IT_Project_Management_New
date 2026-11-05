@@ -6580,3 +6580,47 @@ equested_at (DATETIME).
   * TestClient Backend: Thử nghiệm không có key (401), key sai (401), key đúng qua query param (200 OK), key đúng qua header (200 OK). Tất cả đều chính xác 100%.
   * Build Frontend: `cmd /c "npm --prefix frontend run build"` đạt exit code 0 (`✓ built in 4.63s`).
   * Backend Compileall: `backend\.venv\Scripts\python.exe -m compileall backend\app` đạt 0 syntax error.
+
+
+---
+
+### [2026-11-05] PHÁT TRIỂN TÍNH NĂNG IMPORT XỬ LÝ HÀNG LOẠT TÀI KHOẢN TRÊN SSO & IAM
+
+- **Yêu cầu & Mục tiêu**:
+  * Bổ sung tính năng **Import Xử Lý Hàng Loạt** tại trang *Xử Lý Tài Khoản SSO & IAM* (`/app/sso-management`).
+  * Tất cả 5 tác vụ dùng chung **1 template Excel chuẩn 7 cột**:
+    1. Cột A: `User Name`
+    2. Cột B: `Email`
+    3. Cột C: `User Type (0-Local,1-AD,2-Empl)`
+    4. Cột D: `User Phone Number`
+    5. Cột E: `Pass`
+    6. Cột F: `TRANG THAI`
+    7. Cột G: `UPDATE QUYEN`
+  * Hỗ trợ 5 tác vụ chuyên sâu theo đúng quy chuẩn nghiệp vụ:
+    1. **Tạo mới tài khoản**: `User Access Failed Count = 0`, `User Lockout End` xóa trắng, `User Lockout Enabled = false`, đổi pass (từ file hoặc random), phân quyền client (từ cột `UPDATE QUYEN`).
+    2. **Update Pass & Mở khóa**: Cập nhật mật khẩu theo cột `Pass`, `User Access Failed Count = 0`, `User Lockout End` xóa trắng, `User Lockout Enabled = false`.
+    3. **Khóa tài khoản**: `User Lockout Enabled = true` (check switch), `User Access Failed Count = 4`, `User Lockout End = ngày giờ hiện tại`.
+    4. **Update Quyền**: Vào `User & Clients`, check các quyền được khai báo trong cột `UPDATE QUYEN`.
+    5. **Cập nhật thông tin**: Cập nhật lại Email, SĐT hoặc User Type theo các cột tương ứng trong file.
+
+- **Kiến trúc & Triển khai**:
+  * **Backend**:
+    - Thư viện: `openpyxl` tạo template mẫu và phân tích cú pháp Excel linh hoạt (tự động nhận diện header không phân biệt hoa thường, dấu cách).
+    - API `GET /api/v1/sso/bulk-template`: Tải file Excel mẫu chuẩn 7 cột `Mau_Import_SSO_IAM.xlsx`.
+    - API `POST /api/v1/sso/parse-excel`: Upload và xem trước danh sách user đọc từ file Excel.
+    - API `POST /api/v1/sso/bulk-process-item`: Xử lý tuần tự từng user, tự động toggle switch `User Lockout Enabled`, điền `AccessFailedCount`, `LockoutEnd`, đổi pass và đối soát phân quyền `User & Clients`.
+  * **Frontend**:
+    - Nút bấm mới: **`📁 Import Xử Lý Hàng Loạt`** (màu tím `#7C3AED` nổi bật trên thanh Action Toolbar).
+    - Modal `SsoBulkImportModal.tsx`:
+      + Tải file mẫu 1-chạm.
+      + Chọn file kéo thả / duyệt file.
+      + 5 Thẻ lựa chọn tác vụ trực quan kèm tóm tắt quy chuẩn.
+      + Bảng xem trước dữ liệu với thanh cuộn ngang/dọc độc lập (`TopScrollTable`).
+      + Thanh tiến độ (Progress bar) % và đếm số lượng: Tổng số, Thành công, Lỗi.
+      + Trạng thái xử lý real-time từng dòng (Chờ chạy $\rightarrow$ Đang chạy $\rightarrow$ Xong / Lỗi kèm mật khẩu mới và nút copy).
+      + Nút điều khiển: **Bắt đầu xử lý**, **Dừng lại (Stop)**, **Thử lại các dòng lỗi**.
+
+- **Kiểm thử & Đóng gói**:
+  * Backend Smoke Test: `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
+  * TestClient: Thử nghiệm tải template `.xlsx` và phân tích ngược lại đạt 100% chính xác.
+  * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành với exit code 0 (`✓ built in 4.09s`), `frontend/dist/` sạch sẽ 100%.

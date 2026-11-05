@@ -21,11 +21,13 @@ import {
   UserPlus,
   ChevronDown,
   ChevronUp,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { TopScrollTable } from '../../components/ui/TopScrollTable';
+import { SsoBulkImportModal } from '../../components/sso/SsoBulkImportModal';
 import {
   ssoManagementService,
 } from '../../services/ssoManagementService';
@@ -145,6 +147,7 @@ export const SsoManagementPage: React.FC = () => {
   const [inputNccEmail, setInputNccEmail] = useState<string>('');
   const [inputNccPhone, setInputNccPhone] = useState<string>('0908119345');
   const [creatingNccUser, setCreatingNccUser] = useState<boolean>(false);
+  const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState<boolean>(false);
   const [nccConfiguredClients, setNccConfiguredClients] = useState<string[]>(DEFAULT_NCC_CLIENTS);
   const [showNccPermissionsAccordion, setShowNccPermissionsAccordion] = useState<boolean>(false);
   const [nccNewClientInput, setNccNewClientInput] = useState<string>('');
@@ -927,6 +930,23 @@ export const SsoManagementPage: React.FC = () => {
 
           {/* Action Buttons */}
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <Button
+              variant="primary"
+              onClick={() => setIsBulkImportModalOpen(true)}
+              style={{
+                backgroundColor: '#7C3AED',
+                borderColor: '#7C3AED',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontWeight: 600,
+              }}
+            >
+              <FileSpreadsheet size={15} />
+              <span>📁 Import Xử Lý Hàng Loạt</span>
+            </Button>
+
             <Button
               variant="primary"
               onClick={handleOpenCreateNccModal}
@@ -2403,6 +2423,17 @@ export const SsoManagementPage: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* --- MODAL 6: IMPORT XỬ LÝ HÀNG LOẠT --- */}
+      <SsoBulkImportModal
+        isOpen={isBulkImportModalOpen}
+        onClose={() => setIsBulkImportModalOpen(false)}
+        onSuccess={() => {
+          if (searchQuery.trim()) {
+            handleSearch();
+          }
+        }}
+      />
     </div>
   );
 };

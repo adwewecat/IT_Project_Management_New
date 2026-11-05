@@ -10,6 +10,9 @@ import {
   SSOAssignClientsResponse,
   SSOCreateNCCUserRequest,
   SSOCreateNCCUserResponse,
+  SSOBulkParseResponse,
+  SSOBulkProcessItemRequest,
+  SSOBulkProcessItemResponse,
 } from '../types/ssoManagement';
 
 export const ssoManagementService = {
@@ -47,5 +50,34 @@ export const ssoManagementService = {
     const res = await apiClient.post<SSOCreateNCCUserResponse>('/sso/create-ncc-user', payload);
     return res.data;
   },
-};
 
+  async downloadBulkTemplate(): Promise<void> {
+    const res = await apiClient.get('/sso/bulk-template', {
+      responseType: 'blob',
+    });
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'Mau_Import_SSO_IAM.xlsx');
+    document.body.appendChild(link);
+    link.click();
+    link.parentNode?.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
+  async parseExcel(file: File): Promise<SSOBulkParseResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await apiClient.post<SSOBulkParseResponse>('/sso/parse-excel', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return res.data;
+  },
+
+  async processBulkItem(payload: SSOBulkProcessItemRequest): Promise<SSOBulkProcessItemResponse> {
+    const res = await apiClient.post<SSOBulkProcessItemResponse>('/sso/bulk-process-item', payload);
+    return res.data;
+  },
+};

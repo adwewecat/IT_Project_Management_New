@@ -89,3 +89,42 @@ class SSOCreateNCCUserResponse(BaseModel):
     assigned_clients: List[str] = []
     is_duplicate_phone: bool = False
 
+
+
+class SSOBulkRowItem(BaseModel):
+    user_name: str
+    email: Optional[str] = ""
+    user_type: Optional[str] = "0"
+    phone_number: Optional[str] = ""
+    pass_word: Optional[str] = ""
+    trang_thai: Optional[str] = ""
+    update_quyen: Optional[str] = ""
+
+
+class SSOBulkParseResponse(BaseModel):
+    success: bool
+    message: str
+    rows: List[SSOBulkRowItem] = []
+    total_rows: int = 0
+
+
+class SSOBulkProcessItemRequest(BaseModel):
+    action: str = Field(..., description="1 trong 5: create, update_pass, lock, update_permissions, update_info")
+    user_name: str
+    email: Optional[str] = ""
+    user_type: Optional[str] = "0"
+    phone_number: Optional[str] = ""
+    pass_word: Optional[str] = ""
+    trang_thai: Optional[str] = ""
+    update_quyen: Optional[str] = ""
+
+
+class SSOBulkProcessItemResponse(BaseModel):
+    success: bool
+    user_name: str
+    action: str
+    message: str
+    detail: Optional[str] = None
+    new_password: Optional[str] = None
+    assigned_clients: List[str] = []
+    is_ldap: bool = False

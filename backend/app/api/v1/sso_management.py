@@ -1,12 +1,13 @@
 from __future__ import annotations
 import logging
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.api.deps import get_current_user, require_app_or_admin
 from app.schemas.auth import UserInfo
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
+from fastapi.responses import Response, StreamingResponse
 from app.schemas.sso_management import (
     SSOConfigRequest,
     SSOConfigResponse,
@@ -20,6 +21,10 @@ from app.schemas.sso_management import (
     SSOAssignClientsResponse,
     SSOCreateNCCUserRequest,
     SSOCreateNCCUserResponse,
+    SSOBulkRowItem,
+    SSOBulkParseResponse,
+    SSOBulkProcessItemRequest,
+    SSOBulkProcessItemResponse,
 )
 from app.services.sso_management_service import (
     get_user_sso_config,
@@ -29,6 +34,9 @@ from app.services.sso_management_service import (
     change_iam_user_password,
     assign_default_clients_to_user,
     create_iam_ncc_user,
+    generate_sso_bulk_template,
+    parse_sso_excel_file,
+    process_bulk_sso_item,
 )
 from app.services.log_service import log_service
 
@@ -407,3 +415,114 @@ async def create_ncc_user_endpoint(
         )
 
 
+
+
+@router.get("/bulk-template")
+def download_bulk_template(
+    current_user: UserInfo = Depends(require_app_or_admin),
+):
+    """Tải file Excel mẫu chuẩn 7 cột cho tác vụ Import Xử Lý Hàng Loạt."""
+    try:
+        content = generate_sso_bulk_template()
+        return Response(
+            content=content,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=Mau_Import_SSO_IAM.xlsx"},
+        )
+    except Exception as e:
+        logger.error(f"Lỗi tạo template Excel SSO: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi tạo file Excel mẫu: {e}",
+        )
+
+
+@router.post("/parse-excel", response_model=SSOBulkParseResponse)
+async def parse_excel(
+    file: UploadFile = File(...),
+    current_user: UserInfo = Depends(require_app_or_admin),
+):
+    """Tải lên file Excel và phân tích danh sách user để xem trước (preview)."""
+    if not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File tải lên bắt buộc phải có định dạng Excel (.xlsx hoặc .xls).",
+        )
+
+    try:
+        file_bytes = await file.read()
+        rows_data = parse_sso_excel_file(file_bytes)
+        row_items = [SSOBulkRowItem(**r) for r in rows_data]
+        return SSOBulkParseResponse(
+            success=True,
+            message=f"Đọc thành công {len(row_items)} dòng từ file Excel '{file.filename}'.",
+            rows=row_items,
+            total_rows=len(row_items),
+        )
+    except Exception as e:
+        logger.error(f"Lỗi phân tích file Excel '{file.filename}': {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Không thể đọc file Excel. Vui lòng kiểm tra định dạng file: {e}",
+        )
+
+
+@router.post("/bulk-process-item", response_model=SSOBulkProcessItemResponse)
+async def process_single_bulk_item(
+    req: SSOBulkProcessItemRequest,
+    current_user: UserInfo = Depends(require_app_or_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Xử lý 1 dòng trong danh sách Import Hàng Loạt:
+    - create: Tạo mới tài khoản
+    - update_pass: Update mật khẩu & mở khóa
+    - lock: Khóa tài khoản
+    - update_permissions: Update quyền User & Clients
+    - update_info: Cập nhật thông tin (Email, SĐT, User Type)
+    """
+    cfg = get_user_sso_config(db, current_user.username)
+    if not cfg or not cfg.sso_username or not cfg.sso_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Tài khoản '{current_user.username}' chưa cấu hình SSO. Vui lòng bấm 'Cấu Hình SSO' trước khi thực hiện.",
+        )
+
+    try:
+        res = await process_bulk_sso_item(
+            system_username=current_user.username,
+            sso_user=cfg.sso_username,
+            sso_pass=cfg.sso_password,
+            action=req.action,
+            row=req.model_dump(),
+        )
+
+        if res.get("success"):
+            log_service.record_log(
+                db=db,
+                nhom_quyen="APP",
+                man_hinh="SSO_MANAGEMENT",
+                hanh_dong=f"BULK_{req.action.upper()}",
+                noi_dung=f"Xử lý hàng loạt ({req.action}) cho user '{req.user_name}': {res.get('message')}",
+                user_thuchien=current_user.username,
+                current_user=current_user,
+            )
+
+        return SSOBulkProcessItemResponse(
+            success=res.get("success", False),
+            user_name=res.get("user_name", req.user_name),
+            action=req.action,
+            message=res.get("message", ""),
+            detail=res.get("detail"),
+            new_password=res.get("new_password"),
+            assigned_clients=res.get("assigned_clients", []),
+            is_ldap=res.get("is_ldap", False),
+        )
+    except Exception as e:
+        logger.error(f"Lỗi xử lý bulk item '{req.user_name}' ({req.action}): {e}", exc_info=True)
+        return SSOBulkProcessItemResponse(
+            success=False,
+            user_name=req.user_name,
+            action=req.action,
+            message=f"Lỗi thực thi: {str(e)}",
+        )
