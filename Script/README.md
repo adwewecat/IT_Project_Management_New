@@ -6494,3 +6494,46 @@ cc_restaurants) trên Database ITDEPT tại Server Production 172.16.8.25:1433.
   * Fix lỗi Network Error / Failed to fetch khi truy cập từ ngoài Internet (IP WAN 14.161.33.122):
     + Nguyên nhân: Code cũ hardcode gọi trực tiếp vào port 8000 (http://14.161.33.122:8000), nhưng Firewall/Router công ty chỉ mở duy nhất port 5001 ra ngoài Internet (port 8000 chỉ dùng nội bộ localhost cho backend). Trình duyệt từ bên ngoài gọi port 8000 bị timeout 21 giây (Failed to fetch).
     + Khắc phục: Chuẩn hóa piBaseUrl trong cả 2 component (ApiManagementSection.tsx và RestaurantNccApiModal.tsx) tự động dùng window.location.origin (ví dụ http://14.161.33.122:5001). Khi đó request đi qua port 5001 và được IIS reverse proxy mượt mà sang backend 8000 nội bộ, trả kết quả JSON tức thì và NCC bên ngoài cũng kết nối thành công.
+
+
+---
+
+### [2026-11-05] BỔ SUNG TÍNH NĂNG THEO DÕI LƯỢT REQUEST 24H & BẮT SPAM / QUÁ TẢI CÁC API
+
+- **Yêu cầu & Mục tiêu**:
+  * Ghi nhận và đo lường lưu lượng truy vấn của từng API trong vòng 24 giờ qua.
+  * Phát hiện kịp thời các đối tác / NCC gọi quá nhiều hoặc spam request gây quá tải server.
+  * Cảnh báo trực quan trên giao diện khi tần suất request vượt ngưỡng an toàn (> 500 req / 24h).
+  * Hỗ trợ xem danh sách chi tiết các lượt request gần nhất: Thời gian gọi, IP người gọi, Endpoint gọi, Mã trạng thái HTTP, Thời gian phản hồi (latency ms), User-Agent.
+
+- **Cơ sở dữ liệu & Cấu trúc bảng**:
+  * Đã tạo bảng dbo.MANAGED_API_LOGS trên CẢ 2 CƠ SỞ DỮ LIỆU:
+    1. Local Test DB (127.0.0.1:1433, DB: ITDEPT).
+    2. Production Server DB (172.16.8.25:1433, DB: ITDEPT).
+    * Các cột: id (BIGINT), pi_code (NVARCHAR), endpoint_called (NVARCHAR), client_ip (NVARCHAR), method (NVARCHAR), status_code (INT), 
+esponse_time_ms (INT), user_agent (NVARCHAR), query_params (NVARCHAR), 
+equested_at (DATETIME).
+    * Đã tạo Index [api_code, requested_at DESC] và [client_ip, requested_at DESC] để query siêu tốc (< 2ms).
+  * Đã bổ sung các cột thống kê tích lũy vào bảng dbo.MANAGED_APIS:
+    * 	otal_requests (INT DEFAULT 0)
+    * last_requested_at (DATETIME NULL)
+    * last_client_ip (NVARCHAR(100) NULL)
+  * Đã đồng bộ DDL vào Script/Full_SCRIPT_SQL_TABLE.sql và khai báo cơ chế tự tạo bảng phòng vệ trong ackend/app/main.py lifespan.
+
+- **Mã nguồn Backend & Frontend**:
+  * Backend:
+    - Model: ManagedAPILog trong ackend/app/models/managed_api.py.
+    - Schema: ManagedAPILogItem, ManagedAPILogListResponse trong ackend/app/schemas/managed_api.py.
+    - Service: log_api_request, get_api_requests_24h, get_api_logs trong ackend/app/services/managed_api_service.py.
+    - Hook: Tự động ghi nhận log trong ackend/app/api/v1/restaurants.py và ackend/app/api/v1/partner.py (ghi nhận cả trường hợp thành công 200, bị khóa 503, sai key 401).
+    - API Router: Thêm endpoint GET /api/v1/managed-apis/{api_code}/logs xem 50 log gần nhất.
+  * Frontend:
+    - Service: getApiLogs trong rontend/src/services/managedApiService.ts.
+    - UI Component: rontend/src/components/admin/ApiManagementSection.tsx:
+      + Thanh thống kê lưu lượng 24h: Badge số lượt gọi (xanh bình thường, đỏ nhấp nháy cảnh báo nếu > 500 req/24h), Lần gọi gần nhất, IP người gọi, Tổng lũy kế.
+      + Nút **📋 Xem Nhật Ký 24h**: Mở modal hiển thị bảng chi tiết các lượt request (Sticky header, thanh cuộn riêng, phân màu mã HTTP).
+
+- **Kiểm thử & Đóng gói (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Backend: TestClient và HTTP curl đạt 100% PASSED, tự động tăng bộ đếm 24h, ghi nhận đúng IP và độ trễ.
+  * Backend: python -m compileall app sạch sẽ 100%, 0 lỗi.
+  * Frontend: cmd /c 'npm --prefix frontend run build' hoàn thành exit code 0 (dist/ sạch sẽ, sẵn sàng copy sang server IIS).

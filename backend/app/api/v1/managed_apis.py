@@ -10,14 +10,16 @@ from app.schemas.managed_api import (
     ManagedAPIListResponse,
     ManagedAPICreate,
     ManagedAPIUpdate,
-    ManagedAPIToggle
+    ManagedAPIToggle,
+    ManagedAPILogItem,
+    ManagedAPILogListResponse
 )
 from app.services import managed_api_service
 
 router = APIRouter(prefix="/managed-apis", tags=["Managed APIs"])
 
 
-@router.get("", response_model=ManagedAPIListResponse, summary="Lấy danh sách các API đang được quản lý")
+@router.get("", response_model=ManagedAPIListResponse, summary="Lấy danh sách các API đang được quản lý kèm thống kê 24h")
 def list_apis(
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(get_current_user)
@@ -27,6 +29,24 @@ def list_apis(
         "success": True,
         "total": len(items),
         "items": items
+    }
+
+
+@router.get("/{api_code}/logs", response_model=ManagedAPILogListResponse, summary="Lấy danh sách nhật ký truy vấn trong 24h của API")
+def get_api_logs(
+    api_code: str,
+    limit: int = Query(50, ge=1, le=200, description="Số lượng bản ghi tối đa"),
+    hours: int = Query(24, ge=1, le=168, description="Số giờ xem lại (mặc định 24h)"),
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    logs = managed_api_service.get_api_logs(db, api_code, limit=limit, hours=hours)
+    total_24h = managed_api_service.get_api_requests_24h(db, api_code)
+    return {
+        "success": True,
+        "api_code": api_code,
+        "total_in_24h": total_24h,
+        "items": logs
     }
 
 
@@ -78,4 +98,3 @@ def delete_api(
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy cấu hình API.")
     return None
-

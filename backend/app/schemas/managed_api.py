@@ -40,6 +40,13 @@ class ManagedAPIItem(ManagedAPIBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+    # Thống kê lượt request & chống spam
+    requests_24h: int = Field(0, description="Số lượt gọi trong 24 giờ qua")
+    total_requests: int = Field(0, description="Tổng số lượt gọi từ trước đến nay")
+    last_requested_at: Optional[datetime] = Field(None, description="Thời điểm gọi gần nhất")
+    last_client_ip: Optional[str] = Field(None, description="Địa chỉ IP gọi gần nhất")
+    is_high_traffic: bool = Field(False, description="Cảnh báo tần suất cao / nghi vấn spam (> 500 req/24h)")
+
     model_config = {"from_attributes": True}
 
 
@@ -48,3 +55,24 @@ class ManagedAPIListResponse(BaseModel):
     total: int
     items: List[ManagedAPIItem]
 
+
+class ManagedAPILogItem(BaseModel):
+    id: int
+    api_code: str
+    endpoint_called: Optional[str] = None
+    client_ip: Optional[str] = None
+    method: str = "GET"
+    status_code: int = 200
+    response_time_ms: Optional[int] = 0
+    user_agent: Optional[str] = None
+    query_params: Optional[str] = None
+    requested_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ManagedAPILogListResponse(BaseModel):
+    success: bool = True
+    api_code: str
+    total_in_24h: int
+    items: List[ManagedAPILogItem]

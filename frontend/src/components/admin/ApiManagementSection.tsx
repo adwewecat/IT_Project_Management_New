@@ -12,7 +12,11 @@ import {
   CheckCircle,
   XCircle,
   Code,
-  KeyRound
+  KeyRound,
+  Activity,
+  AlertTriangle,
+  FileText,
+  Clock
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
@@ -21,7 +25,8 @@ import {
   managedApiService,
   ManagedAPIItem,
   ManagedAPICreatePayload,
-  ManagedAPIUpdatePayload
+  ManagedAPIUpdatePayload,
+  ManagedAPILogItem
 } from '../../services/managedApiService';
 
 export const ApiManagementSection: React.FC = () => {
@@ -57,7 +62,14 @@ export const ApiManagementSection: React.FC = () => {
     data: any;
   } | null>(null);
 
-  // Tu dong nhan dien Base URL API theo dung origin va port thuc te cua web/proxy (vd: http://14.161.33.122:5001)
+  // Modal Xem Nhật Ký Truy Vấn 24h & Bắt Spam
+  const [logsModalOpen, setLogsModalOpen] = useState<boolean>(false);
+  const [selectedApiForLogs, setSelectedApiForLogs] = useState<ManagedAPIItem | null>(null);
+  const [apiLogs, setApiLogs] = useState<ManagedAPILogItem[]>([]);
+  const [logsLoading, setLogsLoading] = useState<boolean>(false);
+  const [totalLogs24h, setTotalLogs24h] = useState<number>(0);
+
+  // Tự động nhận diện Base URL API theo đúng origin và port thực tế của web/proxy (vd: http://14.161.33.122:5001)
   const apiBaseUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
   const fetchApis = useCallback(async () => {
@@ -89,7 +101,7 @@ export const ApiManagementSection: React.FC = () => {
     const newStatus = !apiItem.is_enabled;
     try {
       const updated = await managedApiService.toggleApi(apiItem.id, newStatus);
-      setApis((prev) => prev.map((item) => (item.id === apiItem.id ? updated : item)));
+      setApis((prev) => prev.map((item) => (item.id === apiItem.id ? { ...item, ...updated } : item)));
     } catch (err) {
       alert('Không thể thay đổi trạng thái API. Vui lòng thử lại!');
     } finally {
@@ -153,7 +165,7 @@ export const ApiManagementSection: React.FC = () => {
           api_key: formData.api_key || undefined
         };
         const updated = await managedApiService.updateApi(editingApi.id, updatePayload);
-        setApis((prev) => prev.map((item) => (item.id === editingApi.id ? updated : item)));
+        setApis((prev) => prev.map((item) => (item.id === editingApi.id ? { ...item, ...updated } : item)));
       } else {
         if (!formData.api_code.trim()) {
           formData.api_code = formData.api_name
@@ -215,6 +227,8 @@ export const ApiManagementSection: React.FC = () => {
         responseTimeMs: duration,
         data
       });
+      // Tự động làm mới danh sách để cập nhật số lượt request
+      fetchApis();
     } catch (err: any) {
       const duration = Math.round(performance.now() - startTime);
       setTestResult({
@@ -225,6 +239,26 @@ export const ApiManagementSection: React.FC = () => {
       });
     } finally {
       setTestLoading(false);
+    }
+  };
+
+  // Mở modal xem logs 24h
+  const handleOpenLogs = async (apiItem: ManagedAPIItem) => {
+    setSelectedApiForLogs(apiItem);
+    setLogsModalOpen(true);
+    await loadApiLogs(apiItem.api_code);
+  };
+
+  const loadApiLogs = async (apiCode: string) => {
+    setLogsLoading(true);
+    try {
+      const res = await managedApiService.getApiLogs(apiCode, 50, 24);
+      setApiLogs(res.items || []);
+      setTotalLogs24h(res.total_in_24h || 0);
+    } catch (err) {
+      console.error('Lỗi nạp nhật ký API:', err);
+    } finally {
+      setLogsLoading(false);
     }
   };
 
@@ -251,31 +285,44 @@ export const ApiManagementSection: React.FC = () => {
               width: '42px',
               height: '42px',
               borderRadius: '10px',
-              backgroundColor: '#e0f2fe',
-              color: '#0284c7',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              color: '#059669',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              border: '1px solid rgba(16, 185, 129, 0.2)'
             }}
           >
             <Globe size={22} />
           </div>
           <div>
-            <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
-              Cổng Quản Lý API & Điều Khiển Bật / Tắt (API Gateway)
+            <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+              Cổng Quản Lý API & Giám Sát Lưu Lượng 24h
             </h2>
-            <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Quản lý tập trung các liên kết API đối ngoại, tra cứu nhanh, kiểm tra trạng thái và chủ động Bật/Tắt API khi cần thiết.
+            <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+              Quản lý tập trung các liên kết API mở ra bên ngoài, theo dõi số lượt request 24h, bắt spam và điều khiển BẬT/TẮT tức thì
             </p>
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <Button variant="secondary" size="sm" leftIcon={<RefreshCw size={14} />} onClick={fetchApis} isLoading={loading}>
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<RefreshCw size={14} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />}
+            onClick={fetchApis}
+            disabled={loading}
+          >
             Làm Mới
           </Button>
-          <Button variant="primary" size="sm" leftIcon={<Plus size={15} />} onClick={handleOpenCreate}>
-            Thêm API Mới
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<Plus size={15} />}
+            onClick={handleOpenCreate}
+            style={{ fontWeight: 600 }}
+          >
+            + Thêm API Mới
           </Button>
         </div>
       </div>
@@ -319,6 +366,8 @@ export const ApiManagementSection: React.FC = () => {
             const isToggling = togglingId === item.id;
             const fullPrimaryUrl = `${apiBaseUrl}${item.endpoint_path}`;
             const fullAliasUrl = item.alias_path ? `${apiBaseUrl}${item.alias_path}` : null;
+            const requests24h = item.requests_24h || 0;
+            const isHigh = item.is_high_traffic || requests24h >= 500;
 
             return (
               <div
@@ -445,6 +494,80 @@ export const ApiManagementSection: React.FC = () => {
                     {item.description}
                   </p>
                 )}
+
+                {/* Thanh Đo Lường Lượt Request 24h & Cảnh Báo Spam */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '8px 12px',
+                    backgroundColor: isHigh ? '#fef2f2' : 'rgba(59, 130, 246, 0.05)',
+                    borderRadius: '8px',
+                    border: isHigh ? '1px solid #fecaca' : '1px solid rgba(59, 130, 246, 0.15)',
+                    flexWrap: 'wrap'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Activity size={15} color={isHigh ? '#ef4444' : '#2563eb'} />
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      Lưu lượng 24h qua:
+                    </span>
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        backgroundColor: isHigh ? '#fee2e2' : requests24h > 0 ? '#dcfce7' : '#f1f5f9',
+                        color: isHigh ? '#b91c1c' : requests24h > 0 ? '#15803d' : '#64748b',
+                        border: isHigh ? '1px solid #f87171' : '1px solid transparent'
+                      }}
+                    >
+                      {requests24h} lượt request
+                    </span>
+                    {isHigh && (
+                      <span style={{ fontSize: '11px', color: '#dc2626', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <AlertTriangle size={13} /> Cảnh báo tần suất cao / Nguy cơ spam!
+                      </span>
+                    )}
+                  </div>
+
+                  <span style={{ color: 'var(--border-color)' }}>|</span>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    <Clock size={13} />
+                    <span>Lần gọi gần nhất:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {item.last_requested_at ? new Date(item.last_requested_at).toLocaleString('vi-VN') : 'Chưa có'}
+                    </span>
+                    {item.last_client_ip && (
+                      <span style={{ fontFamily: 'monospace', backgroundColor: 'var(--bg-secondary)', padding: '1px 5px', borderRadius: '4px', fontSize: '11px' }}>
+                        (IP: {item.last_client_ip})
+                      </span>
+                    )}
+                  </div>
+
+                  <span style={{ color: 'var(--border-color)' }}>|</span>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    <span>Tổng lũy kế:</span>
+                    <strong style={{ color: 'var(--text-primary)' }}>{item.total_requests || 0} lượt</strong>
+                  </div>
+
+                  <div style={{ marginLeft: 'auto' }}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<FileText size={13} color="#2563eb" />}
+                      onClick={() => handleOpenLogs(item)}
+                      style={{ fontSize: '11.5px', padding: '3px 10px' }}
+                      title="Xem danh sách chi tiết các lượt gọi, IP và độ trễ phản hồi trong 24h"
+                    >
+                      Xem Nhật Ký 24h
+                    </Button>
+                  </div>
+                </div>
 
                 {/* Cụm Link API */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -588,7 +711,7 @@ export const ApiManagementSection: React.FC = () => {
                         leftIcon={<Trash2 size={13} style={{ color: '#ef4444' }} />}
                         onClick={() => handleDelete(item)}
                         style={{ fontSize: '11.5px', padding: '3px 10px', color: '#ef4444' }}
-                        title="Xóa API này"
+                        title="Xóa cấu hình API này"
                       >
                         Xóa
                       </Button>
@@ -601,315 +724,464 @@ export const ApiManagementSection: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Thêm Mới / Chỉnh Sửa API */}
-      <Modal
-        isOpen={formModalOpen}
-        onClose={() => setFormModalOpen(false)}
-        title={editingApi ? '✏️ Chỉnh Sửa Cấu Hình API' : '➕ Thêm Cấu Hình API Mới'}
-        maxWidth="600px"
-      >
-        <form onSubmit={handleSubmitForm} style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px' }}>
-          <div>
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>
-              Tên API <span style={{ color: '#ef4444' }}>*</span>
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="Ví dụ: API Thông Tin Nhà Hàng Cho NCC"
-              value={formData.api_name}
-              onChange={(e) => setFormData({ ...formData, api_name: e.target.value })}
+      {/* MODAL: Xem Nhật Ký Truy Vấn 24h & Bắt Spam */}
+      {logsModalOpen && selectedApiForLogs && (
+        <Modal
+          isOpen={logsModalOpen}
+          onClose={() => setLogsModalOpen(false)}
+          title={`📋 Nhật Ký Truy Vấn 24h - ${selectedApiForLogs.api_name}`}
+          maxWidth="900px"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '75vh' }}>
+            {/* Thanh thông tin tổng quan modal */}
+            <div
               style={{
-                width: '100%',
-                padding: '8px 12px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)'
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '10px 14px',
+                backgroundColor: 'var(--bg-secondary)',
+                borderRadius: '8px',
+                fontSize: '12.5px',
+                flexWrap: 'wrap',
+                gap: '8px'
               }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>
-                Mã Định Danh (Slug) {!editingApi && <span style={{ fontSize: '11px', color: '#94a3b8' }}>(để trống sẽ tự sinh)</span>}
-              </label>
-              <input
-                type="text"
-                disabled={Boolean(editingApi)}
-                placeholder="ví dụ: ncc_restaurants"
-                value={formData.api_code}
-                onChange={(e) => setFormData({ ...formData, api_code: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: editingApi ? 'var(--bg-secondary)' : 'var(--bg-primary)',
-                  color: 'var(--text-primary)',
-                  fontFamily: 'monospace'
-                }}
-              />
-            </div>
-            <div style={{ width: '130px' }}>
-              <label style={{ display: 'block', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>
-                Phương Thức
-              </label>
-              <select
-                value={formData.method}
-                onChange={(e) => setFormData({ ...formData, method: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-primary)',
-                  color: 'var(--text-primary)'
-                }}
-              >
-                <option value="GET">GET</option>
-                <option value="POST">POST</option>
-                <option value="PUT">PUT</option>
-                <option value="DELETE">DELETE</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>
-              Đường Dẫn Endpoint Chính <span style={{ color: '#ef4444' }}>*</span>
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="ví dụ: /api/v1/restaurants/ncc"
-              value={formData.endpoint_path}
-              onChange={(e) => setFormData({ ...formData, endpoint_path: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-                fontFamily: 'monospace'
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>
-              Đường Dẫn Phụ (Alias) <span style={{ fontSize: '11px', color: '#94a3b8' }}>(Tùy chọn)</span>
-            </label>
-            <input
-              type="text"
-              placeholder="ví dụ: /api/v1/partner/restaurants"
-              value={formData.alias_path || ''}
-              onChange={(e) => setFormData({ ...formData, alias_path: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-                fontFamily: 'monospace'
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>
-              Mô Tả Chức Năng
-            </label>
-            <textarea
-              rows={3}
-              placeholder="Mô tả chức năng, các tham số hỗ trợ và hướng dẫn cho đối tác..."
-              value={formData.description || ''}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-                resize: 'vertical'
-              }}
-            />
-          </div>
-
-          {/* Cấu hình trạng thái & bảo mật */}
-          <div style={{ padding: '12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600 }}>
-              <input
-                type="checkbox"
-                checked={formData.is_enabled}
-                onChange={(e) => setFormData({ ...formData, is_enabled: e.target.checked })}
-              />
-              <span>Cho phép kích hoạt API ngay (BẬT)</span>
-            </label>
-
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600 }}>
-              <input
-                type="checkbox"
-                checked={formData.require_api_key}
-                onChange={(e) => setFormData({ ...formData, require_api_key: e.target.checked })}
-              />
-              <span>Yêu cầu khóa API Key khi truy cập (Header X-API-KEY)</span>
-            </label>
-
-            {formData.require_api_key && (
-              <div style={{ marginTop: '4px' }}>
-                <input
-                  type="text"
-                  placeholder="Nhập khóa API Key bí mật..."
-                  value={formData.api_key || ''}
-                  onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--bg-primary)',
-                    fontFamily: 'monospace'
-                  }}
-                />
+            >
+              <div>
+                <strong>Mã API:</strong> <code style={{ backgroundColor: '#e2e8f0', padding: '1px 6px', borderRadius: '4px' }}>{selectedApiForLogs.api_code}</code>
+                <span style={{ margin: '0 8px' }}>•</span>
+                <strong>Lượt gọi trong 24h:</strong> <span style={{ color: totalLogs24h >= 500 ? '#dc2626' : '#16a34a', fontWeight: 700 }}>{totalLogs24h} lượt</span>
               </div>
-            )}
-          </div>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<RefreshCw size={13} style={{ animation: logsLoading ? 'spin 1s linear infinite' : 'none' }} />}
+                onClick={() => loadApiLogs(selectedApiForLogs.api_code)}
+                disabled={logsLoading}
+              >
+                Làm Mới Logs
+              </Button>
+            </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-            <Button type="button" variant="secondary" onClick={() => setFormModalOpen(false)}>
-              Hủy
-            </Button>
-            <Button type="submit" variant="primary" isLoading={isSubmitting}>
-              {editingApi ? 'Cập Nhật' : 'Tạo API'}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+            {/* Bảng danh sách nhật ký (Sticky header, independent scroll) */}
+            <div
+              style={{
+                flex: 1,
+                minHeight: '250px',
+                maxHeight: '450px',
+                overflowY: 'auto',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px'
+              }}
+            >
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                <thead>
+                  <tr
+                    style={{
+                      position: 'sticky',
+                      top: 0,
+                      backgroundColor: 'var(--bg-secondary)',
+                      zIndex: 10,
+                      borderBottom: '2px solid var(--border-color)'
+                    }}
+                  >
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>Thời Gian</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>IP Người Gọi</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>Đường Dẫn Endpoint</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>Mã HTTP</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>Độ Trễ</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700 }}>Ứng Dụng / User-Agent</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logsLoading ? (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        <RefreshCw size={22} style={{ animation: 'spin 1s linear infinite', marginBottom: '6px' }} />
+                        <div>Đang tải dữ liệu nhật ký...</div>
+                      </td>
+                    </tr>
+                  ) : apiLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        Chưa ghi nhận lượt request nào trong 24 giờ qua.
+                      </td>
+                    </tr>
+                  ) : (
+                    apiLogs.map((log) => {
+                      const isOk = log.status_code === 200;
+                      const isBlocked = log.status_code === 503;
+                      const isAuthErr = log.status_code === 401;
 
-      {/* Modal Chạy Thử API (Live Test Modal) */}
-      <Modal
-        isOpen={testModalOpen}
-        onClose={() => setTestModalOpen(false)}
-        title={`⚡ Kiểm Tra Phản Hồi API: ${testingApi?.api_name || ''}`}
-        maxWidth="750px"
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px' }}>
-          {/* Header Thông Tin Gọi */}
-          <div
-            style={{
-              padding: '10px 14px',
-              backgroundColor: 'var(--bg-secondary)',
-              borderRadius: '8px',
-              border: '1px solid var(--border-color)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '8px'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      return (
+                        <tr
+                          key={log.id}
+                          style={{
+                            borderBottom: '1px solid var(--border-color)',
+                            backgroundColor: isBlocked ? '#fffbeb' : isAuthErr ? '#fef2f2' : 'transparent'
+                          }}
+                        >
+                          <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>
+                            {new Date(log.requested_at).toLocaleString('vi-VN')}
+                          </td>
+                          <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', fontFamily: 'monospace', fontWeight: 600 }}>
+                            {log.client_ip || '—'}
+                          </td>
+                          <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: '11px', color: '#0284c7' }}>
+                            {log.endpoint_called || '—'}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            <span
+                              style={{
+                                padding: '2px 7px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                backgroundColor: isOk ? '#dcfce7' : isBlocked ? '#fef3c7' : '#fee2e2',
+                                color: isOk ? '#15803d' : isBlocked ? '#b45309' : '#b91c1c'
+                              }}
+                            >
+                              {log.status_code} {isOk ? 'OK' : isBlocked ? 'Bị Khóa' : 'Lỗi'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontFamily: 'monospace' }}>
+                            {log.response_time_ms !== null && log.response_time_ms !== undefined ? `${log.response_time_ms} ms` : '—'}
+                          </td>
+                          <td
+                            style={{
+                              padding: '8px 12px',
+                              maxWidth: '220px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              color: 'var(--text-secondary)',
+                              fontSize: '11px'
+                            }}
+                            title={log.user_agent || ''}
+                          >
+                            {log.user_agent || '—'}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Chú thích & Cảnh báo spam */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+              <span>* Hiển thị tối đa 50 lượt gọi gần nhất trong vòng 24 giờ.</span>
+              <Button variant="secondary" size="sm" onClick={() => setLogsModalOpen(false)}>
+                Đóng
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL: Chạy Thử API (Live Test) */}
+      {testModalOpen && testingApi && (
+        <Modal
+          isOpen={testModalOpen}
+          onClose={() => setTestModalOpen(false)}
+          title={`⚡ Kiểm Tra Phản Hồi API: ${testingApi.api_name}`}
+          maxWidth="700px"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* URL gọi */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                backgroundColor: 'var(--bg-secondary)',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)'
+              }}
+            >
               <span
                 style={{
-                  fontWeight: 700,
-                  fontSize: '11px',
                   padding: '2px 6px',
                   borderRadius: '4px',
-                  backgroundColor: '#dbeafe',
-                  color: '#1d4ed8'
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  backgroundColor: '#dcfce7',
+                  color: '#15803d'
                 }}
               >
-                {testingApi?.method || 'GET'}
+                {testingApi.method}
               </span>
-              <code style={{ fontSize: '12.5px', fontFamily: 'monospace' }}>
-                {apiBaseUrl}{testingApi?.endpoint_path}
+              <code style={{ fontSize: '12px', flex: 1, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                {apiBaseUrl}{testingApi.endpoint_path}
               </code>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleTestApi(testingApi)}
+                disabled={testLoading}
+                leftIcon={<RefreshCw size={12} style={{ animation: testLoading ? 'spin 1s linear infinite' : 'none' }} />}
+              >
+                Gọi Lại
+              </Button>
             </div>
 
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={<RefreshCw size={13} />}
-              onClick={() => testingApi && handleTestApi(testingApi)}
-              isLoading={testLoading}
-            >
-              Gọi Lại
-            </Button>
-          </div>
+            {/* Trạng thái phản hồi */}
+            {testLoading ? (
+              <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: '8px' }} />
+                <p style={{ margin: 0, fontSize: '13px' }}>Đang gửi request và đợi phản hồi...</p>
+              </div>
+            ) : testResult ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      backgroundColor:
+                        testResult.status === 200
+                          ? '#dcfce7'
+                          : testResult.status === 503
+                          ? '#fef3c7'
+                          : '#fee2e2',
+                      color:
+                        testResult.status === 200
+                          ? '#15803d'
+                          : testResult.status === 503
+                          ? '#b45309'
+                          : '#b91c1c'
+                    }}
+                  >
+                    {testResult.status === 200 ? (
+                      <CheckCircle size={14} />
+                    ) : (
+                      <XCircle size={14} />
+                    )}
+                    <span>
+                      Mã HTTP: {testResult.status} {testResult.statusText}
+                    </span>
+                  </div>
 
-          {/* Kết Quả Phản Hồi */}
-          {testLoading ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-              <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: '8px' }} />
-              <p style={{ margin: 0 }}>Đang gửi yêu cầu và đợi phản hồi từ server...</p>
-            </div>
-          ) : testResult ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {/* Badge Status & Thời Gian */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    fontWeight: 700,
-                    fontSize: '12px',
-                    backgroundColor: testResult.status === 200 ? '#dcfce7' : '#fee2e2',
-                    color: testResult.status === 200 ? '#15803d' : '#b91c1c'
-                  }}
-                >
-                  {testResult.status === 200 ? <CheckCircle size={15} /> : <XCircle size={15} />}
-                  <span>Mã HTTP: {testResult.status} {testResult.statusText}</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    Thời gian phản hồi: <strong>{testResult.responseTimeMs} ms</strong>
+                  </span>
                 </div>
 
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  Thời gian phản hồi: <strong>{testResult.responseTimeMs} ms</strong>
-                </span>
-
-                {testingApi && !testingApi.is_enabled && (
-                  <span style={{ fontSize: '11px', color: '#dc2626', fontWeight: 600 }}>
-                    (API đang bị KHÓA theo cấu hình Toggle)
-                  </span>
-                )}
-              </div>
-
-              {/* JSON Box */}
-              <div
-                style={{
-                  maxHeight: '320px',
-                  overflowY: 'auto',
-                  backgroundColor: '#1e293b',
-                  color: '#38bdf8',
-                  fontFamily: 'Consolas, monospace',
-                  fontSize: '12px',
-                  padding: '12px 14px',
-                  borderRadius: '8px',
-                  lineHeight: 1.5
-                }}
-              >
-                <pre style={{ margin: 0 }}>
+                {/* Kết quả JSON */}
+                <div
+                  style={{
+                    backgroundColor: '#1e293b',
+                    color: '#f8fafc',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    fontFamily: 'monospace',
+                    fontSize: '11.5px',
+                    maxHeight: '340px',
+                    overflowY: 'auto',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-all',
+                    lineHeight: 1.5
+                  }}
+                >
                   {typeof testResult.data === 'object'
                     ? JSON.stringify(testResult.data, null, 2)
                     : String(testResult.data)}
-                </pre>
+                </div>
+              </div>
+            ) : null}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '6px' }}>
+              <Button variant="secondary" onClick={() => setTestModalOpen(false)}>
+                Đóng
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL: Thêm / Chỉnh Sửa API */}
+      {formModalOpen && (
+        <Modal
+          isOpen={formModalOpen}
+          onClose={() => setFormModalOpen(false)}
+          title={editingApi ? `Chỉnh Sửa API: ${editingApi.api_name}` : 'Thêm Cấu Hình API Mới'}
+          maxWidth="600px"
+        >
+          <form onSubmit={handleSubmitForm} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px' }}>
+                Tên API <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.api_name}
+                onChange={(e) => setFormData({ ...formData, api_name: e.target.value })}
+                placeholder="VD: API Danh Sách Nhà Hàng Cho Đối Tác"
+                required
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--input-bg, #fff)',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px' }}>
+                  Mã API (Slug)
+                </label>
+                <input
+                  type="text"
+                  value={formData.api_code}
+                  onChange={(e) => setFormData({ ...formData, api_code: e.target.value })}
+                  placeholder="VD: ncc_restaurants (tự động tạo nếu để trống)"
+                  disabled={!!editingApi}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: editingApi ? 'var(--bg-secondary)' : 'var(--input-bg, #fff)',
+                    color: 'var(--text-primary)',
+                    fontSize: '13px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px' }}>
+                  Phương Thức HTTP
+                </label>
+                <select
+                  value={formData.method}
+                  onChange={(e) => setFormData({ ...formData, method: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: 'var(--input-bg, #fff)',
+                    color: 'var(--text-primary)',
+                    fontSize: '13px',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <option value="GET">GET (Truy xuất dữ liệu)</option>
+                  <option value="POST">POST (Gửi dữ liệu)</option>
+                  <option value="PUT">PUT (Cập nhật)</option>
+                  <option value="DELETE">DELETE (Xóa)</option>
+                </select>
               </div>
             </div>
-          ) : null}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
-            <Button variant="secondary" onClick={() => setTestModalOpen(false)}>
-              Đóng
-            </Button>
-          </div>
-        </div>
-      </Modal>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px' }}>
+                Đường Dẫn Endpoint Chính <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.endpoint_path}
+                onChange={(e) => setFormData({ ...formData, endpoint_path: e.target.value })}
+                placeholder="VD: /api/v1/restaurants/ncc"
+                required
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--input-bg, #fff)',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px',
+                  fontFamily: 'monospace',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px' }}>
+                Đường Dẫn Alias (Bí Danh / Tùy Chọn)
+              </label>
+              <input
+                type="text"
+                value={formData.alias_path || ''}
+                onChange={(e) => setFormData({ ...formData, alias_path: e.target.value })}
+                placeholder="VD: /api/v1/partner/restaurants"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--input-bg, #fff)',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px',
+                  fontFamily: 'monospace',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px' }}>
+                Mô Tả & Ghi Chú
+              </label>
+              <textarea
+                value={formData.description || ''}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Mô tả chức năng, quy định và thông số kỹ thuật của API..."
+                rows={3}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--input-bg, #fff)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12.5px',
+                  boxSizing: 'border-box',
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '4px' }}>
+              <input
+                type="checkbox"
+                id="is_enabled_check"
+                checked={formData.is_enabled}
+                onChange={(e) => setFormData({ ...formData, is_enabled: e.target.checked })}
+                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              />
+              <label htmlFor="is_enabled_check" style={{ fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                Kích hoạt API ngay sau khi lưu (Bật)
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+              <Button variant="secondary" onClick={() => setFormModalOpen(false)} disabled={isSubmitting}>
+                Hủy Bỏ
+              </Button>
+              <Button variant="primary" type="submit" disabled={isSubmitting}>
+                {isSubmitting ? 'Đang lưu...' : editingApi ? 'Cập Nhật' : 'Thêm Mới'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 };

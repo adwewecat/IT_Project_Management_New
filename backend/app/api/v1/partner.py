@@ -1,7 +1,7 @@
 import os
 from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Header
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Header, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -20,6 +20,7 @@ router = APIRouter(prefix="/partner", tags=["Partner & NCC API"])
     )
 )
 def get_partner_restaurants(
+    request: Request,
     format: str = Query("json", description="Định dạng trả về: 'json' (mặc định dạng đối tượng) hoặc 'array' (mảng danh sách thuần túy)"),
     sap: Optional[str] = Query(None, description="Lọc theo mã SAP cụ thể (4 chữ số)"),
     ma_sap: Optional[str] = Query(None, description="Lọc theo mã SAP cụ thể (4 chữ số)"),
@@ -35,9 +36,29 @@ def get_partner_restaurants(
     - IP WAN: Địa chỉ IP WAN của nhà hàng.
     - Trạng thái: Chỉ lấy nhà hàng có trạng thái là ON (loại bỏ OFF, NEW).
     """
+    import time
+    from app.services.managed_api_service import is_api_enabled, log_api_request
+
+    start_time = time.perf_counter()
+    client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    user_agent = request.headers.get("user-agent", "")
+    query_params = str(request.query_params)
+    endpoint = request.url.path
+
     # Kiểm tra trạng thái Bật / Tắt API từ Cổng Quản Lý API
-    from app.services.managed_api_service import is_api_enabled
     if not is_api_enabled(db, "ncc_restaurants"):
+        duration_ms = int((time.perf_counter() - start_time) * 1000)
+        log_api_request(
+            db=db,
+            api_code="ncc_restaurants",
+            endpoint_called=endpoint,
+            client_ip=client_ip,
+            method=request.method,
+            status_code=503,
+            response_time_ms=duration_ms,
+            user_agent=user_agent,
+            query_params=query_params
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="API Thông Tin Nhà Hàng cho NCC hiện đang tạm khóa hoặc bảo trì bởi Quản trị viên."
@@ -46,12 +67,38 @@ def get_partner_restaurants(
     configured_key = os.environ.get("NCC_API_KEY", "").strip()
     provided_key = (api_key or x_api_key or "").strip()
     if configured_key and provided_key != configured_key:
+        duration_ms = int((time.perf_counter() - start_time) * 1000)
+        log_api_request(
+            db=db,
+            api_code="ncc_restaurants",
+            endpoint_called=endpoint,
+            client_ip=client_ip,
+            method=request.method,
+            status_code=401,
+            response_time_ms=duration_ms,
+            user_agent=user_agent,
+            query_params=query_params
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="API Key không hợp lệ hoặc chưa được cấp quyền truy cập."
         )
 
     results = restaurant_service.get_ncc_restaurants(db=db, sap=sap, ma_sap=ma_sap, search=search)
+    duration_ms = int((time.perf_counter() - start_time) * 1000)
+
+    # Ghi nhận lượt request vào bảng log & cập nhật số liệu 24h
+    log_api_request(
+        db=db,
+        api_code="ncc_restaurants",
+        endpoint_called=endpoint,
+        client_ip=client_ip,
+        method=request.method,
+        status_code=200,
+        response_time_ms=duration_ms,
+        user_agent=user_agent,
+        query_params=query_params
+    )
 
     # Nếu bên NCC yêu cầu mảng JSON thuần túy để dễ parse trực tiếp
     if format and format.strip().lower() in ("array", "raw", "list"):

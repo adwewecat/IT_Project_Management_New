@@ -14,12 +14,39 @@ export interface ManagedAPIItem {
   created_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+
+  // Thống kê & chống spam 24h
+  requests_24h?: number;
+  total_requests?: number;
+  last_requested_at?: string | null;
+  last_client_ip?: string | null;
+  is_high_traffic?: boolean;
 }
 
 export interface ManagedAPIListResponse {
   success: boolean;
   total: number;
   items: ManagedAPIItem[];
+}
+
+export interface ManagedAPILogItem {
+  id: number;
+  api_code: string;
+  endpoint_called?: string | null;
+  client_ip?: string | null;
+  method: string;
+  status_code: number;
+  response_time_ms?: number | null;
+  user_agent?: string | null;
+  query_params?: string | null;
+  requested_at: string;
+}
+
+export interface ManagedAPILogListResponse {
+  success: boolean;
+  api_code: string;
+  total_in_24h: number;
+  items: ManagedAPILogItem[];
 }
 
 export interface ManagedAPICreatePayload {
@@ -51,6 +78,13 @@ export const managedApiService = {
     return res.data;
   },
 
+  async getApiLogs(apiCode: string, limit: number = 50, hours: number = 24): Promise<ManagedAPILogListResponse> {
+    const res = await api.get<ManagedAPILogListResponse>(`/managed-apis/${apiCode}/logs`, {
+      params: { limit, hours }
+    });
+    return res.data;
+  },
+
   async createApi(data: ManagedAPICreatePayload): Promise<ManagedAPIItem> {
     const res = await api.post<ManagedAPIItem>('/managed-apis', data);
     return res.data;
@@ -61,8 +95,8 @@ export const managedApiService = {
     return res.data;
   },
 
-  async toggleApi(id: number, is_enabled: boolean): Promise<ManagedAPIItem> {
-    const res = await api.patch<ManagedAPIItem>(`/managed-apis/${id}/toggle`, { is_enabled });
+  async toggleApi(id: number, isEnabled: boolean): Promise<ManagedAPIItem> {
+    const res = await api.patch<ManagedAPIItem>(`/managed-apis/${id}/toggle`, { is_enabled: isEnabled });
     return res.data;
   },
 
@@ -70,4 +104,3 @@ export const managedApiService = {
     await api.delete(`/managed-apis/${id}`);
   }
 };
-

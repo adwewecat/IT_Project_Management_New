@@ -1861,3 +1861,48 @@ BEGIN
     ('ncc_restaurants', N'API Thông Tin Nhà Hàng Cho NCC (Mã SAP 4 số, Tên NH, IP WAN)', '/api/v1/restaurants/ncc', '/api/v1/partner/restaurants', 'GET', N'Cung cấp danh sách nhà hàng đang hoạt động (trangthai = ON) có mã SAP đúng 4 số cho Nhà Cung Cấp (NCC) và đối tác tự động đồng bộ.', 1, 0, 'system');
 END
 GO
+
+-- Bổ sung cột thống kê request vào MANAGED_APIS nếu chưa có
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'MANAGED_APIS' AND COLUMN_NAME = 'total_requests')
+BEGIN
+    ALTER TABLE [dbo].[MANAGED_APIS] ADD [total_requests] INT NOT NULL DEFAULT 0;
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'MANAGED_APIS' AND COLUMN_NAME = 'last_requested_at')
+BEGIN
+    ALTER TABLE [dbo].[MANAGED_APIS] ADD [last_requested_at] DATETIME NULL;
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'MANAGED_APIS' AND COLUMN_NAME = 'last_client_ip')
+BEGIN
+    ALTER TABLE [dbo].[MANAGED_APIS] ADD [last_client_ip] NVARCHAR(100) NULL;
+END
+GO
+
+-- ----------------------------------------------------------------------------
+-- BẢNG: MANAGED_API_LOGS (Nhật Ký & Thống Kê Truy Vấn API - Bắt Spam & Quá Tải)
+-- ----------------------------------------------------------------------------
+IF OBJECT_ID(N'[dbo].[MANAGED_API_LOGS]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[MANAGED_API_LOGS] (
+        [id] BIGINT IDENTITY(1,1) PRIMARY KEY,
+        [api_code] NVARCHAR(100) NOT NULL,
+        [endpoint_called] NVARCHAR(500) NULL,
+        [client_ip] NVARCHAR(100) NULL,
+        [method] NVARCHAR(10) NOT NULL DEFAULT 'GET',
+        [status_code] INT NOT NULL DEFAULT 200,
+        [response_time_ms] INT NULL DEFAULT 0,
+        [user_agent] NVARCHAR(500) NULL,
+        [query_params] NVARCHAR(500) NULL,
+        [requested_at] DATETIME NOT NULL DEFAULT GETDATE()
+    );
+
+    CREATE INDEX [IX_MANAGED_API_LOGS_CODE_TIME] 
+    ON [dbo].[MANAGED_API_LOGS] ([api_code], [requested_at] DESC);
+
+    CREATE INDEX [IX_MANAGED_API_LOGS_IP] 
+    ON [dbo].[MANAGED_API_LOGS] ([client_ip], [requested_at] DESC);
+
+    PRINT N'Table [dbo].[MANAGED_API_LOGS] created successfully.';
+END
+GO

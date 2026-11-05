@@ -1,10 +1,10 @@
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, func, desc
 
-from app.models.managed_api import ManagedAPI
+from app.models.managed_api import ManagedAPI, ManagedAPILog
 from app.schemas.managed_api import ManagedAPICreate, ManagedAPIUpdate
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,8 @@ def ensure_default_apis(db: Session) -> None:
                     require_api_key=item.get("require_api_key", False),
                     created_by=item.get("created_by", "system"),
                     created_at=datetime.now(),
-                    updated_at=datetime.now()
+                    updated_at=datetime.now(),
+                    total_requests=0
                 )
                 db.add(new_api)
                 db.commit()
@@ -66,10 +67,115 @@ def is_api_enabled(db: Session, api_code: str) -> bool:
         return True
 
 
-def list_managed_apis(db: Session) -> List[ManagedAPI]:
-    """Lấy danh sách tất cả API đang được quản lý trong hệ thống"""
+def log_api_request(
+    db: Session,
+    api_code: str,
+    endpoint_called: str,
+    client_ip: Optional[str] = None,
+    method: str = "GET",
+    status_code: int = 200,
+    response_time_ms: int = 0,
+    user_agent: Optional[str] = None,
+    query_params: Optional[str] = None
+) -> None:
+    """
+    Ghi nhận một lượt request vào bảng MANAGED_API_LOGS và cập nhật thống kê trong MANAGED_APIS.
+    Bọc an toàn trong try-except để không bao giờ làm gián đoạn flow phản hồi API của hệ thống.
+    """
+    try:
+        now = datetime.now()
+        # 1. Thêm bản ghi log chi tiết
+        log_entry = ManagedAPILog(
+            api_code=api_code,
+            endpoint_called=endpoint_called[:500] if endpoint_called else None,
+            client_ip=client_ip[:100] if client_ip else None,
+            method=method.upper(),
+            status_code=status_code,
+            response_time_ms=response_time_ms,
+            user_agent=user_agent[:500] if user_agent else None,
+            query_params=query_params[:500] if query_params else None,
+            requested_at=now
+        )
+        db.add(log_entry)
+
+        # 2. Cập nhật thống kê tích lũy nhanh trong MANAGED_APIS
+        api = db.query(ManagedAPI).filter(ManagedAPI.api_code == api_code).first()
+        if api:
+            api.total_requests = (api.total_requests or 0) + 1
+            api.last_requested_at = now
+            if client_ip:
+                api.last_client_ip = client_ip[:100]
+
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.warning("Không thể ghi log request API %s: %s", api_code, e)
+
+
+def get_api_requests_24h(db: Session, api_code: str) -> int:
+    """Đếm số lượt gọi trong 24 giờ qua của một API"""
+    try:
+        since_time = datetime.now() - timedelta(hours=24)
+        count = db.query(func.count(ManagedAPILog.id)).filter(
+            ManagedAPILog.api_code == api_code,
+            ManagedAPILog.requested_at >= since_time
+        ).scalar()
+        return count or 0
+    except Exception as e:
+        logger.warning("Lỗi đếm request 24h cho API %s: %s", api_code, e)
+        return 0
+
+
+def list_managed_apis(db: Session) -> List[Dict[str, Any]]:
+    """Lấy danh sách tất cả API đang được quản lý kèm thống kê lượt gọi 24h & cảnh báo spam"""
     ensure_default_apis(db)
-    return db.query(ManagedAPI).order_by(ManagedAPI.id.asc()).all()
+    apis = db.query(ManagedAPI).order_by(ManagedAPI.id.asc()).all()
+
+    since_24h = datetime.now() - timedelta(hours=24)
+
+    # Đếm số request 24h của tất cả api_code cùng 1 query group by để tối ưu hiệu năng
+    stats_24h: Dict[str, int] = {}
+    try:
+        rows = db.query(
+            ManagedAPILog.api_code,
+            func.count(ManagedAPILog.id)
+        ).filter(
+            ManagedAPILog.requested_at >= since_24h
+        ).group_by(ManagedAPILog.api_code).all()
+        for code, cnt in rows:
+            stats_24h[code] = cnt
+    except Exception as e:
+        logger.warning("Lỗi thống kê nhóm request 24h: %s", e)
+
+    results = []
+    for api in apis:
+        cnt_24h = stats_24h.get(api.api_code, 0)
+        # Cảnh báo tần suất cao nếu lượt gọi 24h > 500 (trung bình > 20 req/h liên tục)
+        is_high = cnt_24h >= 500
+
+        item_dict = {
+            "id": api.id,
+            "api_code": api.api_code,
+            "api_name": api.api_name,
+            "endpoint_path": api.endpoint_path,
+            "alias_path": api.alias_path,
+            "method": api.method,
+            "description": api.description,
+            "is_enabled": api.is_enabled,
+            "require_api_key": api.require_api_key,
+            "api_key": api.api_key,
+            "created_by": api.created_by,
+            "created_at": api.created_at,
+            "updated_at": api.updated_at,
+            "requests_24h": cnt_24h,
+            "total_requests": api.total_requests or 0,
+            "last_requested_at": api.last_requested_at,
+            "last_client_ip": api.last_client_ip,
+            "is_high_traffic": is_high
+        }
+        results.append(item_dict)
+
+    return results
 
 
 def get_managed_api(db: Session, api_id: int) -> Optional[ManagedAPI]:
@@ -82,9 +188,26 @@ def get_managed_api_by_code(db: Session, api_code: str) -> Optional[ManagedAPI]:
     return db.query(ManagedAPI).filter(ManagedAPI.api_code == api_code).first()
 
 
+def get_api_logs(
+    db: Session,
+    api_code: str,
+    limit: int = 50,
+    hours: int = 24
+) -> List[ManagedAPILog]:
+    """Lấy danh sách nhật ký các lượt gọi gần nhất của 1 API"""
+    since_time = datetime.now() - timedelta(hours=hours)
+    try:
+        return db.query(ManagedAPILog).filter(
+            ManagedAPILog.api_code == api_code,
+            ManagedAPILog.requested_at >= since_time
+        ).order_by(desc(ManagedAPILog.requested_at)).limit(limit).all()
+    except Exception as e:
+        logger.warning("Lỗi truy vấn logs cho API %s: %s", api_code, e)
+        return []
+
+
 def create_managed_api(db: Session, data: ManagedAPICreate, username: str) -> ManagedAPI:
     """Thêm một API mới vào hệ thống quản lý"""
-    # Chuẩn hóa api_code (slug không dấu)
     code = data.api_code.strip().lower().replace(" ", "_")
     existing = db.query(ManagedAPI).filter(ManagedAPI.api_code == code).first()
     if existing:
@@ -102,7 +225,8 @@ def create_managed_api(db: Session, data: ManagedAPICreate, username: str) -> Ma
         api_key=data.api_key.strip() if data.api_key else None,
         created_by=username,
         created_at=datetime.now(),
-        updated_at=datetime.now()
+        updated_at=datetime.now(),
+        total_requests=0
     )
     db.add(new_api)
     db.commit()
