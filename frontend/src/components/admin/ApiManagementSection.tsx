@@ -57,9 +57,8 @@ export const ApiManagementSection: React.FC = () => {
     data: any;
   } | null>(null);
 
-  // Tính host hiện tại
-  const backendHost = window.location.hostname || 'localhost';
-  const apiBaseUrl = `${window.location.protocol}//${backendHost}:8000`;
+  // Tu dong nhan dien Base URL API theo dung origin va port thuc te cua web/proxy (vd: http://14.161.33.122:5001)
+  const apiBaseUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
   const fetchApis = useCallback(async () => {
     setLoading(true);

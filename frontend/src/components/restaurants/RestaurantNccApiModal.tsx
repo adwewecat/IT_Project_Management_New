@@ -22,9 +22,8 @@ export const RestaurantNccApiModal: React.FC<RestaurantNccApiModalProps> = ({ is
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [previewFormat, setPreviewFormat] = useState<'object' | 'array'>('object');
 
-  // Tính toán Base URL API
-  const backendHost = window.location.hostname || 'localhost';
-  const apiBase = `${window.location.protocol}//${backendHost}:8000/api/v1`;
+  // Tu dong nhan dien Base URL API theo dung origin va port thuc te cua web/proxy (vd: http://14.161.33.122:5001)
+  const apiBase = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1`;
   const primaryApiUrl = `${apiBase}/restaurants/ncc`;
   const aliasApiUrl = `${apiBase}/partner/restaurants`;
   const arrayApiUrl = `${apiBase}/restaurants/ncc?format=array`;

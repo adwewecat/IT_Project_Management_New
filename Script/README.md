@@ -6491,3 +6491,6 @@ cc_restaurants trong lifespan tại ackend/app/main.py.
   * Frontend: cmd /c 'npm --prefix frontend run build' hoàn thành exit code 0 (dist/ sạch sẽ, sẵn sàng copy sang server IIS).
   * Cơ sở dữ liệu Production: Đã kết nối trực tiếp và khởi tạo hoàn chỉnh bảng dbo.MANAGED_APIS (đủ 12 cột chuẩn, seed bản ghi mặc định 
 cc_restaurants) trên Database ITDEPT tại Server Production 172.16.8.25:1433.
+  * Fix lỗi Network Error / Failed to fetch khi truy cập từ ngoài Internet (IP WAN 14.161.33.122):
+    + Nguyên nhân: Code cũ hardcode gọi trực tiếp vào port 8000 (http://14.161.33.122:8000), nhưng Firewall/Router công ty chỉ mở duy nhất port 5001 ra ngoài Internet (port 8000 chỉ dùng nội bộ localhost cho backend). Trình duyệt từ bên ngoài gọi port 8000 bị timeout 21 giây (Failed to fetch).
+    + Khắc phục: Chuẩn hóa piBaseUrl trong cả 2 component (ApiManagementSection.tsx và RestaurantNccApiModal.tsx) tự động dùng window.location.origin (ví dụ http://14.161.33.122:5001). Khi đó request đi qua port 5001 và được IIS reverse proxy mượt mà sang backend 8000 nội bộ, trả kết quả JSON tức thì và NCC bên ngoài cũng kết nối thành công.

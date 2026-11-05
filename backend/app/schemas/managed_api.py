@@ -47,3 +47,4 @@ class ManagedAPIListResponse(BaseModel):
     success: bool = True
     total: int
     items: List[ManagedAPIItem]
+

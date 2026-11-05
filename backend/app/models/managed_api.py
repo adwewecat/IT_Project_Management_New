@@ -22,3 +22,4 @@ class ManagedAPI(Base):
     created_by: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+
