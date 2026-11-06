@@ -25,6 +25,9 @@ from app.schemas.sso_management import (
     SSOBulkParseResponse,
     SSOBulkProcessItemRequest,
     SSOBulkProcessItemResponse,
+    SSOQuickProcessItemRequest,
+    SSOQuickProcessItemResponse,
+    SSOBatchExportRequest,
 )
 from app.services.sso_management_service import (
     get_user_sso_config,
@@ -37,6 +40,8 @@ from app.services.sso_management_service import (
     generate_sso_bulk_template,
     parse_sso_excel_file,
     process_bulk_sso_item,
+    process_quick_sso_item,
+    generate_batch_export_excel,
 )
 from app.services.log_service import log_service
 
@@ -528,4 +533,92 @@ async def process_single_bulk_item(
             email=req.email,
             action=req.action,
             message=f"Lỗi thực thi: {str(e)}",
+        )
+
+
+
+@router.post("/quick-process-item", response_model=SSOQuickProcessItemResponse)
+async def process_single_quick_item(
+    req: SSOQuickProcessItemRequest,
+    current_user: UserInfo = Depends(require_app_or_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Xử lý nhanh hàng loạt cho 1 user dựa trên từ khóa (Username, Email hoặc Số điện thoại):
+    - change_pass: Mở khóa và đổi mật khẩu ngẫu nhiên đạt chuẩn (>= 9 ký tự).
+    - lock: Khóa tài khoản (Lockout Enabled = True, Failed = 4).
+    """
+    cfg = get_user_sso_config(db, current_user.username)
+    if not cfg or not cfg.sso_username or not cfg.sso_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Tài khoản '{current_user.username}' chưa cấu hình SSO. Vui lòng bấm 'Cấu Hình SSO' trước khi thực hiện.",
+        )
+
+    try:
+        res = await process_quick_sso_item(
+            system_username=current_user.username,
+            sso_user=cfg.sso_username,
+            sso_pass=cfg.sso_password,
+            action=req.action,
+            query=req.query,
+            custom_password=req.custom_password,
+        )
+
+        if res.get("success"):
+            log_service.record_log(
+                db=db,
+                nhom_quyen="APP",
+                man_hinh="SSO_MANAGEMENT",
+                hanh_dong=f"QUICK_{req.action.upper()}",
+                noi_dung=f"Xử lý nhanh ({req.action}) cho '{req.query}': {res.get('message')}",
+                user_thuchien=current_user.username,
+                current_user=current_user,
+            )
+
+        return SSOQuickProcessItemResponse(
+            success=res.get("success", False),
+            query=req.query,
+            action=req.action,
+            user_id=res.get("user_id"),
+            user_name=res.get("user_name"),
+            email=res.get("email"),
+            phone_number=res.get("phone_number"),
+            new_password=res.get("new_password"),
+            message=res.get("message", ""),
+            detail=res.get("detail"),
+            is_ldap=res.get("is_ldap", False),
+        )
+    except Exception as e:
+        logger.error(f"Lỗi xử lý quick item '{req.query}' ({req.action}): {e}", exc_info=True)
+        return SSOQuickProcessItemResponse(
+            success=False,
+            query=req.query,
+            action=req.action,
+            message=f"Lỗi thực thi: {str(e)}",
+        )
+
+
+@router.post("/export-batch-results")
+async def export_batch_results(
+    req: SSOBatchExportRequest,
+    current_user: UserInfo = Depends(require_app_or_admin),
+):
+    """Xuất file Excel báo cáo kết quả xử lý hàng loạt SSO/IAM."""
+    try:
+        items_dict = [it.model_dump() for it in req.items]
+        excel_bytes = generate_batch_export_excel(req.action, items_dict)
+        from datetime import datetime
+        import io
+        filename = f"Ket_Qua_SSO_{req.action}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        return StreamingResponse(
+            io.BytesIO(excel_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        logger.error(f"Lỗi xuất Excel kết quả bulk SSO: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi tạo file Excel: {e}"
         )

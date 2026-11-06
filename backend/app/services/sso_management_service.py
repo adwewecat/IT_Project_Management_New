@@ -1636,3 +1636,289 @@ async def process_bulk_sso_item(
 
         finally:
             await browser.close()
+
+
+
+async def process_quick_sso_item(
+    system_username: str,
+    sso_user: str,
+    sso_pass: str,
+    action: str,
+    query: str,
+    custom_password: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Xử lý nhanh hàng loạt cho 1 tài khoản dựa trên từ khóa tìm kiếm (Username, Email hoặc Số điện thoại):
+    - 'change_pass': Mở khóa (LockoutEnabled=false, FailedCount=0, LockoutEnd="") và đổi mật khẩu ngẫu nhiên đạt chuẩn (>= 9 ký tự).
+    - 'lock': Khóa tài khoản (LockoutEnabled=true, FailedCount=4, LockoutEnd=ngày giờ hiện tại).
+    """
+    clean_query = (query or "").strip()
+    if not clean_query:
+        return {
+            "success": False,
+            "query": "",
+            "action": action,
+            "message": "Từ khóa tìm kiếm rỗng."
+        }
+
+    async with async_playwright() as p:
+        browser, context = await _create_user_playwright_context(p, system_username)
+        try:
+            page = await context.new_page()
+
+            # 1. Đảm bảo đăng nhập IAM
+            await page.goto("https://iam.ggg.com.vn/Identity/Users", wait_until="networkidle", timeout=30000)
+            await _ensure_iam_logged_in(page, context, system_username, sso_user, sso_pass)
+
+            # 2. Tìm kiếm trên IAM
+            encoded_search = urllib.parse.quote(clean_query)
+            search_url = f"https://iam.ggg.com.vn/Identity/Users?search={encoded_search}&UserType=99"
+            await page.goto(search_url, wait_until="networkidle", timeout=30000)
+
+            rows = page.locator("table tbody tr")
+            count = await rows.count()
+            if count == 0:
+                return {
+                    "success": False,
+                    "query": clean_query,
+                    "action": action,
+                    "message": f"Không tìm thấy tài khoản nào khớp với '{clean_query}' trên IAM."
+                }
+
+            # 3. So khớp tìm dòng phù hợp nhất (theo username, email hoặc số điện thoại)
+            matched_user_id = None
+            matched_username = ""
+            matched_email = ""
+            matched_phone = ""
+
+            clean_digits = re.sub(r"\D", "", clean_query)
+
+            for i in range(count):
+                row = rows.nth(i)
+                cells = row.locator("td")
+                if await cells.count() >= 5:
+                    u_name = (await cells.nth(2).inner_text()).strip()
+                    u_mail = (await cells.nth(3).inner_text()).strip()
+                    u_phone = (await cells.nth(4).inner_text()).strip()
+                    u_phone_digits = re.sub(r"\D", "", u_phone)
+
+                    is_match = False
+                    if u_name.lower() == clean_query.lower() or clean_query.lower() in u_name.lower():
+                        is_match = True
+                    elif u_mail.lower() == clean_query.lower() or clean_query.lower() in u_mail.lower():
+                        is_match = True
+                    elif clean_digits and (clean_digits == u_phone_digits or clean_digits in u_phone_digits):
+                        is_match = True
+
+                    if is_match:
+                        edit_link = cells.nth(0).locator("a")
+                        if await edit_link.count() > 0:
+                            href = (await edit_link.get_attribute("href")) or ""
+                            matched_user_id = href.split("/")[-1] if "/" in href else href
+                            matched_username = u_name
+                            matched_email = u_mail
+                            matched_phone = u_phone
+                            break
+
+            # Nếu không tìm thấy dòng nào khớp chính xác chuỗi nhưng query có trả về kết quả -> lấy dòng đầu tiên
+            if not matched_user_id:
+                first_row = rows.first
+                cells = first_row.locator("td")
+                if await cells.count() >= 5:
+                    matched_username = (await cells.nth(2).inner_text()).strip()
+                    matched_email = (await cells.nth(3).inner_text()).strip()
+                    matched_phone = (await cells.nth(4).inner_text()).strip()
+                    edit_link = cells.nth(0).locator("a")
+                    if await edit_link.count() > 0:
+                        href = (await edit_link.get_attribute("href")) or ""
+                        matched_user_id = href.split("/")[-1] if "/" in href else href
+
+            if not matched_user_id:
+                return {
+                    "success": False,
+                    "query": clean_query,
+                    "action": action,
+                    "message": f"Không trích xuất được thông tin tài khoản cho '{clean_query}'."
+                }
+
+            # 4. Thực hiện tác vụ: ĐỔI PASS hoặc KHÓA
+            if action == "change_pass":
+                profile_url = f"https://iam.ggg.com.vn/Identity/UserProfile/{matched_user_id}"
+                await page.goto(profile_url, wait_until="networkidle", timeout=30000)
+
+                # Kiểm tra LDAP / AD (UserType == 1)
+                type_loc = page.locator("#UserType, input[name='UserType']").first
+                if await type_loc.count() > 0:
+                    val = (await type_loc.input_value()).strip()
+                    if val == "1":
+                        return {
+                            "success": False,
+                            "query": clean_query,
+                            "action": action,
+                            "user_id": matched_user_id,
+                            "user_name": matched_username,
+                            "email": matched_email,
+                            "phone_number": matched_phone,
+                            "is_ldap": True,
+                            "message": f"Tài khoản '{matched_username}' đồng bộ từ LDAP (AD). Vui lòng liên hệ Helpdesk đổi pass mail."
+                        }
+
+                # Mở khóa tài khoản: LockoutEnabled=false, AccessFailedCount=0, LockoutEnd=""
+                await set_user_lockout_fields(page, lockout_enabled=False, access_failed_count=0, lockout_end="")
+                save_btn = page.locator("button.btn:has-text('Save User'), button[type='submit']:has-text('Save')").first
+                if await save_btn.count() > 0:
+                    await save_btn.scroll_into_view_if_needed()
+                    await save_btn.click()
+                    await _safe_wait_network_idle(page, 15000)
+
+                # Đổi mật khẩu ngẫu nhiên đạt chuẩn >= 9 ký tự (10 ký tự: hoa, thường, số, ký tự đặc biệt)
+                new_pwd = custom_password if custom_password else generate_compliant_password(10)
+                change_pwd_url = f"https://iam.ggg.com.vn/Identity/UserChangePassword/{matched_user_id}"
+                await page.goto(change_pwd_url, wait_until="networkidle", timeout=30000)
+                await page.wait_for_selector("#Password", timeout=15000)
+                await page.fill("#Password", new_pwd)
+                await page.fill("#ConfirmPassword", new_pwd)
+                submit_pwd = page.locator("button[type='submit']:has-text('Change Password')").first
+                if await submit_pwd.count() > 0:
+                    await submit_pwd.click()
+                    await _safe_wait_network_idle(page, 15000)
+
+                # Kiểm tra validation error
+                val_errors = page.locator(".text-danger, .validation-summary-errors")
+                if await val_errors.count() > 0:
+                    err = (await val_errors.first.inner_text()).strip()
+                    if err:
+                        return {
+                            "success": False,
+                            "query": clean_query,
+                            "action": action,
+                            "user_id": matched_user_id,
+                            "user_name": matched_username,
+                            "email": matched_email,
+                            "phone_number": matched_phone,
+                            "message": f"Đổi mật khẩu thất bại: {err}"
+                        }
+
+                return {
+                    "success": True,
+                    "query": clean_query,
+                    "action": action,
+                    "user_id": matched_user_id,
+                    "user_name": matched_username,
+                    "email": matched_email,
+                    "phone_number": matched_phone,
+                    "new_password": new_pwd,
+                    "message": f"Đã mở khóa và đổi mật khẩu thành công: {new_pwd}"
+                }
+
+            elif action == "lock":
+                profile_url = f"https://iam.ggg.com.vn/Identity/UserProfile/{matched_user_id}"
+                await page.goto(profile_url, wait_until="networkidle", timeout=30000)
+
+                # Khóa tài khoản: User Lockout Enabled check button, User Access Failed Count nhập 4, User Lockout End nhập ngày hiện tại
+                now_str = datetime.now().strftime("%m/%d/%Y %I:%M %p")
+                await set_user_lockout_fields(page, lockout_enabled=True, access_failed_count=4, lockout_end=now_str)
+                save_btn = page.locator("button.btn:has-text('Save User'), button[type='submit']:has-text('Save')").first
+                if await save_btn.count() > 0:
+                    await save_btn.scroll_into_view_if_needed()
+                    await save_btn.click()
+                    await _safe_wait_network_idle(page, 15000)
+
+                return {
+                    "success": True,
+                    "query": clean_query,
+                    "action": action,
+                    "user_id": matched_user_id,
+                    "user_name": matched_username,
+                    "email": matched_email,
+                    "phone_number": matched_phone,
+                    "detail": f"Lockout Enabled = TRUE, Access Failed Count = 4, Lockout End = {now_str}",
+                    "message": f"Đã khóa tài khoản '{matched_username}' thành công!"
+                }
+
+            else:
+                return {
+                    "success": False,
+                    "query": clean_query,
+                    "action": action,
+                    "message": f"Hành động '{action}' không được hỗ trợ."
+                }
+
+        finally:
+            await browser.close()
+
+
+def generate_batch_export_excel(action: str, items: List[Dict[str, Any]]) -> bytes:
+    """Tạo file Excel kết quả xử lý hàng loạt SSO/IAM chuẩn đẹp bằng openpyxl."""
+    import openpyxl
+    import io
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "KET_QUA_XU_LY"
+
+    headers = [
+        "STT",
+        "Từ Khóa Nhập",
+        "User Name IAM",
+        "Email IAM",
+        "SĐT IAM",
+    ]
+    if action == "change_pass":
+        headers.append("Mật Khẩu Mới")
+    headers.extend(["Trạng Thái", "Chi Tiết / Phản Hồi"])
+
+    ws.append(headers)
+
+    header_fill = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    thin_border = Border(
+        left=Side(style='thin', color='D9D9D9'),
+        right=Side(style='thin', color='D9D9D9'),
+        top=Side(style='thin', color='D9D9D9'),
+        bottom=Side(style='thin', color='D9D9D9')
+    )
+
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = thin_border
+
+    for idx, item in enumerate(items, 1):
+        status_text = "Thành công" if item.get("status") == "success" else "Lỗi"
+        row_vals = [
+            idx,
+            str(item.get("query") or ""),
+            str(item.get("user_name") or ""),
+            str(item.get("email") or ""),
+            str(item.get("phone_number") or ""),
+        ]
+        if action == "change_pass":
+            row_vals.append(str(item.get("new_password") or ""))
+        row_vals.extend([status_text, str(item.get("message") or "")])
+        ws.append(row_vals)
+
+        current_row = idx + 1
+        for col_idx in range(1, len(row_vals) + 1):
+            cell = ws.cell(row=current_row, column=col_idx)
+            cell.border = thin_border
+            if col_idx == 1:
+                cell.alignment = Alignment(horizontal="center")
+            if action == "change_pass" and col_idx == 6:
+                cell.font = Font(name="Consolas", size=11, bold=True, color="0070C0")
+
+    widths = [8, 24, 22, 32, 18]
+    if action == "change_pass":
+        widths.append(20)
+    widths.extend([16, 45])
+
+    for i, w in enumerate(widths, 1):
+        col_letter = openpyxl.utils.get_column_letter(i)
+        ws.column_dimensions[col_letter].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()

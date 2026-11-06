@@ -352,6 +352,21 @@
 - Form tìm kiếm hỗ trợ tự xuống dòng linh hoạt trên màn hình hẹp (`flexWrap: 'wrap'`).
 - Bảng danh sách user có thanh cuộn ngang độc lập `overflowX: 'auto'`.
 - **Thêm User NCC (Nhà Cung Cấp)**: Nút `+ Thêm User NCC` mở modal khởi tạo user Local (`type=0`) với Playwright. Số điện thoại mặc định điền sẵn `0908119345`, mỗi lần thêm thành công tự động `+2` cho lần sau (lưu localStorage). Kiểm tra trùng SĐT qua query IAM; nếu trùng báo lỗi cho user tự sửa hoặc chọn `"⚡ Để hệ thống tự xử lý"`. Sau khi tạo xong, Playwright tự động điều hướng sang User & Clients gán 4 quyền mặc định (`Hệ thống GChecklist`, `PoPortal_Hệ thống đặt hàng Hồ Chí Minh`, `Hệ thống E-Bidding`, `SSO OTP Client...`).
+- **Tính Năng Import Xử Lý Hàng Loạt User (`SsoBulkImportModal.tsx`)**:
+  - Dùng chung **1 template Excel chuẩn 10 cột**: Cột 1-7 (User Name, Email, User Type, SĐT, Pass, TRANG THAI, UPDATE QUYEN), Cột 8-10 (Email Mới, SĐT Mới, Loại TK Mới).
+  - Quy tắc linh hoạt: Có thể bỏ trống User Name nếu có Email (hoặc ngược lại). Kiểm tra trùng lặp trên IAM trước khi thêm mới user để tránh lỗi validation.
+  - Hỗ trợ 5 tác vụ: Tạo mới, Update Pass & Mở khóa, Khóa tài khoản, Update Quyền, Cập nhật thông tin.
+- **Tính Năng Xử Lý Hàng Loạt Dạng Dán Text / Copy-Paste Nhanh (`SsoBatchPasteModal.tsx`)**:
+  - Hỗ trợ 2 tác vụ nhanh: **Đổi Mật Khẩu Hàng Loạt** (`change_pass`) và **Khóa Tài Khoản Hàng Loạt** (`lock`).
+  - Cho phép dán trực tiếp danh sách tài khoản (Username, Email hoặc Số điện thoại) từ Clipboard hoặc copy cả cột từ Excel. Tự động nhận diện và phân tách linh hoạt theo dòng, dấu phẩy, chấm phẩy, tab.
+  - Tác vụ Đổi Mật Khẩu: Kiểm tra tài khoản AD/LDAP, tự động sinh mật khẩu ngẫu nhiên đạt chuẩn IAM $\ge$ 9 ký tự (`generate_compliant_password(10)`), tự động mở khóa tài khoản (`Failed Count = 0`, `Lockout End = ""`, `Lockout Enabled = false`).
+  - Tác vụ Khóa Tài Khoản: Thiết lập `Lockout Enabled = true`, `Failed Count = 4`, `Lockout End = ngày giờ hiện tại`.
+  - Tiện ích: Sticky header, `TopScrollTable`, nút copy 1-chạm cho từng mật khẩu, nút "📋 Copy Toàn Bộ Pass" và nút "Tải File Excel (.xlsx)".
+- **Quy Chuẩn Màu Sắc & CSS Variables Trong Toàn Phân Hệ SSO & IAM**:
+  - Nền trắng (`var(--bg-primary)`) / Nền xám nhạt (`var(--bg-secondary)`), Chữ đen (`var(--text-primary)`).
+  - Vàng đậm `#F5B800` (`var(--color-primary)`) cho nút chính (`Button variant="primary"`), tab đang chọn và điểm nhấn.
+  - Tuyệt đối không dùng màu ngẫu nhiên, gradient, xanh dương, tím, hồng. Đỏ và xanh lá CHỈ dùng cho lỗi hoặc thành công.
+  - 100% màu sắc sử dụng biến hệ thống `var(--...)`.
 
 ### 6.6. Quản Lý Job & Giám Sát Dịch Vụ Nhà Hàng (MongoDB & Mosquitto)
 - **Bản chất đường truyền WAN/VPN**: Mạng kết nối từ Server trung tâm tới các máy trạm nhà hàng (.11, .12, .41) đi qua VPN/FTTH có độ trễ biến thiên và nguy cơ rớt gói SYN/ACK tạm thời trong các đợt quét song song hàng trăm nhà hàng.

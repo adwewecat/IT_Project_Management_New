@@ -128,6 +128,43 @@ npm run dev
      + Modal/Popup co giãn full-width (`max-height: 94vh`, `margin: 8px`), chân trang có `flex-wrap: wrap`.
      + Tuyệt đối không hard-code `min-width > 360px` gây tràn viewport.
 
+### [2026-11-06] - Nâng Cấp Xử Lý Tài Khoản SSO & IAM: Bổ Sung Xử Lý Hàng Loạt Dạng Dán (Paste Danh Sách) Cho Đổi Mật Khẩu & Khóa Tài Khoản, Tự Động Sinh Pass An Toàn, Xuất Excel & Chuẩn Hóa Triệt Để Bộ Màu Sắc Theo CSS Variables
+- **Yêu cầu người dùng**:
+  1. Thêm tính năng **Xử lý hàng loạt dạng Paste (Paste Text / Danh sách nhanh)** cho cả **Đổi Mật Khẩu (Change Pass)** và **Khóa Tài Khoản (Lock Account)** trong trang *Xử Lý Tài Khoản SSO & IAM* (`SsoManagementPage.tsx`).
+     - Cho phép paste danh sách `username`, `email` hoặc `sdt` vào 1 khung textarea, phân cách bằng phím Enter, dấu phẩy `,`, chấm phẩy `;`, hoặc copy cả cột từ Excel dán vào (`\t`, `\n`).
+     - Tác vụ **Đổi Pass**: Tự động random mật khẩu mới đạt chuẩn IAM (**ít nhất 9 ký tự**, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt), mở khóa (`AccessFailedCount=0`, `LockoutEnd=""`, `LockoutEnabled=false`).
+     - Tác vụ **Khóa TK**: Thiết lập `LockoutEnabled=true`, `AccessFailedCount=4`, `LockoutEnd=ngày giờ hiện tại`.
+     - Sau khi xử lý xong: Show mật khẩu mới rõ ràng, có nút Copy nhanh từng dòng và nút **Copy Toàn Bộ Pass** để gửi cho user.
+     - Hiển thị bảng tiến độ từng dòng báo Thành công / Thất bại, lý do chi tiết.
+     - Hỗ trợ nút **Tải File Excel (.xlsx)** để download báo cáo kết quả về máy nếu danh sách nhiều user.
+  2. **Quy định Khắt Khe Về Màu Sắc & CSS Variables (Bắt buộc tuân thủ)**:
+     - Toàn bộ hệ thống SSO & IAM: Style màu chủ đạo bắt buộc là nền trắng, chữ đen và màu vàng đậm `#F5B800` (`var(--color-primary)`) cho button chính, menu đang chọn và điểm nhấn.
+     - Tuyệt đối không sử dụng màu ngẫu nhiên, gradient, xanh dương, tím hoặc hồng để trang trí.
+     - Màu đỏ (`var(--color-error)`) và xanh lá (`var(--color-success)`) CHỈ được sử dụng cho trạng thái lỗi hoặc thành công.
+     - Tất cả màu phải lấy từ CSS variables của hệ thống, không hard-code màu trong từng component.
+- **Chi tiết thực hiện**:
+  1. **Backend (`backend/app/schemas/sso_management.py`, `backend/app/services/sso_management_service.py`, `backend/app/api/v1/sso_management.py`)**:
+     - Thêm schemas `SSOQuickProcessItemRequest`, `SSOQuickProcessItemResponse`, `SSOBatchExportItem`, `SSOBatchExportRequest`.
+     - Bổ sung hàm `process_quick_sso_item(action, query, custom_password)`:
+       + Tìm kiếm linh hoạt trên IAM theo username, email hoặc số điện thoại.
+       + Đổi pass: Kiểm tra user có phải AD/LDAP hay không, mở khóa tài khoản, tạo mật khẩu ngẫu nhiên $\ge$ 9 ký tự (`generate_compliant_password(10)`), đổi mật khẩu qua IAM.
+       + Khóa tài khoản: Thiết lập `LockoutEnabled=True`, `AccessFailedCount=4`, `LockoutEnd=thời gian hiện tại`.
+     - Bổ sung hàm `generate_batch_export_excel(action, items)`: Xuất file Excel báo cáo chi tiết kết quả xử lý bằng `openpyxl`.
+     - Thêm 2 endpoints mới: `POST /api/v1/sso/quick-process-item` và `POST /api/v1/sso/export-batch-results`.
+  2. **Frontend UI (`frontend/src/components/sso/SsoBatchPasteModal.tsx`, `frontend/src/pages/app/SsoManagementPage.tsx`)**:
+     - Xây dựng component mới `SsoBatchPasteModal.tsx`:
+       + 2 tab chuyển đổi mượt mà giữa Đổi Pass và Khóa TK.
+       + Textarea phân tích chuỗi tự động tách theo dòng, dấu phẩy, chấm phẩy, tab Excel.
+       + Hỗ trợ nút Mẫu ví dụ, Xóa trắng, Dừng lại khi đang chạy, Thử lại các dòng lỗi.
+       + Bảng danh sách chi tiết có thanh cuộn riêng `TopScrollTable`, sticky header, nút copy 1-chạm cho từng mật khẩu, nút "📋 Copy Toàn Bộ Pass", nút "Tải File Excel (.xlsx)".
+     - Tích hợp 2 nút thao tác nhanh trên Toolbar trang SSO: `🔑 Đổi Pass Hàng Loạt (Paste)` và `🔒 Khóa TK Hàng Loạt (Paste)`.
+     - Rà soát và làm sạch triệt để toàn bộ mã màu trang trí hardcode (`#2563EB`, `#7C3AED`, `#16A34A`, `#3730A3`, `#EFF6FF`, `#BFDBFE`, `#E0E7FF`, `#93C5FD`, `#D97706`, `#B45309`, `#FCD34D`, `#FEF3C7`...) trong `SsoManagementPage.tsx`, `SsoBulkImportModal.tsx`, `SsoBatchPasteModal.tsx`, chuyển 100% sang CSS variables chuẩn Golden Gate (`var(--color-primary)` #F5B800, `var(--bg-primary)`, `var(--text-primary)`, `var(--border-color)`).
+  3. **Kiểm thử & Đóng gói**:
+     - Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 6.10s`), bản build sạch sẽ trong `frontend/dist/`.
+     - Backend: `python -m compileall app` sạch cú pháp 100%, Backend Smoke Test `PASSED 100%`.
+
+---
+
 ### [2026-11-03] - Chuẩn Hóa Hiển Thị Hình Ảnh & Đồng Bộ Món Vào MongoDB: Khử Trùng Lặp 1 Dòng / 1 Món (Theo Mã RK7 & SAP) & Đồng Bộ Toàn Bộ Các Menu
 - **Yêu cầu người dùng**:
   1. Với hình ảnh món ăn: mỗi món có mã RK7 thì chỉ có 1 hình ảnh tương ứng. Vì vậy trong popup "Chọn Món Đồng Bộ Link Ảnh Từ Server Về MongoDB", chỉ hiển thị 1 dòng cho 1 món nếu có cùng mã SAP và mã RK7 (tránh trường hợp một món như "Tôm Càng Sen" xuất hiện 7 lần do nằm trong nhiều nhóm/combo khác nhau, "Tok phô mai" xuất hiện 2 lần, "Tôm thẻ" xuất hiện nhiều lần).

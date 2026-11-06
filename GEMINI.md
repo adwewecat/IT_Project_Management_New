@@ -366,6 +366,30 @@
     4. *Update Quyền*: Vào `User & Clients`, check các quyền được khai báo trong cột `UPDATE QUYEN`.
     5. *Cập nhật thông tin*: Tìm kiếm user trên IAM theo `User Name` hoặc `Email` cũ $ightarrow$ Cập nhật thông tin mới theo 3 cột cuối: `Email Mới`, `SĐT Mới`, `Loại TK Mới`.
   - Giao diện có nút tải template Excel mẫu 10 cột, xem trước danh sách user, highlight 3 cột mới khi chọn tác vụ Cập nhật, progress bar tiến độ và trạng thái chi tiết từng dòng, hỗ trợ nút "Dừng lại" và "Thử lại các dòng lỗi".
+- **Tính Năng Xử Lý Hàng Loạt Dạng Dán Text / Copy-Paste Nhanh (`SsoBatchPasteModal.tsx`)**:
+  - Hỗ trợ 2 tác vụ nhanh: **Đổi Mật Khẩu Hàng Loạt** (`change_pass`) và **Khóa Tài Khoản Hàng Loạt** (`lock`).
+  - **Khung dán đa năng**: Cho phép dán trực tiếp danh sách tài khoản (Username, Email hoặc Số điện thoại) từ Clipboard, Notepad, hoặc copy cả cột từ Excel. Hệ thống tự động phân tách theo ký tự xuống dòng (`\n`, `\r\n`), dấu phẩy (`,`), chấm phẩy (`;`), hoặc tab (`\t`), tự động lọc trùng và hiển thị số lượng nhận diện thời gian thực.
+  - **Tác vụ Đổi Mật Khẩu (Change Password)**:
+    * Kiểm tra loại tài khoản trên IAM: Nếu là tài khoản AD/LDAP (`user_type == 1`), hệ thống dừng lại và cảnh báo liên hệ Helpdesk đổi pass mail.
+    * Tự động sinh mật khẩu ngẫu nhiên đạt chuẩn bảo mật IAM: **Ít nhất 9 ký tự**, bắt buộc có chữ hoa, chữ thường, chữ số và ký tự đặc biệt (`generate_compliant_password(10)`).
+    * Tự động mở khóa tài khoản: Đặt lại `User Access Failed Count = 0`, xóa trắng `User Lockout End`, đặt `User Lockout Enabled = false`.
+    * Đổi mật khẩu thành công trên IAM và trả về mật khẩu mới.
+  - **Tác vụ Khóa Tài Khoản (Lock Account)**:
+    * Thiết lập `User Lockout Enabled = true`, `User Access Failed Count = 4`, `User Lockout End = ngày giờ hiện tại`.
+  - **Tính năng giao diện & tiện ích kết quả**:
+    * Hiển thị bảng kết quả chi tiết từng tài khoản với sticky header và thanh cuộn ngang độc lập `TopScrollTable`.
+    * Nút copy 1-chạm cho từng mật khẩu mới kèm phản hồi thị giác (icon Check xanh lá).
+    * Nút **"📋 Copy Toàn Bộ Pass"**: Sao chép toàn bộ danh sách kết quả (User + Mật khẩu + Email) vào clipboard để gửi nhanh cho người dùng/bộ phận nghiệp vụ.
+    * Nút **"Tải File Excel (.xlsx)"**: Tải toàn bộ báo cáo kết quả xử lý (STT, Từ Khóa, User IAM, Email, SĐT, Mật Khẩu Mới, Trạng Thái, Chi Tiết) về máy.
+    * Tiến độ thực hiện dạng Progress bar mượt mà, hỗ trợ nút "Dừng Lại" và "Thử Lại Dòng Lỗi".
+- **Quy Chuẩn Màu Sắc & CSS Variables Trong Toàn Phân Hệ SSO & IAM**:
+  - Tuân thủ nghiêm ngặt bảng màu nhận diện Golden Gate:
+    * Nền trắng (`var(--bg-primary): #FFFFFF`) / Nền xám nhạt (`var(--bg-secondary)`)
+    * Chữ đen (`var(--text-primary): #111827`)
+    * Màu vàng đậm `#F5B800` (`var(--color-primary)`) dành cho nút chính (`Button variant="primary"`), tab đang chọn và điểm nhấn.
+    * Tuyệt đối không sử dụng các màu ngẫu nhiên, gradient, xanh dương (`#2563EB`), tím, hồng để trang trí.
+    * Màu đỏ (`var(--color-error)`) và xanh lá (`var(--color-success)`) CHỈ được dùng duy nhất cho trạng thái lỗi hoặc thành công.
+    * Toàn bộ mã màu phải lấy từ CSS variables của hệ thống (`var(--...)`), không hard-code hex màu trong các components.
 
 ### 6.6. Quản Lý Job & Giám Sát Dịch Vụ Nhà Hàng (MongoDB & Mosquitto)
 - **Bản chất đường truyền WAN/VPN**: Mạng kết nối từ Server trung tâm tới các máy trạm nhà hàng (.11, .12, .41) đi qua VPN/FTTH có độ trễ biến thiên và nguy cơ rớt gói SYN/ACK tạm thời trong các đợt quét song song hàng trăm nhà hàng.

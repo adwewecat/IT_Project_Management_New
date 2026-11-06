@@ -28,6 +28,8 @@ import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { TopScrollTable } from '../../components/ui/TopScrollTable';
 import { SsoBulkImportModal } from '../../components/sso/SsoBulkImportModal';
+import { SsoBatchPasteModal } from '../../components/sso/SsoBatchPasteModal';
+import { Lock } from 'lucide-react';
 import {
   ssoManagementService,
 } from '../../services/ssoManagementService';
@@ -148,6 +150,8 @@ export const SsoManagementPage: React.FC = () => {
   const [inputNccPhone, setInputNccPhone] = useState<string>('0908119345');
   const [creatingNccUser, setCreatingNccUser] = useState<boolean>(false);
   const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState<boolean>(false);
+  const [isBatchPasteModalOpen, setIsBatchPasteModalOpen] = useState<boolean>(false);
+  const [batchPasteAction, setBatchPasteAction] = useState<'change_pass' | 'lock'>('change_pass');
   const [nccConfiguredClients, setNccConfiguredClients] = useState<string[]>(DEFAULT_NCC_CLIENTS);
   const [showNccPermissionsAccordion, setShowNccPermissionsAccordion] = useState<boolean>(false);
   const [nccNewClientInput, setNccNewClientInput] = useState<string>('');
@@ -632,7 +636,7 @@ export const SsoManagementPage: React.FC = () => {
             zIndex: 9999,
             padding: '12px 20px',
             borderRadius: '8px',
-            backgroundColor: toast.type === 'success' ? '#059669' : toast.type === 'error' ? '#DC2626' : '#2563EB',
+            backgroundColor: toast.type === 'success' ? 'var(--color-success)' : toast.type === 'error' ? 'var(--color-error)' : 'var(--text-primary)',
             color: '#fff',
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
             display: 'flex',
@@ -763,9 +767,9 @@ export const SsoManagementPage: React.FC = () => {
       {!loadingConfig && !ssoConfig?.configured && (
         <div
           style={{
-            backgroundColor: '#FEF3C7',
-            border: '1px solid #FCD34D',
-            borderRadius: '10px',
+            backgroundColor: 'var(--color-warning-bg)',
+            border: '1px solid var(--color-warning-border)',
+            borderRadius: 'var(--radius-lg)',
             padding: '14px 18px',
             display: 'flex',
             alignItems: 'center',
@@ -774,20 +778,20 @@ export const SsoManagementPage: React.FC = () => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <AlertTriangle size={22} style={{ color: '#D97706', flexShrink: 0 }} />
+            <AlertTriangle size={22} style={{ color: 'var(--color-warning-text)', flexShrink: 0 }} />
             <div>
-              <div style={{ fontWeight: 700, color: '#92400E', fontSize: '14px' }}>
+              <div style={{ fontWeight: 700, color: 'var(--color-warning-text)', fontSize: '14px' }}>
                 Bạn chưa cấu hình tài khoản SSO cho tài khoản đăng nhập này ({user?.username})
               </div>
-              <div style={{ fontSize: '13px', color: '#B45309', marginTop: '2px' }}>
+              <div style={{ fontSize: '13px', color: 'var(--color-warning-text)', marginTop: '2px' }}>
                 Mỗi tài khoản đăng nhập vào hệ thống sẽ lưu thông tin SSO riêng biệt. Vui lòng bấm cấu hình để lưu tài khoản SSO của bạn trước khi tra cứu trên IAM.
               </div>
             </div>
           </div>
           <Button
+            variant="primary"
             size="sm"
             onClick={() => setIsConfigModalOpen(true)}
-            style={{ backgroundColor: '#D97706', color: '#fff', borderColor: '#D97706' }}
           >
             Cấu Hình Ngay
           </Button>
@@ -860,17 +864,17 @@ export const SsoManagementPage: React.FC = () => {
         <div
           style={{
             padding: '12px 18px',
-            borderRadius: '10px',
-            backgroundColor: '#FFFBEB',
-            border: '1px solid #FCD34D',
+            borderRadius: 'var(--radius-md)',
+            backgroundColor: 'var(--color-warning-bg)',
+            border: '1px solid var(--color-warning-border)',
             display: 'flex',
             alignItems: 'center',
             gap: '12px',
             boxShadow: 'var(--shadow-sm)',
           }}
         >
-          <AlertTriangle size={20} style={{ color: '#D97706', flexShrink: 0 }} />
-          <div style={{ fontSize: '13px', color: '#92400E', lineHeight: 1.5 }}>
+          <AlertTriangle size={20} style={{ color: 'var(--color-warning-text)', flexShrink: 0 }} />
+          <div style={{ fontSize: '13px', color: 'var(--color-warning-text)', lineHeight: 1.5 }}>
             <strong>Danh sách kết quả nhiều hơn 10 user nên hệ thống chỉ hiển thị 10 user đầu tiên.</strong>{' '}
             Vui lòng nhập thêm thông tin chi tiết (mã nhân viên, email, số điện thoại hoặc họ tên đầy đủ) để tìm kiếm chính xác tài khoản.
           </div>
@@ -912,11 +916,11 @@ export const SsoManagementPage: React.FC = () => {
                 style={{
                   fontSize: '13px',
                   fontWeight: 700,
-                  color: '#2563EB',
-                  backgroundColor: '#EFF6FF',
+                  color: 'var(--text-primary)',
+                  backgroundColor: 'var(--color-primary-light)',
                   padding: '4px 10px',
-                  borderRadius: '6px',
-                  border: '1px solid #BFDBFE',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--color-primary)',
                 }}
               >
                 Đang chọn: <strong>{selectedUser.user_name}</strong> {selectedUser.email && `(${selectedUser.email})`}
@@ -929,34 +933,62 @@ export const SsoManagementPage: React.FC = () => {
           </div>
 
           {/* Action Buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
             <Button
               variant="primary"
-              onClick={() => setIsBulkImportModalOpen(true)}
+              onClick={() => {
+                setBatchPasteAction('change_pass');
+                setIsBatchPasteModalOpen(true);
+              }}
               style={{
-                backgroundColor: '#7C3AED',
-                borderColor: '#7C3AED',
-                color: '#ffffff',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: '7px',
+                fontWeight: 700,
+              }}
+            >
+              <KeyRound size={15} />
+              <span>🔑 Đổi Pass Hàng Loạt (Paste)</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBatchPasteAction('lock');
+                setIsBatchPasteModalOpen(true);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '7px',
+                fontWeight: 600,
+              }}
+            >
+              <Lock size={15} />
+              <span>🔒 Khóa TK Hàng Loạt (Paste)</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => setIsBulkImportModalOpen(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '7px',
                 fontWeight: 600,
               }}
             >
               <FileSpreadsheet size={15} />
-              <span>📁 Import Xử Lý Hàng Loạt</span>
+              <span>📁 Import Excel</span>
             </Button>
 
             <Button
-              variant="primary"
+              variant="outline"
               onClick={handleOpenCreateNccModal}
               style={{
-                backgroundColor: '#16A34A',
-                borderColor: '#16A34A',
-                color: '#ffffff',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: '7px',
                 fontWeight: 600,
               }}
             >
@@ -969,31 +1001,33 @@ export const SsoManagementPage: React.FC = () => {
               disabled={!selectedUser || processingChangePass}
               onClick={handleOpenChangePassModal}
               style={{
-                borderColor: selectedUser ? '#2563EB' : undefined,
-                color: selectedUser ? '#2563EB' : undefined,
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: '7px',
+                borderColor: selectedUser ? 'var(--color-primary)' : undefined,
+                backgroundColor: selectedUser ? 'var(--color-primary-light)' : undefined,
+                color: 'var(--text-primary)',
               }}
             >
               <KeyRound size={15} />
-              <span>1. Đổi Mật Khẩu (Change Pass)</span>
+              <span>Đổi Pass User Chọn</span>
             </Button>
 
             <Button
-              variant="primary"
+              variant="outline"
               disabled={!selectedUser || processingAssign}
               onClick={handleOpenAssignModal}
               style={{
-                backgroundColor: selectedUser ? '#059669' : undefined,
-                borderColor: selectedUser ? '#059669' : undefined,
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: '7px',
+                borderColor: selectedUser ? 'var(--color-primary)' : undefined,
+                backgroundColor: selectedUser ? 'var(--color-primary-light)' : undefined,
+                color: 'var(--text-primary)',
               }}
             >
               <ShieldCheck size={15} />
-              <span>2. Phân Quyền Client (GGG / NCC)</span>
+              <span>Phân Quyền User Chọn</span>
             </Button>
           </div>
         </div>
@@ -1072,8 +1106,9 @@ export const SsoManagementPage: React.FC = () => {
                             borderRadius: '4px',
                             fontSize: '11px',
                             fontWeight: 600,
-                            backgroundColor: item.user_type === 'AD' ? '#E0E7FF' : item.user_type === 'Empl' ? '#ECFDF5' : '#FEF3C7',
-                            color: item.user_type === 'AD' ? '#3730A3' : item.user_type === 'Empl' ? '#065F46' : '#92400E',
+                            backgroundColor: 'var(--bg-secondary)',
+                            color: 'var(--text-primary)',
+                            border: '1px solid var(--border-color)',
                           }}
                         >
                           {item.user_type || 'Local'}
@@ -1214,7 +1249,7 @@ export const SsoManagementPage: React.FC = () => {
         onClose={() => !processingChangePass && setIsChangePassModalOpen(false)}
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <KeyRound size={18} style={{ color: '#2563EB' }} />
+            <KeyRound size={18} style={{ color: 'var(--text-primary)' }} />
             <span>Đổi Mật Khẩu Cho User: {selectedUser?.user_name}</span>
           </div>
         }
@@ -1249,7 +1284,7 @@ export const SsoManagementPage: React.FC = () => {
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#2563EB',
+                  color: 'var(--text-primary)',
                   fontSize: '12px',
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -1308,7 +1343,7 @@ export const SsoManagementPage: React.FC = () => {
               variant="primary"
               onClick={handleConfirmChangePass}
               disabled={processingChangePass || !newPasswordInput.trim()}
-              style={{ backgroundColor: '#2563EB', borderColor: '#2563EB' }}
+              
             >
               {processingChangePass ? (
                 <>
@@ -1332,7 +1367,7 @@ export const SsoManagementPage: React.FC = () => {
             {passResultData?.success ? (
               <CheckCircle2 size={20} style={{ color: '#059669' }} />
             ) : (
-              <AlertTriangle size={20} style={{ color: '#D97706' }} />
+              <AlertTriangle size={20} style={{ color: 'var(--color-primary)' }} />
             )}
             <span>{passResultData?.success ? 'Đổi Mật Khẩu Thành Công' : 'Thông Báo Từ Hệ Thống'}</span>
           </div>
@@ -1343,8 +1378,8 @@ export const SsoManagementPage: React.FC = () => {
           {passResultData?.isLdap ? (
             <div
               style={{
-                backgroundColor: '#FEF3C7',
-                border: '1px solid #FCD34D',
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
                 borderRadius: '8px',
                 padding: '16px',
                 display: 'flex',
@@ -1352,12 +1387,12 @@ export const SsoManagementPage: React.FC = () => {
                 gap: '12px',
               }}
             >
-              <AlertTriangle size={24} style={{ color: '#D97706', flexShrink: 0, marginTop: '2px' }} />
+              <AlertTriangle size={24} style={{ color: 'var(--color-primary)', flexShrink: 0, marginTop: '2px' }} />
               <div>
-                <div style={{ fontWeight: 700, color: '#92400E', fontSize: '14px' }}>
+                <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '14px' }}>
                   Tài Khoản Đồng Bộ Từ LDAP / Active Directory
                 </div>
-                <div style={{ fontSize: '13px', color: '#B45309', marginTop: '6px', lineHeight: 1.5 }}>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '6px', lineHeight: 1.5 }}>
                   {passResultData.message}
                 </div>
               </div>
@@ -1397,7 +1432,7 @@ export const SsoManagementPage: React.FC = () => {
                       fontFamily: 'monospace',
                       fontSize: '18px',
                       fontWeight: 700,
-                      color: '#2563EB',
+                      color: 'var(--text-primary)',
                       letterSpacing: '1px',
                     }}
                   >
@@ -1525,9 +1560,9 @@ export const SsoManagementPage: React.FC = () => {
                   fontWeight: 600,
                   padding: '2px 8px',
                   borderRadius: '10px',
-                  backgroundColor: '#EFF6FF',
-                  color: '#2563EB',
-                  border: '1px solid #BFDBFE',
+                  backgroundColor: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border-color)',
                 }}
               >
                 Loại: {selectedUser.user_type}
@@ -1552,11 +1587,11 @@ export const SsoManagementPage: React.FC = () => {
                 gap: '8px',
                 padding: '10px 16px',
                 fontSize: '13px',
-                fontWeight: 600,
-                color: assignTab === 'ggg' ? '#059669' : 'var(--text-secondary)',
-                backgroundColor: assignTab === 'ggg' ? '#ECFDF5' : 'transparent',
+                fontWeight: 700,
+                color: assignTab === 'ggg' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                backgroundColor: assignTab === 'ggg' ? 'var(--color-primary-light)' : 'transparent',
                 border: 'none',
-                borderBottom: assignTab === 'ggg' ? '2px solid #059669' : '2px solid transparent',
+                borderBottom: assignTab === 'ggg' ? '2px solid var(--color-primary)' : '2px solid transparent',
                 borderRadius: '8px 8px 0 0',
                 cursor: 'pointer',
                 marginBottom: '-2px',
@@ -1570,8 +1605,9 @@ export const SsoManagementPage: React.FC = () => {
                   fontSize: '11px',
                   padding: '1px 6px',
                   borderRadius: '10px',
-                  backgroundColor: assignTab === 'ggg' ? '#059669' : 'var(--border-color)',
-                  color: assignTab === 'ggg' ? '#FFFFFF' : 'var(--text-muted)',
+                  backgroundColor: assignTab === 'ggg' ? 'var(--color-primary)' : 'var(--border-color)',
+                  color: 'var(--text-primary)',
+                  fontWeight: 700,
                 }}
               >
                 {selectedGggClients.length}/{gggClients.length}
@@ -1587,11 +1623,11 @@ export const SsoManagementPage: React.FC = () => {
                 gap: '8px',
                 padding: '10px 16px',
                 fontSize: '13px',
-                fontWeight: 600,
-                color: assignTab === 'ncc' ? '#059669' : 'var(--text-secondary)',
-                backgroundColor: assignTab === 'ncc' ? '#ECFDF5' : 'transparent',
+                fontWeight: 700,
+                color: assignTab === 'ncc' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                backgroundColor: assignTab === 'ncc' ? 'var(--color-primary-light)' : 'transparent',
                 border: 'none',
-                borderBottom: assignTab === 'ncc' ? '2px solid #059669' : '2px solid transparent',
+                borderBottom: assignTab === 'ncc' ? '2px solid var(--color-primary)' : '2px solid transparent',
                 borderRadius: '8px 8px 0 0',
                 cursor: 'pointer',
                 marginBottom: '-2px',
@@ -1605,8 +1641,9 @@ export const SsoManagementPage: React.FC = () => {
                   fontSize: '11px',
                   padding: '1px 6px',
                   borderRadius: '10px',
-                  backgroundColor: assignTab === 'ncc' ? '#059669' : 'var(--border-color)',
-                  color: assignTab === 'ncc' ? '#FFFFFF' : 'var(--text-muted)',
+                  backgroundColor: assignTab === 'ncc' ? 'var(--color-primary)' : 'var(--border-color)',
+                  color: 'var(--text-primary)',
+                  fontWeight: 700,
                 }}
               >
                 {selectedNccClients.length}/{nccClients.length}
@@ -1690,10 +1727,11 @@ export const SsoManagementPage: React.FC = () => {
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: '#2563EB',
+                    color: 'var(--text-primary)',
                     fontSize: '12px',
-                    fontWeight: 500,
+                    fontWeight: 600,
                     cursor: 'pointer',
+                    textDecoration: 'underline',
                   }}
                 >
                   {(assignTab === 'ggg' ? selectedGggClients.length === gggClients.length : selectedNccClients.length === nccClients.length)
@@ -1829,7 +1867,7 @@ export const SsoManagementPage: React.FC = () => {
               variant="primary"
               onClick={handleConfirmAssignClients}
               disabled={processingAssign || (assignTab === 'ggg' ? selectedGggClients.length === 0 : selectedNccClients.length === 0)}
-              style={{ backgroundColor: '#059669', borderColor: '#059669' }}
+              
             >
               {processingAssign ? (
                 <>
@@ -2036,7 +2074,7 @@ export const SsoManagementPage: React.FC = () => {
                 }}
               >
                 <span style={{ color: 'var(--text-muted)' }}>Loại tài khoản (User Type):</span>{' '}
-                <strong style={{ color: '#2563EB' }}>0 - Local</strong>
+                <strong>0 - Local</strong>
               </div>
               <div
                 style={{
@@ -2102,13 +2140,15 @@ export const SsoManagementPage: React.FC = () => {
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: '#2563EB',
+                      color: 'var(--text-primary)',
                       cursor: 'pointer',
                       fontSize: '12px',
+                      fontWeight: 500,
                       display: 'flex',
                       alignItems: 'center',
                       gap: '4px',
                       padding: 0,
+                      textDecoration: 'underline',
                     }}
                   >
                     <RotateCcw size={12} />
@@ -2236,7 +2276,7 @@ export const SsoManagementPage: React.FC = () => {
               variant="primary"
               onClick={() => handleCreateNccUser(false)}
               disabled={creatingNccUser || !inputNccUsername.trim() || !inputNccEmail.trim() || !inputNccPhone.trim()}
-              style={{ backgroundColor: '#16A34A', borderColor: '#16A34A', color: '#ffffff' }}
+              
             >
               {creatingNccUser ? (
                 <>
@@ -2334,7 +2374,7 @@ export const SsoManagementPage: React.FC = () => {
                 padding: '12px 16px',
                 borderRadius: '8px',
                 backgroundColor: 'var(--bg-secondary)',
-                border: '1.5px solid #93C5FD',
+                border: '1px solid var(--border-color)',
               }}
             >
               <span
@@ -2342,7 +2382,7 @@ export const SsoManagementPage: React.FC = () => {
                   fontFamily: 'monospace',
                   fontSize: '19px',
                   fontWeight: 700,
-                  color: '#2563EB',
+                  color: 'var(--text-primary)',
                   letterSpacing: '1px',
                 }}
               >
@@ -2352,7 +2392,7 @@ export const SsoManagementPage: React.FC = () => {
                 size="sm"
                 variant="primary"
                 onClick={handleCopyNccPassword}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#2563EB', borderColor: '#2563EB' }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
               >
                 {copiedNccPass ? <Check size={14} /> : <Copy size={14} />}
                 <span>{copiedNccPass ? 'Đã Chép' : 'Sao Chép Mật Khẩu'}</span>
@@ -2416,7 +2456,7 @@ export const SsoManagementPage: React.FC = () => {
             <Button
               variant="primary"
               onClick={() => setIsNccResultModalOpen(false)}
-              style={{ backgroundColor: '#16A34A', borderColor: '#16A34A', color: '#fff', minWidth: '110px' }}
+              style={{ minWidth: '110px' }}
             >
               Hoàn Tất / Đóng
             </Button>
@@ -2428,6 +2468,18 @@ export const SsoManagementPage: React.FC = () => {
       <SsoBulkImportModal
         isOpen={isBulkImportModalOpen}
         onClose={() => setIsBulkImportModalOpen(false)}
+        onSuccess={() => {
+          if (searchQuery.trim()) {
+            handleSearch();
+          }
+        }}
+      />
+
+      {/* Modal Xử Lý Hàng Loạt Dạng Paste (Đổi Pass / Khóa TK) */}
+      <SsoBatchPasteModal
+        isOpen={isBatchPasteModalOpen}
+        onClose={() => setIsBatchPasteModalOpen(false)}
+        initialAction={batchPasteAction}
         onSuccess={() => {
           if (searchQuery.trim()) {
             handleSearch();

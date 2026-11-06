@@ -13,6 +13,9 @@ import {
   SSOBulkParseResponse,
   SSOBulkProcessItemRequest,
   SSOBulkProcessItemResponse,
+  SSOQuickProcessItemRequest,
+  SSOQuickProcessItemResponse,
+  SSOBatchExportItem,
 } from '../types/ssoManagement';
 
 export const ssoManagementService = {
@@ -79,5 +82,25 @@ export const ssoManagementService = {
   async processBulkItem(payload: SSOBulkProcessItemRequest): Promise<SSOBulkProcessItemResponse> {
     const res = await apiClient.post<SSOBulkProcessItemResponse>('/sso/bulk-process-item', payload);
     return res.data;
+  },
+
+  async quickProcessItem(payload: SSOQuickProcessItemRequest): Promise<SSOQuickProcessItemResponse> {
+    const res = await apiClient.post<SSOQuickProcessItemResponse>('/sso/quick-process-item', payload);
+    return res.data;
+  },
+
+  async exportBatchResults(action: 'change_pass' | 'lock', items: SSOBatchExportItem[]): Promise<void> {
+    const res = await apiClient.post('/sso/export-batch-results', { action, items }, {
+      responseType: 'blob',
+    });
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    const nowStr = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+    link.setAttribute('download', `Ket_Qua_SSO_${action}_${nowStr}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.parentNode?.removeChild(link);
+    window.URL.revokeObjectURL(url);
   },
 };

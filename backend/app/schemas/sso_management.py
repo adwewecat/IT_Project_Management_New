@@ -135,3 +135,39 @@ class SSOBulkProcessItemResponse(BaseModel):
     new_password: Optional[str] = None
     assigned_clients: List[str] = []
     is_ldap: bool = False
+
+
+
+class SSOQuickProcessItemRequest(BaseModel):
+    action: str = Field(..., description="'change_pass' hoặc 'lock'")
+    query: str = Field(..., description="User Name, Email hoặc Số điện thoại")
+    custom_password: Optional[str] = Field(None, description="Mật khẩu tùy chọn hoặc bỏ trống để tự sinh ngẫu nhiên >= 9 ký tự")
+
+
+class SSOQuickProcessItemResponse(BaseModel):
+    success: bool
+    query: str
+    action: str
+    user_id: Optional[str] = None
+    user_name: Optional[str] = None
+    email: Optional[str] = None
+    phone_number: Optional[str] = None
+    new_password: Optional[str] = None
+    message: str
+    detail: Optional[str] = None
+    is_ldap: bool = False
+
+
+class SSOBatchExportItem(BaseModel):
+    query: str = ""
+    user_name: Optional[str] = ""
+    email: Optional[str] = ""
+    phone_number: Optional[str] = ""
+    new_password: Optional[str] = ""
+    status: str = "success"
+    message: Optional[str] = ""
+
+
+class SSOBatchExportRequest(BaseModel):
+    action: str = Field(..., description="'change_pass' hoặc 'lock'")
+    items: List[SSOBatchExportItem] = []

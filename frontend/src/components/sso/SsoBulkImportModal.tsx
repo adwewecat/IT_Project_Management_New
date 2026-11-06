@@ -46,7 +46,7 @@ const ACTION_OPTIONS: ActionOption[] = [
     title: '1. Tạo Mới Tài Khoản',
     shortDesc: 'Failed Count = 0, Lockout End xóa trắng, Lockout Enabled = False, gán pass & quyền nếu có',
     icon: <UserPlus size={16} />,
-    color: '#16A34A',
+    color: 'var(--color-primary)',
     badge: 'TẠO MỚI',
   },
   {
@@ -54,7 +54,7 @@ const ACTION_OPTIONS: ActionOption[] = [
     title: '2. Update Pass & Mở Khóa',
     shortDesc: 'Đổi pass theo file, Failed Count = 0, Lockout End xóa trắng, Lockout Enabled = False',
     icon: <KeyRound size={16} />,
-    color: '#2563EB',
+    color: 'var(--color-primary)',
     badge: 'ĐỔI PASS',
   },
   {
@@ -62,7 +62,7 @@ const ACTION_OPTIONS: ActionOption[] = [
     title: '3. Khóa Tài Khoản',
     shortDesc: 'Lockout Enabled = TRUE, Failed Count = 4, Lockout End = Ngày giờ hiện tại',
     icon: <Lock size={16} />,
-    color: '#DC2626',
+    color: 'var(--color-primary)',
     badge: 'KHÓA TK',
   },
   {
@@ -70,7 +70,7 @@ const ACTION_OPTIONS: ActionOption[] = [
     title: '4. Update Quyền',
     shortDesc: 'Truy cập User & Clients, check các quyền được khai báo trong cột UPDATE QUYEN',
     icon: <ShieldCheck size={16} />,
-    color: '#7C3AED',
+    color: 'var(--color-primary)',
     badge: 'PHÂN QUYỀN',
   },
   {
@@ -78,7 +78,7 @@ const ACTION_OPTIONS: ActionOption[] = [
     title: '5. Cập Nhật Thông Tin',
     shortDesc: 'Tìm user theo User Name / Email, cập nhật theo 3 cột: Email Mới, SĐT Mới, Loại TK Mới',
     icon: <FileText size={16} />,
-    color: '#D97706',
+    color: 'var(--color-primary)',
     badge: 'CẬP NHẬT',
   },
 ];
@@ -248,7 +248,7 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
       }}
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <FileSpreadsheet size={20} style={{ color: '#2563EB' }} />
+          <FileSpreadsheet size={20} style={{ color: 'var(--text-primary)' }} />
           <span>Import Xử Lý Hàng Loạt User IAM / SSO</span>
         </div>
       }
@@ -264,12 +264,12 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
             flexWrap: 'wrap',
             gap: '12px',
             padding: '12px 16px',
-            backgroundColor: '#EFF6FF',
-            borderRadius: '8px',
-            border: '1px solid #BFDBFE',
+            backgroundColor: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-color)',
           }}
         >
-          <div style={{ fontSize: '13px', color: '#1E40AF', lineHeight: 1.5 }}>
+          <div style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
             <strong>Quy chuẩn Import:</strong> Tất cả 5 tác vụ đều sử dụng <strong>chung 1 mẫu Excel 10 cột</strong>.
             Cột <strong>User Name</strong> hoặc <strong>Email</strong> chỉ cần có ít nhất 1 trong 2 cột để tìm kiếm user.
             Riêng tác vụ <strong>5. Cập Nhật Thông Tin</strong> sẽ lấy thông tin cập nhật từ 3 cột mới ở cuối (<strong>Email Mới</strong>, <strong>SĐT Mới</strong>, <strong>Loại TK Mới</strong>).
@@ -280,10 +280,6 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
             onClick={handleDownloadTemplate}
             disabled={downloadingTemplate}
             style={{
-              backgroundColor: '#FFFFFF',
-              borderColor: '#2563EB',
-              color: '#2563EB',
-              fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
@@ -314,9 +310,9 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                   onClick={() => !isRunning && setSelectedAction(opt.id)}
                   style={{
                     padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: isSelected ? `2px solid ${opt.color}` : '1px solid var(--border-color)',
-                    backgroundColor: isSelected ? 'var(--bg-secondary)' : 'var(--bg-card)',
+                    borderRadius: 'var(--radius-md)',
+                    border: isSelected ? '2px solid var(--color-primary)' : '1px solid var(--border-color)',
+                    backgroundColor: isSelected ? 'var(--color-primary-light)' : 'var(--bg-card)',
                     cursor: isRunning ? 'not-allowed' : 'pointer',
                     transition: 'all 0.2s',
                     display: 'flex',
@@ -326,7 +322,7 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: opt.color, fontWeight: 700, fontSize: '13px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-primary)', fontWeight: 700, fontSize: '13px' }}>
                       {opt.icon}
                       <span>{opt.badge}</span>
                     </div>
@@ -399,8 +395,8 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
           {rows.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12.5px' }}>
               <span>Tổng số: <strong>{totalCount}</strong></span>
-              <span style={{ color: '#16A34A', fontWeight: 600 }}>Thành công: {successCount}</span>
-              {errorCount > 0 && <span style={{ color: '#DC2626', fontWeight: 600 }}>Lỗi: {errorCount}</span>}
+              <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>Thành công: {successCount}</span>
+              {errorCount > 0 && <span style={{ color: 'var(--color-error)', fontWeight: 600 }}>Lỗi: {errorCount}</span>}
             </div>
           )}
         </div>
@@ -417,7 +413,7 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                 style={{
                   width: `${percent}%`,
                   height: '100%',
-                  backgroundColor: errorCount > 0 && successCount === 0 ? '#DC2626' : '#2563EB',
+                  backgroundColor: errorCount > 0 && successCount === 0 ? 'var(--color-error)' : 'var(--color-primary)',
                   transition: 'width 0.3s ease',
                 }}
               />
@@ -453,8 +449,8 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                       style={{
                         width: '150px',
                         padding: '8px 10px',
-                        backgroundColor: selectedAction === 'update_info' ? '#FEF3C7' : 'inherit',
-                        color: selectedAction === 'update_info' ? '#92400E' : 'inherit',
+                        backgroundColor: selectedAction === 'update_info' ? 'var(--color-primary-light)' : 'inherit',
+                        color: selectedAction === 'update_info' ? 'var(--text-primary)' : 'inherit',
                         fontWeight: selectedAction === 'update_info' ? 700 : 'inherit',
                       }}
                     >
@@ -464,8 +460,8 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                       style={{
                         width: '105px',
                         padding: '8px 10px',
-                        backgroundColor: selectedAction === 'update_info' ? '#FEF3C7' : 'inherit',
-                        color: selectedAction === 'update_info' ? '#92400E' : 'inherit',
+                        backgroundColor: selectedAction === 'update_info' ? 'var(--color-primary-light)' : 'inherit',
+                        color: selectedAction === 'update_info' ? 'var(--text-primary)' : 'inherit',
                         fontWeight: selectedAction === 'update_info' ? 700 : 'inherit',
                       }}
                     >
@@ -476,8 +472,8 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                         width: '80px',
                         padding: '8px 10px',
                         textAlign: 'center',
-                        backgroundColor: selectedAction === 'update_info' ? '#FEF3C7' : 'inherit',
-                        color: selectedAction === 'update_info' ? '#92400E' : 'inherit',
+                        backgroundColor: selectedAction === 'update_info' ? 'var(--color-primary-light)' : 'inherit',
+                        color: selectedAction === 'update_info' ? 'var(--text-primary)' : 'inherit',
                         fontWeight: selectedAction === 'update_info' ? 700 : 'inherit',
                       }}
                     >
@@ -493,7 +489,7 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                     const isError = row.status === 'error';
 
                     const rowBg = isProcessing
-                      ? '#FEF3C7'
+                      ? 'var(--color-primary-light)'
                       : isSuccess
                       ? '#F0FDF4'
                       : isError
@@ -514,17 +510,17 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                         </td>
                         <td style={{ padding: '7px 10px', textAlign: 'center' }}>
                           {isProcessing && (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#D97706', fontWeight: 600 }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--text-primary)', fontWeight: 600 }}>
                               <RefreshCw size={13} className="spin" /> Đang chạy
                             </span>
                           )}
                           {isSuccess && (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#16A34A', fontWeight: 700 }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--color-success)', fontWeight: 700 }}>
                               <CheckCircle2 size={14} /> Xong
                             </span>
                           )}
                           {isError && (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#DC2626', fontWeight: 700 }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--color-error)', fontWeight: 700 }}>
                               <XCircle size={14} /> Lỗi
                             </span>
                           )}
@@ -565,7 +561,7 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                                   background: 'none',
                                   border: 'none',
                                   cursor: 'pointer',
-                                  color: copiedId === row.id ? '#16A34A' : 'var(--text-muted)',
+                                  color: copiedId === row.id ? 'var(--color-success)' : 'var(--text-muted)',
                                 }}
                                 title="Sao chép mật khẩu"
                               >
@@ -582,7 +578,7 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                         <td
                           style={{
                             padding: '7px 10px',
-                            backgroundColor: selectedAction === 'update_info' && row.new_email ? '#FEF9C3' : 'inherit',
+                            backgroundColor: selectedAction === 'update_info' && row.new_email ? 'var(--color-primary-light)' : 'inherit',
                             fontWeight: selectedAction === 'update_info' && row.new_email ? 600 : 400,
                           }}
                         >
@@ -592,7 +588,7 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                           style={{
                             padding: '7px 10px',
                             fontFamily: 'monospace',
-                            backgroundColor: selectedAction === 'update_info' && row.new_phone ? '#FEF9C3' : 'inherit',
+                            backgroundColor: selectedAction === 'update_info' && row.new_phone ? 'var(--color-primary-light)' : 'inherit',
                             fontWeight: selectedAction === 'update_info' && row.new_phone ? 600 : 400,
                           }}
                         >
@@ -602,13 +598,13 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                           style={{
                             padding: '7px 10px',
                             textAlign: 'center',
-                            backgroundColor: selectedAction === 'update_info' && row.new_user_type ? '#FEF9C3' : 'inherit',
+                            backgroundColor: selectedAction === 'update_info' && row.new_user_type ? 'var(--color-primary-light)' : 'inherit',
                             fontWeight: selectedAction === 'update_info' && row.new_user_type ? 600 : 400,
                           }}
                         >
                           {row.new_user_type || '—'}
                         </td>
-                        <td style={{ padding: '7px 10px', color: isError ? '#DC2626' : isSuccess ? '#16A34A' : 'var(--text-secondary)' }}>
+                        <td style={{ padding: '7px 10px', color: isError ? 'var(--color-error)' : isSuccess ? 'var(--color-success-text)' : 'var(--text-secondary)' }}>
                           {row.resultMessage || '—'}
                         </td>
                       </tr>
@@ -669,8 +665,8 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                 variant="outline"
                 onClick={handleStopProcess}
                 style={{
-                  borderColor: '#DC2626',
-                  color: '#DC2626',
+                  borderColor: 'var(--color-error)',
+                  color: 'var(--color-error)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
@@ -686,8 +682,7 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                 variant="outline"
                 onClick={() => handleStartProcess(true)}
                 style={{
-                  borderColor: '#D97706',
-                  color: '#D97706',
+                  
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
@@ -704,14 +699,10 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
               onClick={() => handleStartProcess(false)}
               disabled={isRunning || rows.length === 0}
               style={{
-                backgroundColor: ACTION_OPTIONS.find((a) => a.id === selectedAction)?.color || '#2563EB',
-                borderColor: ACTION_OPTIONS.find((a) => a.id === selectedAction)?.color || '#2563EB',
-                color: '#FFFFFF',
-                fontWeight: 700,
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                padding: '8px 18px',
+                padding: '9px 20px',
               }}
             >
               {isRunning ? (
