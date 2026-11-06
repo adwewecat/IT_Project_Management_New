@@ -114,7 +114,8 @@ import {
 
   Flame,
   Network,
-  Tablet
+  Tablet,
+  Smartphone
 } from 'lucide-react';
 
 import { Card } from '../../components/ui/Card';
@@ -168,6 +169,7 @@ import { CoSoKdsFlowDiagramModal } from '../../components/restaurant-analysis/Co
 import { BatchRoleUserModal } from './BatchRoleUserModal';
 
 import { AndroidEmulatorTab } from './AndroidEmulatorTab';
+import { EmulatorIntegratedTab } from './EmulatorIntegratedTab';
 
 import { PrintManagementModal } from '../../components/mongodb/PrintManagementModal';
 
@@ -353,7 +355,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
   // Active Main Tab: 'task_actions' | 'reports' | 'android_emulator'
 
-  const [activeTab, setActiveTab] = useState<'task_actions' | 'reports' | 'android_emulator'>('task_actions');
+  const [activeTab, setActiveTab] = useState<'task_actions' | 'reports' | 'android_emulator' | 'emulator_all'>('task_actions');
 
 
 
@@ -5629,6 +5631,31 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
         </button>
 
+        <button
+          type="button"
+          onClick={() => setActiveTab('emulator_all')}
+          style={{
+            padding: '10px 18px',
+            fontSize: '14px',
+            fontWeight: activeTab === 'emulator_all' ? 700 : 500,
+            color: activeTab === 'emulator_all' ? '#ea580c' : '#6B7280',
+            borderBottom: activeTab === 'emulator_all' ? '3px solid #ea580c' : '3px solid transparent',
+            marginBottom: '-2px',
+            backgroundColor: 'transparent',
+            borderTop: 'none',
+            borderLeft: 'none',
+            borderRight: 'none',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <Smartphone size={16} />
+          <span>Tab 4: Giả Lập (CO - SO - Xử Lý Ảnh)</span>
+        </button>
+
       </div>
 
 
@@ -6698,6 +6725,17 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
         />
 
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* TAB 4 CONTENT: GIẢ LẬP HỆ SINH THÁI CO - SO & XỬ LÝ ẢNH      */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {activeTab === 'emulator_all' && (
+        <EmulatorIntegratedTab
+          selectedRestaurant={selectedRestaurant}
+          connectedHost={connectedHost}
+          onToast={showToast}
+        />
       )}
 
 

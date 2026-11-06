@@ -3237,3 +3237,44 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.94s`), thư mục `frontend/dist/` sạch sẽ.
   * Backend: `python -m compileall app` không lỗi, Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
   * Backend daemon uvicorn reload thành công trên port 8000.
+
+
+### [2026-11-07] PHÁT TRIỂN & TÍCH HỢP TAB 4: GIẢ LẬP HỆ SINH THÁI CO - SO & XỬ LÝ ẢNH TOÀN DIỆN
+- **Bối cảnh & Mục tiêu**:
+  * Phát triển mới **Tab 4: Giả Lập (CO - SO - Xử Lý Ảnh)** trong màn hình Phân Tích MongoDB Nhà Hàng (`RestaurantMongoAnalysisPage.tsx`).
+  * Hợp nhất toàn bộ tính năng và thao tác của cả CO (Customer Order), SO (Staff Order), cùng toàn bộ phân hệ kiểm tra & xử lý hình ảnh thực đơn (từ Tab 3) vào Tab 4.
+  * Mục đích: Tạo ra một không gian giả lập hoàn chỉnh "All-in-One", chuẩn bị lộ trình thay thế và loại bỏ hoàn toàn Tab 3 cũ sau khi người dùng vận hành ổn định.
+- **1. Chế Độ 1: Giả Lập Khách Chọn Món (CO Tablet)**:
+  * Trực quan hóa máy tính bảng 10 inch đặt tại bàn của thực khách.
+  * Thanh Header Tablet: Tên nhà hàng, mã RK7, badge Bàn ăn (kèm dropdown đổi bàn tức thì), số lượng khách, đồng hồ thời gian ngồi.
+  * Bộ công cụ hỗ trợ tại bàn:
+    + "🔔 Giục Món Khẩn": Gửi lệnh phát chuông DingDong và đẩy tín hiệu ưu tiên lên màn hình KDS Bếp.
+    + "🙋 Gọi Nhân Viên": Popup chọn nhanh nhu cầu (Nước lọc, khăn lạnh, đổi vỉ nướng, lấy thêm bát đũa, gọi bill...) và phát thông báo tới nhân viên phục vụ.
+    + "📋 Món Đã Gọi": Modal theo dõi tiến độ thực tế 3 giai đoạn của món (Đang nấu KDS -> Bếp hoàn thành -> Đã bưng ra bàn), kèm nút Giục món lẻ.
+    + "💳 CO-Pay (QR)": Thanh toán trực tuyến với mã QR mô phỏng VNPay / MoMo, tính thuế VAT 8% và nút xác nhận thanh toán giải phóng bàn về EMPTY.
+  * Danh mục thực đơn đa tầng:
+    + SuperType: Tất Cả | Alacarte (Món lẻ) | Buffet (Món 0đ) | Đồ Uống & Tráng Miệng.
+    + Nhóm món cuộn ngang (Combo, Gà rán, Bò nướng, Lẩu, Trà...).
+    + Lưới card món ăn sắc nét với nút "Check SFTP" trực tiếp trên ảnh, nút "+ Gọi món" và bộ đếm số lượng `+ / -`.
+    + Modal Chi Tiết Món: Phóng to ảnh, tùy chọn ghi chú gia vị (Không cay, Ít ngọt, Không hành, Cho đá riêng, Ưu tiên lên trước...).
+  * Giỏ hàng gọi món (CO Cart Drawer):
+    + Danh sách món trong giỏ, đơn giá, số lượng, xóa món, tính thuế VAT 8%.
+    + Nút "🚀 GỬI GỌI MÓN (submitOrder)": Gửi gói tin REST API `submitOrder()` vào POS R-Keeper, chuyển món vào danh sách order bàn, cập nhật trạng thái bàn sang OCCUPIED và tự động đồng bộ sang bảng món chờ bưng của SO!
+- **2. Chế Độ 2: Giả Lập Máy Phục Vụ (Staff Order SO)**:
+  * 3 Phân hệ tác vụ phục vụ linh hoạt:
+    + Sub-tab 1: Sơ đồ bàn theo khu (Tầng 1, Tầng 2, VIP...) với các màu sắc trạng thái chuẩn POS R-Keeper (EMPTY, OCCUPIED, ORDERING, BILL_PRINTED). Thao tác nhanh: Mở bàn mới, Chuyển/Đổi bàn, Ghép bàn, In hóa đơn tạm tính, Giải phóng bàn.
+    + Sub-tab 2: Menu gọi món POS phục vụ với bố cục 2 cột (Cột trái: Đơn món của bàn; Cột phải: Thực đơn chọn món nhanh).
+    + Sub-tab 3: Bảng món chờ bưng (SO DeliveredDish Monitor): Danh sách các món bếp KDS vừa bấm hoàn thành (`SubmitDish()`) kèm nút "✅ Xác Nhận Đã Bưng Ra Bàn" để hoàn tất chu trình phục vụ.
+- **3. Chế Độ 3: Trung Tâm Xử Lý & Đối Soát Hình Ảnh Thực Đơn (Tích hợp 100% từ Tab 3)**:
+  * Nút "⚡ Kiểm Tra Toàn Bộ Ảnh Menu": So khớp toàn bộ thực đơn với SFTP Server `192.168.201.116`.
+  * Nút "🌐 Tra Cứu Ảnh Toàn Máy Chủ SFTP": Tìm kiếm vị trí file ảnh trên toàn cây thư mục `/opt/gpos/gmonitor/resources/menu`.
+  * Nút "🖥️ Quét Thư Mục Máy Trạm": Đối soát các file ảnh tồn tại thực tế trên ổ `D:\GPOS-Setup\app\img\menu` của máy trạm nhà hàng.
+  * Nút "🚀 Đẩy Hàng Loạt Ảnh Lỗi Xuống Trạm": Đẩy tức thời tất cả file ảnh bị thiếu/sai xuống máy trạm qua Agent.
+  * Nút "📊 Xuất Excel Đối Soát": Tải file Excel danh sách các món sai lệch link ảnh (`exportMismatchedDishesExcel`).
+  * Nút "⚙️ Cấu Hình SFTP": Chỉnh sửa IP, Port, Username, Remote Dir và nút "Kiểm tra kết nối".
+  * Ô Jump Search: Nhảy nhanh tới món ăn theo Tên (không dấu/có dấu), Mã SAP, Mã RK7 và highlight viền vàng.
+- **Dữ Liệu Dùng Chung & Đồng Bộ Hoàn Hảo (Shared State)**:
+  * Dữ liệu bàn (`tables`), thực đơn món (`dishes`), bàn đang chọn (`activeTableId`), giỏ hàng và trạng thái kiểm tra ảnh được kết nối liền mạch giữa 3 chế độ. Khi khách tự đặt món ở CO, nhân viên chuyển sang SO sẽ thấy ngay bàn có khách và hiển thị đúng các món đã gọi.
+- **Build & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 5.11s`), thư mục `frontend/dist/` sạch sẽ.
+  * Backend: `python -m compileall app` không lỗi, Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
