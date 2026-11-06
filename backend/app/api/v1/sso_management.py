@@ -511,6 +511,7 @@ async def process_single_bulk_item(
         return SSOBulkProcessItemResponse(
             success=res.get("success", False),
             user_name=res.get("user_name", req.user_name),
+            email=res.get("email", req.email),
             action=req.action,
             message=res.get("message", ""),
             detail=res.get("detail"),
@@ -519,10 +520,12 @@ async def process_single_bulk_item(
             is_ldap=res.get("is_ldap", False),
         )
     except Exception as e:
-        logger.error(f"Lỗi xử lý bulk item '{req.user_name}' ({req.action}): {e}", exc_info=True)
+        target_name = req.user_name or req.email or "unknown"
+        logger.error(f"Lỗi xử lý bulk item '{target_name}' ({req.action}): {e}", exc_info=True)
         return SSOBulkProcessItemResponse(
             success=False,
             user_name=req.user_name,
+            email=req.email,
             action=req.action,
             message=f"Lỗi thực thi: {str(e)}",
         )

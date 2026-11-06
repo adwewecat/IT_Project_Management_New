@@ -988,18 +988,23 @@ def parse_sso_excel_file(file_bytes: bytes) -> List[Dict[str, Any]]:
         if not any(r):
             continue
         uname_idx = hdr_map.get("user_name", 0)
-        u_name = str(r[uname_idx] or "").strip() if uname_idx < len(r) else ""
-        if not u_name:
+        u_name = str(r[uname_idx] or "").strip() if uname_idx < len(r) and r[uname_idx] is not None else ""
+
+        email_idx = hdr_map.get("email", 1)
+        email_val = str(r[email_idx] or "").strip() if email_idx < len(r) and r[email_idx] is not None else ""
+
+        # Quy tắc: Bắt buộc ít nhất 1 trong 2 cột User Name hoặc Email phải có dữ liệu
+        if not u_name and not email_val:
             continue
 
         results.append({
             "user_name": u_name,
-            "email": str(r[hdr_map["email"]] or "").strip() if "email" in hdr_map and hdr_map["email"] < len(r) else "",
-            "user_type": str(r[hdr_map["user_type"]] or "").strip() if "user_type" in hdr_map and hdr_map["user_type"] < len(r) else "0",
-            "phone_number": str(r[hdr_map["phone_number"]] or "").strip() if "phone_number" in hdr_map and hdr_map["phone_number"] < len(r) else "",
-            "pass_word": str(r[hdr_map["pass_word"]] or "").strip() if "pass_word" in hdr_map and hdr_map["pass_word"] < len(r) else "",
-            "trang_thai": str(r[hdr_map["trang_thai"]] or "").strip() if "trang_thai" in hdr_map and hdr_map["trang_thai"] < len(r) else "",
-            "update_quyen": str(r[hdr_map["update_quyen"]] or "").strip() if "update_quyen" in hdr_map and hdr_map["update_quyen"] < len(r) else "",
+            "email": email_val,
+            "user_type": str(r[hdr_map["user_type"]] or "").strip() if "user_type" in hdr_map and hdr_map["user_type"] < len(r) and r[hdr_map["user_type"]] is not None else "0",
+            "phone_number": str(r[hdr_map["phone_number"]] or "").strip() if "phone_number" in hdr_map and hdr_map["phone_number"] < len(r) and r[hdr_map["phone_number"]] is not None else "",
+            "pass_word": str(r[hdr_map["pass_word"]] or "").strip() if "pass_word" in hdr_map and hdr_map["pass_word"] < len(r) and r[hdr_map["pass_word"]] is not None else "",
+            "trang_thai": str(r[hdr_map["trang_thai"]] or "").strip() if "trang_thai" in hdr_map and hdr_map["trang_thai"] < len(r) and r[hdr_map["trang_thai"]] is not None else "",
+            "update_quyen": str(r[hdr_map["update_quyen"]] or "").strip() if "update_quyen" in hdr_map and hdr_map["update_quyen"] < len(r) and r[hdr_map["update_quyen"]] is not None else "",
         })
 
     return results
@@ -1032,7 +1037,6 @@ async def set_user_lockout_fields(
     if await lockout_chk.count() > 0:
         is_cur_checked = await lockout_chk.is_checked()
         if is_cur_checked != lockout_enabled:
-            # Click vào switch hoặc label để toggle
             switch_label = lockout_chk.locator("xpath=..")
             if await switch_label.count() > 0 and "switch" in (await switch_label.get_attribute("class") or ""):
                 await switch_label.click()
@@ -1075,39 +1079,70 @@ async def set_user_lockout_fields(
             pass
 
 
-async def find_iam_user_id(page: Page, username: str) -> Optional[str]:
-    """Tìm ID/GUID của User trên hệ thống IAM theo User Name."""
-    clean_username = username.strip()
-    encoded_user = urllib.parse.quote(clean_username)
-    search_url = f"https://iam.ggg.com.vn/Identity/Users?search={encoded_user}&UserType=99"
-    await page.goto(search_url, wait_until="networkidle", timeout=30000)
+async def find_iam_user_info(
+    page: Page,
+    email: Optional[str] = None,
+    username: Optional[str] = None
+) -> Tuple[Optional[str], str, str]:
+    """
+    Tìm kiếm user trên IAM theo thứ tự ưu tiên:
+    1. Ưu tiên tìm kiếm theo Email trước (nếu có Email).
+    2. Nếu không tìm thấy, tìm kiếm theo User Name (nếu có User Name).
+    Trả về: (user_id, found_username, found_email)
+    """
+    clean_email = (email or "").strip()
+    clean_username = (username or "").strip()
 
-    rows = page.locator("table tbody tr")
-    count = await rows.count()
-    if count == 0:
-        return None
+    search_queries: List[Tuple[str, str]] = []
+    if clean_email:
+        search_queries.append(("email", clean_email))
+    if clean_username and clean_username.lower() != clean_email.lower():
+        search_queries.append(("username", clean_username))
 
-    for i in range(count):
-        row = rows.nth(i)
-        cells = row.locator("td")
-        if await cells.count() >= 3:
+    for q_type, q_val in search_queries:
+        encoded_query = urllib.parse.quote(q_val)
+        search_url = f"https://iam.ggg.com.vn/Identity/Users?search={encoded_query}&UserType=99"
+        await page.goto(search_url, wait_until="networkidle", timeout=30000)
+
+        rows = page.locator("table tbody tr")
+        count = await rows.count()
+        if count == 0:
+            continue
+
+        for i in range(count):
+            row = rows.nth(i)
+            cells = row.locator("td")
+            cell_count = await cells.count()
+            if cell_count >= 4:
+                uname = (await cells.nth(2).inner_text()).strip()
+                umail = (await cells.nth(3).inner_text()).strip()
+
+                is_match = False
+                if q_type == "email" and (umail.lower() == q_val.lower() or q_val.lower() in umail.lower()):
+                    is_match = True
+                elif q_type == "username" and (uname.lower() == q_val.lower() or q_val.lower() in uname.lower()):
+                    is_match = True
+
+                if is_match:
+                    edit_link = cells.nth(0).locator("a")
+                    if await edit_link.count() > 0:
+                        href = (await edit_link.get_attribute("href")) or ""
+                        uid = href.split("/")[-1] if "/" in href else href
+                        return uid, uname, umail
+
+        # Nếu không có dòng nào khớp chính xác chuỗi nhưng query trả về kết quả
+        first_row = rows.first
+        cells = first_row.locator("td")
+        if await cells.count() >= 4:
             uname = (await cells.nth(2).inner_text()).strip()
-            if uname.lower() == clean_username.lower():
-                edit_link = cells.nth(0).locator("a")
-                if await edit_link.count() > 0:
-                    href = (await edit_link.get_attribute("href")) or ""
-                    return href.split("/")[-1] if "/" in href else href
+            umail = (await cells.nth(3).inner_text()).strip()
+            edit_link = cells.nth(0).locator("a")
+            if await edit_link.count() > 0:
+                href = (await edit_link.get_attribute("href")) or ""
+                uid = href.split("/")[-1] if "/" in href else href
+                return uid, uname, umail
 
-    # Nếu không khớp tuyệt đối nhưng có kết quả đầu tiên
-    first_row = rows.first
-    cells = first_row.locator("td")
-    if await cells.count() >= 1:
-        edit_link = cells.nth(0).locator("a")
-        if await edit_link.count() > 0:
-            href = (await edit_link.get_attribute("href")) or ""
-            return href.split("/")[-1] if "/" in href else href
-
-    return None
+    return None, clean_username, clean_email
 
 
 async def update_user_clients_on_page(page: Page, user_id: str, client_names: List[str]) -> Tuple[bool, List[str]]:
@@ -1186,14 +1221,21 @@ async def process_bulk_sso_item(
     5. 'update_info': Cập nhật thông tin (Email, SĐT, User Type)
     """
     user_name = str(row.get("user_name") or "").strip()
-    if not user_name:
-        return {"success": False, "user_name": "", "action": action, "message": "User Name không được để trống."}
-
     email = str(row.get("email") or "").strip()
     phone_number = str(row.get("phone_number") or "").strip()
     user_type = str(row.get("user_type") or "0").strip()
     pass_word = str(row.get("pass_word") or "").strip()
     update_quyen = str(row.get("update_quyen") or "").strip()
+
+    # Bắt buộc ít nhất 1 trong 2: User Name hoặc Email
+    if not user_name and not email:
+        return {
+            "success": False,
+            "user_name": "",
+            "email": "",
+            "action": action,
+            "message": "Bắt buộc phải có ít nhất User Name hoặc Email trong file để xử lý."
+        }
 
     async with async_playwright() as p:
         browser, context = await _create_user_playwright_context(p, system_username)
@@ -1208,6 +1250,9 @@ async def process_bulk_sso_item(
             # HÀNH ĐỘNG 1: TẠO MỚI TÀI KHOẢN (CREATE)
             # -------------------------------------------------------------
             if action == "create":
+                target_username = user_name if user_name else email.split("@")[0].strip()
+                target_email = email if email else f"{target_username}@ggg.com.vn"
+
                 # Kiểm tra SĐT nếu có
                 current_phone = phone_number
                 if current_phone:
@@ -1229,8 +1274,8 @@ async def process_bulk_sso_item(
                 await page.wait_for_selector("#UserName, input[name='UserName']", timeout=20000)
 
                 # Điền thông tin cơ bản
-                await page.fill("#UserName, input[name='UserName']", user_name)
-                await page.fill("#Email, input[name='Email']", email)
+                await page.fill("#UserName, input[name='UserName']", target_username)
+                await page.fill("#Email, input[name='Email']", target_email)
 
                 type_loc = page.locator("#UserType, input[name='UserType']").first
                 if await type_loc.count() > 0:
@@ -1267,13 +1312,14 @@ async def process_bulk_sso_item(
                     if err_texts:
                         return {
                             "success": False,
-                            "user_name": user_name,
+                            "user_name": target_username,
+                            "email": target_email,
                             "action": action,
                             "message": f"Không thể tạo user: {'; '.join(err_texts)}"
                         }
 
                 # Tìm user_id vừa tạo
-                user_id = await find_iam_user_id(page, user_name)
+                user_id, found_username, found_email = await find_iam_user_info(page, email=target_email, username=target_username)
 
                 # Mở trang UserProfile để đảm bảo Lockout Enabled = False
                 if user_id:
@@ -1308,27 +1354,37 @@ async def process_bulk_sso_item(
 
                 return {
                     "success": True,
-                    "user_name": user_name,
+                    "user_name": found_username or target_username,
+                    "email": found_email or target_email,
                     "action": action,
                     "new_password": new_pwd,
                     "assigned_clients": assigned_clients,
-                    "message": f"Tạo user '{user_name}' thành công! Mật khẩu: {new_pwd}" + (f" | Phân {len(assigned_clients)} quyền" if assigned_clients else "")
+                    "message": f"Tạo user '{found_username or target_username}' thành công! Mật khẩu: {new_pwd}" + (f" | Phân {len(assigned_clients)} quyền" if assigned_clients else "")
                 }
+
+            # -------------------------------------------------------------
+            # CÁC HÀNH ĐỘNG 2, 3, 4, 5: TÌM KIẾM THEO EMAIL TRƯỚC, SAU ĐÓ USERNAME
+            # -------------------------------------------------------------
+            user_id, found_username, found_email = await find_iam_user_info(page, email=email, username=user_name)
+            if not user_id:
+                search_desc = f"Email '{email}'" if email else f"User Name '{user_name}'"
+                if email and user_name:
+                    search_desc = f"Email '{email}' hoặc User Name '{user_name}'"
+                return {
+                    "success": False,
+                    "user_name": user_name,
+                    "email": email,
+                    "action": action,
+                    "message": f"Không tìm thấy tài khoản với {search_desc} trên hệ thống IAM."
+                }
+
+            display_username = found_username or user_name
+            display_email = found_email or email
 
             # -------------------------------------------------------------
             # HÀNH ĐỘNG 2: UPDATE PASS & MỞ KHÓA (UPDATE_PASS)
             # -------------------------------------------------------------
-            elif action == "update_pass":
-                user_id = await find_iam_user_id(page, user_name)
-                if not user_id:
-                    return {
-                        "success": False,
-                        "user_name": user_name,
-                        "action": action,
-                        "message": f"Không tìm thấy tài khoản '{user_name}' trên hệ thống IAM."
-                    }
-
-                # Vào UserProfile: Kiểm tra UserType, xóa Lockout End, đặt AccessFailedCount = 0, LockoutEnabled = false
+            if action == "update_pass":
                 profile_url = f"https://iam.ggg.com.vn/Identity/UserProfile/{user_id}"
                 await page.goto(profile_url, wait_until="networkidle", timeout=30000)
 
@@ -1339,10 +1395,11 @@ async def process_bulk_sso_item(
                     if val == "1":
                         return {
                             "success": False,
-                            "user_name": user_name,
+                            "user_name": display_username,
+                            "email": display_email,
                             "action": action,
                             "is_ldap": True,
-                            "message": "Tài khoản đồng bộ từ LDAP (AD), vui lòng liên hệ Helpdesk đổi pass mail."
+                            "message": f"Tài khoản '{display_username}' đồng bộ từ LDAP (AD), vui lòng liên hệ Helpdesk đổi pass mail."
                         }
 
                 await set_user_lockout_fields(page, lockout_enabled=False, access_failed_count=0, lockout_end="")
@@ -1371,32 +1428,25 @@ async def process_bulk_sso_item(
                     if err:
                         return {
                             "success": False,
-                            "user_name": user_name,
+                            "user_name": display_username,
+                            "email": display_email,
                             "action": action,
                             "message": f"Đổi mật khẩu thất bại: {err}"
                         }
 
                 return {
                     "success": True,
-                    "user_name": user_name,
+                    "user_name": display_username,
+                    "email": display_email,
                     "action": action,
                     "new_password": new_pwd,
-                    "message": f"Đã mở khóa và đổi mật khẩu thành công: {new_pwd}"
+                    "message": f"Đã mở khóa và đổi mật khẩu cho user '{display_username}': {new_pwd}"
                 }
 
             # -------------------------------------------------------------
             # HÀNH ĐỘNG 3: KHÓA TÀI KHOẢN (LOCK)
             # -------------------------------------------------------------
             elif action == "lock":
-                user_id = await find_iam_user_id(page, user_name)
-                if not user_id:
-                    return {
-                        "success": False,
-                        "user_name": user_name,
-                        "action": action,
-                        "message": f"Không tìm thấy tài khoản '{user_name}' trên hệ thống IAM."
-                    }
-
                 profile_url = f"https://iam.ggg.com.vn/Identity/UserProfile/{user_id}"
                 await page.goto(profile_url, wait_until="networkidle", timeout=30000)
 
@@ -1412,29 +1462,22 @@ async def process_bulk_sso_item(
 
                 return {
                     "success": True,
-                    "user_name": user_name,
+                    "user_name": display_username,
+                    "email": display_email,
                     "action": action,
                     "detail": f"Lockout Enabled = TRUE, Access Failed Count = 4, Lockout End = {now_str}",
-                    "message": f"Đã khóa tài khoản '{user_name}' thành công!"
+                    "message": f"Đã khóa tài khoản '{display_username}' thành công!"
                 }
 
             # -------------------------------------------------------------
             # HÀNH ĐỘNG 4: UPDATE QUYỀN (UPDATE_PERMISSIONS)
             # -------------------------------------------------------------
             elif action == "update_permissions":
-                user_id = await find_iam_user_id(page, user_name)
-                if not user_id:
-                    return {
-                        "success": False,
-                        "user_name": user_name,
-                        "action": action,
-                        "message": f"Không tìm thấy tài khoản '{user_name}' trên hệ thống IAM."
-                    }
-
                 if not update_quyen:
                     return {
                         "success": False,
-                        "user_name": user_name,
+                        "user_name": display_username,
+                        "email": display_email,
                         "action": action,
                         "message": "Không có thông tin quyền cần gán (cột UPDATE QUYEN trống)."
                     }
@@ -1444,32 +1487,25 @@ async def process_bulk_sso_item(
                 if not ok:
                     return {
                         "success": False,
-                        "user_name": user_name,
+                        "user_name": display_username,
+                        "email": display_email,
                         "action": action,
                         "message": "Không tải được bảng danh sách quyền client trên IAM."
                     }
 
                 return {
                     "success": True,
-                    "user_name": user_name,
+                    "user_name": display_username,
+                    "email": display_email,
                     "action": action,
                     "assigned_clients": assigned_clients,
-                    "message": f"Đã cập nhật thành công {len(assigned_clients)} quyền client cho user '{user_name}'!"
+                    "message": f"Đã cập nhật thành công {len(assigned_clients)} quyền client cho user '{display_username}'!"
                 }
 
             # -------------------------------------------------------------
             # HÀNH ĐỘNG 5: CẬP NHẬT THÔNG TIN (UPDATE_INFO)
             # -------------------------------------------------------------
             elif action == "update_info":
-                user_id = await find_iam_user_id(page, user_name)
-                if not user_id:
-                    return {
-                        "success": False,
-                        "user_name": user_name,
-                        "action": action,
-                        "message": f"Không tìm thấy tài khoản '{user_name}' trên hệ thống IAM."
-                    }
-
                 profile_url = f"https://iam.ggg.com.vn/Identity/UserProfile/{user_id}"
                 await page.goto(profile_url, wait_until="networkidle", timeout=30000)
 
@@ -1498,10 +1534,11 @@ async def process_bulk_sso_item(
                     await save_btn.click()
                     await _safe_wait_network_idle(page, 15000)
 
-                msg = f"Đã cập nhật thông tin cho user '{user_name}' ({', '.join(updated_fields)})" if updated_fields else f"Không có thông tin mới cần cập nhật cho user '{user_name}'."
+                msg = f"Đã cập nhật thông tin cho user '{display_username}' ({', '.join(updated_fields)})" if updated_fields else f"Không có thông tin mới cần cập nhật cho user '{display_username}'."
                 return {
                     "success": True,
-                    "user_name": user_name,
+                    "user_name": display_username,
+                    "email": display_email,
                     "action": action,
                     "message": msg
                 }
@@ -1509,7 +1546,8 @@ async def process_bulk_sso_item(
             else:
                 return {
                     "success": False,
-                    "user_name": user_name,
+                    "user_name": display_username,
+                    "email": display_email,
                     "action": action,
                     "message": f"Hành động '{action}' không được hỗ trợ."
                 }

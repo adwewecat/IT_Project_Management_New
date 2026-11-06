@@ -6624,3 +6624,27 @@ equested_at (DATETIME).
   * Backend Smoke Test: `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
   * TestClient: Thử nghiệm tải template `.xlsx` và phân tích ngược lại đạt 100% chính xác.
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn thành với exit code 0 (`✓ built in 4.09s`), `frontend/dist/` sạch sẽ 100%.
+
+
+---
+
+### [2026-11-06] NÂNG CẤP XỬ LÝ LINH HOẠT CỘT USER NAME VÀ EMAIL CHO IMPORT HÀNG LOẠT SSO/IAM
+
+- **Vấn đề phát hiện**:
+  * Người dùng thường chỉ điền cột `Email` (ví dụ: `test@gmail.com`) và cột `Pass`, để trống cột `User Name` (như trong trường hợp đổi pass).
+  * Bộ phân tích Excel cũ bắt buộc `user_name` phải có dữ liệu, dẫn đến trường hợp các dòng để trống `User Name` bị bỏ qua và giao diện báo `(0 dòng dữ liệu)`.
+  * Cơ chế tìm kiếm cũ chỉ tìm kiếm theo `user_name`, không hỗ trợ tìm kiếm trực tiếp theo `email`.
+
+- **Cải tiến & Chuẩn hóa nghiệp vụ**:
+  1. **Quy tắc phân tích Excel linh hoạt (`parse_sso_excel_file`)**:
+     * Cột `User Name` hoàn toàn có thể để trống nếu đã có `Email`.
+     * Điều kiện hợp lệ: Ít nhất 1 trong 2 cột `User Name` hoặc `Email` phải có dữ liệu. Chỉ bỏ qua dòng nếu cả 2 cột đều trống.
+  2. **Cơ chế tìm kiếm User thông minh trên IAM (`find_iam_user_info`)**:
+     * **Bước 1**: Ưu tiên tìm kiếm trên IAM theo `Email` trước (nếu có Email).
+     * **Bước 2**: Nếu không tìm thấy theo Email, tự động tìm kiếm dự phòng theo `User Name` (nếu có User Name).
+     * Tự động trích xuất `user_id`, `actual_username` và `actual_email` từ bảng IAM để thực hiện các thao tác tiếp theo.
+  3. **Hỗ trợ Tạo mới khi User Name trống**:
+     * Nếu tạo mới mà `User Name` trống nhưng có `Email`, hệ thống tự động lấy phần prefix trước `@` của email làm username (ví dụ: `test@gmail.com` $\rightarrow$ `test`).
+  4. **Frontend UI/UX**:
+     * Hiển thị trực quan: Cột `User Name` nếu trống hiển thị nhãn mờ `(Tìm theo email)`. Cột `Email` nếu trống hiển thị `(Tìm theo user)`.
+     * Khi thực hiện xong, hệ thống tự động cập nhật và hiển thị `User Name` thực tế tìm thấy từ IAM lên bảng kết quả.

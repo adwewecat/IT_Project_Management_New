@@ -128,7 +128,7 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
       const res = await ssoManagementService.parseExcel(selectedFile);
       const progressRows: SSOBulkRowProgress[] = res.rows.map((r, idx) => ({
         ...r,
-        id: `row-${idx}-${r.user_name}`,
+        id: `row-${idx}-${r.user_name || r.email || idx}`,
         status: 'idle',
       }));
       setRows(progressRows);
@@ -185,6 +185,8 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
             idx === item.index
               ? {
                   ...r,
+                  user_name: res.user_name || r.user_name,
+                  email: res.email || r.email,
                   status: res.success ? 'success' : 'error',
                   resultMessage: res.message || (res.success ? 'Thành công' : 'Lỗi không xác định'),
                   newPassword: res.new_password,
@@ -266,7 +268,7 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
         >
           <div style={{ fontSize: '13px', color: '#1E40AF', lineHeight: 1.5 }}>
             <strong>Quy chuẩn Import:</strong> Tất cả 5 tác vụ đều sử dụng <strong>chung 1 mẫu Excel 7 cột</strong>.
-            Tùy từng tác vụ được chọn bên dưới, hệ thống sẽ tự động đối soát và áp dụng đúng logic tương ứng.
+            Cột <strong>User Name</strong> hoặc <strong>Email</strong> chỉ cần có ít nhất 1 trong 2 cột (hệ thống sẽ ưu tiên tìm kiếm theo Email trước, nếu không thấy sẽ tìm theo User Name).
           </div>
           <Button
             variant="outline"
@@ -493,10 +495,18 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                           )}
                         </td>
                         <td style={{ padding: '7px 10px', fontWeight: 700, fontFamily: 'monospace' }}>
-                          {row.user_name}
+                          {row.user_name || (
+                            <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontWeight: 400, fontSize: '11px' }}>
+                              (Tìm theo email)
+                            </span>
+                          )}
                         </td>
                         <td style={{ padding: '7px 10px', color: row.email ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                          {row.email || '—'}
+                          {row.email || (
+                            <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontWeight: 400, fontSize: '11px' }}>
+                              (Tìm theo user)
+                            </span>
+                          )}
                         </td>
                         <td style={{ padding: '7px 10px', textAlign: 'center' }}>
                           {row.user_type || '0'}

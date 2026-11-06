@@ -92,7 +92,7 @@ class SSOCreateNCCUserResponse(BaseModel):
 
 
 class SSOBulkRowItem(BaseModel):
-    user_name: str
+    user_name: Optional[str] = ""
     email: Optional[str] = ""
     user_type: Optional[str] = "0"
     phone_number: Optional[str] = ""
@@ -110,7 +110,7 @@ class SSOBulkParseResponse(BaseModel):
 
 class SSOBulkProcessItemRequest(BaseModel):
     action: str = Field(..., description="1 trong 5: create, update_pass, lock, update_permissions, update_info")
-    user_name: str
+    user_name: Optional[str] = ""
     email: Optional[str] = ""
     user_type: Optional[str] = "0"
     phone_number: Optional[str] = ""
@@ -121,7 +121,8 @@ class SSOBulkProcessItemRequest(BaseModel):
 
 class SSOBulkProcessItemResponse(BaseModel):
     success: bool
-    user_name: str
+    user_name: Optional[str] = ""
+    email: Optional[str] = ""
     action: str
     message: str
     detail: Optional[str] = None

@@ -83,7 +83,7 @@ export interface SSOCreateNCCUserResponse {
 
 
 export interface SSOBulkRowItem {
-  user_name: string;
+  user_name?: string;
   email?: string;
   user_type?: string;
   phone_number?: string;
@@ -103,7 +103,7 @@ export type SSOBulkActionType = 'create' | 'update_pass' | 'lock' | 'update_perm
 
 export interface SSOBulkProcessItemRequest {
   action: SSOBulkActionType;
-  user_name: string;
+  user_name?: string;
   email?: string;
   user_type?: string;
   phone_number?: string;
@@ -114,7 +114,8 @@ export interface SSOBulkProcessItemRequest {
 
 export interface SSOBulkProcessItemResponse {
   success: boolean;
-  user_name: string;
+  user_name?: string;
+  email?: string;
   action: string;
   message: string;
   detail?: string;

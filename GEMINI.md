@@ -355,6 +355,7 @@
 - **Thêm User NCC (Nhà Cung Cấp)**: Nút `+ Thêm User NCC` mở modal khởi tạo user Local (`type=0`) với Playwright. Số điện thoại mặc định điền sẵn `0908119345`, mỗi lần thêm thành công tự động `+2` cho lần sau (lưu localStorage). Kiểm tra trùng SĐT qua query IAM; nếu trùng báo lỗi cho user tự sửa hoặc chọn `"⚡ Để hệ thống tự xử lý"`. Sau khi tạo xong, Playwright tự động điều hướng sang User & Clients gán 4 quyền mặc định (`Hệ thống GChecklist`, `PoPortal_Hệ thống đặt hàng Hồ Chí Minh`, `Hệ thống E-Bidding`, `SSO OTP Client...`).
 - **Tính Năng Import Xử Lý Hàng Loạt User (`SsoBulkImportModal.tsx`)**:
   - Dùng chung **1 template Excel chuẩn 7 cột**: `User Name`, `Email`, `User Type (0-Local,1-AD,2-Empl)`, `User Phone Number`, `Pass`, `TRANG THAI`, `UPDATE QUYEN`.
+  - **Quy tắc linh hoạt User Name & Email**: Cột `User Name` có thể để trống nếu đã có `Email` (hoặc ngược lại). Chỉ bỏ qua dòng khi cả 2 cột đều trống. Cơ chế tìm kiếm user trên IAM tự động ưu tiên tìm theo Email trước, nếu không thấy mới tìm theo User Name.
   - Hỗ trợ 5 tác vụ chuyên sâu với quy chuẩn:
     1. *Tạo mới tài khoản*: `User Access Failed Count = 0`, `User Lockout End` xóa trắng, `User Lockout Enabled = false`, gán pass (từ file hoặc random) và phân quyền client (từ cột `UPDATE QUYEN`).
     2. *Update Pass & Mở khóa*: Đổi pass theo cột `Pass`, `User Access Failed Count = 0`, `User Lockout End` xóa trắng, `User Lockout Enabled = false`.
