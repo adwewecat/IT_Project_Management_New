@@ -170,6 +170,7 @@ import { BatchRoleUserModal } from './BatchRoleUserModal';
 
 import { AndroidEmulatorTab } from './AndroidEmulatorTab';
 import { EmulatorIntegratedTab } from './EmulatorIntegratedTab';
+import { KdsIntegratedTab } from './KdsIntegratedTab';
 
 import { PrintManagementModal } from '../../components/mongodb/PrintManagementModal';
 
@@ -355,7 +356,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
   // Active Main Tab: 'task_actions' | 'reports' | 'android_emulator'
 
-  const [activeTab, setActiveTab] = useState<'task_actions' | 'reports' | 'android_emulator' | 'emulator_all'>('task_actions');
+  const [activeTab, setActiveTab] = useState<'task_actions' | 'reports' | 'android_emulator' | 'emulator_all' | 'kds_hub'>('task_actions');
 
 
 
@@ -5655,6 +5656,30 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
           <Smartphone size={16} />
           <span>Tab 4: Giả Lập (CO - SO - Xử Lý Ảnh)</span>
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('kds_hub')}
+          style={{
+            padding: '10px 18px',
+            fontSize: '14px',
+            fontWeight: activeTab === 'kds_hub' ? 700 : 500,
+            color: activeTab === 'kds_hub' ? '#b45309' : '#6B7280',
+            borderBottom: activeTab === 'kds_hub' ? '3px solid #b45309' : '3px solid transparent',
+            marginBottom: '-2px',
+            backgroundColor: 'transparent',
+            borderTop: 'none',
+            borderLeft: 'none',
+            borderRight: 'none',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <ChefHat size={16} />
+          <span>Tab 5: KDS (Nhà Bếp & Điều Phối Món)</span>
+        </button>
 
       </div>
 
@@ -6735,6 +6760,17 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
           selectedRestaurant={selectedRestaurant}
           connectedHost={connectedHost}
           onToast={showToast}
+        />
+      )}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* TAB 5 CONTENT: KDS (NHÀ BẾP & ĐIỀU PHỐI MÓN TOÀN DIỆN)         */}
+      {/* ══════════════════════════════════════════════════════════════ */}
+      {activeTab === 'kds_hub' && (
+        <KdsIntegratedTab
+          selectedRestaurant={selectedRestaurant}
+          connectedHost={connectedHost}
+          onToast={showToast}
+          restaurants={restaurants}
         />
       )}
 

@@ -4187,3 +4187,55 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
 - **Build & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7)**:
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 5.11s`), thư mục `frontend/dist/` sạch sẽ.
   * Backend: `python -m compileall app` không lỗi, Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
+
+
+### [2026-11-07] PHÁT TRIỂN & TÍCH HỢP TAB 5: KDS (NHÀ BẾP & ĐIỀU PHỐI MÓN TOÀN DIỆN)
+- **Bối cảnh & Mục tiêu**:
+  * Phát triển mới **Tab 5: KDS (Nhà Bếp & Điều Phối Món)** trong màn hình Phân Tích MongoDB Nhà Hàng (`RestaurantMongoAnalysisPage.tsx`).
+  * Gom và tích hợp **100% tất cả các tính năng và nghiệp vụ liên quan đến KDS** vào một không gian quản trị & vận hành tập trung chuyên sâu:
+    1. **Màn Hình KDS & Điều Phối Bếp Trực Quan (Live Screen & Giả Lập Bếp)**:
+       - Trực quan hóa màn hình chạm điều phối bếp thực tế tại nhà hàng Golden Gate.
+       - Thẻ Phiếu Bếp (Kitchen Ticket Card) theo bàn: Tên bàn (Bàn 01, Bàn 08, VIP 02), Giờ gửi order, Bộ đếm thời gian thực (Live Elapsed Timer) chạy từng giây kèm phân loại màu sắc SLA chuẩn:
+         * Xanh lá (< 5 phút): Kịp tiến độ.
+         * Vàng hổ phách (5-10 phút): Cần lưu ý.
+         * Đỏ chớp nháy (> 10 phút): Cảnh báo QUÁ HẠN SLA!
+       - Thao tác nhanh cho từng món ăn:
+         * `[🍳 Xong Món (SubmitDish / DingDong)]`: Xác nhận xong món hộ bếp (KDS Bypass) tức thời, tự động bắn tín hiệu đồng bộ sang màn hình phục vụ SO và phát âm thanh chuông xác nhận.
+         * `[↩️ Hoàn Tác (Recall)]`: Kéo món đã làm xong quay trở lại bếp để chế biến lại khi bếp bấm nhầm.
+         * `[🔄 Đổi Quầy]`: Mở modal chuyển Line Cook phụ trách.
+       - Thao tác cho cả phiếu bàn:
+         * `[✅ Done Toàn Phiếu]`: Hoàn tất toàn bộ món của phiếu bàn 1-chạm.
+         * `[🔔 Giục Món Khẩn (DingDong / Pop-up Đỏ)]`: Kích hoạt âm thanh Text-To-Speech (Web Speech API) và chuông DingDong vui tai, đồng thời bật trạng thái ưu tiên khẩn cấp cho phiếu bàn.
+       - Bộ lọc quầy bếp (Line Cook) linh hoạt: Bếp Nướng, Bếp Lẩu, Bếp Nóng, Bếp Lạnh, Bếp Chiên, Quầy Bar...
+       - Nút `[+ Phiếu Order Mẫu]`: Tự động tạo phiếu mô phỏng mới giúp IT Support kiểm thử luồng KDS mọi lúc mọi nơi.
+    2. **Tra Cứu Logs & Thống Kê Bếp (Logs & Performance Analytics)**:
+       - Khung 1: Tra Cứu Logs KDS Chi Tiết (`KdsLogsModal`): Bảng `G_KITCHEN.LOG_DISH_FINISH_ITEM` & `G_ORDER`, đối soát giờ order, giờ done, độ trễ và lệnh in máy in KDS.
+       - Khung 2: Phân Tích Món & Lượt Vào Bếp (`KdsKitchenIntakeModal`): Thống kê tải bếp 1 ngày hoặc 2-5 ngày liên tiếp theo từng khung giờ cao điểm để phát hiện dồn nghẽn.
+       - Bảng Thống Kê Hiệu Suất SLA Thời Gian Nấu Theo Quầy: Tự động tổng hợp số món quản lý, thời gian SLA trung bình, tỷ lệ món nhanh (<5p), món chậm (>10p) của từng quầy Line Cook.
+    3. **Quản Lý Quầy Bếp & Phân Quyền Trạm (Places & Accounts Management)**:
+       - Bảng Quầy Bếp (`CONFIG_KDS.places`): Mã quầy, Tên quầy, Mã ký hiệu, Máy in nhiệt bếp Port 9100, Sảnh phục vụ (`hallPlanIds`), Số món đang gán, Trạng thái thuộc Food Control, Thao tác chuyển món.
+       - Bảng Tài Khoản Trạm Bếp (`G_KITCHEN.ACCOUNT`): Hiển thị trực tiếp mật khẩu trạm monospace (không che) kèm nút copy 1-chạm, Role trạm (Role 1/2 Food Control vs Role 3 Line Cook), danh sách quầy (`listPlace`).
+       - Bộ công cụ hành động:
+         * `[+ Thêm Quầy Bếp]` (`KdsAddQuayModal`)
+         * `[📋 Quản Lý Quầy & Tên HOA]` (`KdsQuayListModal`)
+         * `[👑 Khởi Tạo Food Control]` (`ModalCreateFoodControl`)
+         * `[🔑 Phân Quyền & Mật Khẩu KDS]` (`KdsRoleUserModal`)
+         * `[⚡ Phân Quyền Hàng Loạt]` (`BatchRoleUserModal` với `ROLE_SETUP_CONFIG_COOKING`)
+         * `[🔄 Đồng Nhất Nhóm Bếp (1-Chạm)]` (`mongoService.syncKdsGroupsByQuays`)
+    4. **Cấu Hình Món & Thời Gian Nấu SLA (CONFIG_COOKING)**:
+       - Bộ lọc nhanh theo quầy (`accounts_summary`) kèm badge số lượng món.
+       - Ô tìm kiếm món (Tên món, SAP code, RK7 code) mượt mà.
+       - Banner cảnh báo quầy mồ côi (nếu phát hiện món trỏ vào quầy bị xóa ở nhà hàng, kèm nút gom chuyển sang quầy chuẩn `KdsTransferQuayModal`).
+       - Bảng dữ liệu `CONFIG_COOKING` bọc trong component `TopScrollTable` (tuân thủ Quy tắc 8):
+         * Cột: Checkbox chọn nhiều món, #, Mã SAP, Mã RK7, Tên món, Quầy phụ trách, Nhóm bếp, SLA Nấu (Phút) có ô nhập liệu inline để sửa nhanh và lưu tức thì (`updateKdsCookingTime`), Giá bán GPOS đối chiếu, Thao tác đổi quầy.
+         * Nút `[+ Thêm Món Vào KDS]` (`KdsAddDishModal`).
+         * Nút `[Chuyển Quầy Nhiều Món]` (`KdsTransferQuayModal`).
+         * Nút `[Xóa Cấu Hình KDS]` (`KdsDeleteCookingConfigModal`).
+    5. **Công Cụ Tiện Ích Trên Đỉnh**:
+       - Bật / Tắt KDS Master trực tiếp (`SHOW_KDS` trong `APP_PARAM`) qua switch toggle với phản hồi tức thì (`toggleKdsMasterStatus`).
+       - Quản lý máy in bếp Port 9100 (`PrintManagementModal`).
+       - Điều khiển từ xa VNC / Scrcpy KDS (`VncKdsModal`).
+       - Sổ tay cẩm nang KDS (Role 2 vs Role 3, Food Control, placeParent = "101", hallPlanIds).
+- **Kiểm Thử & Build Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 5.17s`), thư mục `frontend/dist/` sạch sẽ.
+  * Backend: `python -m compileall app` sạch cú pháp, Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
