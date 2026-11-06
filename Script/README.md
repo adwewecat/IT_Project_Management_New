@@ -4112,3 +4112,37 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
 - **Build & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7)**:
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.63s`), thư mục `frontend/dist/` sạch sẽ.
   * Backend: `python -m compileall app` không lỗi, Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
+
+
+### [2026-11-06] HOÀN THIỆN TOÀN DIỆN PHÂN HỆ CHUYÊN SÂU APP CO - SO - KDS
+- **1. Hợp Nhất Tra Cứu Nhật Ký KDS & Radar Luồng Đơn (2 trong 1)**:
+  * Loại bỏ hoàn toàn các nút thao tác dư thừa: "Xong Hộ Bếp", "Bắn Lại Xuống KDS", "Kích Mở Menu Bàn (CO)", "Giục Món Khẩn".
+  * Hợp nhất Tra Cứu Nhật Ký KDS và Radar Luồng Đơn vào 1 modal duy nhất `CoSoKdsRadarModal.tsx`:
+    + Bộ lọc đa tiêu chí: Ngày kiểm tra, Từ giờ - Đến giờ, Bàn ăn, Món ăn / Mã SAP / RK7, Nguồn Order (Tất cả / Tablet CO / Staff SO), Trạng thái SLA.
+    + Bảng dữ liệu hiển thị rõ ràng: Bàn, Nguồn Order (Tablet CO vs Staff SO), Tên món (SAP/RK7), Quầy Bếp (LineCook), Giờ Order, Giờ POS nhận, Giờ KDS nhận & Done, Giờ SO bưng ra bàn, Lệnh in KDS, Thời gian thực tế vs SLA chuẩn.
+    + Nâng cấp tính năng "Soi Món": Mở popup lưu vết chi tiết 5 mốc thời gian của món, phân biệt rõ khách tự gọi hay nhân viên phục vụ gọi, kèm đánh giá SLA.
+    + Hỗ trợ nút sao chép toàn bộ bảng đối soát vào Clipboard để gửi nhóm hỗ trợ nhà hàng.
+- **2. Tái Thiết Kế Lưu Đồ Luồng Gọi Món & Giao Thức (Flowchart Thuần Gọi Món)**:
+  * Tinh chỉnh `CoSoKdsFlowDiagramModal.tsx` thành lưu đồ trực quan (Flowchart):
+    + Bước 1: Khách tự gọi trên Tablet CO (app `vn.com.ggg.customerorder`) HOẶC Phục vụ gọi trên Staff SO (app `com.ggg.stafforder`).
+    + Bước 2: Gửi gói tin REST API HTTP POST `submitOrder()` lên POS.
+    + Bước 3: POS R-Keeper lưu trữ DB `G_ORDER` và gán mã đơn.
+    + Bước 4: POS Publish gói tin tức thời qua MQTT Broker port 1883 (Topic `/ggg/restaurant/order`).
+    + Bước 5: Màn hình KDS Bếp nhận lệnh theo từng Quầy (LineCook).
+    + Bước 6: KDS phát chuông `DingDong` + Google Cloud TTS đọc to tên món + bắt đầu đếm ngược đồng hồ SLA.
+    + Bước 7: Đầu bếp hoàn thành chạm thẻ món gọi hàm `SubmitDish()`.
+    + Bước 8: KDS bắn thông báo hoàn thành ➔ App Staff SO của nhân viên phục vụ rung chuông `DeliveredDishItem`.
+    + Bước 9: Phục vụ bưng món ra bàn và xác nhận hoàn tất.
+- **3. Đảm Bảo Đồng Bộ Tuần Tự Tuyệt Đối 2 Lớp (SO ➔ CO)**:
+  * Nâng cấp `CoSoKdsTwoStepSyncModal.tsx` và backend `co_so_kds_service.py`:
+    + Chạy hoàn toàn theo tuần tự (Sequential): Bước 1 (POS ➔ SO qua `syncRK`) phải hoàn tất 100% thành công.
+    + Chỉ khi Bước 1 thành công mới tự động kích hoạt Bước 2 (phát sóng MQTT ép Tablet CO cập nhật cache SQLite).
+    + Nếu Bước 1 thất bại, hệ thống hủy ngay Bước 2 và cảnh báo đỏ để tránh sai lệch dữ liệu giá trên Tablet CO.
+- **4. Nâng Cấp Bản Đồ Thiết Bị Duy Nhất Toàn Nhà Hàng (Device Fleet)**:
+  * Sắp xếp bắt buộc theo thời gian: **Bàn nào mở / phát sinh order muộn nhất luôn được xếp ở vị trí ĐẦU TIÊN (Descending)**.
+  * Nhận diện thiết bị duy nhất: Gom nhóm các session theo Model phần cứng thực tế (Samsung Tab A8, Lenovo M10, Sunmi V2 Pro, Posiflex RT-5015) và ID phần cứng duy nhất (UID / MAC).
+  * Hiển thị số phiên đã gộp (VD: `1 máy (đã gộp 8 phiên)`), giúp IT phản ánh chính xác số lượng máy thực tế (2-3 máy) thay vì bị ảo giác bởi hàng chục session kết nối.
+- **Build & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.94s`), thư mục `frontend/dist/` sạch sẽ.
+  * Backend: `python -m compileall app` không lỗi, Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
+  * Backend daemon uvicorn reload thành công trên port 8000.

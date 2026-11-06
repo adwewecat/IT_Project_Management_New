@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, 
-  Layers, Smartphone, Server, Radio
+  X, RefreshCw, AlertTriangle, ArrowRight, 
+  Layers, Server, Radio, ShieldAlert, Check
 } from 'lucide-react';
 import { 
-  mongoService, 
-  CoSoKdsTwoStepSyncResponse 
+  mongoService
 } from '../../services/mongoService';
 
 interface CoSoKdsTwoStepSyncModalProps {
@@ -18,6 +17,8 @@ interface CoSoKdsTwoStepSyncModalProps {
   restaurantId?: number;
 }
 
+type SyncStepState = 'IDLE' | 'STEP1_RUNNING' | 'STEP1_DONE' | 'STEP2_RUNNING' | 'COMPLETED' | 'ERROR';
+
 export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = ({
   isOpen,
   onClose,
@@ -28,9 +29,9 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
   restaurantId
 }) => {
   const [syncMode, setSyncMode] = useState<'FULL_TWO_STEP' | 'SO_ONLY' | 'CO_ONLY'>('FULL_TWO_STEP');
-  const [loading, setLoading] = useState<boolean>(false);
-  const [result, setResult] = useState<CoSoKdsTwoStepSyncResponse | null>(null);
+  const [stepState, setStepState] = useState<SyncStepState>('IDLE');
   const [logMessages, setLogMessages] = useState<string[]>([]);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -44,72 +45,110 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
 
   if (!isOpen) return null;
 
-  const handleStartSync = async () => {
+  const handleStartSequentialSync = async () => {
     if (!mongoHost) return;
-    setLoading(true);
-    setResult(null);
+    setStepState('IDLE');
+    setErrorMsg(null);
     setLogMessages([
-      `[${new Date().toLocaleTimeString()}] Bắt đầu quy trình đồng bộ menu & giá nhà hàng ${restaurantName}...`,
-      `[${new Date().toLocaleTimeString()}] Kết nối máy chủ MongoDB & MQTT: ${mongoHost}:${mongoPort}`
+      `[${new Date().toLocaleTimeString()}] Bắt đầu quy trình đồng bộ TUẦN TỰ Menu & Giá tại ${restaurantName}...`,
+      `[${new Date().toLocaleTimeString()}] Máy chủ mục tiêu: ${mongoHost}:${mongoPort}`
     ]);
 
     try {
+      // ══════════════════════════════════════════════════════════════
+      // BƯỚC 1: ĐỒNG BỘ POS -> SO (syncRK)
+      // ══════════════════════════════════════════════════════════════
       if (syncMode === 'FULL_TWO_STEP' || syncMode === 'SO_ONLY') {
+        setStepState('STEP1_RUNNING');
         setLogMessages((prev) => [
           ...prev,
-          `[${new Date().toLocaleTimeString()}] >> Bước 1: Gửi lệnh syncRK kéo dữ liệu Menu/Giá mới nhất từ POS R-Keeper vào máy chủ SO...`
+          `[${new Date().toLocaleTimeString()}] ⏳ [TUẦN TỰ - BƯỚC 1/2] Đang kích hoạt lệnh syncRK kéo dữ liệu thực đơn & giá từ POS RK7 vào máy chủ SO...`
         ]);
-      }
 
-      const res = await mongoService.postCoSoKdsSyncTwoStep({
-        host: mongoHost,
-        port: mongoPort,
-        restaurant_id: restaurantId,
-        sync_mode: syncMode
-      });
+        // Thực thi riêng Bước 1
+        const resStep1 = await mongoService.postCoSoKdsSyncTwoStep({
+          host: mongoHost,
+          port: mongoPort,
+          restaurant_id: restaurantId,
+          sync_mode: 'SO_ONLY'
+        });
 
-      setResult(res);
-
-      if (res.step1_so_success) {
-        setLogMessages((prev) => [
-          ...prev,
-          `[${new Date().toLocaleTimeString()}] ✅ Bước 1 thành công: ${res.step1_so_message}`
-        ]);
-      } else {
-        setLogMessages((prev) => [
-          ...prev,
-          `[${new Date().toLocaleTimeString()}] ⚠️ Bước 1 gặp sự cố: ${res.step1_so_message}`
-        ]);
-      }
-
-      if (syncMode === 'FULL_TWO_STEP' || syncMode === 'CO_ONLY') {
-        if (res.step2_co_success) {
+        if (!resStep1.step1_so_success) {
+          // BƯỚC 1 LỖI: DỪNG NGAY LẬP TỨC! TUYỆT ĐỐI KHÔNG CHẠY BƯỚC 2
+          setStepState('ERROR');
+          setErrorMsg(resStep1.step1_so_message || 'Bước 1 thất bại khi đồng bộ SO từ POS');
           setLogMessages((prev) => [
             ...prev,
-            `[${new Date().toLocaleTimeString()}] ✅ Bước 2 thành công: ${res.step2_co_message} (Đã phát lệnh tới ${res.total_co_notified} Tablet CO)`
+            `[${new Date().toLocaleTimeString()}] ❌ BƯỚC 1 THẤT BẠI: ${resStep1.step1_so_message}`,
+            `[${new Date().toLocaleTimeString()}] ⛔ ĐÃ DỪNG TOÀN BỘ TIẾN TRÌNH: Do Bước 1 chưa thành công, hệ thống TUYỆT ĐỐI KHÔNG chạy Bước 2 để tránh sai lệch dữ liệu giá trên Tablet CO!`
           ]);
-        } else {
-          setLogMessages((prev) => [
-            ...prev,
-            `[${new Date().toLocaleTimeString()}] ⚠️ Bước 2 gặp sự cố: ${res.step2_co_message}`
-          ]);
+          return;
         }
+
+        // Bước 1 thành công
+        setStepState('STEP1_DONE');
+        setLogMessages((prev) => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] ✅ BƯỚC 1 HOÀN TẤT 100%: ${resStep1.step1_so_message}`,
+          `[${new Date().toLocaleTimeString()}] ⏩ Chờ 0.8 giây kiểm tra toàn vẹn trước khi chuyển sang Bước 2...`
+        ]);
+
+        if (syncMode === 'SO_ONLY') {
+          setStepState('COMPLETED');
+          return;
+        }
+
+        // Delay ngắn để đảm bảo hoàn toàn tuần tự
+        await new Promise((r) => setTimeout(r, 800));
       }
 
-      setLogMessages((prev) => [
-        ...prev,
-        `[${new Date().toLocaleTimeString()}] 🎉 Hoàn tất quy trình đồng bộ trong ${res.elapsed_ms.toFixed(1)}ms!`
-      ]);
+      // ══════════════════════════════════════════════════════════════
+      // BƯỚC 2: PHÁT SÓNG MQTT ÉP TABLET CO CẬP NHẬT CACHE
+      // ══════════════════════════════════════════════════════════════
+      if (syncMode === 'FULL_TWO_STEP' || syncMode === 'CO_ONLY') {
+        setStepState('STEP2_RUNNING');
+        setLogMessages((prev) => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] ⏳ [TUẦN TỰ - BƯỚC 2/2] Bắt đầu phát sóng MQTT broadcast tới các Tablet CO yêu cầu xóa cache SQLite...`
+        ]);
+
+        // Thực thi riêng Bước 2
+        const resStep2 = await mongoService.postCoSoKdsSyncTwoStep({
+          host: mongoHost,
+          port: mongoPort,
+          restaurant_id: restaurantId,
+          sync_mode: 'CO_ONLY'
+        });
+
+        if (!resStep2.step2_co_success) {
+          setStepState('ERROR');
+          setErrorMsg(resStep2.step2_co_message || 'Lỗi khi phát sóng MQTT tới Tablet CO');
+          setLogMessages((prev) => [
+            ...prev,
+            `[${new Date().toLocaleTimeString()}] ⚠️ BƯỚC 2 GẶP SỰ CỐ: ${resStep2.step2_co_message}`
+          ]);
+          return;
+        }
+
+        setStepState('COMPLETED');
+        setLogMessages((prev) => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] ✅ BƯỚC 2 HOÀN TẤT: Đã phát sóng thông báo tới ${resStep2.total_co_notified} Tablet CO!`,
+          `[${new Date().toLocaleTimeString()}] 🎉 QUY TRÌNH ĐỒNG BỘ TUẦN TỰ 2 LỚP ĐÃ HOÀN TẤT THÀNH CÔNG!`
+        ]);
+      }
     } catch (err: unknown) {
       const error = err as Error;
+      setStepState('ERROR');
+      setErrorMsg(error.message || 'Lỗi ngoại lệ khi thực thi đồng bộ');
       setLogMessages((prev) => [
         ...prev,
-        `[${new Date().toLocaleTimeString()}] ❌ Lỗi thực thi đồng bộ: ${error.message || 'Không xác định'}`
+        `[${new Date().toLocaleTimeString()}] ❌ Lỗi hệ thống: ${error.message || 'Không xác định'}`
       ]);
-    } finally {
-      setLoading(false);
     }
   };
+
+  const isRunning = stepState === 'STEP1_RUNNING' || stepState === 'STEP2_RUNNING';
 
   return (
     <div style={{
@@ -128,25 +167,25 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
       <div style={{
         background: '#FFFFFF',
         width: '100%',
-        maxWidth: 860,
+        maxWidth: 880,
         borderRadius: 12,
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
         border: '1px solid #E2E8F0',
-        maxHeight: '90vh'
+        maxHeight: '92vh'
       }}>
         {/* Header */}
         <div style={{
-          padding: '14px 20px',
+          padding: '12px 20px',
           borderBottom: '1px solid #E2E8F0',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           background: '#F8FAFC'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
               width: 36,
               height: 36,
@@ -162,9 +201,12 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
             </div>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 8 }}>
-                ÉP ĐỒNG BỘ MENU & GIÁ TOÀN NHÀ HÀNG (QUY TRÌNH 2 LỚP: SO ➔ CO)
+                ÉP ĐỒNG BỘ MENU &amp; GIÁ (QUY TRÌNH TUẦN TỰ 2 LỚP: SO ➔ CO)
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: '#DCFCE7', color: '#166534', fontWeight: 700 }}>
+                  Tuần Tự 100%
+                </span>
               </div>
-              <div style={{ fontSize: 12, color: '#64748B' }}>
+              <div style={{ fontSize: 11.5, color: '#64748B' }}>
                 Nhà hàng: <strong>{restaurantName}</strong> ({ipSubnet}) — Máy chủ: <strong>{mongoHost}:{mongoPort}</strong>
               </div>
             </div>
@@ -186,76 +228,124 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
         </div>
 
         {/* Modal Body */}
-        <div style={{ padding: '16px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ padding: '16px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
           
-          {/* Explanation Banner */}
+          {/* Important Principle Banner */}
           <div style={{
-            padding: '12px 16px',
-            background: '#EFF6FF',
+            padding: '10px 14px',
+            background: '#FEF3C7',
             borderRadius: 8,
-            border: '1px solid #BFDBFE',
-            fontSize: 12.5,
-            color: '#1E3A8A',
-            lineHeight: 1.5
+            border: '1px solid #FCD34D',
+            fontSize: 12,
+            color: '#92400E',
+            lineHeight: 1.5,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 8
           }}>
-            <strong>💡 Quy tắc vận hành chuẩn Golden Gate:</strong> App CO (Customer Order trên máy tính bảng) không thể tự tải giá mới trực tiếp từ POS R-Keeper. Menu và giá mới <em>bắt buộc phải qua app SO (Staff Order) để đồng bộ trước (syncRK)</em>, sau đó hệ thống mới phát sóng MQTT ép toàn bộ máy tính bảng CO xóa SQLite cache và nạp giá mới!
+            <ShieldAlert size={18} color="#D97706" style={{ flexShrink: 0, marginTop: 1 }} />
+            <div>
+              <strong>Quy tắc tuần tự bắt buộc:</strong> Quá trình đồng bộ chạy <em>hoàn toàn theo tuần tự</em>. Hệ thống sẽ kéo dữ liệu từ POS R-Keeper vào app SO phục vụ trước (Bước 1). <strong>Chỉ khi Bước 1 hoàn thành 100% thành công</strong>, hệ thống mới tự động chuyển sang Bước 2 (phát sóng MQTT ép Tablet CO cập nhật giá mới) để tuyệt đối tránh tình trạng chạy song song gây sai lệch giá!
+            </div>
           </div>
 
-          {/* 2-Step Architecture Diagram */}
+          {/* Sequential 2-Step Visual Flow Cards */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '1fr auto 1fr auto 1fr',
+            gridTemplateColumns: '1fr auto 1fr',
             alignItems: 'center',
-            gap: 10,
-            padding: '14px',
+            gap: 12,
+            padding: 14,
             background: '#F8FAFC',
-            borderRadius: 8,
+            borderRadius: 10,
             border: '1px solid #E2E8F0'
           }}>
-            {/* Box 1: POS RK7 */}
-            <div style={{ padding: 12, background: '#FFFFFF', borderRadius: 8, border: '1px solid #CBD5E1', textAlign: 'center' }}>
-              <Server size={24} color="#6366F1" style={{ margin: '0 auto 6px' }} />
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#0F172A' }}>POS R-Keeper</div>
-              <div style={{ fontSize: 11, color: '#64748B' }}>Gốc Menu & Giá</div>
+            {/* Step 1 Card */}
+            <div style={{
+              padding: '12px 14px',
+              borderRadius: 8,
+              background: '#FFFFFF',
+              border: stepState === 'STEP1_RUNNING' ? '2px solid #F59E0B' : stepState === 'STEP1_DONE' || stepState === 'COMPLETED' ? '2px solid #10B981' : stepState === 'ERROR' ? '2px solid #EF4444' : '1px solid #CBD5E1',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Server size={18} color="#6366F1" />
+                  <span style={{ fontWeight: 800, fontSize: 13, color: '#0F172A' }}>BƯỚC 1: POS ➔ SO</span>
+                </div>
+                {stepState === 'STEP1_RUNNING' && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#D97706', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <RefreshCw size={12} className="animate-spin" /> Đang chạy...
+                  </span>
+                )}
+                {(stepState === 'STEP1_DONE' || stepState === 'COMPLETED') && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#16A34A', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Check size={14} /> Xong 100%
+                  </span>
+                )}
+                {stepState === 'ERROR' && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#DC2626' }}>❌ Lỗi</span>
+                )}
+              </div>
+              <div style={{ fontSize: 11.5, color: '#475569', lineHeight: 1.4 }}>
+                Gửi lệnh <code>syncRK</code> kéo bảng giá &amp; menu mới nhất từ POS RK7 vào máy chủ SO.
+              </div>
             </div>
 
-            <div style={{ textAlign: 'center', color: '#64748B' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#2563EB', marginBottom: 2 }}>Bước 1: syncRK</div>
-              <ArrowRight size={18} color="#2563EB" />
+            {/* Sequential Connector */}
+            <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <span style={{ fontSize: 10, fontWeight: 800, color: '#2563EB', background: '#EFF6FF', padding: '2px 6px', borderRadius: 4 }}>
+                TUẦN TỰ
+              </span>
+              <ArrowRight size={20} color={stepState === 'STEP1_DONE' || stepState === 'COMPLETED' ? '#10B981' : '#94A3B8'} />
             </div>
 
-            {/* Box 2: Staff Order (SO) */}
-            <div style={{ padding: 12, background: '#FFFFFF', borderRadius: 8, border: '1px solid #CBD5E1', textAlign: 'center' }}>
-              <Smartphone size={24} color="#F59E0B" style={{ margin: '0 auto 6px' }} />
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#0F172A' }}>App Staff Order (SO)</div>
-              <div style={{ fontSize: 11, color: '#64748B' }}>cache.sqlite máy chủ</div>
-            </div>
-
-            <div style={{ textAlign: 'center', color: '#64748B' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#16A34A', marginBottom: 2 }}>Bước 2: MQTT</div>
-              <ArrowRight size={18} color="#16A34A" />
-            </div>
-
-            {/* Box 3: Customer Order (CO) */}
-            <div style={{ padding: 12, background: '#FFFFFF', borderRadius: 8, border: '1px solid #CBD5E1', textAlign: 'center' }}>
-              <Radio size={24} color="#10B981" style={{ margin: '0 auto 6px' }} />
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#0F172A' }}>Tablet CO Các Bàn</div>
-              <div style={{ fontSize: 11, color: '#64748B' }}>Ép nạp SQLite cache</div>
+            {/* Step 2 Card */}
+            <div style={{
+              padding: '12px 14px',
+              borderRadius: 8,
+              background: '#FFFFFF',
+              border: stepState === 'STEP2_RUNNING' ? '2px solid #3B82F6' : stepState === 'COMPLETED' ? '2px solid #10B981' : '1px solid #CBD5E1',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+              opacity: (syncMode === 'FULL_TWO_STEP' && (stepState === 'IDLE' || stepState === 'STEP1_RUNNING')) ? 0.65 : 1
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Radio size={18} color="#0EA5E9" />
+                  <span style={{ fontWeight: 800, fontSize: 13, color: '#0F172A' }}>BƯỚC 2: SO ➔ CO (TABLET)</span>
+                </div>
+                {syncMode === 'FULL_TWO_STEP' && (stepState === 'IDLE' || stepState === 'STEP1_RUNNING') && (
+                  <span style={{ fontSize: 11, color: '#64748B' }}>⏳ Chờ Bước 1</span>
+                )}
+                {stepState === 'STEP2_RUNNING' && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#2563EB', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <RefreshCw size={12} className="animate-spin" /> Đang phát sóng...
+                  </span>
+                )}
+                {stepState === 'COMPLETED' && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#16A34A', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Check size={14} /> Hoàn tất
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 11.5, color: '#475569', lineHeight: 1.4 }}>
+                Phát sóng MQTT ép tất cả máy tính bảng CO xóa cache SQLite và nạp menu/giá mới.
+              </div>
             </div>
           </div>
 
           {/* Sync Mode Selection */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
-              Chọn Phương Thức Đồng Bộ:
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 12.5, fontWeight: 700, color: '#0F172A' }}>
+              Phương Thức Đồng Bộ:
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
               <label style={{
-                padding: '10px 14px',
+                padding: '10px 12px',
                 borderRadius: 8,
                 border: syncMode === 'FULL_TWO_STEP' ? '2px solid #F5B800' : '1px solid #CBD5E1',
                 background: syncMode === 'FULL_TWO_STEP' ? '#FFFBEB' : '#FFFFFF',
-                cursor: 'pointer',
+                cursor: isRunning ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 4
@@ -265,20 +355,21 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
                     type="radio"
                     name="syncMode"
                     value="FULL_TWO_STEP"
+                    disabled={isRunning}
                     checked={syncMode === 'FULL_TWO_STEP'}
                     onChange={() => setSyncMode('FULL_TWO_STEP')}
                   />
-                  <span style={{ fontWeight: 700, fontSize: 12.5, color: '#0F172A' }}>2 Lớp Chuẩn (SO ➔ CO)</span>
+                  <span style={{ fontWeight: 800, fontSize: 12.5, color: '#0F172A' }}>2 Lớp Tuần Tự (SO ➔ CO)</span>
                 </div>
-                <span style={{ fontSize: 11, color: '#64748B', paddingLeft: 22 }}>Khuyên dùng: Chuẩn hóa 100% menu & giá toàn nhà hàng.</span>
+                <span style={{ fontSize: 11, color: '#64748B', paddingLeft: 22 }}>Khuyên dùng: Bước 1 xong mới sang Bước 2.</span>
               </label>
 
               <label style={{
-                padding: '10px 14px',
+                padding: '10px 12px',
                 borderRadius: 8,
                 border: syncMode === 'SO_ONLY' ? '2px solid #F5B800' : '1px solid #CBD5E1',
                 background: syncMode === 'SO_ONLY' ? '#FFFBEB' : '#FFFFFF',
-                cursor: 'pointer',
+                cursor: isRunning ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 4
@@ -288,20 +379,21 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
                     type="radio"
                     name="syncMode"
                     value="SO_ONLY"
+                    disabled={isRunning}
                     checked={syncMode === 'SO_ONLY'}
                     onChange={() => setSyncMode('SO_ONLY')}
                   />
-                  <span style={{ fontWeight: 700, fontSize: 12.5, color: '#0F172A' }}>Chỉ Đồng Bộ SO (Bước 1)</span>
+                  <span style={{ fontWeight: 800, fontSize: 12.5, color: '#0F172A' }}>Chỉ Đồng Bộ SO (Bước 1)</span>
                 </div>
-                <span style={{ fontSize: 11, color: '#64748B', paddingLeft: 22 }}>Kéo menu từ POS RK7 vào app SO phục vụ.</span>
+                <span style={{ fontSize: 11, color: '#64748B', paddingLeft: 22 }}>Chỉ kéo menu từ POS RK7 vào máy chủ SO.</span>
               </label>
 
               <label style={{
-                padding: '10px 14px',
+                padding: '10px 12px',
                 borderRadius: 8,
                 border: syncMode === 'CO_ONLY' ? '2px solid #F5B800' : '1px solid #CBD5E1',
                 background: syncMode === 'CO_ONLY' ? '#FFFBEB' : '#FFFFFF',
-                cursor: 'pointer',
+                cursor: isRunning ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 4
@@ -311,82 +403,61 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
                     type="radio"
                     name="syncMode"
                     value="CO_ONLY"
+                    disabled={isRunning}
                     checked={syncMode === 'CO_ONLY'}
                     onChange={() => setSyncMode('CO_ONLY')}
                   />
-                  <span style={{ fontWeight: 700, fontSize: 12.5, color: '#0F172A' }}>Chỉ Ép Tablet CO (Bước 2)</span>
+                  <span style={{ fontWeight: 800, fontSize: 12.5, color: '#0F172A' }}>Chỉ Ép Tablet CO (Bước 2)</span>
                 </div>
-                <span style={{ fontSize: 11, color: '#64748B', paddingLeft: 22 }}>Bắn MQTT yêu cầu tất cả CO xóa cache nạp lại.</span>
+                <span style={{ fontSize: 11, color: '#64748B', paddingLeft: 22 }}>Bắn MQTT ép các Tablet CO xóa cache nạp lại.</span>
               </label>
             </div>
           </div>
 
           {/* Action Button */}
           <button
-            onClick={handleStartSync}
-            disabled={loading}
+            onClick={handleStartSequentialSync}
+            disabled={isRunning}
             style={{
-              padding: '12px 20px',
+              padding: '11px 20px',
               borderRadius: 8,
               border: 'none',
               background: '#F5B800',
               color: '#000',
-              fontWeight: 700,
-              fontSize: 14,
-              cursor: loading ? 'not-allowed' : 'pointer',
+              fontWeight: 800,
+              fontSize: 13.5,
+              cursor: isRunning ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 8,
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
             }}
           >
-            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-            {loading ? 'Đang Thực Hiện Đồng Bộ Toàn Nhà Hàng...' : '⚡ Bắt Đầu Ép Đồng Bộ Menu & Giá Toàn Nhà Hàng'}
+            <RefreshCw size={17} className={isRunning ? 'animate-spin' : ''} />
+            {isRunning ? 'Đang Thực Thi Tuần Tự Từng Bước...' : '⚡ Bắt Đầu Ép Đồng Bộ Tuần Tự Menu & Giá Toàn Nhà Hàng'}
           </button>
 
-          {/* Result Status Cards if completed */}
-          {result && (
+          {/* Error Alert if Step 1 failed */}
+          {errorMsg && (
             <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 12
+              padding: '10px 14px',
+              borderRadius: 8,
+              border: '1px solid #FECACA',
+              background: '#FEF2F2',
+              color: '#991B1B',
+              fontSize: 12,
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
             }}>
-              <div style={{
-                padding: '10px 14px',
-                borderRadius: 8,
-                border: result.step1_so_success ? '1px solid #86EFAC' : '1px solid #FECACA',
-                background: result.step1_so_success ? '#F0FDF4' : '#FEF2F2',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10
-              }}>
-                {result.step1_so_success ? <CheckCircle2 size={20} color="#16A34A" /> : <AlertTriangle size={20} color="#DC2626" />}
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 12.5, color: '#0F172A' }}>Bước 1: SO Đồng Bộ POS</div>
-                  <div style={{ fontSize: 11, color: '#475569' }}>{result.step1_so_message}</div>
-                </div>
-              </div>
-
-              <div style={{
-                padding: '10px 14px',
-                borderRadius: 8,
-                border: result.step2_co_success ? '1px solid #86EFAC' : '1px solid #FECACA',
-                background: result.step2_co_success ? '#F0FDF4' : '#FEF2F2',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10
-              }}>
-                {result.step2_co_success ? <CheckCircle2 size={20} color="#16A34A" /> : <AlertTriangle size={20} color="#DC2626" />}
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 12.5, color: '#0F172A' }}>Bước 2: Tablet CO Nạp Cache</div>
-                  <div style={{ fontSize: 11, color: '#475569' }}>{result.step2_co_message} (Đã báo {result.total_co_notified} máy)</div>
-                </div>
-              </div>
+              <AlertTriangle size={18} color="#DC2626" />
+              <span>{errorMsg}</span>
             </div>
           )}
 
-          {/* Real-time Log Console */}
+          {/* Live Progress Logs */}
           {logMessages.length > 0 && (
             <div style={{
               background: '#0F172A',
@@ -420,6 +491,7 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
         }}>
           <button
             onClick={onClose}
+            disabled={isRunning}
             style={{
               padding: '6px 16px',
               borderRadius: 6,
@@ -428,7 +500,7 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
               color: '#334155',
               fontSize: 12,
               fontWeight: 600,
-              cursor: 'pointer'
+              cursor: isRunning ? 'not-allowed' : 'pointer'
             }}
           >
             Đóng

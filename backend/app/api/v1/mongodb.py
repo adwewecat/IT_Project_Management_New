@@ -2939,15 +2939,29 @@ def bulk_push_images_to_restaurant_api(
 def get_co_so_kds_order_flow_api(
     host: str = Query(..., description="IP may chu MongoDB nha hang"),
     port: int = Query(27017),
-    table: str = Query("01", description="So ban can quet luong don"),
+    table: Optional[str] = Query(None, description="So ban can quet luong don"),
     order_id: Optional[str] = Query(None, description="Ma don hang cu the"),
+    date: Optional[str] = Query(None, description="Ngay kiem tra YYYY-MM-DD"),
+    query: Optional[str] = Query(None, description="Tim theo ten mon hoac ma SAP/RK7"),
+    source: Optional[str] = Query(None, description="Nguon order: ALL | CO | SO"),
+    from_time: Optional[str] = Query(None),
+    to_time: Optional[str] = Query(None),
     current_user: UserInfo = Depends(require_app_or_admin)
 ):
     """
-    Radar truy vet luong don hang 5 chang (CO - SO - KDS Flow Tracer):
-    CO -> POS -> MQTT -> KDS -> SO -> CO-Pay.
+    Radar truy vet va nhat ky doi soat luong don hang hop nhat (CO - SO - KDS).
     """
-    return co_so_kds_service.get_order_flow(host=host, port=port, table_number=table, order_id=order_id)
+    return co_so_kds_service.get_order_flow(
+        host=host,
+        port=port,
+        table_number=table,
+        order_id=order_id,
+        date_str=date,
+        query_str=query,
+        source_filter=source,
+        from_time=from_time,
+        to_time=to_time
+    )
 
 
 @router.post("/co-so-kds/sync-two-step", response_model=CoSoKdsTwoStepSyncResponse)

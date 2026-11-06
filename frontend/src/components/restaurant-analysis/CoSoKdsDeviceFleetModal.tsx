@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   X, RefreshCw, Search, Smartphone, Tablet, Monitor, 
   CheckCircle2, XCircle, AlertTriangle, Battery, BatteryCharging,
-  Wifi, Filter
+  Wifi, Filter, ArrowDownWideNarrow, Layers
 } from 'lucide-react';
 import { 
   mongoService, 
@@ -34,6 +34,7 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [filterType, setFilterType] = useState<string>('ALL'); // 'ALL' | 'CO' | 'SO' | 'KDS'
   const [filterStatus, setFilterStatus] = useState<string>('ALL'); // 'ALL' | 'ONLINE' | 'OUTDATED' | 'OFFLINE'
+  const [sortBy, setSortBy] = useState<'ORDER_TIME_DESC' | 'TABLE_ASC' | 'VERSION_ASC'>('ORDER_TIME_DESC');
 
   const loadDeviceFleet = useCallback(async () => {
     if (!mongoHost) return;
@@ -68,9 +69,9 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  const filteredDevices = useMemo(() => {
+  const filteredAndSortedDevices = useMemo(() => {
     if (!data || !data.devices) return [];
-    return data.devices.filter((device: CoSoKdsDeviceItem) => {
+    const list = data.devices.filter((device: CoSoKdsDeviceItem) => {
       if (filterType !== 'ALL' && device.device_type !== filterType) return false;
       if (filterStatus === 'ONLINE' && !device.is_online) return false;
       if (filterStatus === 'OFFLINE' && device.is_online) return false;
@@ -78,14 +79,33 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
       if (searchKeyword.trim()) {
         const q = searchKeyword.toLowerCase();
         const matchName = device.device_name?.toLowerCase().includes(q);
+        const matchModel = device.device_model?.toLowerCase().includes(q);
+        const matchUid = device.unique_device_id?.toLowerCase().includes(q);
         const matchTable = device.table_code?.toLowerCase().includes(q);
         const matchIp = device.ip_address?.toLowerCase().includes(q);
         const matchVersion = device.app_version?.toLowerCase().includes(q);
-        if (!matchName && !matchTable && !matchIp && !matchVersion) return false;
+        if (!matchName && !matchModel && !matchUid && !matchTable && !matchIp && !matchVersion) return false;
       }
       return true;
     });
-  }, [data, filterType, filterStatus, searchKeyword]);
+
+    // Sắp xếp
+    list.sort((a, b) => {
+      if (sortBy === 'ORDER_TIME_DESC') {
+        const timeA = a.last_order_time || '00:00:00';
+        const timeB = b.last_order_time || '00:00:00';
+        return timeB.localeCompare(timeA); // Muộn nhất lên trước
+      }
+      if (sortBy === 'TABLE_ASC') {
+        const tA = a.table_code || a.device_name || '';
+        const tB = b.table_code || b.device_name || '';
+        return tA.localeCompare(tB);
+      }
+      return a.app_version.localeCompare(b.app_version);
+    });
+
+    return list;
+  }, [data, filterType, filterStatus, searchKeyword, sortBy]);
 
   if (!isOpen) return null;
 
@@ -94,7 +114,7 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
       case 'CO':
         return <Tablet size={16} color="#2563EB" />;
       case 'SO':
-        return <Smartphone size={16} color="#D97706" />;
+        return <Smartphone size={16} color="#7C3AED" />;
       case 'KDS':
         return <Monitor size={16} color="#16A34A" />;
       default:
@@ -119,7 +139,7 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
       <div style={{
         background: '#FFFFFF',
         width: '100%',
-        maxWidth: 1200,
+        maxWidth: 1300,
         height: '92vh',
         borderRadius: 12,
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
@@ -130,14 +150,14 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
       }}>
         {/* Header */}
         <div style={{
-          padding: '14px 20px',
+          padding: '12px 20px',
           borderBottom: '1px solid #E2E8F0',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           background: '#F8FAFC'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
               width: 36,
               height: 36,
@@ -153,10 +173,13 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
             </div>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 8 }}>
-                BẢN ĐỒ GIÁM SÁT SỨC KHỎE THIẾT BỊ TOÀN NHÀ HÀNG (DEVICE FLEET)
+                BẢN ĐỒ THIẾT BỊ DUY NHẤT TOÀN NHÀ HÀNG (DEVICE FLEET)
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: '#DCFCE7', color: '#166534', fontWeight: 700 }}>
+                  Đã Gom Phiên &amp; Sắp Xếp Order Mới Nhất
+                </span>
               </div>
-              <div style={{ fontSize: 12, color: '#64748B' }}>
-                Nhà hàng: <strong>{restaurantName}</strong> ({ipSubnet}) — Quét thiết bị: <strong>CO, SO, KDS</strong>
+              <div style={{ fontSize: 11.5, color: '#64748B' }}>
+                Nhà hàng: <strong>{restaurantName}</strong> ({ipSubnet}) — Nhận diện thiết bị duy nhất: <strong>CO, SO, KDS</strong>
               </div>
             </div>
           </div>
@@ -178,45 +201,45 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
 
         {/* Filters and Controls */}
         <div style={{
-          padding: '12px 20px',
+          padding: '10px 20px',
           borderBottom: '1px solid #E2E8F0',
           background: '#FFFFFF',
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 12
+          gap: 10
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {/* Search Input */}
             <div style={{ position: 'relative' }}>
-              <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 10, top: 10 }} />
+              <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 10, top: 9 }} />
               <input
                 type="text"
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
-                placeholder="Tìm theo tên thiết bị, bàn, IP..."
+                placeholder="Tìm theo model, ID máy, bàn, IP..."
                 style={{
-                  width: 220,
-                  padding: '6px 10px 6px 30px',
+                  width: 240,
+                  padding: '5px 10px 5px 30px',
                   borderRadius: 6,
                   border: '1px solid #CBD5E1',
-                  fontSize: 13
+                  fontSize: 12.5
                 }}
               />
             </div>
 
             {/* Filter by Device Type */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Filter size={14} color="#64748B" />
+              <Filter size={13} color="#64748B" />
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
                 style={{
-                  padding: '6px 10px',
+                  padding: '5px 8px',
                   borderRadius: 6,
                   border: '1px solid #CBD5E1',
-                  fontSize: 12.5,
+                  fontSize: 12,
                   fontWeight: 600
                 }}
               >
@@ -232,10 +255,10 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               style={{
-                padding: '6px 10px',
+                padding: '5px 8px',
                 borderRadius: 6,
                 border: '1px solid #CBD5E1',
-                fontSize: 12.5,
+                fontSize: 12,
                 fontWeight: 600
               }}
             >
@@ -244,22 +267,44 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
               <option value="OFFLINE">🔴 Offline / Mất kết nối</option>
               <option value="OUTDATED">⚠️ Bản App Cũ Cần Cập Nhật</option>
             </select>
+
+            {/* Sort by Option */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <ArrowDownWideNarrow size={13} color="#2563EB" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                style={{
+                  padding: '5px 8px',
+                  borderRadius: 6,
+                  border: '1px solid #93C5FD',
+                  background: '#EFF6FF',
+                  color: '#1E40AF',
+                  fontSize: 12,
+                  fontWeight: 700
+                }}
+              >
+                <option value="ORDER_TIME_DESC">⏱️ Giờ Order Mới Nhất (Muộn nhất lên trước)</option>
+                <option value="TABLE_ASC">🍽️ Sắp xếp theo Tên Bàn</option>
+                <option value="VERSION_ASC">📱 Sắp xếp theo Phiên Bản App</option>
+              </select>
+            </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {data?.outdated_count ? (
               <span style={{
-                padding: '4px 10px',
-                borderRadius: 6,
+                padding: '3px 8px',
+                borderRadius: 5,
                 background: '#FEF3C7',
                 color: '#B45309',
-                fontSize: 12,
+                fontSize: 11.5,
                 fontWeight: 700,
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6
+                gap: 5
               }}>
-                <AlertTriangle size={14} /> Có {data.outdated_count} máy chạy app cũ
+                <AlertTriangle size={13} /> {data.outdated_count} máy chạy app cũ
               </span>
             ) : null}
 
@@ -269,19 +314,19 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
-                padding: '6px 14px',
+                gap: 5,
+                padding: '5px 12px',
                 borderRadius: 6,
                 border: 'none',
                 background: '#F5B800',
                 color: '#000',
                 fontWeight: 700,
-                fontSize: 13,
+                fontSize: 12,
                 cursor: loading ? 'not-allowed' : 'pointer'
               }}
             >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-              {loading ? 'Đang Quét...' : 'Làm Mới Thiết Bị'}
+              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+              {loading ? 'Đang Quét...' : 'Làm Mới'}
             </button>
           </div>
         </div>
@@ -298,31 +343,35 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
           {loading ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: '#64748B' }}>
               <RefreshCw size={28} className="animate-spin" color="#F5B800" />
-              <div style={{ fontSize: 14, fontWeight: 600 }}>Đang quét tình trạng thiết bị toàn nhà hàng...</div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Đang nhận diện thiết bị duy nhất &amp; đối soát phiên...</div>
             </div>
-          ) : filteredDevices.length === 0 ? (
+          ) : filteredAndSortedDevices.length === 0 ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#64748B' }}>
               <Search size={32} color="#CBD5E1" />
               <div style={{ fontSize: 14, fontWeight: 600, color: '#334155' }}>Không tìm thấy thiết bị nào khớp bộ lọc</div>
             </div>
           ) : (
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', borderBottom: '2px solid #E2E8F0' }}>
                   <tr>
-                    <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#334155', width: 40 }}>#</th>
-                    <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#334155' }}>Loại Thiết Bị</th>
-                    <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#334155' }}>Tên Thiết Bị / Vị Trí</th>
-                    <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#334155', width: 90 }}>Mã Bàn</th>
-                    <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#334155', width: 120 }}>IP Thiết Bị</th>
-                    <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#334155', width: 140 }}>Phiên Bản App</th>
-                    <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#334155', width: 100 }}>Pin / Nguồn</th>
-                    <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#334155', width: 110 }}>Tín Hiệu</th>
-                    <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#334155' }}>Ghi Chú Nghiệp Vụ</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#334155', width: 35 }}>#</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#334155', width: 90 }}>Loại Máy</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#334155', width: 75 }}>Bàn Ăn</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, color: '#1E40AF', width: 120, background: '#EFF6FF' }}>
+                      ⏱️ Giờ Order Mới Nhất
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#334155' }}>Model Thiết Bị (Phần Cứng)</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#334155', width: 130 }}>ID Thiết Bị Duy Nhất</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#334155', width: 105 }}>Địa Chỉ IP</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#334155', width: 110 }}>Phiên Bản App</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#334155', width: 85 }}>Pin / Nguồn</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#334155', width: 95 }}>Tín Hiệu</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#334155' }}>Ghi Chú &amp; Phiên Đã Gom</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredDevices.map((device, idx) => (
+                  {filteredAndSortedDevices.map((device, idx) => (
                     <tr
                       key={device.id || idx}
                       style={{
@@ -330,33 +379,43 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
                         background: !device.is_online ? '#FEF2F2' : device.is_outdated ? '#FFFBEB' : idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA'
                       }}
                     >
-                      <td style={{ padding: '10px 14px', color: '#64748B' }}>{idx + 1}</td>
-                      <td style={{ padding: '10px 14px' }}>
+                      <td style={{ padding: '8px 12px', color: '#64748B' }}>{idx + 1}</td>
+                      <td style={{ padding: '8px 12px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: '#0F172A' }}>
                           {getDeviceIcon(device.device_type)}
-                          <span>
+                          <span style={{ fontSize: 11.5 }}>
                             {device.device_type === 'CO' ? 'Tablet CO' : device.device_type === 'SO' ? 'Staff SO' : 'KDS Bếp'}
                           </span>
                         </div>
                       </td>
-                      <td style={{ padding: '10px 14px' }}>
-                        <div style={{ fontWeight: 700, color: '#0F172A' }}>{device.device_name}</div>
+                      <td style={{ padding: '8px 12px', fontWeight: 800, color: '#1E293B' }}>
+                        {device.table_code ? `Bàn ${device.table_code}` : '—'}
+                      </td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', background: '#F8FAFC' }}>
+                        <strong style={{ color: '#1D4ED8', fontFamily: 'monospace', fontSize: 12 }}>
+                          {device.last_order_time || '—'}
+                        </strong>
+                      </td>
+                      <td style={{ padding: '8px 12px' }}>
+                        <div style={{ fontWeight: 700, color: '#0F172A' }}>
+                          {device.device_model || device.device_name}
+                        </div>
                         {device.line_cook && (
                           <div style={{ fontSize: 11, color: '#16A34A', fontWeight: 600 }}>{device.line_cook}</div>
                         )}
                       </td>
-                      <td style={{ padding: '10px 14px', fontWeight: 700, color: '#1E293B' }}>
-                        {device.table_code || '—'}
+                      <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: 11, color: '#334155' }}>
+                        {device.unique_device_id || device.id}
                       </td>
-                      <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: '#475569' }}>
+                      <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: 11, color: '#475569' }}>
                         {device.ip_address || '—'}
                       </td>
-                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                           <span style={{
-                            padding: '2px 8px',
+                            padding: '2px 7px',
                             borderRadius: 4,
-                            fontSize: 11,
+                            fontSize: 10.5,
                             fontWeight: 700,
                             background: device.is_outdated ? '#FEE2E2' : '#DCFCE7',
                             color: device.is_outdated ? '#B91C1C' : '#15803D',
@@ -366,34 +425,51 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
                           </span>
                           {device.is_outdated && (
                             <span title={`Khuyên dùng bản mới nhất: ${device.latest_version}`} style={{ color: '#DC2626' }}>
-                              <AlertTriangle size={13} />
+                              <AlertTriangle size={12} />
                             </span>
                           )}
                         </div>
                       </td>
-                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                      <td style={{ padding: '8px 12px', textAlign: 'center' }}>
                         {device.battery_level !== undefined && device.battery_level !== null ? (
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: device.battery_level < 20 ? '#DC2626' : '#334155' }}>
-                            {device.battery_level >= 95 ? <BatteryCharging size={14} color="#16A34A" /> : <Battery size={14} />}
+                            {device.battery_level >= 95 ? <BatteryCharging size={13} color="#16A34A" /> : <Battery size={13} />}
                             <span>{device.battery_level}%</span>
                           </div>
                         ) : (
-                          <span style={{ color: '#94A3B8' }}>Nguồn AC</span>
+                          <span style={{ color: '#94A3B8', fontSize: 11 }}>Nguồn AC</span>
                         )}
                       </td>
-                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                      <td style={{ padding: '8px 12px', textAlign: 'center' }}>
                         {device.is_online ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: '#16A34A' }}>
-                            <CheckCircle2 size={13} /> Online
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, color: '#16A34A' }}>
+                            <CheckCircle2 size={12} /> Online
                           </span>
                         ) : (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: '#DC2626' }}>
-                            <XCircle size={13} /> Mất Kết Nối
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, color: '#DC2626' }}>
+                            <XCircle size={12} /> Offline
                           </span>
                         )}
                       </td>
-                      <td style={{ padding: '10px 14px', color: '#64748B', fontSize: 11.5 }}>
-                        {device.note || (device.last_seen ? `Thấy lúc ${device.last_seen}` : '—')}
+                      <td style={{ padding: '8px 12px', color: '#64748B', fontSize: 11 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span>{device.note || '—'}</span>
+                          {device.session_count && device.session_count > 1 ? (
+                            <span style={{
+                              padding: '1px 5px',
+                              borderRadius: 4,
+                              background: '#F1F5F9',
+                              color: '#475569',
+                              fontSize: 10,
+                              fontWeight: 600,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3
+                            }}>
+                              <Layers size={10} /> Đã gộp {device.session_count} phiên
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -405,7 +481,7 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
 
         {/* Footer */}
         <div style={{
-          padding: '10px 20px',
+          padding: '8px 20px',
           borderTop: '1px solid #E2E8F0',
           background: '#F8FAFC',
           display: 'flex',
@@ -415,14 +491,14 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
           color: '#64748B'
         }}>
           <div>
-            Hiển thị: <strong>{filteredDevices.length}</strong> / {data?.total_devices || 0} thiết bị (Online: {data?.online_count || 0}, Cũ: {data?.outdated_count || 0})
+            Thiết bị duy nhất: <strong>{filteredAndSortedDevices.length}</strong> máy (Online: {data?.online_count || 0}, Bản cũ: {data?.outdated_count || 0}) — <em>Sắp xếp: Bàn mở/order mới nhất luôn ở đầu</em>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span>Bản chuẩn GGG: CO <strong>v1.6.91</strong> | SO <strong>v2.4.107</strong> | KDS <strong>v1.4.51</strong></span>
+            <span>Bản chuẩn: CO <strong>v1.6.91</strong> | SO <strong>v2.4.107</strong> | KDS <strong>v1.4.51</strong></span>
             <button
               onClick={onClose}
               style={{
-                padding: '6px 14px',
+                padding: '5px 14px',
                 borderRadius: 6,
                 border: '1px solid #CBD5E1',
                 background: '#FFFFFF',

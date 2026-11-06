@@ -1448,6 +1448,11 @@ export const mongoService = {
     port?: number;
     table?: string;
     order_id?: string;
+    date?: string;
+    query?: string;
+    source?: string;
+    from_time?: string;
+    to_time?: string;
   }): Promise<CoSoKdsOrderFlowResponse> => {
     const res = await api.get<CoSoKdsOrderFlowResponse>('/mongodb/co-so-kds/order-flow', { params });
     return res.data;
@@ -2773,6 +2778,7 @@ export interface CoSoKdsOrderFlowItem {
   dish_name: string;
   quantity: number;
   table_number: string;
+  table_name?: string;
   order_id: string;
   source: string; // 'CO' | 'SO'
   time_co_sent?: string;
@@ -2786,6 +2792,13 @@ export interface CoSoKdsOrderFlowItem {
   elapsed_minutes: number;
   is_delayed: boolean;
   note?: string;
+  sap_code?: string;
+  rk7_code?: string;
+  print_status?: string;
+  printer_name?: string;
+  account_name?: string;
+  actual_minutes?: number;
+  config_minutes?: number;
 }
 
 export interface CoSoKdsOrderFlowResponse {
@@ -2825,6 +2838,9 @@ export interface CoSoKdsDeviceItem {
   id: string;
   device_type: 'CO' | 'SO' | 'KDS';
   device_name: string;
+  device_model?: string;
+  unique_device_id?: string;
+  mac_address?: string;
   table_code?: string;
   ip_address?: string;
   is_online: boolean;
@@ -2833,6 +2849,8 @@ export interface CoSoKdsDeviceItem {
   is_outdated: boolean;
   battery_level?: number;
   last_seen?: string;
+  last_order_time?: string;
+  session_count?: number;
   line_cook?: string;
   note?: string;
 }

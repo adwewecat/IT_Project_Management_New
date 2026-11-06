@@ -5651,7 +5651,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
             gap: '16px',
             alignItems: 'stretch'
           }}>
-            {/* KHUNG 1: RADAR TRUY VẾT LUỒNG ĐƠN HÀNG TOÀN DIỆN */}
+            {/* KHUNG 1: TRA CỨU NHẬT KÝ & RADAR TRUY VẾT LUỒNG ĐƠN HÀNG */}
             <div style={{
               background: '#FFFFFF',
               borderRadius: '10px',
@@ -5670,26 +5670,26 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                       <Flame size={16} color="#D97706" />
                     </div>
                     <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#0F172A' }}>
-                      Radar Truy Vết Luồng Đơn
+                      Nhật Ký &amp; Radar Luồng Đơn
                     </div>
                   </div>
-                  <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: '#FEF3C7', color: '#B45309' }}>
-                    Xử lý nhanh
+                  <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: '#DCFCE7', color: '#166534' }}>
+                    Hợp Nhất 2 Trong 1
                   </span>
                 </div>
 
                 <div style={{ fontSize: '12px', color: '#475569', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div>
-                    <strong>• Truy Vết Luồng Đơn 5 Chặng:</strong> Theo dõi thời gian thực CO (Khách gửi) ➔ POS (Ghi nhận) ➔ MQTT ➔ KDS (Bếp nấu) ➔ SO (Phục vụ bưng) ➔ CO-Pay.
+                    <strong>• Hợp Nhất Nhật Ký KDS &amp; Radar:</strong> Gom trọn vẹn Tra Cứu Nhật Ký KDS và Radar luồng đơn vào 1 giao diện duy nhất, không bị trùng lặp.
                   </div>
                   <div>
-                    <strong>• Đo Đếm SLA &amp; Cảnh Báo Trễ Món:</strong> Phát hiện ngay các món trễ quá thời gian quy định (&gt;10 phút) có biểu tượng cảnh báo đỏ.
+                    <strong>• Phân Biệt Nguồn Order:</strong> Hiển thị rõ món được gửi từ <code>Tablet CO</code> (Khách tự gọi tại bàn) hay <code>Staff SO</code> (Phục vụ gọi).
                   </div>
                   <div>
-                    <strong>• Cứu Đơn Giờ Cao Điểm:</strong> Khắc phục tình trạng sót đơn hoặc kẹt đơn giờ cao điểm bằng lệnh phát lại Topic MQTT.
+                    <strong>• Soi Món Chuyên Sâu 5 Chặng:</strong> Khám phá chi tiết từng giây đường đi của món: Khách gửi ➔ POS nhận ➔ MQTT LineCook ➔ KDS Done ➔ SO bưng ra bàn.
                   </div>
                   <div>
-                    <strong>• Hỗ Trợ Đóng/Mở Bàn Khẩn Cấp:</strong> Kích mở menu bàn trên tablet CO, bấm hoàn thành món hộ bếp khi máy KDS bị đơ.
+                    <strong>• Đối Soát SLA &amp; Lệnh In KDS:</strong> Thống kê thời gian chế biến thực tế so với chuẩn SLA, lệnh in KDS và trạng thái ra món.
                   </div>
                 </div>
               </div>
@@ -5714,11 +5714,11 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                   boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                 }}
               >
-                Mở Radar Truy Vết Luồng Đơn ➔
+                Mở Tra Cứu Nhật Ký &amp; Radar Luồng Đơn ➔
               </button>
             </div>
 
-            {/* KHUNG 2: PHÂN TÍCH LOGS KDS & SƠ ĐỒ ĐƯỜNG ĐI */}
+            {/* KHUNG 2: LƯU ĐỒ LUỒNG GỌI MÓN & PHÂN TÍCH TẢI BẾP */}
             <div style={{
               background: '#FFFFFF',
               borderRadius: '10px',
@@ -5737,86 +5737,64 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                       <ChefHat size={16} color="#7E22CE" />
                     </div>
                     <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#0F172A' }}>
-                      Phân Tích Logs &amp; Luồng KDS
+                      Lưu Đồ Gọi Món &amp; Tải Bếp
                     </div>
                   </div>
                   <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: '#F3E8FF', color: '#7E22CE' }}>
-                    Chuyên sâu
+                    Lưu Đồ Gọi Món
                   </span>
                 </div>
 
                 <div style={{ fontSize: '12px', color: '#475569', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div>
-                    <strong>• Logs KDS (Order &amp; Ra Món):</strong> Tra cứu chi tiết từng món: giờ order từ CO/SO, giờ bấm Done trên KDS, thời gian chế biến thực tế và phát lệnh in.
+                    <strong>• Lưu Đồ Gọi Món Tường Minh:</strong> Trực quan hóa quy trình gọi món thuần túy bằng lưu đồ tuần tự kết nối giữa Tablet CO, Máy SO, POS RK7, MQTT Broker và KDS Bếp.
                   </div>
                   <div>
-                    <strong>• Phân Tích Món Vào Bếp:</strong> Thống kê tổng số món và số lượt gửi vào bếp (1 ngày / 2-5 ngày) theo món &amp; theo lượt để đánh giá tải bếp.
+                    <strong>• Giao Thức Gọi Món Thực Tế:</strong> Minh họa rõ ràng submitOrder(), MQTT Broker port 1883, Google Cloud TTS đọc tên món, chuông DingDong, SubmitDish() và DeliveredDishItem.
                   </div>
                   <div>
-                    <strong>• Bản Đồ Sơ Đồ Đường Đi Các App:</strong> Khám phá luồng dữ liệu 5 giai đoạn giữa CO (vn.com.ggg), SO (com.ggg), KDS (LineCook) và MQTT Broker (1883).
-                  </div>
-                  <div>
-                    <strong>• Gom Cụm Tiện Ích:</strong> Tích hợp toàn diện các công cụ điều tra sự cố bếp về một nơi duy nhất.
+                    <strong>• Phân Tích Món Vào Bếp MỚI:</strong> Thống kê tổng số món và số lượt gửi vào bếp (1 ngày / 2-5 ngày) theo từng món để đánh giá tải bếp.
                   </div>
                 </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setShowKdsLogsModal(true)}
-                    style={{
-                      padding: '8px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid #CBD5E1',
-                      background: '#FFFFFF',
-                      color: '#0F172A',
-                      fontWeight: 600,
-                      fontSize: '11.5px',
-                      cursor: 'pointer',
-                      textAlign: 'center'
-                    }}
-                  >
-                    1. Logs Order &amp; Ra Món ➔
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowKdsIntakeModal(true)}
-                    style={{
-                      padding: '8px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid #CBD5E1',
-                      background: '#FFFFFF',
-                      color: '#0F172A',
-                      fontWeight: 600,
-                      fontSize: '11.5px',
-                      cursor: 'pointer',
-                      textAlign: 'center'
-                    }}
-                  >
-                    2. Món Vào Bếp MỚI ➔
-                  </button>
-                </div>
                 <button
                   type="button"
                   onClick={() => setShowFlowDiagramModal(true)}
                   style={{
-                    padding: '6px 10px',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    background: '#FFFFFF',
+                    color: '#0F172A',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Network size={13} color="#2563EB" /> 1. Xem Lưu Đồ Gọi Món (Flowchart) ➔
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowKdsIntakeModal(true)}
+                  style={{
+                    padding: '7px 10px',
                     borderRadius: '6px',
                     border: '1px solid #E2E8F0',
                     background: '#F8FAFC',
                     color: '#475569',
                     fontWeight: 600,
-                    fontSize: '11px',
+                    fontSize: '11.5px',
                     cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '4px'
+                    textAlign: 'center'
                   }}
                 >
-                  <Network size={12} color="#64748B" /> Xem Sơ Đồ Luồng CO - SO - KDS
+                  2. Phân Tích Món Vào Bếp MỚI ➔
                 </button>
               </div>
             </div>
@@ -5844,13 +5822,13 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                     </div>
                   </div>
                   <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: '#DCFCE7', color: '#166534' }}>
-                    2 Lớp Chuẩn
+                    Tuần Tự 100%
                   </span>
                 </div>
 
                 <div style={{ fontSize: '12px', color: '#475569', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div>
-                    <strong>• Khắc Phục Lỗi Giá Mới Không Xuống:</strong> App CO không tải trực tiếp từ POS mà phải qua app SO đồng bộ trước (syncRK) mới nạp được dữ liệu chuẩn.
+                    <strong>• Quy Trình Tuần Tự Tuyệt Đối:</strong> Bắt buộc đồng bộ tuần tự, Bước 1 (POS ➔ SO) phải xong 100% mới chuyển sang Bước 2 (SO ➔ CO), tránh chạy song song gây sai lệch giá!
                   </div>
                   <div>
                     <strong>• Bước 1 - Kéo Menu &amp; Giá Vào SO:</strong> Kích hoạt đồng bộ POS R-Keeper nạp bảng giá và thực đơn mới nhất vào máy chủ SO nhà hàng.
@@ -5883,11 +5861,11 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                   gap: '6px'
                 }}
               >
-                Ép Đồng Bộ SO ➔ CO Toàn Nhà Hàng ➔
+                ⚡ Ép Đồng Bộ Tuần Tự SO ➔ CO ➔
               </button>
             </div>
 
-            {/* KHUNG 4: BẢN ĐỒ GIÁM SÁT THIẾT BỊ */}
+            {/* KHUNG 4: BẢN ĐỒ THIẾT BỊ DUY NHẤT */}
             <div style={{
               background: '#FFFFFF',
               borderRadius: '10px',
@@ -5906,23 +5884,23 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                       <Tablet size={16} color="#0369A1" />
                     </div>
                     <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#0F172A' }}>
-                      Bản Đồ Thiết Bị Toàn Nhà Hàng
+                      Bản Đồ Thiết Bị Duy Nhất
                     </div>
                   </div>
                   <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: '#E0F2FE', color: '#0369A1' }}>
-                    Fleet Map
+                    Đã Gộp Phiên
                   </span>
                 </div>
 
                 <div style={{ fontSize: '12px', color: '#475569', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div>
-                    <strong>• Giám Sát Thiết Bị 3 Phân Hệ:</strong> Quản lý tập trung toàn bộ máy Tablet CO từng bàn, điện thoại SO phục vụ và màn hình KDS bếp.
+                    <strong>• Sắp Xếp Order Mới Nhất Lên Đầu:</strong> Bàn nào mở hoặc phát sinh order muộn nhất luôn được xếp ở vị trí đầu tiên của bảng.
+                  </div>
+                  <div>
+                    <strong>• Nhận Diện Thiết Bị Duy Nhất:</strong> Gom nhóm các session theo Model phần cứng và ID máy thực tế, tránh tình trạng 1 máy bị đếm thành hàng chục session.
                   </div>
                   <div>
                     <strong>• Kiểm Tra Phiên Bản App:</strong> So sánh phiên bản đang chạy thực tế với bản chuẩn GGG (CO v1.6.91, SO v2.4.107, KDS v1.4.51).
-                  </div>
-                  <div>
-                    <strong>• Cảnh Báo Thiết Bị Lỗi Thời:</strong> Tự động phát hiện các máy trạm hoặc tablet chưa được nâng cấp bản vá lỗi mới.
                   </div>
                   <div>
                     <strong>• Giám Sát Pin &amp; Tín Hiệu Online:</strong> Theo dõi dung lượng pin máy tính bảng, tình trạng cắm sạc AC và kết nối mạng thực tế.
@@ -5949,7 +5927,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                   gap: '6px'
                 }}
               >
-                Mở Bản Đồ Thiết Bị Toàn Nhà Hàng ➔
+                📱 Mở Bản Đồ Thiết Bị Duy Nhất ➔
               </button>
             </div>
           </div>

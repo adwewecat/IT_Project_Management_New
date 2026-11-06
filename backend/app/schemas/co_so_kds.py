@@ -8,8 +8,9 @@ class CoSoKdsOrderFlowItem(BaseModel):
     dish_name: str
     quantity: int = 1
     table_number: str
+    table_name: Optional[str] = None
     order_id: str
-    source: str = "CO"  # "CO" hoặc "SO"
+    source: str = "CO"  # "CO" (Tablet Bàn) hoặc "SO" (Nhân viên phục vụ)
     time_co_sent: Optional[str] = None
     time_pos_received: Optional[str] = None
     time_kds_received: Optional[str] = None
@@ -21,11 +22,19 @@ class CoSoKdsOrderFlowItem(BaseModel):
     elapsed_minutes: int = 4
     is_delayed: bool = False
     note: Optional[str] = None
+    # Chi tiết KDS & đối soát
+    sap_code: Optional[str] = None
+    rk7_code: Optional[str] = None
+    print_status: Optional[str] = None  # "PRINTED" | "NO_PRINTER" | "DISABLED" | "WAITING"
+    printer_name: Optional[str] = None
+    account_name: Optional[str] = None
+    actual_minutes: Optional[float] = None
+    config_minutes: Optional[int] = 10
 
 
 class CoSoKdsOrderFlowResponse(BaseModel):
     success: bool
-    table_number: str
+    table_number: Optional[str] = None
     order_id: Optional[str] = None
     total_dishes: int = 0
     waiting_count: int = 0
@@ -60,6 +69,9 @@ class CoSoKdsDeviceItem(BaseModel):
     id: str
     device_type: str  # "CO" | "SO" | "KDS"
     device_name: str
+    device_model: Optional[str] = "Samsung Galaxy Tab A8"
+    unique_device_id: Optional[str] = None
+    mac_address: Optional[str] = None
     table_code: Optional[str] = None
     ip_address: Optional[str] = None
     is_online: bool = True
@@ -68,6 +80,8 @@ class CoSoKdsDeviceItem(BaseModel):
     is_outdated: bool = False
     battery_level: Optional[int] = None
     last_seen: Optional[str] = None
+    last_order_time: Optional[str] = None  # Thời gian order / mở bàn mới nhất để sort
+    session_count: int = 1  # Số phiên session đã gom về thiết bị duy nhất này
     line_cook: Optional[str] = None
     note: Optional[str] = None
 
