@@ -1645,12 +1645,14 @@ async def process_quick_sso_item(
     sso_pass: str,
     action: str,
     query: str,
-    custom_password: Optional[str] = None
+    custom_password: Optional[str] = None,
+    clients: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Xử lý nhanh hàng loạt cho 1 tài khoản dựa trên từ khóa tìm kiếm (Username, Email hoặc Số điện thoại):
     - 'change_pass': Mở khóa (LockoutEnabled=false, FailedCount=0, LockoutEnd="") và đổi mật khẩu ngẫu nhiên đạt chuẩn (>= 9 ký tự).
     - 'lock': Khóa tài khoản (LockoutEnabled=true, FailedCount=4, LockoutEnd=ngày giờ hiện tại).
+    - 'assign_permissions': Phân quyền các client đã chọn cho tài khoản trên IAM.
     """
     clean_query = (query or "").strip()
     if not clean_query:
@@ -1836,6 +1838,46 @@ async def process_quick_sso_item(
                     "message": f"Đã khóa tài khoản '{matched_username}' thành công!"
                 }
 
+            elif action in ("assign_permissions", "assign"):
+                target_clients = [c.strip() for c in clients if c.strip()] if clients else DEFAULT_NCC_CLIENTS
+                if not target_clients:
+                    return {
+                        "success": False,
+                        "query": clean_query,
+                        "action": action,
+                        "user_id": matched_user_id,
+                        "user_name": matched_username,
+                        "email": matched_email,
+                        "phone_number": matched_phone,
+                        "message": "Danh sách quyền client cần phân không được để trống."
+                    }
+
+                ok, assigned_clients = await update_user_clients_on_page(page, matched_user_id, target_clients)
+                if not ok:
+                    return {
+                        "success": False,
+                        "query": clean_query,
+                        "action": action,
+                        "user_id": matched_user_id,
+                        "user_name": matched_username,
+                        "email": matched_email,
+                        "phone_number": matched_phone,
+                        "message": "Không tải hoặc cập nhật được trang phân quyền User & Clients trên IAM."
+                    }
+
+                return {
+                    "success": True,
+                    "query": clean_query,
+                    "action": action,
+                    "user_id": matched_user_id,
+                    "user_name": matched_username,
+                    "email": matched_email,
+                    "phone_number": matched_phone,
+                    "assigned_clients": assigned_clients,
+                    "detail": f"Đã bật {len(assigned_clients)} quyền: {', '.join(assigned_clients[:3])}{'...' if len(assigned_clients) > 3 else ''}",
+                    "message": f"Đã phân quyền thành công {len(assigned_clients)} client cho tài khoản '{matched_username}'!"
+                }
+
             else:
                 return {
                     "success": False,
@@ -1867,6 +1909,8 @@ def generate_batch_export_excel(action: str, items: List[Dict[str, Any]]) -> byt
     ]
     if action == "change_pass":
         headers.append("Mật Khẩu Mới")
+    elif action in ("assign_permissions", "assign"):
+        headers.append("Quyền Đã Phân")
     headers.extend(["Trạng Thái", "Chi Tiết / Phản Hồi"])
 
     ws.append(headers)
@@ -1898,6 +1942,12 @@ def generate_batch_export_excel(action: str, items: List[Dict[str, Any]]) -> byt
         ]
         if action == "change_pass":
             row_vals.append(str(item.get("new_password") or ""))
+        elif action in ("assign_permissions", "assign"):
+            ac = item.get("assigned_clients")
+            if isinstance(ac, list):
+                row_vals.append(", ".join(ac))
+            else:
+                row_vals.append(str(ac or ""))
         row_vals.extend([status_text, str(item.get("message") or "")])
         ws.append(row_vals)
 
@@ -1913,6 +1963,8 @@ def generate_batch_export_excel(action: str, items: List[Dict[str, Any]]) -> byt
     widths = [8, 24, 22, 32, 18]
     if action == "change_pass":
         widths.append(20)
+    elif action in ("assign_permissions", "assign"):
+        widths.append(35)
     widths.extend([16, 45])
 
     for i, w in enumerate(widths, 1):

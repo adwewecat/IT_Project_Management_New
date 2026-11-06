@@ -563,6 +563,7 @@ async def process_single_quick_item(
             action=req.action,
             query=req.query,
             custom_password=req.custom_password,
+            clients=req.clients,
         )
 
         if res.get("success"):
@@ -585,6 +586,7 @@ async def process_single_quick_item(
             email=res.get("email"),
             phone_number=res.get("phone_number"),
             new_password=res.get("new_password"),
+            assigned_clients=res.get("assigned_clients"),
             message=res.get("message", ""),
             detail=res.get("detail"),
             is_ldap=res.get("is_ldap", False),

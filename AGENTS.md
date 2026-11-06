@@ -356,6 +356,18 @@
   - Dùng chung **1 template Excel chuẩn 10 cột**: Cột 1-7 (User Name, Email, User Type, SĐT, Pass, TRANG THAI, UPDATE QUYEN), Cột 8-10 (Email Mới, SĐT Mới, Loại TK Mới).
   - Quy tắc linh hoạt: Có thể bỏ trống User Name nếu có Email (hoặc ngược lại). Kiểm tra trùng lặp trên IAM trước khi thêm mới user để tránh lỗi validation.
   - Hỗ trợ 5 tác vụ: Tạo mới, Update Pass & Mở khóa, Khóa tài khoản, Update Quyền, Cập nhật thông tin.
+- **Quy Trình Xử Lý Tập Trung & Feature Hub Dashboard (`SsoManagementPage.tsx`)**:
+  - Đã loại bỏ hoàn toàn khung tìm kiếm đơn lẻ và nút "Đổi Pass User Chọn" để chuyển 100% sang tự động hóa và xử lý hàng loạt theo danh sách.
+  - Thanh công cụ tinh gọn gồm 4 nút cốt lõi:
+    * **`⚡ Tính Năng Mở Rộng`** (`variant="primary"`, màu vàng `#F5B800`): Mở popup `SsoBatchPasteModal` với 2 tab Đổi Mật Khẩu Hàng Loạt (Random pass $\ge$ 9 ký tự, tự động mở khóa) và Khóa Tài Khoản Hàng Loạt.
+    * **`📁 Import Excel`** (`variant="outline"`): Mở popup `SsoBulkImportModal` (template 10 cột, 5 tác vụ).
+    * **`+ Thêm User NCC`** (`variant="outline"`): Mở popup tạo tài khoản Local cho NCC (tự động tăng SĐT `+2`, gán 4 quyền mặc định).
+    * **`🛡️ Phân Quyền User`** (`variant="outline"`): Mở popup `SsoBatchAssignModal`.
+  - **Feature Hub Dashboard**: Thay thế bảng dữ liệu rỗng cũ bằng 4 thẻ tương tác trực quan giới thiệu chi tiết 4 phân hệ kèm nút mở nhanh 1-click.
+- **Tính Năng Phân Quyền User & Clients Hàng Loạt (`SsoBatchAssignModal.tsx`)**:
+  - Hỗ trợ chọn bộ quyền mẫu nhanh: **4 Quyền Mặc Định NCC** (GChecklist, PoPortal, E-Bidding, SSO OTP Client) hoặc **14 Quyền Mặc Định GGG**, hoặc tùy chọn từng checkbox quyền client.
+  - Khung dán danh sách tài khoản (Username, Email hoặc Số điện thoại) cần phân quyền linh hoạt từ Clipboard/Excel.
+  - Tự động gọi API gán quyền client tuần tự trên IAM qua Playwright, báo cáo tiến độ, kết quả chi tiết từng dòng và hỗ trợ tải file Excel (.xlsx).
 - **Tính Năng Xử Lý Hàng Loạt Dạng Dán Text / Copy-Paste Nhanh (`SsoBatchPasteModal.tsx`)**:
   - Hỗ trợ 2 tác vụ nhanh: **Đổi Mật Khẩu Hàng Loạt** (`change_pass`) và **Khóa Tài Khoản Hàng Loạt** (`lock`).
   - Cho phép dán trực tiếp danh sách tài khoản (Username, Email hoặc Số điện thoại) từ Clipboard hoặc copy cả cột từ Excel. Tự động nhận diện và phân tách linh hoạt theo dòng, dấu phẩy, chấm phẩy, tab.

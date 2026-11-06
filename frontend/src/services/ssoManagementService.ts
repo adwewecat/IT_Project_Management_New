@@ -89,7 +89,7 @@ export const ssoManagementService = {
     return res.data;
   },
 
-  async exportBatchResults(action: 'change_pass' | 'lock', items: SSOBatchExportItem[]): Promise<void> {
+  async exportBatchResults(action: 'change_pass' | 'lock' | 'assign_permissions', items: SSOBatchExportItem[]): Promise<void> {
     const res = await apiClient.post('/sso/export-batch-results', { action, items }, {
       responseType: 'blob',
     });

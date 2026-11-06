@@ -140,9 +140,10 @@ export interface SSOBulkRowProgress extends SSOBulkRowItem {
 
 
 export interface SSOQuickProcessItemRequest {
-  action: 'change_pass' | 'lock';
+  action: 'change_pass' | 'lock' | 'assign_permissions';
   query: string;
   custom_password?: string;
+  clients?: string[];
 }
 
 export interface SSOQuickProcessItemResponse {
@@ -154,6 +155,7 @@ export interface SSOQuickProcessItemResponse {
   email?: string;
   phone_number?: string;
   new_password?: string;
+  assigned_clients?: string[];
   message: string;
   detail?: string;
   is_ldap?: boolean;
@@ -165,6 +167,7 @@ export interface SSOBatchExportItem {
   email?: string;
   phone_number?: string;
   new_password?: string;
+  assigned_clients?: string;
   status: 'success' | 'error';
   message?: string;
 }
@@ -176,6 +179,7 @@ export interface SSOQuickRowProgress {
   email?: string;
   phone_number?: string;
   new_password?: string;
+  assigned_clients?: string[];
   status: 'idle' | 'processing' | 'success' | 'error';
   message?: string;
   detail?: string;

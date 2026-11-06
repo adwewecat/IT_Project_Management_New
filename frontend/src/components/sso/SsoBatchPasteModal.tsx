@@ -240,9 +240,7 @@ export const SsoBatchPasteModal: React.FC<SsoBatchPasteModalProps> = ({
             <Lock size={20} style={{ color: 'var(--text-primary)' }} />
           )}
           <span>
-            {action === 'change_pass'
-              ? 'Đổi Mật Khẩu Hàng Loạt (Paste Danh Sách)'
-              : 'Khóa Tài Khoản Hàng Loạt (Paste Danh Sách)'}
+            Tính Năng Mở Rộng ({action === 'change_pass' ? '1. Đổi Mật Khẩu Hàng Loạt' : '2. Khóa Tài Khoản Hàng Loạt'})
           </span>
         </div>
       }
@@ -654,3 +652,4 @@ export const SsoBatchPasteModal: React.FC<SsoBatchPasteModalProps> = ({
     </Modal>
   );
 };
+

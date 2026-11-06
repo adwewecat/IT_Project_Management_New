@@ -366,6 +366,18 @@
     4. *Update Quyền*: Vào `User & Clients`, check các quyền được khai báo trong cột `UPDATE QUYEN`.
     5. *Cập nhật thông tin*: Tìm kiếm user trên IAM theo `User Name` hoặc `Email` cũ $ightarrow$ Cập nhật thông tin mới theo 3 cột cuối: `Email Mới`, `SĐT Mới`, `Loại TK Mới`.
   - Giao diện có nút tải template Excel mẫu 10 cột, xem trước danh sách user, highlight 3 cột mới khi chọn tác vụ Cập nhật, progress bar tiến độ và trạng thái chi tiết từng dòng, hỗ trợ nút "Dừng lại" và "Thử lại các dòng lỗi".
+- **Quy Trình Xử Lý Tập Trung & Feature Hub Dashboard (`SsoManagementPage.tsx`)**:
+  - Đã loại bỏ hoàn toàn khung tìm kiếm đơn lẻ và nút "Đổi Pass User Chọn" để chuyển 100% sang tự động hóa và xử lý hàng loạt theo danh sách.
+  - Thanh công cụ tinh gọn gồm 4 nút cốt lõi:
+    * **`⚡ Tính Năng Mở Rộng`** (`variant="primary"`, màu vàng `#F5B800`): Mở popup `SsoBatchPasteModal` với 2 tab Đổi Mật Khẩu Hàng Loạt (Random pass $\ge$ 9 ký tự, tự động mở khóa) và Khóa Tài Khoản Hàng Loạt. Thiết kế kiến trúc sẵn sàng mở rộng các tab tính năng mới sau này.
+    * **`📁 Import Excel`** (`variant="outline"`): Mở popup `SsoBulkImportModal` (template 10 cột, 5 tác vụ).
+    * **`+ Thêm User NCC`** (`variant="outline"`): Mở popup tạo tài khoản Local cho NCC (tự động tăng SĐT `+2`, gán 4 quyền mặc định).
+    * **`🛡️ Phân Quyền User`** (`variant="outline"`): Mở popup `SsoBatchAssignModal`.
+  - **Feature Hub Dashboard**: Thay thế bảng dữ liệu rỗng cũ bằng 4 thẻ tương tác trực quan giới thiệu chi tiết 4 phân hệ kèm nút mở nhanh 1-click.
+- **Tính Năng Phân Quyền User & Clients Hàng Loạt (`SsoBatchAssignModal.tsx`)**:
+  - Hỗ trợ chọn bộ quyền mẫu nhanh: **4 Quyền Mặc Định NCC** (GChecklist, PoPortal, E-Bidding, SSO OTP Client) hoặc **14 Quyền Mặc Định GGG**, hoặc tùy chọn từng checkbox quyền client.
+  - Khung dán danh sách tài khoản (Username, Email hoặc Số điện thoại) cần phân quyền linh hoạt từ Clipboard/Excel.
+  - Tự động gọi API gán quyền client tuần tự trên IAM qua Playwright, báo cáo tiến độ, kết quả chi tiết từng dòng và hỗ trợ tải file Excel (.xlsx).
 - **Tính Năng Xử Lý Hàng Loạt Dạng Dán Text / Copy-Paste Nhanh (`SsoBatchPasteModal.tsx`)**:
   - Hỗ trợ 2 tác vụ nhanh: **Đổi Mật Khẩu Hàng Loạt** (`change_pass`) và **Khóa Tài Khoản Hàng Loạt** (`lock`).
   - **Khung dán đa năng**: Cho phép dán trực tiếp danh sách tài khoản (Username, Email hoặc Số điện thoại) từ Clipboard, Notepad, hoặc copy cả cột từ Excel. Hệ thống tự động phân tách theo ký tự xuống dòng (`\n`, `\r\n`), dấu phẩy (`,`), chấm phẩy (`;`), hoặc tab (`\t`), tự động lọc trùng và hiển thị số lượng nhận diện thời gian thực.

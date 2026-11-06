@@ -1,59 +1,39 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  KeyRound,
   ShieldCheck,
-  Search,
+  KeyRound,
+  AlertCircle,
   CheckCircle2,
   AlertTriangle,
   RefreshCw,
   Copy,
   Check,
-  User,
   Settings,
   Eye,
   EyeOff,
-  AlertCircle,
   Plus,
   Trash2,
-  Building2,
-  Users,
   RotateCcw,
   UserPlus,
   ChevronDown,
   ChevronUp,
   FileSpreadsheet,
+  Sparkles,
+  ArrowRight,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
-import { TopScrollTable } from '../../components/ui/TopScrollTable';
 import { SsoBulkImportModal } from '../../components/sso/SsoBulkImportModal';
 import { SsoBatchPasteModal } from '../../components/sso/SsoBatchPasteModal';
-import { Lock } from 'lucide-react';
+import { SsoBatchAssignModal } from '../../components/sso/SsoBatchAssignModal';
 import {
   ssoManagementService,
 } from '../../services/ssoManagementService';
 import {
   SSOConfigResponse,
-  IAMUserItem,
 } from '../../types/ssoManagement';
-
-const DEFAULT_14_CLIENTS = [
-  'Chatbot cho hệ thống GPMS và G-Office (Phân quyền người dùng)',
-  'Client Gương Thần API (Phân quyền người dùng)',
-  'Client Gương Thần App (Phân quyền người dùng)',
-  'Hệ thống G-Office ( Phân quyền người dùng)',
-  'Hệ thống Quick Ticket',
-  'Hệ thống GChecklist',
-  'GStars_App_RM_PROD - Client dự án Gstars APP cho RM - PROD',
-  'GStars_Web_RM_PROD - Webadmin dự án GStars App RM - PROD',
-  'G Survey hệ thống khảo sát',
-  'Hệ thống G-PMS',
-  'Gstar Mobile App Client - Donot delete',
-  'GHERO_Hệ thống Ghero',
-  'ggg_sso_pim_created_date_19102021',
-  'SSO OTP Client - Ứng dụng dùng send OTP cho SSO web 2FA: For sending OTP - Donot delete',
-];
 
 const DEFAULT_NCC_CLIENTS = [
   'Hệ thống GChecklist',
@@ -61,36 +41,6 @@ const DEFAULT_NCC_CLIENTS = [
   'Hệ thống E-Bidding',
   'SSO OTP Client - Ứng dụng dùng send OTP cho SSO web 2FA: For sending OTP - Donot delete',
 ];
-
-
-// Helper tạo mật khẩu ngẫu nhiên đạt chuẩn
-const generateSecurePassword = (length = 10): string => {
-  const uppers = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const lowers = 'abcdefghijkmnpqrstuvwxyz';
-  const digits = '23456789';
-  const specials = '@#$!%&*';
-
-  const getRandom = (chars: string) => chars[Math.floor(Math.random() * chars.length)];
-
-  const u = getRandom(uppers);
-  const l = getRandom(lowers);
-  const d = getRandom(digits);
-  const s = getRandom(specials);
-
-  const all = uppers + lowers + digits + specials;
-  let remaining = '';
-  for (let i = 0; i < Math.max(length - 4, 4); i++) {
-    remaining += getRandom(all);
-  }
-
-  const combined = (u + l + d + s + remaining).split('');
-  for (let i = combined.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [combined[i], combined[j]] = [combined[j], combined[i]];
-  }
-  return combined.join('');
-};
-
 export const SsoManagementPage: React.FC = () => {
   const { user } = useAuth();
 
@@ -106,42 +56,11 @@ export const SsoManagementPage: React.FC = () => {
   const [savingConfig, setSavingConfig] = useState<boolean>(false);
   const [showConfigPass, setShowConfigPass] = useState<boolean>(false);
 
-  // --- Search State ---
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [searching, setSearching] = useState<boolean>(false);
-  const [hasSearched, setHasSearched] = useState<boolean>(false);
-  const [hasMoreResults, setHasMoreResults] = useState<boolean>(false);
-  const [userList, setUserList] = useState<IAMUserItem[]>([]);
-  const [selectedUser, setSelectedUser] = useState<IAMUserItem | null>(null);
-
-  // --- Change Password Modal ---
-  const [isChangePassModalOpen, setIsChangePassModalOpen] = useState<boolean>(false);
-  const [newPasswordInput, setNewPasswordInput] = useState<string>('');
-  const [showNewPassword, setShowNewPassword] = useState<boolean>(true);
-  const [processingChangePass, setProcessingChangePass] = useState<boolean>(false);
-
-  // --- Change Password Result Modal ---
-  const [passResultModalOpen, setPassResultModalOpen] = useState<boolean>(false);
-  const [passResultData, setPassResultData] = useState<{
-    success: boolean;
-    isLdap?: boolean;
-    message: string;
-    newPassword?: string;
-    userName?: string;
-    email?: string;
-  } | null>(null);
-  const [copiedPass, setCopiedPass] = useState<boolean>(false);
-  const [copiedTemplate, setCopiedTemplate] = useState<boolean>(false);
-
-  // --- Assign Clients Modal ---
-  const [isAssignModalOpen, setIsAssignModalOpen] = useState<boolean>(false);
-  const [assignTab, setAssignTab] = useState<'ggg' | 'ncc'>('ggg');
-  const [gggClients, setGggClients] = useState<string[]>(DEFAULT_14_CLIENTS);
-  const [selectedGggClients, setSelectedGggClients] = useState<string[]>(DEFAULT_14_CLIENTS);
-  const [nccClients, setNccClients] = useState<string[]>(DEFAULT_NCC_CLIENTS);
-  const [selectedNccClients, setSelectedNccClients] = useState<string[]>(DEFAULT_NCC_CLIENTS);
-  const [customClientInput, setCustomClientInput] = useState<string>('');
-  const [processingAssign, setProcessingAssign] = useState<boolean>(false);
+  // --- Modals State ---
+  const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState<boolean>(false);
+  const [isBatchPasteModalOpen, setIsBatchPasteModalOpen] = useState<boolean>(false);
+  const [batchPasteAction, setBatchPasteAction] = useState<'change_pass' | 'lock'>('change_pass');
+  const [isBatchAssignModalOpen, setIsBatchAssignModalOpen] = useState<boolean>(false);
 
   // --- Create NCC User Modal State ---
   const [isCreateNccModalOpen, setIsCreateNccModalOpen] = useState<boolean>(false);
@@ -149,9 +68,6 @@ export const SsoManagementPage: React.FC = () => {
   const [inputNccEmail, setInputNccEmail] = useState<string>('');
   const [inputNccPhone, setInputNccPhone] = useState<string>('0908119345');
   const [creatingNccUser, setCreatingNccUser] = useState<boolean>(false);
-  const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState<boolean>(false);
-  const [isBatchPasteModalOpen, setIsBatchPasteModalOpen] = useState<boolean>(false);
-  const [batchPasteAction, setBatchPasteAction] = useState<'change_pass' | 'lock'>('change_pass');
   const [nccConfiguredClients, setNccConfiguredClients] = useState<string[]>(DEFAULT_NCC_CLIENTS);
   const [showNccPermissionsAccordion, setShowNccPermissionsAccordion] = useState<boolean>(false);
   const [nccNewClientInput, setNccNewClientInput] = useState<string>('');
@@ -161,7 +77,7 @@ export const SsoManagementPage: React.FC = () => {
     message: string;
   } | null>(null);
 
-  // --- NCC Creation Result Modal (Hiển thị User & Password mới) ---
+  // --- NCC Creation Result Modal ---
   const [nccResultData, setNccResultData] = useState<{
     userName: string;
     email: string;
@@ -175,7 +91,6 @@ export const SsoManagementPage: React.FC = () => {
 
   // --- Toast notification ---
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-
 
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ message, type });
@@ -247,227 +162,6 @@ export const SsoManagementPage: React.FC = () => {
     }
   };
 
-  // Tìm kiếm User IAM
-  const handleSearch = async (e?: React.FormEvent, customQuery?: string) => {
-    if (e) e.preventDefault();
-    if (!ssoConfig?.configured) {
-      showToast('Vui lòng cấu hình tài khoản SSO trước khi tìm kiếm.', 'error');
-      setIsConfigModalOpen(true);
-      return;
-    }
-    const queryToSearch = (customQuery !== undefined ? customQuery : searchQuery).trim();
-    if (!queryToSearch) {
-      showToast('Vui lòng nhập từ khóa tìm kiếm (Username, email, SĐT hoặc mã nhân viên).', 'info');
-      return;
-    }
-    try {
-      setSearching(true);
-      setSelectedUser(null);
-      const res = await ssoManagementService.searchUsers(queryToSearch);
-      setUserList(res.items || []);
-      setHasSearched(true);
-      const more = !!res.has_more || (res.items && res.items.length >= 10);
-      setHasMoreResults(more);
-      if (more) {
-        showToast('Danh sách nhiều hơn 10 user nên chỉ list ra 10 user đầu. Vui lòng nhập thêm thông tin để tìm chính xác.', 'info');
-      } else if (res.items.length === 0) {
-        showToast('Không tìm thấy tài khoản nào khớp với từ khóa.', 'info');
-      } else {
-        showToast(`Tìm thấy ${res.items.length} tài khoản phù hợp.`, 'success');
-      }
-    } catch (err: any) {
-      const msg = err.response?.data?.detail || err.message || 'Lỗi khi tìm kiếm trên IAM';
-      showToast(msg, 'error');
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  // Mở modal Đổi Mật Khẩu
-  const handleOpenChangePassModal = () => {
-    if (!selectedUser) {
-      showToast('Vui lòng chọn 1 tài khoản để đổi mật khẩu.', 'info');
-      return;
-    }
-    setNewPasswordInput(generateSecurePassword(10));
-    setShowNewPassword(true);
-    setIsChangePassModalOpen(true);
-  };
-
-  // Xác nhận Đổi Mật Khẩu
-  const handleConfirmChangePass = async () => {
-    if (!selectedUser) return;
-    try {
-      setProcessingChangePass(true);
-      const res = await ssoManagementService.changePassword({
-        user_id: selectedUser.user_id,
-        custom_password: newPasswordInput.trim() || undefined,
-      });
-
-      setIsChangePassModalOpen(false);
-      setPassResultData({
-        success: res.success,
-        isLdap: res.is_ldap,
-        message: res.message,
-        newPassword: res.new_password,
-        userName: res.user_name || selectedUser.user_name,
-        email: selectedUser.email || '',
-      });
-      setCopiedPass(false);
-      setCopiedTemplate(false);
-      setPassResultModalOpen(true);
-
-      if (res.success) {
-        showToast('Đổi mật khẩu thành công!', 'success');
-      } else if (res.is_ldap) {
-        showToast('Tài khoản AD/LDAP - Không thể đổi pass trực tiếp.', 'info');
-      } else {
-        showToast(res.message || 'Đổi mật khẩu thất bại.', 'error');
-      }
-    } catch (err: any) {
-      const msg = err.response?.data?.detail || err.message || 'Lỗi khi đổi mật khẩu';
-      showToast(msg, 'error');
-    } finally {
-      setProcessingChangePass(false);
-    }
-  };
-
-  // Mở modal Phân Quyền
-  const handleOpenAssignModal = () => {
-    if (!selectedUser) {
-      showToast('Vui lòng chọn 1 tài khoản để phân quyền client.', 'info');
-      return;
-    }
-    setCustomClientInput('');
-    setIsAssignModalOpen(true);
-  };
-
-  // Thêm client tùy biến vào danh sách đang chọn
-  const handleAddCustomClient = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const trimmed = customClientInput.trim();
-    if (!trimmed) {
-      showToast('Vui lòng nhập tên client cần bổ sung.', 'info');
-      return;
-    }
-
-    if (assignTab === 'ggg') {
-      if (gggClients.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
-        showToast('Client này đã có trong danh sách phân quyền GGG.', 'info');
-        return;
-      }
-      setGggClients(prev => [...prev, trimmed]);
-      setSelectedGggClients(prev => [...prev, trimmed]);
-      setCustomClientInput('');
-      showToast(`Đã bổ sung client "${trimmed}" vào danh sách GGG.`, 'success');
-    } else {
-      if (nccClients.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
-        showToast('Client này đã có trong danh sách phân quyền Đối tác NCC.', 'info');
-        return;
-      }
-      setNccClients(prev => [...prev, trimmed]);
-      setSelectedNccClients(prev => [...prev, trimmed]);
-      setCustomClientInput('');
-      showToast(`Đã bổ sung client "${trimmed}" vào danh sách Đối tác NCC.`, 'success');
-    }
-  };
-
-  // Xóa client khỏi danh sách
-  const handleRemoveClient = (clientName: string) => {
-    if (assignTab === 'ggg') {
-      setGggClients(prev => prev.filter(c => c !== clientName));
-      setSelectedGggClients(prev => prev.filter(c => c !== clientName));
-    } else {
-      setNccClients(prev => prev.filter(c => c !== clientName));
-      setSelectedNccClients(prev => prev.filter(c => c !== clientName));
-    }
-  };
-
-  // Toggle chọn / bỏ chọn 1 client
-  const handleToggleClientCheck = (clientName: string) => {
-    if (assignTab === 'ggg') {
-      setSelectedGggClients(prev =>
-        prev.includes(clientName) ? prev.filter(c => c !== clientName) : [...prev, clientName]
-      );
-    } else {
-      setSelectedNccClients(prev =>
-        prev.includes(clientName) ? prev.filter(c => c !== clientName) : [...prev, clientName]
-      );
-    }
-  };
-
-  // Chọn tất cả / Bỏ chọn tất cả
-  const handleToggleSelectAll = () => {
-    if (assignTab === 'ggg') {
-      if (selectedGggClients.length === gggClients.length) {
-        setSelectedGggClients([]);
-      } else {
-        setSelectedGggClients([...gggClients]);
-      }
-    } else {
-      if (selectedNccClients.length === nccClients.length) {
-        setSelectedNccClients([]);
-      } else {
-        setSelectedNccClients([...nccClients]);
-      }
-    }
-  };
-
-  // Đặt lại mặc định
-  const handleResetDefaultClients = () => {
-    if (assignTab === 'ggg') {
-      setGggClients(DEFAULT_14_CLIENTS);
-      setSelectedGggClients(DEFAULT_14_CLIENTS);
-      showToast('Đã đặt lại 14 client mặc định cho User GGG.', 'info');
-    } else {
-      setNccClients(DEFAULT_NCC_CLIENTS);
-      setSelectedNccClients(DEFAULT_NCC_CLIENTS);
-      showToast('Đã đặt lại 3 client mặc định cho Đối tác NCC.', 'info');
-    }
-  };
-
-  // Xác nhận Phân Quyền
-  const handleConfirmAssignClients = async () => {
-    if (!selectedUser) return;
-    const targetClients = assignTab === 'ggg' ? selectedGggClients : selectedNccClients;
-    if (targetClients.length === 0) {
-      showToast('Vui lòng chọn ít nhất 1 client để phân quyền.', 'error');
-      return;
-    }
-    try {
-      setProcessingAssign(true);
-      const res = await ssoManagementService.assignDefaultClients({
-        user_id: selectedUser.user_id,
-        client_names: targetClients,
-      });
-      setIsAssignModalOpen(false);
-      showToast(res.message || `Phân quyền thành công ${targetClients.length} client cho user!`, 'success');
-    } catch (err: any) {
-      const msg = err.response?.data?.detail || err.message || 'Lỗi khi phân quyền client';
-      showToast(msg, 'error');
-    } finally {
-      setProcessingAssign(false);
-    }
-  };
-
-  // Copy password to clipboard
-  const handleCopyPassword = () => {
-    if (!passResultData?.newPassword) return;
-    navigator.clipboard.writeText(passResultData.newPassword);
-    setCopiedPass(true);
-    showToast('Đã sao chép mật khẩu vào clipboard!', 'success');
-    setTimeout(() => setCopiedPass(false), 3000);
-  };
-
-  // Copy full message template to send to user
-  const handleCopyTemplate = () => {
-    if (!passResultData?.newPassword) return;
-    const txt = `Hệ thống SSO/IAM đã tạo:\n- Username: ${passResultData.userName || selectedUser?.user_name}\n- Mật khẩu: ${passResultData.newPassword}\n- Email: ${passResultData.email || selectedUser?.email || ''}`;
-    navigator.clipboard.writeText(txt);
-    setCopiedTemplate(true);
-    showToast('Đã sao chép toàn bộ tin nhắn gửi user!', 'success');
-    setTimeout(() => setCopiedTemplate(false), 3000);
-  };
 
   // Helper tính SĐT tiếp theo (+2)
   const getNextPhoneNumber = (currentPhone: string, step = 2): string => {
@@ -595,8 +289,7 @@ export const SsoManagementPage: React.FC = () => {
       showToast(res.message || `Đã thêm thành công User NCC "${username}" và cấp mật khẩu mới!`, 'success');
 
       // Tự động tìm kiếm tài khoản vừa tạo để hiển thị lên bảng
-      setSearchQuery(username);
-      handleSearch(undefined, username);
+
     } catch (err: any) {
       const msg = err.response?.data?.detail || err.message || 'Lỗi khi tạo User NCC';
       showToast(msg, 'error');
@@ -623,6 +316,7 @@ export const SsoManagementPage: React.FC = () => {
     showToast('Đã sao chép toàn bộ thông tin gửi đối tác!', 'success');
     setTimeout(() => setCopiedNccTemplate(false), 3000);
   };
+
 
   return (
     <div style={{ padding: '18px 24px', display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', boxSizing: 'border-box' }}>
@@ -798,90 +492,8 @@ export const SsoManagementPage: React.FC = () => {
         </div>
       )}
 
-      {/* Search Input Box */}
-      <div
-        style={{
-          backgroundColor: 'var(--bg-card)',
-          borderRadius: '12px',
-          border: '1px solid var(--border-color)',
-          padding: '18px 24px',
-          boxShadow: 'var(--shadow-sm)',
-        }}
-      >
-        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', flex: '1 1 320px', minWidth: '240px' }}>
-            <Search
-              size={18}
-              style={{
-                position: 'absolute',
-                left: '14px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--text-muted)',
-              }}
-            />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Nhập tên đăng nhập, email, số điện thoại hoặc mã nhân viên (ví dụ: dung.nguyenanh, 000016)..."
-              disabled={searching}
-              style={{
-                width: '100%',
-                padding: '10px 14px 10px 42px',
-                borderRadius: '8px',
-                border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-                fontSize: '14px',
-                outline: 'none',
-              }}
-            />
-          </div>
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={searching || !ssoConfig?.configured}
-            style={{ padding: '10px 22px', display: 'flex', alignItems: 'center', gap: '8px' }}
-          >
-            {searching ? (
-              <>
-                <RefreshCw size={16} className="spin" />
-                <span>Đang Tìm Trên IAM...</span>
-              </>
-            ) : (
-              <>
-                <Search size={16} />
-                <span>Tìm Kiếm User</span>
-              </>
-            )}
-          </Button>
-        </form>
-      </div>
 
-      {/* Thông báo kết quả vượt quá 10 user */}
-      {hasMoreResults && (
-        <div
-          style={{
-            padding: '12px 18px',
-            borderRadius: 'var(--radius-md)',
-            backgroundColor: 'var(--color-warning-bg)',
-            border: '1px solid var(--color-warning-border)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            boxShadow: 'var(--shadow-sm)',
-          }}
-        >
-          <AlertTriangle size={20} style={{ color: 'var(--color-warning-text)', flexShrink: 0 }} />
-          <div style={{ fontSize: '13px', color: 'var(--color-warning-text)', lineHeight: 1.5 }}>
-            <strong>Danh sách kết quả nhiều hơn 10 user nên hệ thống chỉ hiển thị 10 user đầu tiên.</strong>{' '}
-            Vui lòng nhập thêm thông tin chi tiết (mã nhân viên, email, số điện thoại hoặc họ tên đầy đủ) để tìm kiếm chính xác tài khoản.
-          </div>
-        </div>
-      )}
-
-      {/* Action Toolbar & Table Section */}
+      {/* Action Toolbar & Feature Hub Section */}
       <div
         style={{
           backgroundColor: 'var(--bg-card)',
@@ -898,38 +510,19 @@ export const SsoManagementPage: React.FC = () => {
           style={{
             padding: '14px 20px',
             borderBottom: '1px solid var(--border-color)',
-            backgroundColor: selectedUser ? 'var(--bg-secondary)' : 'var(--bg-card)',
+            backgroundColor: 'var(--bg-card)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
             gap: '12px',
-            transition: 'background-color 0.2s',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              DANH SÁCH USER IAM:
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Zap size={18} style={{ color: 'var(--color-primary)' }} />
+            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+              CÔNG CỤ XỬ LÝ TÀI KHOẢN SSO & IAM:
             </span>
-            {selectedUser ? (
-              <span
-                style={{
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  color: 'var(--text-primary)',
-                  backgroundColor: 'var(--color-primary-light)',
-                  padding: '4px 10px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-primary)',
-                }}
-              >
-                Đang chọn: <strong>{selectedUser.user_name}</strong> {selectedUser.email && `(${selectedUser.email})`}
-              </span>
-            ) : (
-              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                (Chọn 1 dòng trong bảng để thực hiện thao tác)
-              </span>
-            )}
           </div>
 
           {/* Action Buttons */}
@@ -947,25 +540,8 @@ export const SsoManagementPage: React.FC = () => {
                 fontWeight: 700,
               }}
             >
-              <KeyRound size={15} />
-              <span>🔑 Đổi Pass Hàng Loạt (Paste)</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={() => {
-                setBatchPasteAction('lock');
-                setIsBatchPasteModalOpen(true);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '7px',
-                fontWeight: 600,
-              }}
-            >
-              <Lock size={15} />
-              <span>🔒 Khóa TK Hàng Loạt (Paste)</span>
+              <Sparkles size={15} />
+              <span>⚡ Tính Năng Mở Rộng</span>
             </Button>
 
             <Button
@@ -998,151 +574,351 @@ export const SsoManagementPage: React.FC = () => {
 
             <Button
               variant="outline"
-              disabled={!selectedUser || processingChangePass}
-              onClick={handleOpenChangePassModal}
+              onClick={() => setIsBatchAssignModalOpen(true)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '7px',
-                borderColor: selectedUser ? 'var(--color-primary)' : undefined,
-                backgroundColor: selectedUser ? 'var(--color-primary-light)' : undefined,
-                color: 'var(--text-primary)',
-              }}
-            >
-              <KeyRound size={15} />
-              <span>Đổi Pass User Chọn</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              disabled={!selectedUser || processingAssign}
-              onClick={handleOpenAssignModal}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '7px',
-                borderColor: selectedUser ? 'var(--color-primary)' : undefined,
-                backgroundColor: selectedUser ? 'var(--color-primary-light)' : undefined,
-                color: 'var(--text-primary)',
+                fontWeight: 600,
               }}
             >
               <ShieldCheck size={15} />
-              <span>Phân Quyền User Chọn</span>
+              <span>🛡️ Phân Quyền User</span>
             </Button>
           </div>
         </div>
 
-        {/* Results Table */}
-        <TopScrollTable maxHeight="520px">
-          <table style={{ width: '100%', minWidth: '780px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-            <thead style={{ position: 'sticky', top: 0, zIndex: 5, backgroundColor: 'var(--bg-secondary)' }}>
-              <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
-                <th style={{ width: '60px', padding: '12px 16px', textAlign: 'center', backgroundColor: 'var(--bg-secondary)' }}>Chọn</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, backgroundColor: 'var(--bg-secondary)' }}>UserName</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, backgroundColor: 'var(--bg-secondary)' }}>Email</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, backgroundColor: 'var(--bg-secondary)' }}>Số Điện Thoại</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, backgroundColor: 'var(--bg-secondary)' }}>Khóa (Lock)</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, backgroundColor: 'var(--bg-secondary)' }}>Loại (Type)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {searching ? (
-                <tr>
-                  <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    <RefreshCw size={24} className="spin" style={{ margin: '0 auto 10px', display: 'block', color: 'var(--color-primary)' }} />
-                    <div>Đang kết nối hệ thống IAM và tải danh sách user...</div>
-                  </td>
-                </tr>
-              ) : userList.length > 0 ? (
-                userList.map((item) => {
-                  const isSelected = selectedUser?.user_id === item.user_id;
-                  return (
-                    <tr
-                      key={item.user_id}
-                      onClick={() => setSelectedUser(item)}
-                      style={{
-                        borderBottom: '1px solid var(--border-color)',
-                        backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
-                        cursor: 'pointer',
-                        transition: 'background-color 0.15s ease',
-                      }}
-                    >
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                        <input
-                          type="radio"
-                          name="selected_iam_user"
-                          checked={isSelected}
-                          onChange={() => setSelectedUser(item)}
-                          style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-                        />
-                      </td>
-                      <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {item.user_name}
-                      </td>
-                      <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>
-                        {item.email || '—'}
-                      </td>
-                      <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>
-                        {item.phone_number || '—'}
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <span
-                          style={{
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            backgroundColor: item.lock_enable?.toLowerCase() === 'true' ? '#FEE2E2' : '#F3F4F6',
-                            color: item.lock_enable?.toLowerCase() === 'true' ? '#DC2626' : '#6B7280',
-                          }}
-                        >
-                          {item.lock_enable?.toLowerCase() === 'true' ? 'Đang Khóa' : 'Bình thường'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <span
-                          style={{
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            backgroundColor: 'var(--bg-secondary)',
-                            color: 'var(--text-primary)',
-                            border: '1px solid var(--border-color)',
-                          }}
-                        >
-                          {item.user_type || 'Local'}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={6} style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    {hasSearched ? (
-                      <div>
-                        <AlertCircle size={28} style={{ color: 'var(--text-muted)', margin: '0 auto 8px', display: 'block' }} />
-                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Không tìm thấy tài khoản nào</div>
-                        <div style={{ fontSize: '12px', marginTop: '4px' }}>
-                          Vui lòng kiểm tra lại từ khóa tìm kiếm (Username, Email, hoặc Mã nhân viên).
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <User size={28} style={{ color: 'var(--text-muted)', margin: '0 auto 8px', display: 'block' }} />
-                        <div style={{ fontWeight: 500 }}>Chưa có kết quả tìm kiếm</div>
-                        <div style={{ fontSize: '12px', marginTop: '4px' }}>
-                          Nhập từ khóa vào ô tìm kiếm ở trên và nhấn "Tìm Kiếm User".
-                        </div>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </TopScrollTable>
+        {/* 4 Feature Hub Cards */}
+        <div
+          style={{
+            padding: '24px 20px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+            gap: '18px',
+            backgroundColor: 'var(--bg-card)',
+          }}
+        >
+          {/* Card 1: Tính Năng Mở Rộng */}
+          <div
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              gap: '14px',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div
+                    style={{
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '8px',
+                      backgroundColor: 'var(--color-primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--text-primary)',
+                      fontWeight: 700,
+                    }}
+                  >
+                    <Sparkles size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Tính Năng Mở Rộng
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      Dán danh sách Text / Copy-Paste nhanh
+                    </div>
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    backgroundColor: 'var(--color-primary-light)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--color-primary)',
+                  }}
+                >
+                  Xử lý nhanh
+                </span>
+              </div>
+
+              <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                <div>• <strong>Đổi Mật Khẩu Hàng Loạt</strong>: Tự động sinh password ngẫu nhiên đạt chuẩn IAM &ge; 9 ký tự (hoa, thường, số, ký tự đặc biệt) và tự động mở khóa tài khoản.</div>
+                <div style={{ marginTop: '4px' }}>• <strong>Khóa Tài Khoản Hàng Loạt</strong>: Tự động khóa nhanh (Lockout Enabled = TRUE, Failed = 4, Lockout End = ngày hiện tại).</div>
+                <div style={{ marginTop: '4px' }}>• Hỗ trợ copy 1-chạm từng pass, copy toàn bộ danh sách, xuất file Excel (.xlsx).</div>
+              </div>
+            </div>
+
+            <Button
+              variant="primary"
+              onClick={() => {
+                setBatchPasteAction('change_pass');
+                setIsBatchPasteModalOpen(true);
+              }}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                fontWeight: 700,
+              }}
+            >
+              <span>Mở Tính Năng Mở Rộng</span>
+              <ArrowRight size={15} />
+            </Button>
+          </div>
+
+          {/* Card 2: Import Excel */}
+          <div
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              gap: '14px',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div
+                    style={{
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '8px',
+                      backgroundColor: 'var(--bg-primary)',
+                      border: '1px solid var(--border-color)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    <FileSpreadsheet size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Import File Excel
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      Mẫu Excel chuẩn 10 cột tiện lợi
+                    </div>
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-color)',
+                  }}
+                >
+                  5 tác vụ
+                </span>
+              </div>
+
+              <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                <div>• Dùng chung <strong>1 template Excel 10 cột</strong> cho toàn bộ 5 nghiệp vụ SSO/IAM.</div>
+                <div style={{ marginTop: '4px' }}>• <strong>5 Tác vụ</strong>: 1. Tạo mới tài khoản (chống trùng) | 2. Update Pass & Mở khóa | 3. Khóa tài khoản | 4. Phân quyền User & Clients | 5. Cập nhật thông tin (Email mới, SĐT mới, Loại tài khoản mới).</div>
+                <div style={{ marginTop: '4px' }}>• Thanh tiến độ chi tiết, dừng tiến trình và thử lại dòng lỗi linh hoạt.</div>
+              </div>
+            </div>
+
+            <Button
+              variant="outline"
+              onClick={() => setIsBulkImportModalOpen(true)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                fontWeight: 600,
+              }}
+            >
+              <span>Mở Import File Excel</span>
+              <ArrowRight size={15} />
+            </Button>
+          </div>
+
+          {/* Card 3: Thêm User NCC */}
+          <div
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              gap: '14px',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div
+                    style={{
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '8px',
+                      backgroundColor: 'var(--bg-primary)',
+                      border: '1px solid var(--border-color)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    <UserPlus size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Thêm User Đối Tác NCC
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      Tự động hóa Playwright + Tự tăng SĐT
+                    </div>
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-color)',
+                  }}
+                >
+                  Đối tác NCC
+                </span>
+              </div>
+
+              <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                <div>• Tự động khởi tạo tài khoản Local (User Type = 0) cho Nhà Cung Cấp.</div>
+                <div style={{ marginTop: '4px' }}>• <strong>Tự động tăng số điện thoại (+2)</strong> tránh trùng lặp dữ liệu trên IAM.</div>
+                <div style={{ marginTop: '4px' }}>• <strong>Tự động gán 4 quyền mặc định NCC</strong>: GChecklist, PoPortal, E-Bidding, SSO OTP Client.</div>
+                <div style={{ marginTop: '4px' }}>• Sinh mật khẩu ngẫu nhiên an toàn và tạo sẵn mẫu tin nhắn gửi đối tác.</div>
+              </div>
+            </div>
+
+            <Button
+              variant="outline"
+              onClick={handleOpenCreateNccModal}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                fontWeight: 600,
+              }}
+            >
+              <span>+ Thêm Mới User NCC</span>
+              <ArrowRight size={15} />
+            </Button>
+          </div>
+
+          {/* Card 4: Phân Quyền User */}
+          <div
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              gap: '14px',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div
+                    style={{
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '8px',
+                      backgroundColor: 'var(--bg-primary)',
+                      border: '1px solid var(--border-color)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    <ShieldCheck size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Phân Quyền User & Clients
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      Quyền mặc định + List tài khoản
+                    </div>
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-color)',
+                  }}
+                >
+                  Hàng loạt
+                </span>
+              </div>
+
+              <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                <div>• Chọn bộ quyền mẫu: <strong>4 quyền NCC</strong> hoặc <strong>14 quyền GGG nội bộ</strong>.</div>
+                <div style={{ marginTop: '4px' }}>• Tùy chọn linh hoạt bật/tắt từng checkbox quyền client theo nhu cầu.</div>
+                <div style={{ marginTop: '4px' }}>• Dán danh sách tài khoản (Username, Email hoặc SĐT) để phân quyền đồng loạt.</div>
+                <div style={{ marginTop: '4px' }}>• Báo cáo kết quả chi tiết từng dòng kèm nút tải file Excel (.xlsx).</div>
+              </div>
+            </div>
+
+            <Button
+              variant="outline"
+              onClick={() => setIsBatchAssignModalOpen(true)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                fontWeight: 600,
+              }}
+            >
+              <span>Mở Phân Quyền User</span>
+              <ArrowRight size={15} />
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* --- MODAL 1: CẤU HÌNH SSO CÁ NHÂN --- */}
@@ -1243,647 +1019,6 @@ export const SsoManagementPage: React.FC = () => {
         </div>
       </Modal>
 
-      {/* --- MODAL 2: XÁC NHẬN ĐỔI MẬT KHẨU --- */}
-      <Modal
-        isOpen={isChangePassModalOpen}
-        onClose={() => !processingChangePass && setIsChangePassModalOpen(false)}
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <KeyRound size={18} style={{ color: 'var(--text-primary)' }} />
-            <span>Đổi Mật Khẩu Cho User: {selectedUser?.user_name}</span>
-          </div>
-        }
-        maxWidth="540px"
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Thông tin user */}
-          <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '12px 16px', borderRadius: '8px', fontSize: '13px' }}>
-            <div><strong>Tài khoản:</strong> {selectedUser?.user_name}</div>
-            <div><strong>Email:</strong> {selectedUser?.email || '—'}</div>
-            <div><strong>Loại tài khoản:</strong> {selectedUser?.user_type || 'Local'}</div>
-          </div>
-
-          {/* Hướng dẫn quy trình */}
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>Hệ thống sẽ tự động thực hiện:</div>
-            <div>1. Đặt lại <strong>User Access Failed Count = 0</strong>.</div>
-            <div>2. Xóa trắng thời gian khóa <strong>User Lockout End</strong>.</div>
-            <div>3. Kiểm tra User Type: Nếu là tài khoản <strong>AD (1)</strong> thì hệ thống sẽ dừng và thông báo liên hệ Helpdesk đổi pass mail.</div>
-            <div>4. Cập nhật mật khẩu mới đạt chuẩn bảo mật vào hệ thống IAM.</div>
-          </div>
-
-          {/* Ô nhập mật khẩu mới */}
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                Mật khẩu mới dự kiến (Đạt chuẩn bảo mật):
-              </label>
-              <button
-                type="button"
-                onClick={() => setNewPasswordInput(generateSecurePassword(10))}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--text-primary)',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <RefreshCw size={12} /> Tạo pass ngẫu nhiên khác
-              </button>
-            </div>
-            <div style={{ position: 'relative' }}>
-              <input
-                type={showNewPassword ? 'text' : 'password'}
-                value={newPasswordInput}
-                onChange={(e) => setNewPasswordInput(e.target.value)}
-                placeholder="Nhập mật khẩu hoặc dùng mật khẩu ngẫu nhiên trên..."
-                style={{
-                  width: '100%',
-                  padding: '9px 36px 9px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-primary)',
-                  color: 'var(--text-primary)',
-                  fontSize: '14px',
-                  fontFamily: 'monospace',
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPassword(!showNewPassword)}
-                style={{
-                  position: 'absolute',
-                  right: '10px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              Yêu cầu: Ít nhất 8 ký tự, có ít nhất 1 số, 1 chữ hoa, 1 chữ thường và 1 ký tự đặc biệt.
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-            <Button variant="outline" onClick={() => setIsChangePassModalOpen(false)} disabled={processingChangePass}>
-              Hủy
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleConfirmChangePass}
-              disabled={processingChangePass || !newPasswordInput.trim()}
-              
-            >
-              {processingChangePass ? (
-                <>
-                  <RefreshCw size={14} className="spin" />
-                  <span>Đang Thao Tác Trên IAM...</span>
-                </>
-              ) : (
-                <span>Tiến Hành Đổi Mật Khẩu</span>
-              )}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* --- MODAL 3: KẾT QUẢ ĐỔI MẬT KHẨU --- */}
-      <Modal
-        isOpen={passResultModalOpen}
-        onClose={() => setPassResultModalOpen(false)}
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {passResultData?.success ? (
-              <CheckCircle2 size={20} style={{ color: '#059669' }} />
-            ) : (
-              <AlertTriangle size={20} style={{ color: 'var(--color-primary)' }} />
-            )}
-            <span>{passResultData?.success ? 'Đổi Mật Khẩu Thành Công' : 'Thông Báo Từ Hệ Thống'}</span>
-          </div>
-        }
-        maxWidth="540px"
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {passResultData?.isLdap ? (
-            <div
-              style={{
-                backgroundColor: 'var(--bg-secondary)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '8px',
-                padding: '16px',
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '12px',
-              }}
-            >
-              <AlertTriangle size={24} style={{ color: 'var(--color-primary)', flexShrink: 0, marginTop: '2px' }} />
-              <div>
-                <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '14px' }}>
-                  Tài Khoản Đồng Bộ Từ LDAP / Active Directory
-                </div>
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '6px', lineHeight: 1.5 }}>
-                  {passResultData.message}
-                </div>
-              </div>
-            </div>
-          ) : passResultData?.success ? (
-            <>
-              <div
-                style={{
-                  backgroundColor: '#ECFDF5',
-                  border: '1px solid #A7F3D0',
-                  borderRadius: '8px',
-                  padding: '14px 16px',
-                  color: '#065F46',
-                  fontSize: '13px',
-                }}
-              >
-                Đã đặt lại <strong>Access Failed Count = 0</strong>, xóa thời gian khóa tài khoản và cập nhật mật khẩu mới thành công trên IAM cho user <strong>{passResultData.userName}</strong>.
-              </div>
-
-              <div>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                  MẬT KHẨU MỚI:
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '12px 16px',
-                    borderRadius: '8px',
-                    backgroundColor: 'var(--bg-secondary)',
-                    border: '1px solid var(--border-color)',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontFamily: 'monospace',
-                      fontSize: '18px',
-                      fontWeight: 700,
-                      color: 'var(--text-primary)',
-                      letterSpacing: '1px',
-                    }}
-                  >
-                    {passResultData.newPassword}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={handleCopyPassword}
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    {copiedPass ? <Check size={14} /> : <Copy size={14} />}
-                    <span>{copiedPass ? 'Đã Chép' : 'Sao Chép'}</span>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Mẫu tin nhắn gửi cho user */}
-              <div
-                style={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '8px',
-                  padding: '12px 16px',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    MẪU TIN NHẮN GỬI CHO USER:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleCopyTemplate}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#059669',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    {copiedTemplate ? <Check size={13} /> : <Copy size={13} />}
-                    <span>{copiedTemplate ? 'Đã chép nội dung' : 'Sao chép tin nhắn'}</span>
-                  </button>
-                </div>
-                <div
-                  style={{
-                    fontSize: '12px',
-                    color: 'var(--text-primary)',
-                    whiteSpace: 'pre-line',
-                    lineHeight: 1.5,
-                    fontFamily: 'monospace',
-                    backgroundColor: 'var(--bg-card)',
-                    padding: '10px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
-                  }}
-                >
-                  {`Hệ thống SSO/IAM đã tạo:\n- Username: ${passResultData.userName || selectedUser?.user_name}\n- Mật khẩu: ${passResultData.newPassword}\n- Email: ${passResultData.email || selectedUser?.email || ''}`}
-                </div>
-              </div>
-            </>
-          ) : (
-            <div
-              style={{
-                backgroundColor: '#FEE2E2',
-                border: '1px solid #FECACA',
-                borderRadius: '8px',
-                padding: '14px 16px',
-                color: '#991B1B',
-                fontSize: '13px',
-              }}
-            >
-              {passResultData?.message || 'Có lỗi xảy ra trong quá trình đổi mật khẩu.'}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
-            <Button variant="primary" onClick={() => setPassResultModalOpen(false)}>
-              Đóng
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* --- MODAL 4: PHÂN QUYỀN CLIENTS (GGG & NCC) --- */}
-      <Modal
-        isOpen={isAssignModalOpen}
-        onClose={() => !processingAssign && setIsAssignModalOpen(false)}
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ShieldCheck size={20} style={{ color: '#059669' }} />
-            <span>Phân Quyền Client Cho User: {selectedUser?.user_name}</span>
-          </div>
-        }
-        maxWidth="680px"
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* User info mini header */}
-          <div
-            style={{
-              padding: '10px 14px',
-              borderRadius: '8px',
-              backgroundColor: 'var(--bg-secondary)',
-              border: '1px solid var(--border-color)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              fontSize: '12px',
-            }}
-          >
-            <div>
-              <span style={{ color: 'var(--text-secondary)' }}>Tài khoản: </span>
-              <strong>{selectedUser?.user_name}</strong>
-              {selectedUser?.email && <span style={{ color: 'var(--text-muted)' }}> ({selectedUser.email})</span>}
-            </div>
-            {selectedUser?.user_type && (
-              <span
-                style={{
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  padding: '2px 8px',
-                  borderRadius: '10px',
-                  backgroundColor: 'var(--bg-secondary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border-color)',
-                }}
-              >
-                Loại: {selectedUser.user_type}
-              </span>
-            )}
-          </div>
-
-          {/* 2 Tabs: Phân quyền User GGG vs Đối tác NCC */}
-          <div
-            style={{
-              display: 'flex',
-              borderBottom: '2px solid var(--border-color)',
-              gap: '8px',
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setAssignTab('ggg')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 16px',
-                fontSize: '13px',
-                fontWeight: 700,
-                color: assignTab === 'ggg' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                backgroundColor: assignTab === 'ggg' ? 'var(--color-primary-light)' : 'transparent',
-                border: 'none',
-                borderBottom: assignTab === 'ggg' ? '2px solid var(--color-primary)' : '2px solid transparent',
-                borderRadius: '8px 8px 0 0',
-                cursor: 'pointer',
-                marginBottom: '-2px',
-                transition: 'all 0.2s',
-              }}
-            >
-              <Users size={16} />
-              <span>1. Phân Quyền User GGG</span>
-              <span
-                style={{
-                  fontSize: '11px',
-                  padding: '1px 6px',
-                  borderRadius: '10px',
-                  backgroundColor: assignTab === 'ggg' ? 'var(--color-primary)' : 'var(--border-color)',
-                  color: 'var(--text-primary)',
-                  fontWeight: 700,
-                }}
-              >
-                {selectedGggClients.length}/{gggClients.length}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setAssignTab('ncc')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 16px',
-                fontSize: '13px',
-                fontWeight: 700,
-                color: assignTab === 'ncc' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                backgroundColor: assignTab === 'ncc' ? 'var(--color-primary-light)' : 'transparent',
-                border: 'none',
-                borderBottom: assignTab === 'ncc' ? '2px solid var(--color-primary)' : '2px solid transparent',
-                borderRadius: '8px 8px 0 0',
-                cursor: 'pointer',
-                marginBottom: '-2px',
-                transition: 'all 0.2s',
-              }}
-            >
-              <Building2 size={16} />
-              <span>2. Phân Quyền Đối Tác NCC</span>
-              <span
-                style={{
-                  fontSize: '11px',
-                  padding: '1px 6px',
-                  borderRadius: '10px',
-                  backgroundColor: assignTab === 'ncc' ? 'var(--color-primary)' : 'var(--border-color)',
-                  color: 'var(--text-primary)',
-                  fontWeight: 700,
-                }}
-              >
-                {selectedNccClients.length}/{nccClients.length}
-              </span>
-            </button>
-          </div>
-
-          {/* Tab Description */}
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            {assignTab === 'ggg' ? (
-              <span>
-                Hệ thống sẽ tự động bật các client nội bộ Golden Gate (G-Office, Chatbot, GPMS, Quick Ticket, v.v.)
-                cho user trên trang <strong>User & Clients</strong>.
-              </span>
-            ) : (
-              <span>
-                Hệ thống sẽ tự động phân quyền các cổng truy cập dành cho <strong>Đối Tác / Nhà Cung Cấp</strong> (PoPortal, E-Bidding, SSO IAM)
-                trên trang <strong>User & Clients</strong>.
-              </span>
-            )}
-          </div>
-
-          {/* Ô Bổ sung phân quyền */}
-          <div
-            style={{
-              padding: '12px',
-              borderRadius: '8px',
-              backgroundColor: 'var(--bg-secondary)',
-              border: '1px dashed var(--border-color)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-            }}
-          >
-            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
-              Bổ sung Client vào danh sách phân quyền (nếu cần):
-            </div>
-            <form onSubmit={handleAddCustomClient} style={{ display: 'flex', gap: '8px' }}>
-              <input
-                type="text"
-                value={customClientInput}
-                onChange={(e) => setCustomClientInput(e.target.value)}
-                placeholder="Nhập chính xác tên Client trên IAM (ví dụ: Tên_Hệ_Thống)..."
-                disabled={processingAssign}
-                style={{
-                  flex: 1,
-                  padding: '7px 12px',
-                  fontSize: '13px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-card)',
-                  color: 'var(--text-primary)',
-                  outline: 'none',
-                }}
-              />
-              <Button
-                type="submit"
-                variant="outline"
-                size="sm"
-                disabled={processingAssign || !customClientInput.trim()}
-                style={{ display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}
-              >
-                <Plus size={15} />
-                <span>Bổ Sung</span>
-              </Button>
-            </form>
-          </div>
-
-          {/* Danh sách Client của Tab hiện tại */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {/* List Toolbar */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
-              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
-                DANH SÁCH CLIENT CẦN BẬT ({assignTab === 'ggg' ? selectedGggClients.length : selectedNccClients.length} đã chọn):
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <button
-                  type="button"
-                  onClick={handleToggleSelectAll}
-                  disabled={processingAssign}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-primary)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    textDecoration: 'underline',
-                  }}
-                >
-                  {(assignTab === 'ggg' ? selectedGggClients.length === gggClients.length : selectedNccClients.length === nccClients.length)
-                    ? 'Bỏ chọn tất cả'
-                    : 'Chọn tất cả'}
-                </button>
-                <span style={{ color: 'var(--border-color)' }}>|</span>
-                <button
-                  type="button"
-                  onClick={handleResetDefaultClients}
-                  disabled={processingAssign}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-secondary)',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                  }}
-                >
-                  <RotateCcw size={12} />
-                  <span>Đặt lại mặc định</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Scrollable Client Items */}
-            <div
-              style={{
-                maxHeight: '260px',
-                overflowY: 'auto',
-                borderRadius: '8px',
-                border: '1px solid var(--border-color)',
-                padding: '6px',
-                backgroundColor: 'var(--bg-secondary)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '6px',
-              }}
-            >
-              {(assignTab === 'ggg' ? gggClients : nccClients).map((client, idx) => {
-                const isSelected = assignTab === 'ggg' ? selectedGggClients.includes(client) : selectedNccClients.includes(client);
-                const isDefault = assignTab === 'ggg' ? DEFAULT_14_CLIENTS.includes(client) : DEFAULT_NCC_CLIENTS.includes(client);
-
-                return (
-                  <div
-                    key={client}
-                    onClick={() => !processingAssign && handleToggleClientCheck(client)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '8px 10px',
-                      backgroundColor: isSelected ? 'var(--bg-card)' : 'transparent',
-                      borderRadius: '6px',
-                      border: isSelected ? '1px solid var(--border-color)' : '1px dashed transparent',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
-                      opacity: isSelected ? 1 : 0.65,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => {}} // handled by row click
-                        disabled={processingAssign}
-                        style={{ cursor: 'pointer', width: '15px', height: '15px' }}
-                      />
-                      <span
-                        style={{
-                          fontSize: '12px',
-                          fontWeight: isSelected ? 600 : 400,
-                          color: isSelected ? 'var(--text-primary)' : 'var(--text-muted)',
-                          wordBreak: 'break-word',
-                        }}
-                      >
-                        {idx + 1}. {client}
-                      </span>
-                      {!isDefault && (
-                        <span
-                          style={{
-                            fontSize: '10px',
-                            fontWeight: 600,
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                            backgroundColor: '#FEF3C7',
-                            color: '#92400E',
-                            flexShrink: 0,
-                          }}
-                        >
-                          Tự bổ sung
-                        </span>
-                      )}
-                    </div>
-
-                    {!isDefault && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemoveClient(client);
-                        }}
-                        disabled={processingAssign}
-                        title="Xóa client này khỏi danh sách"
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: '#EF4444',
-                          cursor: 'pointer',
-                          padding: '4px',
-                          display: 'flex',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Modal Footer */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-            <Button variant="outline" onClick={() => setIsAssignModalOpen(false)} disabled={processingAssign}>
-              Hủy
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleConfirmAssignClients}
-              disabled={processingAssign || (assignTab === 'ggg' ? selectedGggClients.length === 0 : selectedNccClients.length === 0)}
-              
-            >
-              {processingAssign ? (
-                <>
-                  <RefreshCw size={14} className="spin" />
-                  <span>Đang Phân Quyền Trên IAM...</span>
-                </>
-              ) : (
-                <span>
-                  Tiến Hành Phân Quyền (
-                  {assignTab === 'ggg' ? selectedGggClients.length : selectedNccClients.length} Client)
-                </span>
-              )}
-            </Button>
-          </div>
-        </div>
-      </Modal>
 
       {/* 4. MODAL THÊM USER NCC */}
       <Modal
@@ -2193,8 +1328,8 @@ export const SsoManagementPage: React.FC = () => {
                                 fontSize: '10px',
                                 padding: '1px 5px',
                                 borderRadius: '4px',
-                                backgroundColor: '#FEF3C7',
-                                color: '#92400E',
+                                backgroundColor: 'var(--color-primary-light)',
+                                color: 'var(--text-primary)',
                                 flexShrink: 0,
                               }}
                             >
@@ -2469,9 +1604,7 @@ export const SsoManagementPage: React.FC = () => {
         isOpen={isBulkImportModalOpen}
         onClose={() => setIsBulkImportModalOpen(false)}
         onSuccess={() => {
-          if (searchQuery.trim()) {
-            handleSearch();
-          }
+
         }}
       />
 
@@ -2481,10 +1614,13 @@ export const SsoManagementPage: React.FC = () => {
         onClose={() => setIsBatchPasteModalOpen(false)}
         initialAction={batchPasteAction}
         onSuccess={() => {
-          if (searchQuery.trim()) {
-            handleSearch();
-          }
+
         }}
+      />
+      {/* --- MODAL PHÂN QUYỀN USER & CLIENTS HÀNG LOẠT --- */}
+      <SsoBatchAssignModal
+        isOpen={isBatchAssignModalOpen}
+        onClose={() => setIsBatchAssignModalOpen(false)}
       />
     </div>
   );
