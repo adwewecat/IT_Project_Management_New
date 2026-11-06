@@ -3119,3 +3119,19 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
   * Backend: `python -m compileall app` sạch 100%, Smoke Test `from app.main import app` PASSED 100%.
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn tất exit code 0 (`✓ built in 4.25s`), thư mục `frontend/dist/` sạch sẽ.
   * Backend daemon uvicorn đã được restart sạch sẽ trên port 8000.
+
+
+### [2026-11-06] NÂNG CẤP LAN RELAY TRUYỀN FILE ĐA MÁY (POS 2, POS 3 KHÔNG SQL) & ĐỔI THƯ MỤC MẶC ĐỊNH SANG D:\GPOS-Setup\
+- **Giải quyết triệt để truyền file xuống máy không có SQL (ví dụ Máy .12 Isushi Vivo City)**:
+  * Khám phá tài khoản xác thực mạng chuẩn trên các máy POS nhà hàng: APP / GGrg@2025 và Administrator / pass_ou_ko_sys.
+  * Xây dựng hàm _build_lan_relay_auth_script: Tự động duyệt xác thực tuần tự các tài khoản chuẩn (APP, Administrator, PC) khi kết nối mạng LAN từ máy SQL (.41) sang máy đích (.12, .13).
+  * Xóa bỏ cơ chế lưu tạm giả lập (local fallback), báo cáo chính xác 100% tình trạng truyền sang máy đích.
+  * Đã kiểm thử thực tế quét thư mục D:\GPOS-Setup\ trên máy .12 (Isushi Vivo City) qua cầu nối .41: Nhận diện chuẩn xác 3 file thực tế (ix_CO_SO_Fail_to_connect.bat, .lnk, .ico).
+- **Dọn dẹp file test & Đổi thư mục mặc định**:
+  * Xóa vĩnh viễn file 	est_script.bat khỏi SFTP Server (/home/f_hcm/Support/test_script.bat).
+  * Chuyển thư mục mặc định toàn hệ thống sang D:\GPOS-Setup\ (Backend schemas, service defaults, và Frontend input + quick suggestions).
+- **Kiểm thử & Đóng gói (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: 
+pm run build hoàn tất exit code 0 (✓ built in 4.42s).
+  * Backend: python -m compileall app sạch lỗi, Smoke Test passed 100%.
+  * Backend daemon uvicorn reload thành công trên port 8000.

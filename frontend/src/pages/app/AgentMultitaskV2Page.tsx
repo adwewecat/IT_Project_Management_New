@@ -67,7 +67,7 @@ export const AgentMultitaskV2Page: React.FC = () => {
   const [selectedRestaurantCode, setSelectedRestaurantCode] = useState<string>('');
   const [restaurantSearchQuery, setRestaurantSearchQuery] = useState<string>('');
   const [targetIp, setTargetIp] = useState<string>('10.8.160.11');
-  const [targetFolder, setTargetFolder] = useState<string>('D:\\Support');
+  const [targetFolder, setTargetFolder] = useState<string>('D:\\GPOS-Setup\\');
   const [checkingConnection, setCheckingConnection] = useState<boolean>(false);
   const [connectionStatus, setConnectionStatus] = useState<CheckRestaurantConnectionResponse | null>(null);
 
@@ -1138,7 +1138,7 @@ export const AgentMultitaskV2Page: React.FC = () => {
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                 <input
                   type="text"
-                  placeholder="D:\Support hoặc D:\GPOS-Setup\app..."
+                  placeholder="D:\GPOS-Setup\ hoặc D:\GPOS-Setup\app..."
                   value={targetFolder}
                   onChange={(e) => setTargetFolder(e.target.value)}
                   style={{
@@ -1159,7 +1159,7 @@ export const AgentMultitaskV2Page: React.FC = () => {
               {/* Nút gợi ý thư mục phổ biến 1-chạm */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
                 <span style={{ fontSize: '11px', color: '#64748b' }}>Gợi ý nhanh:</span>
-                {['D:\\Support', 'D:\\GPOS-Setup\\app', 'C:\\Setup', 'D:\\GPOS-Setup\\app\\img\\menu'].map((f) => (
+                {['D:\\GPOS-Setup\\', 'D:\\GPOS-Setup\\app', 'D:\\Support', 'C:\\Setup', 'D:\\GPOS-Setup\\app\\img\\menu'].map((f) => (
                   <button
                     key={f}
                     type="button"

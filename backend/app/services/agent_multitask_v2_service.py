@@ -236,6 +236,32 @@ def _get_restaurant_ou_password(ip: str) -> str:
     return ""
 
 
+def _build_lan_relay_auth_script(clean_ip: str, pass_ou: str) -> str:
+    """
+    Tạo đoạn PowerShell tự động xác thực mạng nội bộ LAN giữa Máy Chủ SQL và Máy Trạm Đích.
+    Sử dụng danh sách tài khoản chuẩn của GGG (User: APP / Administrator / PC).
+    """
+    safe_ou = (pass_ou or "").replace('"', '`"')
+    return f"""
+$targetIpc = "\\\\{clean_ip}\\ipc$"
+$authList = @(
+    @{{ u = "APP"; p = "GGrg@2025" }},
+    @{{ u = "Administrator"; p = "{safe_ou}" }},
+    @{{ u = "APP"; p = "{safe_ou}" }},
+    @{{ u = "Administrator"; p = "GGrg@2025" }},
+    @{{ u = "Administrator"; p = "GGG@2022" }},
+    @{{ u = "PC"; p = "GGrg@2025" }}
+)
+foreach ($a in $authList) {{
+    if (-not $a.p) {{ continue }}
+    $out = cmd.exe /c "net use `"$targetIpc`" `"$($a.p)`" /user:$($a.u) 2>&1"
+    if ($LASTEXITCODE -eq 0 -or ($out -join ' ') -match 'successfully') {{
+        break
+    }}
+}}
+"""
+
+
 # ==============================================================================
 # SFTP CLIENT FUNCTIONS
 # ==============================================================================
@@ -536,7 +562,7 @@ def list_restaurant_folder_files(
     clean_ip = target_ip.strip()
     clean_folder = target_folder.strip().rstrip("\\/")
     if not clean_folder:
-        clean_folder = "D:\\Support"
+        clean_folder = "D:\\GPOS-Setup"
 
     online_sql_ip, _, _ = find_restaurant_sql_server(clean_ip, sql_port)
     scan_ip = online_sql_ip or clean_ip
@@ -545,11 +571,7 @@ def list_restaurant_folder_files(
     folder_to_scan = _to_unc_path(clean_ip, clean_folder) if is_relay else clean_folder
     pass_ou = _get_restaurant_ou_password(clean_ip) if is_relay else ""
 
-    auth_script = f"""
-if ('{pass_ou}') {{
-    net use "\\\\{clean_ip}\\ipc$" /user:Administrator "{pass_ou}" 2>$null | Out-Null
-}}
-""" if is_relay else ""
+    auth_script = _build_lan_relay_auth_script(clean_ip, pass_ou) if is_relay else ""
 
     ps_code = f"""
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -670,7 +692,7 @@ if (Test-Path -LiteralPath $folder) {{
 def push_file_to_restaurant(
     target_ip: str,
     filename: str,
-    target_folder: str = "D:\\Support",
+    target_folder: str = "D:\\GPOS-Setup",
     remote_sftp_path: Optional[str] = None,
     overwrite: bool = True,
     auto_extract: bool = False,
@@ -680,10 +702,9 @@ def push_file_to_restaurant(
 ) -> PushFileToRestaurantResponse:
     r"""
     Tải file từ SFTP Server 10.28.1.150 và truyền trực tiếp xuống thư mục máy trạm nhà hàng.
-    Hỗ trợ 3 kênh truyền:
+    Hỗ trợ 2 kênh truyền:
     - Kênh 1: SQL Server xp_cmdshell trực tiếp nếu trạm mở port 1433.
-    - Kênh 2: Cầu nối LAN Relay qua Máy Chủ .11 (UNC \\target_ip\D$\...) nếu trạm đích không có SQL.
-    - Kênh 3: Đưa lệnh vào hàng đợi Service Agent (MicrosoftEdgeServicess) nếu trạm chạy Agent.
+    - Kênh 2: Cầu nối LAN Relay qua Máy Chủ SQL của chi nhánh (UNC \\target_ip\D$\...) nếu trạm đích không có SQL.
     """
     clean_ip = target_ip.strip()
     clean_folder = target_folder.strip().rstrip("\\/")
@@ -769,11 +790,7 @@ def push_file_to_restaurant(
     folder_actual = _to_unc_path(clean_ip, clean_folder) if is_relay else clean_folder
     pass_ou = _get_restaurant_ou_password(clean_ip) if is_relay else ""
 
-    auth_script = f"""
-if ('{pass_ou}') {{
-    net use "\\\\{clean_ip}\\ipc$" /user:Administrator "{pass_ou}" 2>$null | Out-Null
-}}
-""" if is_relay else ""
+    auth_script = _build_lan_relay_auth_script(clean_ip, pass_ou) if is_relay else ""
 
     # A) Với file <= 3MB: Nén base64 và đẩy thẳng qua PowerShell chunking
     if file_size <= 3 * 1024 * 1024:
@@ -798,17 +815,7 @@ try {{
         throw "File not saved"
     }}
 }} catch {{
-    # Fallback lưu trực tiếp trên Máy Chủ SQL Server nếu UNC bị từ chối
-    $localFolder = "{clean_folder}"
-    if (-not (Test-Path -LiteralPath $localFolder)) {{ New-Item -ItemType Directory -Force -Path $localFolder | Out-Null }}
-    $localDest = "{dest_path}"
-    [IO.File]::WriteAllBytes($localDest, $bytes)
-    if (Test-Path -LiteralPath $localDest) {{
-        $len = (Get-Item -LiteralPath $localDest).Length
-        Write-Output "PUSH_RESULT|SUCCESS|$len|LAN_FALLBACK_LOCAL"
-    }} else {{
-        Write-Output "PUSH_RESULT|FAILED|0|$($_.Exception.Message)"
-    }}
+    Write-Output "PUSH_RESULT|FAILED|0|$($_.Exception.Message)"
 }}
 """
         lines = _exec_powershell_on_restaurant(push_server_ip, ps_push, sql_port)
@@ -839,17 +846,7 @@ try {{
         throw "File not found after download"
     }}
 }} catch {{
-    # Fallback lưu trực tiếp trên Máy Chủ SQL Server nếu UNC bị từ chối
-    $localFolder = "{clean_folder}"
-    if (-not (Test-Path -LiteralPath $localFolder)) {{ New-Item -ItemType Directory -Force -Path $localFolder | Out-Null }}
-    $localDest = "{dest_path}"
-    try {{
-        (New-Object System.Net.WebClient).DownloadFile('{dl_url}', $localDest)
-        $len = (Get-Item -LiteralPath $localDest).Length
-        Write-Output "PUSH_RESULT|SUCCESS|$len|LAN_FALLBACK_LOCAL"
-    }} catch {{
-        Write-Output "PUSH_RESULT|FAILED|0|$($_.Exception.Message)"
-    }}
+    Write-Output "PUSH_RESULT|FAILED|0|$($_.Exception.Message)"
 }}
 """
         lines = _exec_powershell_on_restaurant(push_server_ip, ps_push, sql_port, timeout_sec=120)
@@ -947,6 +944,8 @@ def execute_remote_action(
     """
     clean_ip = target_ip.strip()
     clean_folder = target_folder.strip().rstrip("\\/")
+    if not clean_folder:
+        clean_folder = "D:\\GPOS-Setup"
     clean_file = filename.strip()
     full_path = f"{clean_folder}\\{clean_file}"
     clean_args = (arguments or "").strip()
@@ -960,11 +959,7 @@ def execute_remote_action(
     is_relay = (exec_server_ip != clean_ip)
 
     pass_ou = _get_restaurant_ou_password(clean_ip) if is_relay else ""
-    auth_script = f"""
-if ('{pass_ou}') {{
-    net use "\\\\{clean_ip}\\ipc$" /user:Administrator "{pass_ou}" 2>$null | Out-Null
-}}
-""" if is_relay else ""
+    auth_script = _build_lan_relay_auth_script(clean_ip, pass_ou) if is_relay else ""
 
     path_actual = _to_unc_path(clean_ip, full_path) if is_relay else full_path
     folder_actual = _to_unc_path(clean_ip, clean_folder) if is_relay else clean_folder
@@ -1009,7 +1004,7 @@ try {{
 {auth_script}
 try {{
     $cmd = "cmd.exe /c call `"{path_actual}`" {clean_args}"
-    $res = (Get-WmiObject -List -ComputerName "{clean_ip}" -Namespace "root\\cimv2" | Where-Object {{ $_.Name -eq "Win32_Process" }}).Create($cmd, "D:\\Support")
+    $res = (Get-WmiObject -List -ComputerName "{clean_ip}" -Namespace "root\\cimv2" | Where-Object {{ $_.Name -eq "Win32_Process" }}).Create($cmd, "{clean_folder}")
     if ($res.ReturnValue -eq 0) {{
         Write-Output "ACTION_RES|SUCCESS|0|Da khoi chay kịch ban qua WMI LAN Relay (PID: $($res.ProcessId))"
     }} else {{

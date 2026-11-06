@@ -75,7 +75,7 @@ class CheckRestaurantConnectionResponse(BaseModel):
 class RestaurantFolderListRequest(BaseModel):
     """Yêu cầu liệt kê các file đang có trong thư mục nhà hàng."""
     target_ip: str
-    target_folder: str = "D:\\Support"
+    target_folder: str = "D:\\GPOS-Setup"
     sql_port: int = 1433
 
 
@@ -105,7 +105,7 @@ class RestaurantFolderListResponse(BaseModel):
 class PushFileToRestaurantRequest(BaseModel):
     """Yêu cầu truyền file từ SFTP xuống thư mục nhà hàng."""
     target_ip: str
-    target_folder: str = "D:\\Support"
+    target_folder: str = "D:\\GPOS-Setup"
     filename: str
     remote_sftp_path: Optional[str] = None
     overwrite: bool = True
@@ -130,7 +130,7 @@ class PushFileToRestaurantResponse(BaseModel):
 class ExecuteRemoteActionRequest(BaseModel):
     """Yêu cầu thực thi thao tác từ xa trên máy trạm nhà hàng."""
     target_ip: str
-    target_folder: str = "D:\\Support"
+    target_folder: str = "D:\\GPOS-Setup"
     filename: str
     action_type: str  # RUN_SCRIPT, LAUNCH_APP, EXTRACT_ARCHIVE, OPEN_DOCUMENT, DELETE_FILE, READ_TEXT
     run_mode: str = "SILENT"  # SILENT (ngầm) hoặc INTERACTIVE (hiện trên màn hình)

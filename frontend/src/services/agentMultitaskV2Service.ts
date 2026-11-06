@@ -160,7 +160,7 @@ class AgentMultitaskV2Service {
   }
 
   /** Quét danh sách file trong thư mục máy trạm nhà hàng */
-  async listRestaurantFolder(targetIp: string, targetFolder: string = 'D:\\Support', sqlPort: number = 1433): Promise<RestaurantFolderListResponse> {
+  async listRestaurantFolder(targetIp: string, targetFolder: string = 'D:\\GPOS-Setup\\', sqlPort: number = 1433): Promise<RestaurantFolderListResponse> {
     const res = await api.post<RestaurantFolderListResponse>('/agent-multitask-v2/restaurant/list-folder', {
       target_ip: targetIp,
       target_folder: targetFolder,
