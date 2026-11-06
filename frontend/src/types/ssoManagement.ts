@@ -90,6 +90,9 @@ export interface SSOBulkRowItem {
   pass_word?: string;
   trang_thai?: string;
   update_quyen?: string;
+  new_email?: string;
+  new_phone?: string;
+  new_user_type?: string;
 }
 
 export interface SSOBulkParseResponse {
@@ -110,6 +113,9 @@ export interface SSOBulkProcessItemRequest {
   pass_word?: string;
   trang_thai?: string;
   update_quyen?: string;
+  new_email?: string;
+  new_phone?: string;
+  new_user_type?: string;
 }
 
 export interface SSOBulkProcessItemResponse {

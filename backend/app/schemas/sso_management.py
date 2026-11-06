@@ -99,6 +99,9 @@ class SSOBulkRowItem(BaseModel):
     pass_word: Optional[str] = ""
     trang_thai: Optional[str] = ""
     update_quyen: Optional[str] = ""
+    new_email: Optional[str] = ""
+    new_phone: Optional[str] = ""
+    new_user_type: Optional[str] = ""
 
 
 class SSOBulkParseResponse(BaseModel):
@@ -117,6 +120,9 @@ class SSOBulkProcessItemRequest(BaseModel):
     pass_word: Optional[str] = ""
     trang_thai: Optional[str] = ""
     update_quyen: Optional[str] = ""
+    new_email: Optional[str] = ""
+    new_phone: Optional[str] = ""
+    new_user_type: Optional[str] = ""
 
 
 class SSOBulkProcessItemResponse(BaseModel):

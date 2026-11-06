@@ -354,15 +354,18 @@
 - Bảng danh sách user có thanh cuộn ngang độc lập `overflowX: 'auto'`.
 - **Thêm User NCC (Nhà Cung Cấp)**: Nút `+ Thêm User NCC` mở modal khởi tạo user Local (`type=0`) với Playwright. Số điện thoại mặc định điền sẵn `0908119345`, mỗi lần thêm thành công tự động `+2` cho lần sau (lưu localStorage). Kiểm tra trùng SĐT qua query IAM; nếu trùng báo lỗi cho user tự sửa hoặc chọn `"⚡ Để hệ thống tự xử lý"`. Sau khi tạo xong, Playwright tự động điều hướng sang User & Clients gán 4 quyền mặc định (`Hệ thống GChecklist`, `PoPortal_Hệ thống đặt hàng Hồ Chí Minh`, `Hệ thống E-Bidding`, `SSO OTP Client...`).
 - **Tính Năng Import Xử Lý Hàng Loạt User (`SsoBulkImportModal.tsx`)**:
-  - Dùng chung **1 template Excel chuẩn 7 cột**: `User Name`, `Email`, `User Type (0-Local,1-AD,2-Empl)`, `User Phone Number`, `Pass`, `TRANG THAI`, `UPDATE QUYEN`.
+  - Dùng chung **1 template Excel chuẩn 10 cột**:
+    * Cột 1-7: `User Name`, `Email`, `User Type (0-Local,1-AD,2-Empl)`, `User Phone Number`, `Pass`, `TRANG THAI`, `UPDATE QUYEN`.
+    * Cột 8-10 (Dành riêng cho tác vụ Cập Nhật Thông Tin): `Email Mới`, `SĐT Mới`, `Loại TK Mới (0-Local,1-AD,2-Empl)`.
   - **Quy tắc linh hoạt User Name & Email**: Cột `User Name` có thể để trống nếu đã có `Email` (hoặc ngược lại). Chỉ bỏ qua dòng khi cả 2 cột đều trống. Cơ chế tìm kiếm user trên IAM tự động ưu tiên tìm theo Email trước, nếu không thấy mới tìm theo User Name.
+  - **Kiểm tra trùng lặp trước khi Tạo mới (Tác vụ 1)**: Trước khi tạo mới tài khoản trên IAM, bắt buộc phải kiểm tra tìm kiếm trước theo Email hoặc Username. Nếu tài khoản đã tồn tại trên IAM, lập tức dừng lại và báo rõ ràng: `Tài khoản đã tồn tại trên IAM... Vui lòng chọn tác vụ Cập Nhật hoặc Đổi Pass` để tránh lỗi validation `Email is already taken`.
   - Hỗ trợ 5 tác vụ chuyên sâu với quy chuẩn:
-    1. *Tạo mới tài khoản*: `User Access Failed Count = 0`, `User Lockout End` xóa trắng, `User Lockout Enabled = false`, gán pass (từ file hoặc random) và phân quyền client (từ cột `UPDATE QUYEN`).
+    1. *Tạo mới tài khoản*: Kiểm tra không tồn tại trên IAM trước khi tạo $ightarrow$ `User Access Failed Count = 0`, `User Lockout End` xóa trắng, `User Lockout Enabled = false`, gán pass (từ file hoặc random) và phân quyền client (từ cột `UPDATE QUYEN`).
     2. *Update Pass & Mở khóa*: Đổi pass theo cột `Pass`, `User Access Failed Count = 0`, `User Lockout End` xóa trắng, `User Lockout Enabled = false`.
     3. *Khóa tài khoản*: `User Lockout Enabled = true` (check switch), `User Access Failed Count = 4`, `User Lockout End = ngày giờ hiện tại`.
     4. *Update Quyền*: Vào `User & Clients`, check các quyền được khai báo trong cột `UPDATE QUYEN`.
-    5. *Cập nhật thông tin*: Cập nhật Email, SĐT, User Type theo các cột trong file.
-  - Giao diện có nút tải template Excel mẫu, xem trước danh sách user, progress bar tiến độ và trạng thái chi tiết từng dòng, hỗ trợ nút "Dừng lại" và "Thử lại các dòng lỗi".
+    5. *Cập nhật thông tin*: Tìm kiếm user trên IAM theo `User Name` hoặc `Email` cũ $ightarrow$ Cập nhật thông tin mới theo 3 cột cuối: `Email Mới`, `SĐT Mới`, `Loại TK Mới`.
+  - Giao diện có nút tải template Excel mẫu 10 cột, xem trước danh sách user, highlight 3 cột mới khi chọn tác vụ Cập nhật, progress bar tiến độ và trạng thái chi tiết từng dòng, hỗ trợ nút "Dừng lại" và "Thử lại các dòng lỗi".
 
 ### 6.6. Quản Lý Job & Giám Sát Dịch Vụ Nhà Hàng (MongoDB & Mosquitto)
 - **Bản chất đường truyền WAN/VPN**: Mạng kết nối từ Server trung tâm tới các máy trạm nhà hàng (.11, .12, .41) đi qua VPN/FTTH có độ trễ biến thiên và nguy cơ rớt gói SYN/ACK tạm thời trong các đợt quét song song hàng trăm nhà hàng.

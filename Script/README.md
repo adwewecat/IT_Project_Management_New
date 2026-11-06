@@ -6648,3 +6648,40 @@ equested_at (DATETIME).
   4. **Frontend UI/UX**:
      * Hiển thị trực quan: Cột `User Name` nếu trống hiển thị nhãn mờ `(Tìm theo email)`. Cột `Email` nếu trống hiển thị `(Tìm theo user)`.
      * Khi thực hiện xong, hệ thống tự động cập nhật và hiển thị `User Name` thực tế tìm thấy từ IAM lên bảng kết quả.
+
+
+---
+
+### [2026-11-06] NÂNG CẤP KIỂM TRA TRÙNG LẬP TRƯỚC KHI TẠO MỚI & BỔ SUNG 3 CỘT MỚI CHO TÁC VỤ CẬP NHẬT THÔNG TIN IMPORT HÀNG LOẠT SSO/IAM
+
+- **Bối cảnh & Yêu cầu từ Người Dùng**:
+  1. *Kiểm tra tồn tại trước khi tạo mới*: Trước khi submit tạo mới tài khoản trên IAM, bắt buộc phải kiểm tra tìm kiếm trước theo Email hoặc Username. Nếu tài khoản đã tồn tại, lập tức dừng và thông báo: `Tài khoản đã tồn tại trên IAM (Username '...', Email '...'). Vui lòng chọn tác vụ Cập Nhật hoặc Đổi Pass thay vì Tạo Mới.` để triệt để ngăn ngừa lỗi validation từ IAM như `Email '...' is already taken`.
+  2. *Bổ sung 3 cột mới vào File mẫu Import*: Tác vụ "5. Cập Nhật Thông Tin" cần cập nhật lại Email mới, SĐT mới, Loại tài khoản mới. Do đó, mở rộng file Excel mẫu chuẩn từ 7 cột lên **10 cột**:
+     * Cột 1-7: `User Name`, `Email`, `User Type (0-Local,1-AD,2-Empl)`, `User Phone Number`, `Pass`, `TRANG THAI`, `UPDATE QUYEN`.
+     * Cột 8 (Mới): `Email Mới` (Dùng để đổi email cho user).
+     * Cột 9 (Mới): `SĐT Mới` (Dùng để đổi SĐT cho user).
+     * Cột 10 (Mới): `Loại TK Mới (0-Local,1-AD,2-Empl)` (Dùng để đổi loại tài khoản: 0-Local, 1-AD, 2-Empl).
+
+- **Chi tiết Kỹ thuật & Nghiệp vụ đã hoàn thiện**:
+  * **Backend**:
+    - `backend/app/schemas/sso_management.py`: Mở rộng `SSOBulkRowItem` và `SSOBulkProcessItemRequest` với 3 trường `new_email`, `new_phone`, `new_user_type`.
+    - `generate_sso_bulk_template`: Tạo template Excel 10 cột, bổ sung các dòng dữ liệu mẫu trực quan minh họa đầy đủ 5 trường hợp sử dụng.
+    - `parse_sso_excel_file`:
+      + Tích hợp thuật toán chuẩn hóa Unicode tiếng Việt (`unicodedata.normalize('NFD')` loại bỏ category `Mn` và chuyển `đ/Đ` $\rightarrow$ `d/D`) giúp nhận diện chính xác 100% các tiêu đề có dấu tiếng Việt (`Email Mới` $\rightarrow$ `emailmoi`, `SĐT Mới` $\rightarrow$ `sdtmoi`, `Loại TK Mới` $\rightarrow$ `loaitkmoi...`).
+      + Khắc phục triệt để lỗi ghi đè cột `email` do trùng từ khóa với `email moi`.
+      + Tự động fallback theo index cột (cột 8, 9, 10) nếu file import bị đổi tiêu đề.
+    - `process_bulk_sso_item`:
+      + **Tác vụ 1 (create)**: Thêm bước kiểm tra tiền khả thi bằng `find_iam_user_info(page, email=target_email, username=target_username)`. Nếu user đã có trên IAM thì báo lỗi rõ ràng và dừng lại ngay.
+      + **Tác vụ 5 (update_info)**: Tìm user theo `user_name` hoặc `email` ở các cột đầu, sau đó cập nhật thông tin mới từ 3 cột cuối (`Email Mới`, `SĐT Mới`, `Loại TK Mới`). Nếu các cột mới có giá trị thì tự động điền vào các input `#Email`, `#PhoneNumber`, `#UserType`, bấm Save User và kiểm tra validation errors.
+  * **Frontend**:
+    - `frontend/src/types/ssoManagement.ts`: Cập nhật interface `SSOBulkRowItem`, `SSOBulkProcessItemRequest`.
+    - `frontend/src/components/sso/SsoBulkImportModal.tsx`:
+      + Cập nhật hướng dẫn: quy chuẩn 10 cột, giải thích rõ cách thức hoạt động của tác vụ 5.
+      + Cập nhật bảng `TopScrollTable`: Thêm 3 cột `Email Mới`, `SĐT Mới`, `Loại Mới`.
+      + Khi người dùng chọn tác vụ **5. Cập Nhật Thông Tin**, 3 cột mới tự động được làm nổi bật với màu nền vàng dịu `#FEF3C7` kèm icon `⭐` trên tiêu đề để người dùng nhận biết ngay các cột dùng cho việc cập nhật.
+      + Gửi đầy đủ 3 trường dữ liệu mới khi gọi API `processBulkItem`.
+
+- **Kiểm thử chất lượng (Verification)**:
+  * Backend: Smoke test `PASSED 100%`.
+  * Python unit test: Đọc/ghi và phân tích cú pháp Excel 10 cột thành công tuyệt đối 100%.
+  * Frontend: `npm run build` exit code 0 (`✓ built in 5.16s`), `frontend/dist/` sạch sẽ, sẵn sàng copy triển khai server.

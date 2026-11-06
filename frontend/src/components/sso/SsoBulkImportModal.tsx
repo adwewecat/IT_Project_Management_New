@@ -76,7 +76,7 @@ const ACTION_OPTIONS: ActionOption[] = [
   {
     id: 'update_info',
     title: '5. Cập Nhật Thông Tin',
-    shortDesc: 'Cập nhật lại Email, Số Điện Thoại hoặc Loại tài khoản theo danh sách file import',
+    shortDesc: 'Tìm user theo User Name / Email, cập nhật theo 3 cột: Email Mới, SĐT Mới, Loại TK Mới',
     icon: <FileText size={16} />,
     color: '#D97706',
     badge: 'CẬP NHẬT',
@@ -178,6 +178,9 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
           pass_word: item.row.pass_word,
           trang_thai: item.row.trang_thai,
           update_quyen: item.row.update_quyen,
+          new_email: item.row.new_email,
+          new_phone: item.row.new_phone,
+          new_user_type: item.row.new_user_type,
         });
 
         setRows((prev) =>
@@ -267,8 +270,9 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
           }}
         >
           <div style={{ fontSize: '13px', color: '#1E40AF', lineHeight: 1.5 }}>
-            <strong>Quy chuẩn Import:</strong> Tất cả 5 tác vụ đều sử dụng <strong>chung 1 mẫu Excel 7 cột</strong>.
-            Cột <strong>User Name</strong> hoặc <strong>Email</strong> chỉ cần có ít nhất 1 trong 2 cột (hệ thống sẽ ưu tiên tìm kiếm theo Email trước, nếu không thấy sẽ tìm theo User Name).
+            <strong>Quy chuẩn Import:</strong> Tất cả 5 tác vụ đều sử dụng <strong>chung 1 mẫu Excel 10 cột</strong>.
+            Cột <strong>User Name</strong> hoặc <strong>Email</strong> chỉ cần có ít nhất 1 trong 2 cột để tìm kiếm user.
+            Riêng tác vụ <strong>5. Cập Nhật Thông Tin</strong> sẽ lấy thông tin cập nhật từ 3 cột mới ở cuối (<strong>Email Mới</strong>, <strong>SĐT Mới</strong>, <strong>Loại TK Mới</strong>).
           </div>
           <Button
             variant="outline"
@@ -434,18 +438,52 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
             </div>
 
             <TopScrollTable maxHeight="340px">
-              <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '12px' }}>
+              <table style={{ width: '100%', minWidth: '1350px', borderCollapse: 'collapse', fontSize: '12px' }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-secondary)' }}>
                   <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                     <th style={{ width: '45px', padding: '8px 10px', textAlign: 'center' }}>STT</th>
                     <th style={{ width: '100px', padding: '8px 10px', textAlign: 'center' }}>Trạng Thái</th>
-                    <th style={{ width: '140px', padding: '8px 10px' }}>User Name</th>
-                    <th style={{ width: '160px', padding: '8px 10px' }}>Email</th>
-                    <th style={{ width: '60px', padding: '8px 10px', textAlign: 'center' }}>Loại</th>
-                    <th style={{ width: '110px', padding: '8px 10px' }}>Số Điện Thoại</th>
-                    <th style={{ width: '120px', padding: '8px 10px' }}>Pass</th>
-                    <th style={{ width: '180px', padding: '8px 10px' }}>Update Quyền</th>
-                    <th style={{ padding: '8px 10px' }}>Chi Tiết / Kết Quả</th>
+                    <th style={{ width: '130px', padding: '8px 10px' }}>User Name</th>
+                    <th style={{ width: '150px', padding: '8px 10px' }}>Email</th>
+                    <th style={{ width: '50px', padding: '8px 10px', textAlign: 'center' }}>Loại</th>
+                    <th style={{ width: '105px', padding: '8px 10px' }}>Số Điện Thoại</th>
+                    <th style={{ width: '110px', padding: '8px 10px' }}>Pass</th>
+                    <th style={{ width: '150px', padding: '8px 10px' }}>Update Quyền</th>
+                    <th
+                      style={{
+                        width: '150px',
+                        padding: '8px 10px',
+                        backgroundColor: selectedAction === 'update_info' ? '#FEF3C7' : 'inherit',
+                        color: selectedAction === 'update_info' ? '#92400E' : 'inherit',
+                        fontWeight: selectedAction === 'update_info' ? 700 : 'inherit',
+                      }}
+                    >
+                      Email Mới {selectedAction === 'update_info' && '⭐'}
+                    </th>
+                    <th
+                      style={{
+                        width: '105px',
+                        padding: '8px 10px',
+                        backgroundColor: selectedAction === 'update_info' ? '#FEF3C7' : 'inherit',
+                        color: selectedAction === 'update_info' ? '#92400E' : 'inherit',
+                        fontWeight: selectedAction === 'update_info' ? 700 : 'inherit',
+                      }}
+                    >
+                      SĐT Mới {selectedAction === 'update_info' && '⭐'}
+                    </th>
+                    <th
+                      style={{
+                        width: '80px',
+                        padding: '8px 10px',
+                        textAlign: 'center',
+                        backgroundColor: selectedAction === 'update_info' ? '#FEF3C7' : 'inherit',
+                        color: selectedAction === 'update_info' ? '#92400E' : 'inherit',
+                        fontWeight: selectedAction === 'update_info' ? 700 : 'inherit',
+                      }}
+                    >
+                      Loại Mới {selectedAction === 'update_info' && '⭐'}
+                    </th>
+                    <th style={{ minWidth: '220px', padding: '8px 10px' }}>Chi Tiết / Kết Quả</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -538,8 +576,37 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
                             row.pass_word || '—'
                           )}
                         </td>
-                        <td style={{ padding: '7px 10px', fontSize: '11px', color: 'var(--text-secondary)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.update_quyen}>
+                        <td style={{ padding: '7px 10px', fontSize: '11px', color: 'var(--text-secondary)', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.update_quyen}>
                           {row.update_quyen || '—'}
+                        </td>
+                        <td
+                          style={{
+                            padding: '7px 10px',
+                            backgroundColor: selectedAction === 'update_info' && row.new_email ? '#FEF9C3' : 'inherit',
+                            fontWeight: selectedAction === 'update_info' && row.new_email ? 600 : 400,
+                          }}
+                        >
+                          {row.new_email || '—'}
+                        </td>
+                        <td
+                          style={{
+                            padding: '7px 10px',
+                            fontFamily: 'monospace',
+                            backgroundColor: selectedAction === 'update_info' && row.new_phone ? '#FEF9C3' : 'inherit',
+                            fontWeight: selectedAction === 'update_info' && row.new_phone ? 600 : 400,
+                          }}
+                        >
+                          {row.new_phone || '—'}
+                        </td>
+                        <td
+                          style={{
+                            padding: '7px 10px',
+                            textAlign: 'center',
+                            backgroundColor: selectedAction === 'update_info' && row.new_user_type ? '#FEF9C3' : 'inherit',
+                            fontWeight: selectedAction === 'update_info' && row.new_user_type ? 600 : 400,
+                          }}
+                        >
+                          {row.new_user_type || '—'}
                         </td>
                         <td style={{ padding: '7px 10px', color: isError ? '#DC2626' : isSuccess ? '#16A34A' : 'var(--text-secondary)' }}>
                           {row.resultMessage || '—'}

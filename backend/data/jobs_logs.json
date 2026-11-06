@@ -1,5 +1,17 @@
 [
   {
+    "id": "539cfe28",
+    "job_id": "job_review_missing_restaurant_info",
+    "job_name": "Rà Soát Thông Tin Nhà Hàng Còn Thiếu",
+    "started_at": "2026-11-06 09:30:07",
+    "finished_at": "2026-11-06 09:30:41",
+    "duration_seconds": 34.14,
+    "status": "failed",
+    "message": "Lỗi trong quá trình rà soát thông tin nhà hàng: _ssl.c:1064: The handshake operation timed out",
+    "details": "Ngoại lệ: _ssl.c:1064: The handshake operation timed out",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
     "id": "c050ad1c",
     "job_id": "job_sync_sales_daily_server",
     "job_name": "Lấy dữ liệu tổng sales, tổng khách từ SERVER Dcorp về Server IT Daily Sales",

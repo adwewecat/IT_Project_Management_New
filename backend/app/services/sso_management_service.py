@@ -900,7 +900,7 @@ def generate_sso_bulk_template() -> bytes:
     ws = wb.active
     ws.title = "DS_USER_IAM"
 
-    # 7 Cột chuẩn hóa khớp 100% giao diện yêu cầu của người dùng
+    # 10 Cột chuẩn hóa: Cột 1-7 dùng chung/tạo mới, Cột 8-10 dành cho cập nhật thông tin mới
     headers = [
         "User Name",
         "Email",
@@ -908,16 +908,20 @@ def generate_sso_bulk_template() -> bytes:
         "User Phone Number",
         "Pass",
         "TRANG THAI",
-        "UPDATE QUYEN"
+        "UPDATE QUYEN",
+        "Email Mới",
+        "SĐT Mới",
+        "Loại TK Mới (0-Local,1-AD,2-Empl)"
     ]
     ws.append(headers)
 
     # Dòng mẫu hướng dẫn thực tế
     samples = [
-        ["user_ncc_01", "ncc01@gmail.com", "0", "0908119345", "Ggg@2026!", "ON", "Hệ thống GChecklist, PoPortal_Hệ thống đặt hàng Hồ Chí Minh"],
-        ["user_ncc_02", "ncc02@gmail.com", "0", "0908119347", "", "ON", "Client Gương Thần API (Phân quyền người dùng), Hệ thống E-Bidding"],
-        ["000016", "g_000016@ggg.com.vn", "2", "0366093968", "MatKhauMoi@123", "", ""],
-        ["user_can_khoa", "", "", "", "", "KHOA", ""]
+        ["user_ncc_01", "ncc01@gmail.com", "0", "0908119345", "Ggg@2026!", "ON", "Hệ thống GChecklist, PoPortal_Hệ thống đặt hàng Hồ Chí Minh", "", "", ""],
+        ["user_ncc_02", "ncc02@gmail.com", "0", "0908119347", "", "ON", "Client Gương Thần API (Phân quyền người dùng), Hệ thống E-Bidding", "", "", ""],
+        ["000016", "g_000016@ggg.com.vn", "2", "0366093968", "MatKhauMoi@123", "", "", "", "", ""],
+        ["user_can_khoa", "", "", "", "", "KHOA", "", "", "", ""],
+        ["000018", "g_000018@ggg.com.vn", "", "", "", "", "", "g_000018_new@ggg.com.vn", "0912345678", "2"]
     ]
     for row in samples:
         ws.append(row)
@@ -939,7 +943,7 @@ def generate_sso_bulk_template() -> bytes:
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         cell.border = thin_border
 
-    widths = [20, 32, 28, 22, 18, 16, 45]
+    widths = [20, 32, 28, 22, 18, 16, 45, 32, 20, 30]
     for idx, width in enumerate(widths, 1):
         col_letter = openpyxl.utils.get_column_letter(idx)
         ws.column_dimensions[col_letter].width = width
@@ -963,12 +967,23 @@ def parse_sso_excel_file(file_bytes: bytes) -> List[Dict[str, Any]]:
     def _norm_hdr(s: Any) -> str:
         if not s:
             return ""
-        return re.sub(r"[^a-zA-Z0-9]", "", str(s).lower())
+        import unicodedata
+        stripped = "".join(
+            c for c in unicodedata.normalize("NFD", str(s))
+            if unicodedata.category(c) != "Mn"
+        ).replace("đ", "d").replace("Đ", "D").lower()
+        return re.sub(r"[^a-z0-9]", "", stripped)
 
     hdr_map: Dict[str, int] = {}
     for idx, col_val in enumerate(rows[0]):
         norm = _norm_hdr(col_val)
-        if "username" in norm or ("user" in norm and "name" in norm):
+        if "emailmoi" in norm or "mailmoi" in norm or "newemail" in norm or "newmail" in norm:
+            hdr_map["new_email"] = idx
+        elif "sdtmoi" in norm or "phonemoi" in norm or "newphone" in norm:
+            hdr_map["new_phone"] = idx
+        elif "loaitkmoi" in norm or "newtype" in norm or "typemoi" in norm or "loaimoi" in norm:
+            hdr_map["new_user_type"] = idx
+        elif "username" in norm or ("user" in norm and "name" in norm):
             hdr_map["user_name"] = idx
         elif "email" in norm or "mail" in norm:
             hdr_map["email"] = idx
@@ -982,6 +997,14 @@ def parse_sso_excel_file(file_bytes: bytes) -> List[Dict[str, Any]]:
             hdr_map["trang_thai"] = idx
         elif "quyen" in norm or "client" in norm:
             hdr_map["update_quyen"] = idx
+
+    # Bổ sung fallback theo thứ tự cột nếu tiêu đề không khớp
+    if "new_email" not in hdr_map and len(rows[0]) >= 8:
+        hdr_map["new_email"] = 7
+    if "new_phone" not in hdr_map and len(rows[0]) >= 9:
+        hdr_map["new_phone"] = 8
+    if "new_user_type" not in hdr_map and len(rows[0]) >= 10:
+        hdr_map["new_user_type"] = 9
 
     results: List[Dict[str, Any]] = []
     for r in rows[1:]:
@@ -1005,6 +1028,9 @@ def parse_sso_excel_file(file_bytes: bytes) -> List[Dict[str, Any]]:
             "pass_word": str(r[hdr_map["pass_word"]] or "").strip() if "pass_word" in hdr_map and hdr_map["pass_word"] < len(r) and r[hdr_map["pass_word"]] is not None else "",
             "trang_thai": str(r[hdr_map["trang_thai"]] or "").strip() if "trang_thai" in hdr_map and hdr_map["trang_thai"] < len(r) and r[hdr_map["trang_thai"]] is not None else "",
             "update_quyen": str(r[hdr_map["update_quyen"]] or "").strip() if "update_quyen" in hdr_map and hdr_map["update_quyen"] < len(r) and r[hdr_map["update_quyen"]] is not None else "",
+            "new_email": str(r[hdr_map["new_email"]] or "").strip() if "new_email" in hdr_map and hdr_map["new_email"] < len(r) and r[hdr_map["new_email"]] is not None else "",
+            "new_phone": str(r[hdr_map["new_phone"]] or "").strip() if "new_phone" in hdr_map and hdr_map["new_phone"] < len(r) and r[hdr_map["new_phone"]] is not None else "",
+            "new_user_type": str(r[hdr_map["new_user_type"]] or "").strip() if "new_user_type" in hdr_map and hdr_map["new_user_type"] < len(r) and r[hdr_map["new_user_type"]] is not None else "",
         })
 
     return results
@@ -1226,6 +1252,9 @@ async def process_bulk_sso_item(
     user_type = str(row.get("user_type") or "0").strip()
     pass_word = str(row.get("pass_word") or "").strip()
     update_quyen = str(row.get("update_quyen") or "").strip()
+    new_email = str(row.get("new_email") or "").strip()
+    new_phone = str(row.get("new_phone") or "").strip()
+    new_user_type = str(row.get("new_user_type") or "").strip()
 
     # Bắt buộc ít nhất 1 trong 2: User Name hoặc Email
     if not user_name and not email:
@@ -1252,6 +1281,17 @@ async def process_bulk_sso_item(
             if action == "create":
                 target_username = user_name if user_name else email.split("@")[0].strip()
                 target_email = email if email else f"{target_username}@ggg.com.vn"
+
+                # QUY TẮC BẮT BUỘC: Kiểm tra trước xem Email hoặc Username đã tồn tại trên IAM chưa
+                existing_uid, existing_uname, existing_umail = await find_iam_user_info(page, email=target_email, username=target_username)
+                if existing_uid:
+                    return {
+                        "success": False,
+                        "user_name": existing_uname or target_username,
+                        "email": existing_umail or target_email,
+                        "action": action,
+                        "message": f"Tài khoản đã tồn tại trên IAM (Username: '{existing_uname}', Email: '{existing_umail}'). Vui lòng chọn tác vụ Cập Nhật hoặc Đổi Pass thay vì Tạo Mới."
+                    }
 
                 # Kiểm tra SĐT nếu có
                 current_phone = phone_number
@@ -1509,39 +1549,81 @@ async def process_bulk_sso_item(
                 profile_url = f"https://iam.ggg.com.vn/Identity/UserProfile/{user_id}"
                 await page.goto(profile_url, wait_until="networkidle", timeout=30000)
 
+                target_new_email = new_email or ""
+                target_new_phone = new_phone or ""
+                target_new_type = new_user_type or ""
+
+                # Nếu cột Email Mới trống nhưng trong file có nhập cột email khác với found_email trên IAM
+                if not target_new_email and email and email.lower() != (found_email or "").lower():
+                    target_new_email = email
+
+                # Nếu cột SĐT Mới trống nhưng cột phone_number có giá trị
+                if not target_new_phone and phone_number:
+                    target_new_phone = phone_number
+
+                # Nếu cột Loại Mới trống nhưng cột user_type có giá trị khác 0 hoặc khác rỗng
+                if not target_new_type and user_type and user_type != "0":
+                    target_new_type = user_type
+
                 updated_fields = []
-                if email:
+                if target_new_email:
                     email_loc = page.locator("#Email, input[name='Email']").first
                     if await email_loc.count() > 0:
-                        await email_loc.fill(email)
-                        updated_fields.append(f"Email: {email}")
+                        await email_loc.fill(target_new_email)
+                        updated_fields.append(f"Email mới: {target_new_email}")
 
-                if phone_number:
+                if target_new_phone:
                     phone_loc = page.locator("#PhoneNumber, input[name='PhoneNumber']").first
                     if await phone_loc.count() > 0:
-                        await phone_loc.fill(phone_number)
-                        updated_fields.append(f"SĐT: {phone_number}")
+                        await phone_loc.fill(target_new_phone)
+                        updated_fields.append(f"SĐT mới: {target_new_phone}")
 
-                if user_type:
+                if target_new_type:
                     type_loc = page.locator("#UserType, input[name='UserType']").first
                     if await type_loc.count() > 0:
-                        await type_loc.fill(user_type)
-                        updated_fields.append(f"UserType: {user_type}")
+                        await type_loc.fill(target_new_type)
+                        updated_fields.append(f"Loại TK mới: {target_new_type}")
 
-                save_btn = page.locator("button.btn:has-text('Save User'), button[type='submit']:has-text('Save')").first
-                if await save_btn.count() > 0:
-                    await save_btn.scroll_into_view_if_needed()
-                    await save_btn.click()
-                    await _safe_wait_network_idle(page, 15000)
+                if updated_fields:
+                    save_btn = page.locator("button.btn:has-text('Save User'), button[type='submit']:has-text('Save')").first
+                    if await save_btn.count() > 0:
+                        await save_btn.scroll_into_view_if_needed()
+                        await save_btn.click()
+                        await _safe_wait_network_idle(page, 15000)
 
-                msg = f"Đã cập nhật thông tin cho user '{display_username}' ({', '.join(updated_fields)})" if updated_fields else f"Không có thông tin mới cần cập nhật cho user '{display_username}'."
-                return {
-                    "success": True,
-                    "user_name": display_username,
-                    "email": display_email,
-                    "action": action,
-                    "message": msg
-                }
+                    # Kiểm tra validation errors
+                    val_errors = page.locator(".text-danger, .validation-summary-errors, .alert-danger")
+                    if await val_errors.count() > 0:
+                        err_texts = []
+                        for idx in range(await val_errors.count()):
+                            txt = (await val_errors.nth(idx).inner_text()).strip()
+                            if txt and not txt.startswith("*") and txt not in err_texts:
+                                err_texts.append(txt)
+                        if err_texts:
+                            return {
+                                "success": False,
+                                "user_name": display_username,
+                                "email": display_email,
+                                "action": action,
+                                "message": f"Cập nhật thất bại: {'; '.join(err_texts)}"
+                            }
+
+                    msg = f"Đã cập nhật thông tin cho user '{display_username}' ({', '.join(updated_fields)})"
+                    return {
+                        "success": True,
+                        "user_name": display_username,
+                        "email": target_new_email or display_email,
+                        "action": action,
+                        "message": msg
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "user_name": display_username,
+                        "email": display_email,
+                        "action": action,
+                        "message": f"Không có dữ liệu mới để cập nhật cho user '{display_username}' (các cột Email Mới, SĐT Mới, Loại TK Mới đều trống)."
+                    }
 
             else:
                 return {
