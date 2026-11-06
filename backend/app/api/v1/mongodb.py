@@ -145,6 +145,13 @@ from app.services.mongodb_service import (
 from app.services.mongo_fix_cpu_service import mongo_fix_cpu_service
 from app.services import mongo_menu_so_co_service
 from app.services.log_service import LogService
+from app.services.co_so_kds_service import co_so_kds_service
+from app.schemas.co_so_kds import (
+    CoSoKdsOrderFlowResponse,
+    CoSoKdsTwoStepSyncRequest,
+    CoSoKdsTwoStepSyncResponse,
+    CoSoKdsDeviceFleetResponse,
+)
 
 
 
@@ -2922,3 +2929,48 @@ def bulk_push_images_to_restaurant_api(
         sql_password=payload.sql_password or "rk7"
     )
     return BulkPushImagesToRestaurantResponse(**res)
+
+
+# ==============================================================================
+# CHUYÊN SÂU APP CO - SO - KDS
+# ==============================================================================
+
+@router.get("/co-so-kds/order-flow", response_model=CoSoKdsOrderFlowResponse)
+def get_co_so_kds_order_flow_api(
+    host: str = Query(..., description="IP may chu MongoDB nha hang"),
+    port: int = Query(27017),
+    table: str = Query("01", description="So ban can quet luong don"),
+    order_id: Optional[str] = Query(None, description="Ma don hang cu the"),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Radar truy vet luong don hang 5 chang (CO - SO - KDS Flow Tracer):
+    CO -> POS -> MQTT -> KDS -> SO -> CO-Pay.
+    """
+    return co_so_kds_service.get_order_flow(host=host, port=port, table_number=table, order_id=order_id)
+
+
+@router.post("/co-so-kds/sync-two-step", response_model=CoSoKdsTwoStepSyncResponse)
+def post_co_so_kds_sync_two_step_api(
+    payload: CoSoKdsTwoStepSyncRequest,
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Ep dong bo Menu va Gia toan nha hang theo quy trinh 2 lop:
+    Buoc 1: SO dong bo POS (syncRK) -> Buoc 2: Ban MQTT ep CO cap nhat cache SQLite.
+    """
+    return co_so_kds_service.execute_two_step_sync(payload=payload)
+
+
+@router.get("/co-so-kds/device-fleet", response_model=CoSoKdsDeviceFleetResponse)
+def get_co_so_kds_device_fleet_api(
+    host: str = Query(..., description="IP may chu MongoDB nha hang"),
+    port: int = Query(27017),
+    restaurant_id: Optional[int] = Query(None),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Ban do giam sat suc khoe thiet bi va phien ban app toan nha hang (CO, SO, KDS).
+    Phat hien thiet bi offline hoac phien ban app loi thoi can cap nhat.
+    """
+    return co_so_kds_service.get_device_fleet(host=host, port=port, restaurant_id=restaurant_id)

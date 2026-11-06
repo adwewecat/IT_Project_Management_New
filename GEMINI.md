@@ -3167,3 +3167,39 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
 - Tích hợp ô input search trực tiếp vào bộ chọn nhà hàng (Searchable Select Combobox) thành 1 ô duy nhất, mở popup danh sách có lọc theo thời gian thực.
 - Đã bỏ 2 đường dẫn gợi ý `D:\Support` và `C:\Setup`.
 - Frontend build exit code 0 (`✓ built in 4.40s`), Backend smoke test 100%.
+
+
+### [2026-11-06] NÂNG CẤP TAB 2: CHUYÊN SÂU APP CO - SO - KDS (PHÂN TÍCH MONGODB NHÀ HÀNG)
+- **Bối cảnh & Yêu cầu**:
+  * Thay thế Tab 2 từ "Tab 2: Báo Cáo Xây Dựng Riêng Cho Từng Nhà Hàng" thành "Tab 2: Chuyên Sâu App CO-SO-KDS" trong màn hình Phân Tích MongoDB Nhà Hàng (`RestaurantMongoAnalysisPage.tsx`).
+  * Triển khai giao diện 4 khung tính năng lớn trực quan (Card Layout) theo mẫu ảnh yêu cầu, chuẩn theme Golden Gate (nền trắng `#FFFFFF`, chữ đen, nút vàng `#F5B800`, zero stat cards dư thừa).
+- **1. Khung 1 - RADAR TRUY VẾT LUỒNG ĐƠN HÀNG TOÀN DIỆN (CO - SO - KDS FLOW TRACER)**:
+  * Modal: `CoSoKdsRadarModal.tsx` với 5 chặng dữ liệu thời gian thực: CO (Khách gửi `submitOrder()`) -> POS R-Keeper (`G_ORDER`) -> MQTT Broker (1883) -> KDS Bếp (LineCook `SubmitDish()`) -> SO (Phục vụ `DeliveredDishItem`).
+  * Đo đếm thời gian SLA từng món, cảnh báo đỏ khi quá hạn (>10 phút).
+  * Bộ công cụ xử lý nhanh tại chỗ:
+    + "⚡ Bắn Lại Xuống KDS": Phát lại topic MQTT cứu đơn mất tích/kẹt đơn giờ cao điểm.
+    + "🔓 Kích Mở Menu Bàn (CO)": Gửi lệnh MQTT mở khóa menu bàn cho tablet CO.
+    + "🔔 Giục Món Khẩn": Kích hoạt chuông DingDong và `OrderPrioritizedPopup` trên KDS bếp.
+    + "👨‍🍳 Xong Hộ Bếp (KDS Bypass)": Bấm hoàn thành món hộ bếp khi máy KDS bị đơ cảm ứng.
+- **2. Khung 2 - PHÂN TÍCH LOGS KDS & SƠ ĐỒ ĐƯỜNG ĐI CÁC APP**:
+  * Tích hợp và gom cụm 2 tính năng điều tra KDS từ "Check / xử lý KDS" về màn hình này:
+    + "1. Logs KDS (Order & Ra Món)": Mở `KdsLogsModal` tra cứu giờ order, giờ done, thời gian chế biến.
+    + "2. Phân Tích Món Vào Bếp MỚI": Mở `KdsKitchenIntakeModal` thống kê tải món và lượt vào bếp 1-5 ngày.
+  * Bản đồ sơ đồ luồng dữ liệu 5 giai đoạn: Modal `CoSoKdsFlowDiagramModal.tsx` trực quan hóa đường đi giữa CO, SO, KDS, POS RK7 và MQTT Broker theo tài liệu kỹ thuật GGG.
+- **3. Khung 3 - ÉP ĐỒNG BỘ MENU & GIÁ TOÀN NHÀ HÀNG (QUY TRÌNH 2 LỚP: SO -> CO)**:
+  * Modal: `CoSoKdsTwoStepSyncModal.tsx` giải quyết triệt để vấn đề thực tế vận hành: Tablet CO không thể tải giá trực tiếp từ POS mà phải qua app SO đồng bộ trước (`syncRK`).
+  * Quy trình 2 bước tự động:
+    + Bước 1: Kéo Menu & Giá mới từ POS R-Keeper vào máy chủ SO nhà hàng.
+    + Bước 2: Phát sóng MQTT broadcast yêu cầu toàn bộ tablet CO xóa cache SQLite (`assets/CustomerOrder`) và nạp giá mới.
+  * Hỗ trợ 3 chế độ: 2 Lớp chuẩn (SO -> CO), Chỉ SO (Bước 1), Chỉ CO (Bước 2) kèm nhật ký live console.
+- **4. Khung 4 - BẢN ĐỒ GIÁM SÁT SỨC KHỎE THIẾT BỊ TOÀN NHÀ HÀNG (DEVICE FLEET HEALTH MAP)**:
+  * Modal: `CoSoKdsDeviceFleetModal.tsx` quản lý toàn bộ thiết bị nhà hàng (Tablet CO từng bàn, Waiter SO, Màn hình KDS bếp).
+  * Tự động đối chiếu phiên bản ứng dụng thực tế với bản chuẩn GGG (CO `v1.6.91`, SO `v2.4.107`, KDS `v1.4.51`) và cảnh báo đỏ/vàng nếu máy chạy bản cũ.
+  * Theo dõi dung lượng pin (%), trạng thái cắm sạc AC, tình trạng online/offline và bộ lọc nhanh đa tiêu chí.
+- **Backend & Schemas**:
+  * Pydantic schemas: `backend/app/schemas/co_so_kds.py`.
+  * Business service: `backend/app/services/co_so_kds_service.py`.
+  * API endpoints: `GET /api/v1/mongodb/co-so-kds/order-flow`, `POST /api/v1/mongodb/co-so-kds/sync-two-step`, `GET /api/v1/mongodb/co-so-kds/device-fleet` trong `backend/app/api/v1/mongodb.py`.
+- **Build & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.63s`), thư mục `frontend/dist/` sạch sẽ.
+  * Backend: `python -m compileall app` không lỗi, Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.

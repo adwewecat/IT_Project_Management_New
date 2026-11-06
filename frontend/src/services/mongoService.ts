@@ -1438,6 +1438,38 @@ export const mongoService = {
   }): Promise<BulkPushImagesToRestaurantResponse> => {
     const res = await api.post<BulkPushImagesToRestaurantResponse>('/mongodb/image-server/bulk-push-to-restaurant', payload);
     return res.data;
+  },
+
+  // -------------------------------------------------------------
+  // CHUYEN SAU APP CO - SO - KDS
+  // -------------------------------------------------------------
+  getCoSoKdsOrderFlow: async (params: {
+    host: string;
+    port?: number;
+    table?: string;
+    order_id?: string;
+  }): Promise<CoSoKdsOrderFlowResponse> => {
+    const res = await api.get<CoSoKdsOrderFlowResponse>('/mongodb/co-so-kds/order-flow', { params });
+    return res.data;
+  },
+
+  postCoSoKdsSyncTwoStep: async (payload: {
+    host: string;
+    port?: number;
+    restaurant_id?: number;
+    sync_mode?: string;
+  }): Promise<CoSoKdsTwoStepSyncResponse> => {
+    const res = await api.post<CoSoKdsTwoStepSyncResponse>('/mongodb/co-so-kds/sync-two-step', payload);
+    return res.data;
+  },
+
+  getCoSoKdsDeviceFleet: async (params: {
+    host: string;
+    port?: number;
+    restaurant_id?: number;
+  }): Promise<CoSoKdsDeviceFleetResponse> => {
+    const res = await api.get<CoSoKdsDeviceFleetResponse>('/mongodb/co-so-kds/device-fleet', { params });
+    return res.data;
   }
 };
 
@@ -2728,5 +2760,93 @@ export interface BulkPushImagesToRestaurantResponse {
     size_bytes: number;
     message: string;
   }>;
+  message: string;
+}
+
+
+// =============================================================================
+// INTERFACES CHUYEN SAU APP CO - SO - KDS
+// =============================================================================
+
+export interface CoSoKdsOrderFlowItem {
+  dish_id: string;
+  dish_name: string;
+  quantity: number;
+  table_number: string;
+  order_id: string;
+  source: string; // 'CO' | 'SO'
+  time_co_sent?: string;
+  time_pos_received?: string;
+  time_kds_received?: string;
+  time_kds_completed?: string;
+  time_so_delivered?: string;
+  line_cook?: string;
+  status: 'WAITING' | 'COOKING' | 'DONE' | 'DELIVERED' | 'DELAYED' | 'CANCELLED';
+  sla_minutes: number;
+  elapsed_minutes: number;
+  is_delayed: boolean;
+  note?: string;
+}
+
+export interface CoSoKdsOrderFlowResponse {
+  success: boolean;
+  table_number: string;
+  order_id?: string;
+  total_dishes: number;
+  waiting_count: number;
+  cooking_count: number;
+  done_count: number;
+  delivered_count: number;
+  delayed_count: number;
+  dishes: CoSoKdsOrderFlowItem[];
+  message: string;
+}
+
+export interface CoSoKdsTwoStepSyncRequest {
+  host: string;
+  port?: number;
+  restaurant_id?: number;
+  sync_mode?: string;
+}
+
+export interface CoSoKdsTwoStepSyncResponse {
+  success: boolean;
+  sync_mode: string;
+  step1_so_success: boolean;
+  step1_so_message: string;
+  step2_co_success: boolean;
+  step2_co_message: string;
+  total_co_notified: number;
+  elapsed_ms: number;
+  message: string;
+}
+
+export interface CoSoKdsDeviceItem {
+  id: string;
+  device_type: 'CO' | 'SO' | 'KDS';
+  device_name: string;
+  table_code?: string;
+  ip_address?: string;
+  is_online: boolean;
+  app_version: string;
+  latest_version: string;
+  is_outdated: boolean;
+  battery_level?: number;
+  last_seen?: string;
+  line_cook?: string;
+  note?: string;
+}
+
+export interface CoSoKdsDeviceFleetResponse {
+  success: boolean;
+  total_devices: number;
+  total_co: number;
+  total_so: number;
+  total_kds: number;
+  online_count: number;
+  offline_count: number;
+  outdated_count: number;
+  devices: CoSoKdsDeviceItem[];
+  official_versions: Record<string, string>;
   message: string;
 }
