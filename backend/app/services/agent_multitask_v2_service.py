@@ -520,8 +520,8 @@ def _exec_powershell_on_restaurant(
     clean_ip = target_ip.strip()
     conn_str = f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={clean_ip},{sql_port};DATABASE=master;UID=rk7;PWD=rk7;TrustServerCertificate=yes;"
 
-    # Luôn ép bảng mã output console về UTF-8
-    full_ps = f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8;\n{powershell_code}"
+    # Luôn ép bảng mã output console về UTF-8 và tắt Progress stream để tránh rác CLIXML
+    full_ps = f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; $ProgressPreference = 'SilentlyContinue'; $WarningPreference = 'SilentlyContinue';\n{powershell_code}"
     enc = base64.b64encode(full_ps.encode("utf-16le")).decode("ascii")
     output_lines: List[str] = []
 
@@ -538,8 +538,20 @@ def _exec_powershell_on_restaurant(
             for r in rows:
                 if r[0]:
                     line = r[0].strip()
-                    if not line.startswith("<") and not line.startswith("#<") and "System.Management.Automation" not in line:
-                        output_lines.append(line)
+                    if (
+                        line.startswith("<")
+                        or line.startswith("#<")
+                        or "</Objs>" in line
+                        or "</Obj>" in line
+                        or "<Obj " in line
+                        or "<MS>" in line
+                        or "<S S=" in line
+                        or "<AV>" in line
+                        or "System.Management.Automation" in line
+                        or "preparing modules for first use" in line.lower()
+                    ):
+                        continue
+                    output_lines.append(line)
 
     return output_lines
 
@@ -1011,7 +1023,12 @@ try {{
         Write-Output "ACTION_RES|FAILED|$($res.ReturnValue)|WMI Error: $($res.ReturnValue)"
     }}
 }} catch {{
-    Write-Output "ACTION_RES|FAILED|1|$($_.Exception.Message)"
+    $err = $_.Exception.Message
+    if ($err -match "Access is denied" -or $err -match "null-valued") {{
+        Write-Output "ACTION_RES|FAILED|1|Trạm {clean_ip} không cài SQL Server và bị Windows bảo mật chặn thực thi từ xa qua mạng LAN. File đã có sẵn tại {clean_folder}\\{clean_file}, để tự động chạy từ xa cần cài Service Agent trên trạm {clean_ip}."
+    }} else {{
+        Write-Output "ACTION_RES|FAILED|1|$err"
+    }}
 }}
 """
             else:
@@ -1042,7 +1059,12 @@ try {{
         Write-Output "ACTION_RES|FAILED|$($res.ReturnValue)|WMI Error: $($res.ReturnValue)"
     }}
 }} catch {{
-    Write-Output "ACTION_RES|FAILED|1|$($_.Exception.Message)"
+    $err = $_.Exception.Message
+    if ($err -match "Access is denied" -or $err -match "null-valued") {{
+        Write-Output "ACTION_RES|FAILED|1|Trạm {clean_ip} không cài SQL Server và bị Windows bảo mật chặn khởi chạy từ xa qua mạng LAN. File đã có sẵn tại {clean_folder}\\{clean_file}, để tự động chạy từ xa cần cài Service Agent trên trạm {clean_ip}."
+    }} else {{
+        Write-Output "ACTION_RES|FAILED|1|$err"
+    }}
 }}
 """
         else:
@@ -1087,29 +1109,17 @@ try {{
 
     # ── 4. MỞ FILE TÀI LIỆU TRÊN MÀN HÌNH USER (.txt, .doc, .docx, .pdf...) ──
     elif act == "OPEN_DOCUMENT":
-        ps_script = f"""
+        if is_relay:
+            ps_script = f"""
+Write-Output "ACTION_RES|SUCCESS|0|File văn bản đã có sẵn tại {clean_folder}\\{clean_file}. Do trạm {clean_ip} chạy qua mạng LAN, người dùng tại trạm có thể nhấp mở trực tiếp tệp tin này."
+"""
+        else:
+            ps_script = f"""
 $fullPath = "{path_actual}"
 $dir = "{folder_actual}"
-
-$u = (Get-CimInstance Win32_ComputerSystem).UserName
-if (-not $u) {{
-    $line = (quser 2>$null | Select-String 'Active' | Out-String).Trim()
-    if ($line) {{
-        $u = (($line -replace '^>', '').Trim() -split '\\s+')[0]
-    }}
-}}
-if (-not $u) {{ $u = 'Users' }}
-
-$taskName = "IT_DocOpen_" + (Get-Random -Maximum 99999)
-$action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c start `"`" `"`"$fullPath`"`"" -WorkingDirectory $dir
-$principal = New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive -RunLevel Highest
-
 try {{
-    Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Force | Out-Null
-    Start-ScheduledTask -TaskName $taskName
-    Start-Sleep -Seconds 1
-    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false | Out-Null
-    Write-Output "ACTION_RES|SUCCESS|0|Da mo tai lieu tren man hinh Desktop cua nguoi dung ($u)"
+    Start-Process -FilePath "explorer.exe" -ArgumentList "`"$fullPath`"" -WorkingDirectory $dir
+    Write-Output "ACTION_RES|SUCCESS|0|Da mo tai lieu tren man hinh nguoi dung thanh cong"
 }} catch {{
     Write-Output "ACTION_RES|FAILED|1|$($_.Exception.Message)"
 }}

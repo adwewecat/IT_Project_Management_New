@@ -3135,3 +3135,17 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
 pm run build hoàn tất exit code 0 (✓ built in 4.42s).
   * Backend: python -m compileall app sạch lỗi, Smoke Test passed 100%.
   * Backend daemon uvicorn reload thành công trên port 8000.
+
+
+### [2026-11-06] XỬ LÝ LỖI THỰC THI TỪ XA TRÊN MÁY KHÔNG CÓ SQL SERVER (.12) & LÀM SẠCH RÁC CLIXML CONSOLE
+- **Phân định rõ 2 cơ chế giữa Truyền File và Thực Thi Kịch Bản**:
+  * Truyền file / Xóa file / Quét thư mục sang máy không có SQL (.12): Đã hoạt động 100% thành công qua cầu nối LAN Relay của máy SQL (.41) bằng tài khoản APP / GGrg@2025.
+  * Thực thi kịch bản (Run Script / Launch App) trên máy không có SQL (.12): Windows bảo mật UAC chặn remote process creation qua mạng LAN đối với máy trạm không có SQL Server.
+  * Đã bổ sung thông báo rõ ràng, thân thiện bằng tiếng Việt khi người dùng bấm thực thi từ xa trên máy phụ không cài SQL.
+- **Làm sạch console (Triệt tiêu rác CLIXML progress của PowerShell)**:
+  * Thêm $ProgressPreference = 'SilentlyContinue' và bộ lọc dòng XML (<Objs>, <Obj>, <MS>, <AV>...).
+  * Output trả về màn hình console hoàn toàn sạch sẽ, không còn rác XML của PowerShell.
+- **Build & Đóng gói (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: npm run build hoàn tất exit code 0 (✓ built in 4.75s).
+  * Backend: Smoke Test PASSED 100%, compileall sạch 100%.
+  * Backend daemon uvicorn reload thành công trên port 8000.
