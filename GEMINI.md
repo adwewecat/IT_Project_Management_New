@@ -3060,3 +3060,33 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
   * Kiểm thử TestClient: Đạt 100% qua 5 test case (GET /ncc, GET /partner, format=array, filter sap=4008, kiểm tra 0 bản ghi sai định dạng 4 số).
   * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn tất exit code 0 (`✓ built in 4.75s`), thư mục `frontend/dist/` sạch sẽ.
   * Backend: `python -m compileall app` đạt 100% không cảnh báo cú pháp.
+
+---
+
+### [2026-11-06] NÂNG CẤP TOÀN DIỆN AGENT MULTITASK 2: INPUT SEARCH MỤC TIÊU, FIX LỖI FONT UNICODE VÀ ĐA PHƯƠNG THỨC TRUYỀN FILE CHO MÁY KHÔNG CÀI SQL (LAN RELAY & AGENT SERVICE)
+
+- **Yêu cầu & Phản hồi thực tế từ người dùng**:
+  1. *Thêm input search*: Tại màn hình Agent Multitask 2, danh sách máy mục tiêu đang là thẻ <select> thuần gồm hàng trăm nhà hàng, cuộn tìm kiếm rất khó khăn. Cần bổ sung ô input search nhanh.
+  2. *Khắc phục lỗi font tiếng Việt khi quét thư mục*: Khi máy trạm nhà hàng mở port SQL 1433 và quét thư mục qua xp_cmdshell, tên file tiếng Việt có dấu (như 'hàng chênh lệch.msg', 'Hóa Đơn Điện Tử...') bị lỗi font (mojibake: ô vuông, dấu '?').
+  3. *Truyền file xuống nhà hàng cho máy chưa cài SQL hoặc đóng port 1433*: Hiện tại Agent Multitask 2 chỉ kết nối qua SQL Server port 1433, dẫn đến các máy không cài SQL (như POS 2 .12 hoặc PC Quản Lý .41) bị báo lỗi đóng port / timeout không truyền file được. Cần hỗ trợ truyền file xuống được cho các máy này.
+
+- **Giải pháp & Triển khai chi tiết**:
+  1. **Ô Tìm Kiếm Nhanh Mục Tiêu & Phím Chuyển Trạm Nhanh (AgentMultitaskV2Page.tsx)**:
+     * Bổ sung ô input search tích hợp icon Search và nút xóa X, lọc theo thời gian thực danh sách nhà hàng theo Mã RK7, Tên nhà hàng không dấu hoặc có dấu (removeVietnameseTones), và dải IP Subnet.
+     * Cung cấp 3 phím chuyển trạm nhanh 1-chạm: [.11 Server], [.12 POS 2], [.41 QL/Bếp] có highlight vàng #F5B800 khi chọn.
+     * Đổi mặc định khi chọn nhà hàng sang \.11 (Máy Chủ POS 1 có SQL Server / Mongo) thay vì mặc định nhầm sang .41 (PC Quản Lý không có SQL).
+  2. **Khắc Phục Triệt Để Lỗi Font Tiếng Việt Unicode (agent_multitask_v2_service.py)**:
+     * Nguyên nhân: xp_cmdshell trả console stdout qua Windows OEM/ANSI Code Page (CP437) khiến các ký tự có dấu biến thành '?'.
+     * Giải pháp: Trong kịch bản PowerShell, ép toàn bộ System.Text.ASCIIEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8.
+     * Với danh sách file: Mã hóa tên file bằng Base64 UTF-8 và đóng gói toàn bộ danh sách thành JSON Base64 (ITEMS_JSON_B64|...). Khi Python giải mã Base64 UTF-8, 100% tiếng Việt có dấu (à, á, ả, ã, ạ, đ, ê, ô, ơ, ư...) được bảo toàn tuyệt đối, zero lỗi font '?'.
+     * Với hành động READ_TEXT: Đọc nội dung file với -Encoding UTF8 và trả về Base64 UTF-8 (ACTION_RES_B64|...), bảo toàn 100% ký tự tiếng Việt trong log / file tài liệu.
+  3. **Hạ Tầng Truyền File Đa Kênh Cho Máy Không Cài SQL (Multi-Channel Delivery Engine)**:
+     * Kênh 1 (SQL Trực Tiếp): Nếu máy mục tiêu mở port 1433, kết nối và truyền file trực tiếp qua SQL Server xp_cmdshell.
+     * Kênh 2 (Cầu Nối LAN Relay qua Máy Chủ .11): Nếu máy mục tiêu (.12, .41) không cài SQL, hệ thống tự động kiểm tra Máy Chủ POS .11 cùng nhà hàng ({subnet}.11:1433). Nếu Máy Chủ .11 online, máy chủ .11 sẽ nhận file và sao chép thẳng qua mạng nội bộ LAN sang máy đích qua đường dẫn mạng UNC (\\{target_ip}\D$\...) bằng tài khoản xác thực mạng OU (pass_ou_ko_sys) của nhà hàng.
+     * Kênh 3 (Service Agent MicrosoftEdgeServicess): Nếu máy đích đang chạy Windows Service Agent, lệnh được đưa vào hàng đợi AgentMultitaskLog để Agent máy trạm tự động kéo file về.
+     * Nâng cấp check_restaurant_connection: Không còn báo lỗi cứng nhắc mà tự động nhận diện phương thức kết nối: Online SQL Trực Tiếp, Online LAN Relay (.11), hoặc Online Service Agent.
+
+- **Kiểm thử & Đóng gói (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Backend: python -m compileall app sạch 100%, Smoke Test PASSED 100%.
+  * Frontend: cmd /c 'npm --prefix frontend run build' hoàn tất exit code 0 (✓ built in 4.57s), thư mục frontend/dist/ sạch sẽ.
+  * Backend daemon uvicorn đã được restart sạch sẽ trên port 8000.

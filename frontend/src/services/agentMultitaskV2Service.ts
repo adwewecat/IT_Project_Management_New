@@ -39,6 +39,9 @@ export interface CheckRestaurantConnectionResponse {
   xp_cmdshell_ready: boolean;
   message: string;
   latency_ms: number;
+  connection_method?: 'SQL_DIRECT' | 'LAN_RELAY' | 'AGENT_SERVICE' | 'FAILED' | string;
+  relay_host?: string;
+  agent_service_ok?: boolean;
 }
 
 export interface RestaurantFolderFileItem {
@@ -59,6 +62,7 @@ export interface RestaurantFolderListResponse {
   folder_exists: boolean;
   files: RestaurantFolderFileItem[];
   total_files: number;
+  scan_method?: string;
 }
 
 export interface PushFileToRestaurantRequest {
@@ -81,6 +85,7 @@ export interface PushFileToRestaurantResponse {
   size_bytes: number;
   elapsed_ms: number;
   execution_output?: string;
+  delivery_channel?: string;
 }
 
 export interface ExecuteRemoteActionRequest {

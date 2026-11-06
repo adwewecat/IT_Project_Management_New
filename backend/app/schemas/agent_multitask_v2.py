@@ -66,6 +66,9 @@ class CheckRestaurantConnectionResponse(BaseModel):
     xp_cmdshell_ready: bool = False
     message: str
     latency_ms: float = 0.0
+    connection_method: Optional[str] = "SQL_DIRECT"  # SQL_DIRECT, LAN_RELAY, AGENT_SERVICE, FAILED
+    relay_host: Optional[str] = None
+    agent_service_ok: bool = False
 
 
 class RestaurantFolderListRequest(BaseModel):
@@ -95,6 +98,7 @@ class RestaurantFolderListResponse(BaseModel):
     folder_exists: bool
     files: List[RestaurantFolderFileItem] = []
     total_files: int = 0
+    scan_method: Optional[str] = "SQL_DIRECT"  # SQL_DIRECT, LAN_RELAY, AGENT_SERVICE
 
 
 class PushFileToRestaurantRequest(BaseModel):
@@ -119,6 +123,7 @@ class PushFileToRestaurantResponse(BaseModel):
     size_bytes: int = 0
     elapsed_ms: float = 0.0
     execution_output: Optional[str] = None
+    delivery_channel: Optional[str] = "SQL_DIRECT"  # SQL_DIRECT, LAN_RELAY, AGENT_SERVICE
 
 
 class ExecuteRemoteActionRequest(BaseModel):

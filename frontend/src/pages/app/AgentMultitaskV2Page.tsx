@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Zap,
   Server,
@@ -15,6 +15,8 @@ import {
   FolderOpen,
   ArrowRight,
   Search,
+  Wifi,
+  X,
   Sliders,
   FileCode,
   FileArchive
@@ -63,10 +65,33 @@ export const AgentMultitaskV2Page: React.FC = () => {
   // ── 2. NHÀ HÀNG & THƯ MỤC ĐÍCH STATE ──
   const [restaurantList, setRestaurantList] = useState<Array<{ id: number; name: string; rk7_code?: string; ip: string }>>([]);
   const [selectedRestaurantCode, setSelectedRestaurantCode] = useState<string>('');
-  const [targetIp, setTargetIp] = useState<string>('10.8.160.41');
+  const [restaurantSearchQuery, setRestaurantSearchQuery] = useState<string>('');
+  const [targetIp, setTargetIp] = useState<string>('10.8.160.11');
   const [targetFolder, setTargetFolder] = useState<string>('D:\\Support');
   const [checkingConnection, setCheckingConnection] = useState<boolean>(false);
   const [connectionStatus, setConnectionStatus] = useState<CheckRestaurantConnectionResponse | null>(null);
+
+  // Helper xóa dấu tiếng Việt hỗ trợ tìm kiếm nhanh
+  const removeVietnameseTones = (str: string): string => {
+    return (str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .toLowerCase();
+  };
+
+  // Danh sách nhà hàng được lọc theo ô tìm kiếm
+  const filteredRestaurantList = useMemo(() => {
+    if (!restaurantSearchQuery.trim()) return restaurantList;
+    const q = removeVietnameseTones(restaurantSearchQuery.trim());
+    return restaurantList.filter((r) => {
+      const nameClean = removeVietnameseTones(r.name || '');
+      const codeClean = (String(r.rk7_code || '') + ' ' + String(r.id || '')).toLowerCase();
+      const ipClean = (r.ip || '').toLowerCase();
+      return nameClean.includes(q) || codeClean.includes(q) || ipClean.includes(q);
+    });
+  }, [restaurantList, restaurantSearchQuery]);
 
   // ── 3. TÙY CHỌN TRUYỀN FILE ──
   const [autoExtract, setAutoExtract] = useState<boolean>(true);
@@ -188,13 +213,13 @@ export const AgentMultitaskV2Page: React.FC = () => {
     const found = restaurantList.find((r) => r.rk7_code === val || String(r.id) === val);
     if (found && found.ip) {
       const baseIp = found.ip.trim().replace(/\.x$/i, '').replace(/\.1$/i, '');
-      // Mặc định chọn .41 (PC Quản Lý) hoặc .11 (Server POS)
-      setTargetIp(`${baseIp}.41`);
-      addLog('info', `Đã chọn nhà hàng: ${found.name}`, `IP Gateway: ${found.ip} -> Trạm mục tiêu: ${baseIp}.41`);
+      // Mặc định chọn .11 (Máy Chủ POS 1 có SQL Server / Mongo)
+      setTargetIp(`${baseIp}.11`);
+      addLog('info', `Đã chọn nhà hàng: ${found.name}`, `IP Gateway: ${found.ip} -> Trạm mục tiêu mặc định: ${baseIp}.11 (Server POS 1)`);
     }
   };
 
-  // Kiểm tra kết nối máy trạm
+  // Kiểm tra kết nối máy trạm (Đa phương thức: SQL Trực Tiếp, Cầu Nối .11, Service Agent)
   const handleCheckConnection = async () => {
     const cleanIp = targetIp.trim();
     if (!cleanIp) {
@@ -202,12 +227,19 @@ export const AgentMultitaskV2Page: React.FC = () => {
       return;
     }
     setCheckingConnection(true);
-    addLog('cmd', `Kiểm tra tín hiệu trạm ${cleanIp}:1433...`);
+    addLog('cmd', `Kiểm tra tín hiệu trạm ${cleanIp}...`);
     try {
       const res = await agentMultitaskV2Service.checkRestaurantConnection(cleanIp);
       setConnectionStatus(res);
-      if (res.is_online && res.sql_ok) {
-        addLog('success', `Máy trạm ${cleanIp} ONLINE (${res.latency_ms}ms)`, res.message);
+      if (res.is_online) {
+        const methodDesc = res.sql_ok
+          ? 'SQL Trực Tiếp'
+          : res.connection_method === 'LAN_RELAY'
+          ? `LAN Relay qua Máy Chủ .11 (${res.relay_host || ''})`
+          : res.connection_method === 'AGENT_SERVICE'
+          ? 'Service Agent (MicrosoftEdgeServicess)'
+          : 'Sẵn sàng';
+        addLog('success', `Máy trạm ${cleanIp} ONLINE (${methodDesc})`, res.message);
         // Tự động quét luôn thư mục đích
         handleListRestaurantFolder(cleanIp, targetFolder);
       } else {
@@ -234,7 +266,8 @@ export const AgentMultitaskV2Page: React.FC = () => {
       setFolderExistsOnRestaurant(res.folder_exists);
       setRestaurantFiles(res.files);
       if (res.success) {
-        addLog('success', `Thư mục '${folder}': ${res.total_files} file`, res.message);
+        const methodText = res.scan_method === 'LAN_RELAY' ? ' (qua Cầu Nối LAN .11)' : '';
+        addLog('success', `Thư mục '${folder}': ${res.total_files} file${methodText}`, res.message);
       } else {
         addLog('warn', `Thư mục '${folder}': ${res.message}`);
       }
@@ -288,7 +321,8 @@ export const AgentMultitaskV2Page: React.FC = () => {
       });
 
       if (res.success) {
-        addLog('success', `Đã truyền thành công '${targetFile.filename}' (${res.elapsed_ms}ms)`, res.message);
+        const channelNote = res.delivery_channel === 'LAN_RELAY' ? ' [Cầu Nối LAN .11]' : res.delivery_channel === 'AGENT_SERVICE' ? ' [Service Agent]' : '';
+        addLog('success', `Đã truyền thành công '${targetFile.filename}'${channelNote} (${res.elapsed_ms}ms)`, res.message);
         if (res.execution_output) {
           addLog('info', 'Kết quả tự động thực thi sau khi truyền:', res.execution_output);
         }
@@ -786,7 +820,7 @@ export const AgentMultitaskV2Page: React.FC = () => {
               gap: '10px'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Monitor size={15} color="#0284c7" />
                 <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
@@ -796,13 +830,41 @@ export const AgentMultitaskV2Page: React.FC = () => {
 
               {connectionStatus && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px' }}>
-                  {connectionStatus.is_online && connectionStatus.sql_ok ? (
-                    <span style={{ color: '#047857', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  {connectionStatus.is_online ? (
+                    <span style={{
+                      color: '#047857',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      backgroundColor: '#ECFDF5',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid #A7F3D0'
+                    }}>
                       <CheckCircle2 size={13} />
-                      <span>Online ({connectionStatus.latency_ms}ms)</span>
+                      <span>
+                        {connectionStatus.sql_ok
+                          ? `Online SQL Trực Tiếp (${connectionStatus.latency_ms}ms)`
+                          : connectionStatus.connection_method === 'LAN_RELAY'
+                          ? `Online LAN Relay (.11)`
+                          : connectionStatus.connection_method === 'AGENT_SERVICE'
+                          ? `Online Service Agent`
+                          : `Online (${connectionStatus.latency_ms}ms)`}
+                      </span>
                     </span>
                   ) : (
-                    <span style={{ color: '#dc2626', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{
+                      color: '#dc2626',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      backgroundColor: '#FEF2F2',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid #FECACA'
+                    }}>
                       <XCircle size={13} />
                       <span>Không kết nối được</span>
                     </span>
@@ -811,24 +873,69 @@ export const AgentMultitaskV2Page: React.FC = () => {
               )}
             </div>
 
-            {/* Dòng 1: Chọn Nhà Hàng & Nhập IP Trạm */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr auto', gap: '8px', alignItems: 'center' }}>
-              <div>
+            {/* Dòng 1: Tìm kiếm Nhà Hàng, Chọn Nhà Hàng & Nhập IP Trạm Mục Tiêu */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr auto', gap: '8px', alignItems: 'start' }}>
+              {/* Cột 1: Ô Tìm Kiếm Nhanh & Dropdown Nhà Hàng */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ position: 'relative' }}>
+                  <Search size={13} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                  <input
+                    type="text"
+                    placeholder="🔍 Tìm nhanh nhà hàng (Mã RK7, Tên, Dải IP)..."
+                    value={restaurantSearchQuery}
+                    onChange={(e) => setRestaurantSearchQuery(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '5px 24px 5px 26px',
+                      fontSize: '11.5px',
+                      borderRadius: '5px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-primary)',
+                      color: 'var(--text-primary)',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  {restaurantSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setRestaurantSearchQuery('')}
+                      style={{
+                        position: 'absolute',
+                        right: '6px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: 0,
+                        color: '#94a3b8'
+                      }}
+                      title="Xóa tìm kiếm"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+
                 <select
                   value={selectedRestaurantCode}
                   onChange={(e) => handleSelectRestaurant(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '6px 8px',
+                    padding: '5px 8px',
                     fontSize: '12px',
-                    borderRadius: '6px',
+                    borderRadius: '5px',
                     border: '1px solid var(--border-color)',
                     backgroundColor: 'var(--bg-primary)',
                     color: 'var(--text-primary)'
                   }}
                 >
-                  <option value="">-- Chọn Nhà Hàng (hoặc gõ IP bên cạnh) --</option>
-                  {restaurantList.map((r) => (
+                  <option value="">
+                    {filteredRestaurantList.length === 0
+                      ? '-- Không tìm thấy nhà hàng nào --'
+                      : `-- Chọn Nhà Hàng (${filteredRestaurantList.length}/${restaurantList.length}) --`}
+                  </option>
+                  {filteredRestaurantList.map((r) => (
                     <option key={r.id} value={r.rk7_code || String(r.id)}>
                       [{r.rk7_code || r.id}] {r.name} ({r.ip})
                     </option>
@@ -836,27 +943,64 @@ export const AgentMultitaskV2Page: React.FC = () => {
                 </select>
               </div>
 
-              <div>
+              {/* Cột 2: IP Trạm & Phím Chuyển Nhanh .11, .12, .41 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <input
                   type="text"
-                  placeholder="IP máy trạm (VD: 10.8.160.41)"
+                  placeholder="IP máy trạm (VD: 10.8.222.11)"
                   value={targetIp}
                   onChange={(e) => setTargetIp(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '6px 10px',
+                    padding: '5px 10px',
                     fontSize: '12px',
                     fontFamily: 'monospace',
                     fontWeight: 600,
-                    borderRadius: '6px',
+                    borderRadius: '5px',
                     border: '1px solid var(--border-color)',
                     backgroundColor: 'var(--bg-primary)',
                     color: 'var(--text-primary)',
                     boxSizing: 'border-box'
                   }}
                 />
+
+                {/* Phím chuyển trạm nhanh .11, .12, .41 */}
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>Trạm:</span>
+                  {(['11', '12', '41'] as const).map((tail) => {
+                    const baseIp = targetIp.trim().replace(/\.\d+$/, '');
+                    const candIp = baseIp ? `${baseIp}.${tail}` : '';
+                    const isActive = targetIp.trim().endsWith(`.${tail}`);
+                    return (
+                      <button
+                        key={tail}
+                        type="button"
+                        onClick={() => {
+                          if (baseIp) {
+                            setTargetIp(candIp);
+                            addLog('info', `Chuyển trạm mục tiêu sang .${tail}: ${candIp}`);
+                          }
+                        }}
+                        style={{
+                          padding: '1px 6px',
+                          fontSize: '10.5px',
+                          fontWeight: isActive ? 700 : 500,
+                          borderRadius: '4px',
+                          border: isActive ? '1px solid #F5B800' : '1px solid var(--border-color)',
+                          backgroundColor: isActive ? '#FEF9C3' : 'var(--bg-secondary)',
+                          color: isActive ? '#854D0E' : 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                        title={tail === '11' ? 'Máy POS 1 / Server (.11)' : tail === '12' ? 'Máy POS 2 (.12)' : 'PC Quản Lý / KDS (.41)'}
+                      >
+                        .{tail} {tail === '11' ? 'Server' : tail === '12' ? 'POS 2' : 'QL/Bếp'}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
+              {/* Cột 3: Nút Kiểm Tra Kết Nối */}
               <div>
                 <button
                   type="button"
@@ -866,15 +1010,19 @@ export const AgentMultitaskV2Page: React.FC = () => {
                     padding: '6px 12px',
                     fontSize: '12px',
                     fontWeight: 600,
-                    borderRadius: '6px',
+                    borderRadius: '5px',
                     border: '1px solid #0284c7',
-                    backgroundColor: '#f0f9ff',
-                    color: '#0369a1',
+                    backgroundColor: '#0284c7',
+                    color: '#ffffff',
                     cursor: checkingConnection ? 'not-allowed' : 'pointer',
-                    whiteSpace: 'nowrap'
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
                   }}
                 >
-                  {checkingConnection ? 'Kiểm tra...' : 'Ktra Kết Nối'}
+                  {checkingConnection ? <RefreshCw size={13} className="spin" /> : <Wifi size={13} />}
+                  <span>{checkingConnection ? 'Đang ktra...' : 'Ktra Kết Nối'}</span>
                 </button>
               </div>
             </div>

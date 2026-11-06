@@ -732,3 +732,4 @@ export const SsoBatchAssignModal: React.FC<SsoBatchAssignModalProps> = ({
     </Modal>
   );
 };
+
