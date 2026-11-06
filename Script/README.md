@@ -4061,3 +4061,18 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
   * Frontend: `cmd /c "npm run build"` hoàn tất exit code 0 (`✓ built in 5.31s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config`.
   * Backend: `python -m compileall app` sạch lỗi, Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
   * Backend daemon uvicorn reload thành công trên port 8000.
+
+
+### [2026-11-06] NÂNG CẤP BỘ CHỌN NHÀ HÀNG SEARCHABLE COMBOBOX TÍCH HỢP & TINH GỌN GỢI Ý THƯ MỤC
+- **Tích Hợp Ô Input Search Vào Ngay Bộ Chọn Nhà Hàng (Searchable Select Combobox)**:
+  * Khắc phục tình trạng 2 ô tách riêng (ô search phía trên và select dropdown phía dưới gây chênh lệch layout).
+  * Gom thành 1 component Searchable Combobox duy nhất: Người dùng có thể click hoặc gõ trực tiếp tên nhà hàng, mã RK7 hoặc dải IP vào ô chọn.
+  * Danh sách kết quả popup mở ra ngay dưới ô nhập với huy hiệu mã RK7, tên đầy đủ, dải IP và highlight màu vàng cho nhà hàng đang chọn.
+  * Tích hợp nút Xóa nhanh (`X`) và nút mở rộng danh sách (`ChevronDown`), tự động đóng khi click ra ngoài.
+  * Hàng bên dưới hiển thị thông tin trạm đang chọn đồng bộ chiều cao hoàn hảo với hàng chọn trạm `.11`, `.12`, `.41`.
+- **Dọn Dẹp Gợi Ý Thư Mục Đích Theo Yêu Cầu**:
+  * Đã loại bỏ hoàn toàn 2 đường dẫn `D:\Support` và `C:\Setup`.
+  * Chỉ giữ lại các đường dẫn chuẩn GPOS: `D:\GPOS-Setup\`, `D:\GPOS-Setup\app`, `D:\GPOS-Setup\app\img\menu`.
+- **Build & Đóng Gói**:
+  * Frontend: `cmd /c "npm run build"` exit code 0 (`✓ built in 4.40s`), `frontend/dist/` sạch sẽ.
+  * Backend: Smoke test PASSED 100%.

@@ -19,7 +19,8 @@ import {
   X,
   Sliders,
   FileCode,
-  FileArchive
+  FileArchive,
+  ChevronDown
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { checkIsDungOrSuperAdmin } from '../../utils/authUtils';
@@ -67,6 +68,8 @@ export const AgentMultitaskV2Page: React.FC = () => {
   const [restaurantList, setRestaurantList] = useState<Array<{ id: number; name: string; rk7_code?: string; ip: string }>>([]);
   const [selectedRestaurantCode, setSelectedRestaurantCode] = useState<string>('');
   const [restaurantSearchQuery, setRestaurantSearchQuery] = useState<string>('');
+  const [isRestaurantDropdownOpen, setIsRestaurantDropdownOpen] = useState<boolean>(false);
+  const restaurantDropdownRef = useRef<HTMLDivElement>(null);
   const [targetIp, setTargetIp] = useState<string>('10.8.160.11');
   const [targetFolder, setTargetFolder] = useState<string>('D:\\GPOS-Setup\\');
   const [checkingConnection, setCheckingConnection] = useState<boolean>(false);
@@ -82,6 +85,13 @@ export const AgentMultitaskV2Page: React.FC = () => {
       .toLowerCase();
   };
 
+  // Nhà hàng đang được chọn hiện tại
+  const selectedRestaurant = useMemo(() => {
+    return restaurantList.find(
+      (r) => r.rk7_code === selectedRestaurantCode || String(r.id) === selectedRestaurantCode
+    );
+  }, [restaurantList, selectedRestaurantCode]);
+
   // Danh sách nhà hàng được lọc theo ô tìm kiếm
   const filteredRestaurantList = useMemo(() => {
     if (!restaurantSearchQuery.trim()) return restaurantList;
@@ -93,6 +103,23 @@ export const AgentMultitaskV2Page: React.FC = () => {
       return nameClean.includes(q) || codeClean.includes(q) || ipClean.includes(q);
     });
   }, [restaurantList, restaurantSearchQuery]);
+
+  // Đóng dropdown khi click ra ngoài
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        restaurantDropdownRef.current &&
+        !restaurantDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsRestaurantDropdownOpen(false);
+        setRestaurantSearchQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // ── 3. TÙY CHỌN TRUYỀN FILE ──
   const [autoExtract, setAutoExtract] = useState<boolean>(true);
@@ -934,74 +961,247 @@ export const AgentMultitaskV2Page: React.FC = () => {
               </div>
             )}
 
-            {/* Dòng 1: Tìm kiếm Nhà Hàng, Chọn Nhà Hàng & Nhập IP Trạm Mục Tiêu */}
+            {/* Dòng 1: Tìm kiếm & Chọn Nhà Hàng (Searchable Combobox) + Nhập IP Trạm Mục Tiêu */}
             <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr auto', gap: '8px', alignItems: 'start' }}>
-              {/* Cột 1: Ô Tìm Kiếm Nhanh & Dropdown Nhà Hàng */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div style={{ position: 'relative' }}>
-                  <Search size={13} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+              {/* Cột 1: Ô Chọn Nhà Hàng Tích Hợp Tìm Kiếm Trực Tiếp (Searchable Combobox) */}
+              <div ref={restaurantDropdownRef} style={{ display: 'flex', flexDirection: 'column', gap: '4px', position: 'relative' }}>
+                <div
+                  style={{
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
+                    border: isRestaurantDropdownOpen ? '1.5px solid #F5B800' : '1px solid var(--border-color)',
+                    borderRadius: '5px',
+                    backgroundColor: 'var(--bg-primary)',
+                    boxShadow: isRestaurantDropdownOpen ? '0 0 0 2px rgba(245, 184, 0, 0.2)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Search size={13} style={{ position: 'absolute', left: '8px', color: isRestaurantDropdownOpen ? '#d97706' : '#64748b', pointerEvents: 'none' }} />
                   <input
                     type="text"
-                    placeholder="🔍 Tìm nhanh nhà hàng (Mã RK7, Tên, Dải IP)..."
-                    value={restaurantSearchQuery}
-                    onChange={(e) => setRestaurantSearchQuery(e.target.value)}
+                    placeholder={
+                      selectedRestaurant
+                        ? `[${selectedRestaurant.rk7_code || selectedRestaurant.id}] ${selectedRestaurant.name} (${selectedRestaurant.ip})`
+                        : restaurantList.length > 0
+                        ? `-- Chọn hoặc gõ tìm Nhà Hàng (${restaurantList.length}) --`
+                        : 'Đang tải danh sách nhà hàng...'
+                    }
+                    value={
+                      isRestaurantDropdownOpen
+                        ? restaurantSearchQuery
+                        : selectedRestaurant
+                        ? `[${selectedRestaurant.rk7_code || selectedRestaurant.id}] ${selectedRestaurant.name} (${selectedRestaurant.ip})`
+                        : ''
+                    }
+                    onChange={(e) => {
+                      setRestaurantSearchQuery(e.target.value);
+                      if (!isRestaurantDropdownOpen) setIsRestaurantDropdownOpen(true);
+                    }}
+                    onFocus={(e) => {
+                      setIsRestaurantDropdownOpen(true);
+                      e.target.select();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setIsRestaurantDropdownOpen(false);
+                        setRestaurantSearchQuery('');
+                      }
+                    }}
                     style={{
                       width: '100%',
-                      padding: '5px 24px 5px 26px',
-                      fontSize: '11.5px',
+                      padding: '5px 48px 5px 26px',
+                      fontSize: '12px',
+                      fontWeight: selectedRestaurant && !isRestaurantDropdownOpen ? 600 : 400,
                       borderRadius: '5px',
-                      border: '1px solid var(--border-color)',
-                      backgroundColor: 'var(--bg-primary)',
+                      border: 'none',
+                      outline: 'none',
+                      backgroundColor: 'transparent',
                       color: 'var(--text-primary)',
-                      boxSizing: 'border-box'
+                      boxSizing: 'border-box',
+                      cursor: 'text'
                     }}
                   />
-                  {restaurantSearchQuery && (
+
+                  {/* Nút Xóa / Clear */}
+                  {(selectedRestaurant || restaurantSearchQuery) && (
                     <button
                       type="button"
-                      onClick={() => setRestaurantSearchQuery('')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedRestaurantCode('');
+                        setRestaurantSearchQuery('');
+                        setIsRestaurantDropdownOpen(true);
+                      }}
                       style={{
                         position: 'absolute',
-                        right: '6px',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
+                        right: '24px',
                         background: 'none',
                         border: 'none',
                         cursor: 'pointer',
-                        padding: 0,
-                        color: '#94a3b8'
+                        padding: '2px',
+                        color: '#94a3b8',
+                        display: 'flex',
+                        alignItems: 'center'
                       }}
-                      title="Xóa tìm kiếm"
+                      title="Xóa lựa chọn nhà hàng"
                     >
                       <X size={12} />
                     </button>
                   )}
+
+                  {/* Nút Mở / Đóng Dropdown */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsRestaurantDropdownOpen((prev) => !prev);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      right: '6px',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      color: '#64748b',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                    title="Mở danh sách nhà hàng"
+                  >
+                    <ChevronDown
+                      size={14}
+                      style={{
+                        transform: isRestaurantDropdownOpen ? 'rotate(180deg)' : 'none',
+                        transition: 'transform 0.15s ease'
+                      }}
+                    />
+                  </button>
                 </div>
 
-                <select
-                  value={selectedRestaurantCode}
-                  onChange={(e) => handleSelectRestaurant(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '5px 8px',
-                    fontSize: '12px',
-                    borderRadius: '5px',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--bg-primary)',
-                    color: 'var(--text-primary)'
-                  }}
-                >
-                  <option value="">
-                    {filteredRestaurantList.length === 0
-                      ? '-- Không tìm thấy nhà hàng nào --'
-                      : `-- Chọn Nhà Hàng (${filteredRestaurantList.length}/${restaurantList.length}) --`}
-                  </option>
-                  {filteredRestaurantList.map((r) => (
-                    <option key={r.id} value={r.rk7_code || String(r.id)}>
-                      [{r.rk7_code || r.id}] {r.name} ({r.ip})
-                    </option>
-                  ))}
-                </select>
+                {/* Sub-row hiển thị thông tin trạm đang chọn (đồng bộ chiều cao hàng với Cột 2) */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '18px', padding: '0 2px' }}>
+                  {selectedRestaurant ? (
+                    <span style={{ fontSize: '11px', color: '#0369a1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      📍 <strong>{selectedRestaurant.name}</strong> ({selectedRestaurant.ip})
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '10.5px', color: '#94a3b8' }}>
+                      Gõ tìm theo mã, tên hoặc dải IP để chọn trạm
+                    </span>
+                  )}
+                  <span style={{ fontSize: '10.5px', color: '#64748b', flexShrink: 0, marginLeft: '6px' }}>
+                    {restaurantList.length} NH
+                  </span>
+                </div>
+
+                {/* Menu Dropdown Danh Sách Kết Quả */}
+                {isRestaurantDropdownOpen && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '34px',
+                      left: 0,
+                      right: 0,
+                      minWidth: '400px',
+                      maxHeight: '280px',
+                      overflowY: 'auto',
+                      backgroundColor: 'var(--bg-card, #ffffff)',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                      zIndex: 1000
+                    }}
+                  >
+                    {/* Header thông tin trong dropdown */}
+                    <div
+                      style={{
+                        position: 'sticky',
+                        top: 0,
+                        backgroundColor: '#f8fafc',
+                        padding: '5px 10px',
+                        borderBottom: '1px solid #e2e8f0',
+                        fontSize: '11px',
+                        color: '#64748b',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontWeight: 600,
+                        zIndex: 1
+                      }}
+                    >
+                      <span>
+                        {restaurantSearchQuery.trim()
+                          ? `Tìm thấy ${filteredRestaurantList.length} / ${restaurantList.length} nhà hàng`
+                          : `Tất cả nhà hàng (${restaurantList.length})`}
+                      </span>
+                      <span style={{ fontSize: '10px', color: '#94a3b8' }}>Bấm để chọn</span>
+                    </div>
+
+                    {/* Danh sách nhà hàng */}
+                    {filteredRestaurantList.length === 0 ? (
+                      <div style={{ padding: '16px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
+                        Không tìm thấy nhà hàng nào với từ khóa "{restaurantSearchQuery}"
+                      </div>
+                    ) : (
+                      filteredRestaurantList.map((r) => {
+                        const isSelected = selectedRestaurantCode === (r.rk7_code || String(r.id));
+                        return (
+                          <div
+                            key={r.id}
+                            onClick={() => {
+                              handleSelectRestaurant(r.rk7_code || String(r.id));
+                              setIsRestaurantDropdownOpen(false);
+                              setRestaurantSearchQuery('');
+                            }}
+                            style={{
+                              padding: '7px 10px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '8px',
+                              borderBottom: '1px solid #f1f5f9',
+                              backgroundColor: isSelected ? '#FEF9C3' : '#ffffff',
+                              borderLeft: isSelected ? '3px solid #F5B800' : '3px solid transparent',
+                              transition: 'background-color 0.1s'
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isSelected) e.currentTarget.style.backgroundColor = '#f8fafc';
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isSelected) e.currentTarget.style.backgroundColor = '#ffffff';
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+                              <span
+                                style={{
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  color: isSelected ? '#854D0E' : '#0369a1',
+                                  backgroundColor: isSelected ? '#FDE047' : '#e0f2fe',
+                                  padding: '1px 5px',
+                                  borderRadius: '3px',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                {r.rk7_code || r.id}
+                              </span>
+                              <span style={{ fontWeight: isSelected ? 700 : 500, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {r.name}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#64748b', whiteSpace: 'nowrap' }}>
+                              {r.ip}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Cột 2: IP Trạm & Phím Chuyển Nhanh .11, .12, .41 */}
@@ -1163,7 +1363,7 @@ export const AgentMultitaskV2Page: React.FC = () => {
               {/* Nút gợi ý thư mục phổ biến 1-chạm */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
                 <span style={{ fontSize: '11px', color: '#64748b' }}>Gợi ý nhanh:</span>
-                {['D:\\GPOS-Setup\\', 'D:\\GPOS-Setup\\app', 'D:\\Support', 'C:\\Setup', 'D:\\GPOS-Setup\\app\\img\\menu'].map((f) => (
+                {['D:\\GPOS-Setup\\', 'D:\\GPOS-Setup\\app', 'D:\\GPOS-Setup\\app\\img\\menu'].map((f) => (
                   <button
                     key={f}
                     type="button"

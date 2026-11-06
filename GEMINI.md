@@ -3161,3 +3161,9 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
 - **Build & Đóng gói**:
   * Frontend: `cmd /c "npm run build"` hoàn tất exit code 0 (`frontend/dist/` sạch sẽ kèm `web.config`).
   * Backend: Smoke test và compileall passed 100%.
+
+
+### [2026-11-06] NÂNG CẤP BỘ CHỌN NHÀ HÀNG SEARCHABLE COMBOBOX TÍCH HỢP & TINH GỌN GỢI Ý THƯ MỤC
+- Tích hợp ô input search trực tiếp vào bộ chọn nhà hàng (Searchable Select Combobox) thành 1 ô duy nhất, mở popup danh sách có lọc theo thời gian thực.
+- Đã bỏ 2 đường dẫn gợi ý `D:\Support` và `C:\Setup`.
+- Frontend build exit code 0 (`✓ built in 4.40s`), Backend smoke test 100%.
