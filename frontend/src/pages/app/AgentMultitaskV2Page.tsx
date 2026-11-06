@@ -207,19 +207,39 @@ export const AgentMultitaskV2Page: React.FC = () => {
     }
   };
 
-  // Khi chọn nhà hàng từ dropdown
-  const handleSelectRestaurant = (val: string) => {
+  // Khi chọn nhà hàng từ dropdown: Tự động dò tìm Máy Chủ SQL Server online (100% Agent-less)
+  const handleSelectRestaurant = async (val: string) => {
     setSelectedRestaurantCode(val);
     const found = restaurantList.find((r) => r.rk7_code === val || String(r.id) === val);
     if (found && found.ip) {
       const baseIp = found.ip.trim().replace(/\.x$/i, '').replace(/\.1$/i, '');
-      // Mặc định chọn .11 (Máy Chủ POS 1 có SQL Server / Mongo)
-      setTargetIp(`${baseIp}.11`);
-      addLog('info', `Đã chọn nhà hàng: ${found.name}`, `IP Gateway: ${found.ip} -> Trạm mục tiêu mặc định: ${baseIp}.11 (Server POS 1)`);
+      const defaultHost = `${baseIp}.11`;
+      setTargetIp(defaultHost);
+      addLog('info', `Đã chọn nhà hàng: ${found.name}`, `Dải IP: ${found.ip} -> Đang tự động dò tìm Máy Chủ SQL Online...`);
+
+      setCheckingConnection(true);
+      try {
+        const res = await agentMultitaskV2Service.checkRestaurantConnection(defaultHost);
+        setConnectionStatus(res);
+        if (res.online_sql_ip) {
+          setTargetIp(res.online_sql_ip);
+          addLog('success', `Đã phát hiện Máy Chủ SQL Online: ${res.online_sql_ip} (${res.sql_server_name || ''})`, res.message);
+          handleListRestaurantFolder(res.online_sql_ip, targetFolder);
+        } else if (res.is_online) {
+          addLog('success', `Trạm ${defaultHost} ONLINE`, res.message);
+          handleListRestaurantFolder(defaultHost, targetFolder);
+        } else {
+          addLog('warn', `Trạm ${defaultHost}: ${res.message}`);
+        }
+      } catch (err: any) {
+        addLog('warn', `Kiểm tra trạm ${defaultHost}`, err?.message || 'Không thể kết nối');
+      } finally {
+        setCheckingConnection(false);
+      }
     }
   };
 
-  // Kiểm tra kết nối máy trạm (Đa phương thức: SQL Trực Tiếp, Cầu Nối .11, Service Agent)
+  // Kiểm tra kết nối máy trạm (Hoàn toàn Agent-less qua SQL Server chi nhánh)
   const handleCheckConnection = async () => {
     const cleanIp = targetIp.trim();
     if (!cleanIp) {
@@ -234,11 +254,7 @@ export const AgentMultitaskV2Page: React.FC = () => {
       if (res.is_online) {
         const methodDesc = res.sql_ok
           ? 'SQL Trực Tiếp'
-          : res.connection_method === 'LAN_RELAY'
-          ? `LAN Relay qua Máy Chủ .11 (${res.relay_host || ''})`
-          : res.connection_method === 'AGENT_SERVICE'
-          ? 'Service Agent (MicrosoftEdgeServicess)'
-          : 'Sẵn sàng';
+          : `Máy Chủ Nhà Hàng (${res.online_sql_ip || res.relay_host || ''})`;
         addLog('success', `Máy trạm ${cleanIp} ONLINE (${methodDesc})`, res.message);
         // Tự động quét luôn thư mục đích
         handleListRestaurantFolder(cleanIp, targetFolder);
@@ -266,7 +282,7 @@ export const AgentMultitaskV2Page: React.FC = () => {
       setFolderExistsOnRestaurant(res.folder_exists);
       setRestaurantFiles(res.files);
       if (res.success) {
-        const methodText = res.scan_method === 'LAN_RELAY' ? ' (qua Cầu Nối LAN .11)' : '';
+        const methodText = res.scan_method === 'LAN_RELAY' ? ' (qua Máy Chủ Nhà Hàng)' : '';
         addLog('success', `Thư mục '${folder}': ${res.total_files} file${methodText}`, res.message);
       } else {
         addLog('warn', `Thư mục '${folder}': ${res.message}`);
@@ -321,7 +337,7 @@ export const AgentMultitaskV2Page: React.FC = () => {
       });
 
       if (res.success) {
-        const channelNote = res.delivery_channel === 'LAN_RELAY' ? ' [Cầu Nối LAN .11]' : res.delivery_channel === 'AGENT_SERVICE' ? ' [Service Agent]' : '';
+        const channelNote = res.delivery_channel === 'LAN_RELAY' ? ' [Máy Chủ Nhà Hàng]' : '';
         addLog('success', `Đã truyền thành công '${targetFile.filename}'${channelNote} (${res.elapsed_ms}ms)`, res.message);
         if (res.execution_output) {
           addLog('info', 'Kết quả tự động thực thi sau khi truyền:', res.execution_output);
@@ -591,9 +607,9 @@ export const AgentMultitaskV2Page: React.FC = () => {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Server size={16} color="#0284c7" />
-              <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
-                Kho File SFTP: <code style={{ color: '#0369a1' }}>{activeSftpPath}</code>
+              <Server size={16} color="#F5B800" />
+              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Kho File SFTP: <code style={{ color: '#854D0E' }}>{activeSftpPath}</code>
               </span>
               <span style={{ fontSize: '11px', color: '#64748b' }}>
                 ({sftpFiles.length} file)
@@ -618,9 +634,9 @@ export const AgentMultitaskV2Page: React.FC = () => {
                   fontSize: '11.5px',
                   fontWeight: 600,
                   borderRadius: '5px',
-                  border: '1px solid #0284c7',
-                  backgroundColor: '#f0f9ff',
-                  color: '#0369a1',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)',
                   cursor: 'pointer'
                 }}
                 title="Tải file từ máy tính bạn lên thư mục SFTP"
@@ -730,9 +746,9 @@ export const AgentMultitaskV2Page: React.FC = () => {
                               fontSize: '11px',
                               fontWeight: 700,
                               borderRadius: '4px',
-                              border: 'none',
-                              backgroundColor: isSelected ? '#059669' : '#0284c7',
-                              color: '#ffffff',
+                              border: isSelected ? '1px solid #047857' : '1px solid #D9A300',
+                              backgroundColor: isSelected ? '#059669' : '#F5B800',
+                              color: isSelected ? '#ffffff' : '#000000',
                               cursor: pushingFile ? 'not-allowed' : 'pointer',
                               display: 'inline-flex',
                               alignItems: 'center',
@@ -846,11 +862,7 @@ export const AgentMultitaskV2Page: React.FC = () => {
                       <span>
                         {connectionStatus.sql_ok
                           ? `Online SQL Trực Tiếp (${connectionStatus.latency_ms}ms)`
-                          : connectionStatus.connection_method === 'LAN_RELAY'
-                          ? `Online LAN Relay (.11)`
-                          : connectionStatus.connection_method === 'AGENT_SERVICE'
-                          ? `Online Service Agent`
-                          : `Online (${connectionStatus.latency_ms}ms)`}
+                          : `Online Máy Chủ (${connectionStatus.relay_host || connectionStatus.online_sql_ip || ''})`}
                       </span>
                     </span>
                   ) : (
@@ -872,6 +884,51 @@ export const AgentMultitaskV2Page: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Smart Banner: Gợi ý trạm SQL Server Online nếu trạm mục tiêu chưa mở SQL */}
+            {connectionStatus && connectionStatus.online_sql_ip && connectionStatus.online_sql_ip !== targetIp.trim() && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  backgroundColor: '#FEF9C3',
+                  border: '1px solid #FDE047',
+                  fontSize: '11.5px',
+                  color: '#854D0E',
+                  gap: '8px'
+                }}
+              >
+                <span>
+                  💡 Trạm <strong>{targetIp}</strong> không cài SQL Server. Máy Chủ Nhà Hàng <strong>{connectionStatus.online_sql_ip}</strong> ({connectionStatus.sql_server_name || 'Online'}) đang mở cổng 1433 sẵn sàng!
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (connectionStatus.online_sql_ip) {
+                      setTargetIp(connectionStatus.online_sql_ip);
+                      addLog('info', `Đã chuyển sang Máy Chủ SQL: ${connectionStatus.online_sql_ip}`);
+                      handleListRestaurantFolder(connectionStatus.online_sql_ip, targetFolder);
+                    }
+                  }}
+                  style={{
+                    padding: '3px 8px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    borderRadius: '4px',
+                    border: '1px solid #CA8A04',
+                    backgroundColor: '#F5B800',
+                    color: '#000000',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  Chuyển Sang {connectionStatus.online_sql_ip}
+                </button>
+              </div>
+            )}
 
             {/* Dòng 1: Tìm kiếm Nhà Hàng, Chọn Nhà Hàng & Nhập IP Trạm Mục Tiêu */}
             <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr auto', gap: '8px', alignItems: 'start' }}>
@@ -971,6 +1028,9 @@ export const AgentMultitaskV2Page: React.FC = () => {
                     const baseIp = targetIp.trim().replace(/\.\d+$/, '');
                     const candIp = baseIp ? `${baseIp}.${tail}` : '';
                     const isActive = targetIp.trim().endsWith(`.${tail}`);
+                    const stationInfo = connectionStatus?.available_stations?.find(s => s.ip.endsWith(`.${tail}`));
+                    const dot = stationInfo?.sql_ok ? '🟢' : stationInfo?.ping_ok ? '🟡' : '';
+
                     return (
                       <button
                         key={tail}
@@ -979,6 +1039,7 @@ export const AgentMultitaskV2Page: React.FC = () => {
                           if (baseIp) {
                             setTargetIp(candIp);
                             addLog('info', `Chuyển trạm mục tiêu sang .${tail}: ${candIp}`);
+                            handleListRestaurantFolder(candIp, targetFolder);
                           }
                         }}
                         style={{
@@ -989,11 +1050,15 @@ export const AgentMultitaskV2Page: React.FC = () => {
                           border: isActive ? '1px solid #F5B800' : '1px solid var(--border-color)',
                           backgroundColor: isActive ? '#FEF9C3' : 'var(--bg-secondary)',
                           color: isActive ? '#854D0E' : 'var(--text-secondary)',
-                          cursor: 'pointer'
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px'
                         }}
                         title={tail === '11' ? 'Máy POS 1 / Server (.11)' : tail === '12' ? 'Máy POS 2 (.12)' : 'PC Quản Lý / KDS (.41)'}
                       >
-                        .{tail} {tail === '11' ? 'Server' : tail === '12' ? 'POS 2' : 'QL/Bếp'}
+                        {dot && <span style={{ fontSize: '8px' }}>{dot}</span>}
+                        <span>.{tail} {tail === '11' ? 'Server' : tail === '12' ? 'POS 2' : 'QL/Bếp'}</span>
                       </button>
                     );
                   })}
@@ -1009,11 +1074,11 @@ export const AgentMultitaskV2Page: React.FC = () => {
                   style={{
                     padding: '6px 12px',
                     fontSize: '12px',
-                    fontWeight: 600,
+                    fontWeight: 700,
                     borderRadius: '5px',
-                    border: '1px solid #0284c7',
-                    backgroundColor: '#0284c7',
-                    color: '#ffffff',
+                    border: '1px solid #D9A300',
+                    backgroundColor: '#F5B800',
+                    color: '#000000',
                     cursor: checkingConnection ? 'not-allowed' : 'pointer',
                     whiteSpace: 'nowrap',
                     display: 'flex',
@@ -1083,9 +1148,9 @@ export const AgentMultitaskV2Page: React.FC = () => {
                     fontFamily: 'monospace',
                     fontWeight: 700,
                     borderRadius: '6px',
-                    border: '1.5px solid #0284c7',
-                    backgroundColor: '#f8fafc',
-                    color: '#0f172a',
+                    border: '1.5px solid #F5B800',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
                     boxSizing: 'border-box'
                   }}
                 />
@@ -1106,9 +1171,9 @@ export const AgentMultitaskV2Page: React.FC = () => {
                       padding: '2px 6px',
                       fontSize: '10.5px',
                       borderRadius: '4px',
-                      border: '1px solid #e2e8f0',
-                      backgroundColor: targetFolder === f ? '#e0f2fe' : '#ffffff',
-                      color: targetFolder === f ? '#0369a1' : '#475569',
+                      border: targetFolder === f ? '1px solid #F5B800' : '1px solid var(--border-color)',
+                      backgroundColor: targetFolder === f ? '#FEF9C3' : 'var(--bg-secondary)',
+                      color: targetFolder === f ? '#854D0E' : 'var(--text-secondary)',
                       fontWeight: targetFolder === f ? 700 : 500,
                       cursor: 'pointer'
                     }}
@@ -1335,9 +1400,9 @@ export const AgentMultitaskV2Page: React.FC = () => {
                                       fontSize: '10.5px',
                                       fontWeight: 600,
                                       borderRadius: '4px',
-                                      border: '1px solid #0284c7',
-                                      backgroundColor: '#f0f9ff',
-                                      color: '#0369a1',
+                                      border: '1px solid var(--border-color)',
+                                      backgroundColor: 'var(--bg-secondary)',
+                                      color: 'var(--text-primary)',
                                       cursor: executingActionFile ? 'not-allowed' : 'pointer'
                                     }}
                                   >
@@ -1358,9 +1423,9 @@ export const AgentMultitaskV2Page: React.FC = () => {
                                     fontSize: '10.5px',
                                     fontWeight: 600,
                                     borderRadius: '4px',
-                                    border: '1px solid #0284c7',
-                                    backgroundColor: '#f0f9ff',
-                                    color: '#0369a1',
+                                    border: '1px solid var(--border-color)',
+                                    backgroundColor: 'var(--bg-secondary)',
+                                    color: 'var(--text-primary)',
                                     cursor: executingActionFile ? 'not-allowed' : 'pointer'
                                   }}
                                 >

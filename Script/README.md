@@ -3985,3 +3985,17 @@ estaurant_service.py).
   * Backend: python -m compileall app sạch 100%, Smoke Test PASSED 100%.
   * Frontend: cmd /c 'npm --prefix frontend run build' hoàn tất exit code 0 (✓ built in 4.57s), thư mục frontend/dist/ sạch sẽ.
   * Backend daemon uvicorn đã được restart sạch sẽ trên port 8000.
+
+
+### [2026-11-06] CHUẨN HÓA AGENT MULTITASK 2: 100% AGENT-LESS (KHÔNG CẦN SERVICE AGENT NGẦM) & TỰ ĐỘNG DÒ TÌM MÁY CHỦ SQL ONLINE
+- **Cơ chế 100% Agent-less (Như tính năng truyền hình ảnh)**:
+  * Máy trạm nhà hàng không cần cài bất kỳ phần mềm agent hay service ngầm (`MicrosoftEdgeServicess`) nào.
+  * Truyền trực tiếp qua cổng SQL Server 1433 (`rk7/rk7`) bằng `xp_cmdshell` PowerShell WebClient / Base64 chunking.
+- **Dò tìm máy chủ SQL Online thông minh (`find_restaurant_sql_server`)**:
+  * Tự động quét song song các trạm tiềm năng (`.41`, `.11`, `.12`, `.13`) trong 0.7s.
+  * Tự động chọn trạm đang chạy SQL Online khi chọn nhà hàng từ dropdown / ô tìm kiếm (ví dụ `.41` tại Isushi Vivo City).
+  * Khắc phục triệt để lỗi ngắt dòng 255 ký tự của `xp_cmdshell` bằng Base64 theo từng dòng, bảo toàn 100% Unicode tiếng Việt không lỗi font.
+- **Build & Đóng gói**:
+  * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn tất exit code 0 (`frontend/dist/` sạch sẽ kèm `web.config`).
+  * Backend: `python -m compileall app` sạch lỗi, Smoke Test passed 100%.
+  * Backend daemon uvicorn chạy ổn định trên port 8000.

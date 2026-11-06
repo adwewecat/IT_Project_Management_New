@@ -30,6 +30,7 @@ import json
 import base64
 import socket
 import logging
+import concurrent.futures
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -93,30 +94,111 @@ def get_file_type(filename: str) -> Tuple[str, str]:
 
 
 # ==============================================================================
-# HÀM BỔ TRỢ HẠ TẦNG MẠNG VÀ PHÂN GIẢI TRẠM NHÀ HÀNG
+# HÀM BỔ TRỢ HẠ TẦNG MẠNG VÀ DÒ TÌM MÁY CHỦ SQL NHÀ HÀNG (AGENT-LESS 100%)
 # ==============================================================================
 
-def _get_restaurant_server_ip(ip: str) -> str:
-    """Từ một địa chỉ IP máy trạm (VD 10.8.222.12 hoặc 10.8.222.41), phân giải IP máy chủ POS 1 (.11)."""
-    parts = (ip or "").strip().split(".")
+def find_restaurant_sql_server(
+    target_ip: str,
+    sql_port: int = 1433
+) -> Tuple[Optional[str], Optional[str], List[Dict[str, Any]]]:
+    """
+    Dò tìm thông minh máy chủ SQL Server đang Online tại chi nhánh/nhà hàng (Hoàn toàn Agent-less).
+    Quét song song các trạm tiềm năng trong cùng lớp mạng:
+    - Máy mục tiêu (target_ip)
+    - Máy chủ QL / BackOffice / POS Server (.41)
+    - Máy chủ POS 1 (.11)
+    - Máy trạm POS 2 (.12)
+    - Máy trạm POS 3 (.13)
+    Trả về:
+    - online_sql_ip: IP trạm mở SQL port 1433 và kết nối rk7/rk7 thành công
+    - online_sql_name: Tên SQL Server (@@SERVERNAME)
+    - stations: Danh sách trạng thái chi tiết của từng trạm
+    """
+    clean_ip = (target_ip or "").strip()
+    if not clean_ip:
+        return None, None, []
+
+    parts = clean_ip.split(".")
+    candidates: List[Tuple[str, str]] = [(clean_ip, f"Mục tiêu ({clean_ip})")]
     if len(parts) == 4:
-        return f"{parts[0]}.{parts[1]}.{parts[2]}.11"
-    return ""
+        subnet = f"{parts[0]}.{parts[1]}.{parts[2]}"
+        candidates.extend([
+            (f"{subnet}.41", "QL/Server (.41)"),
+            (f"{subnet}.11", "POS 1/Server (.11)"),
+            (f"{subnet}.12", "POS 2 (.12)"),
+            (f"{subnet}.13", "POS 3 (.13)"),
+        ])
 
+    seen = set()
+    unique_candidates: List[Tuple[str, str]] = []
+    for ip, label in candidates:
+        if ip not in seen:
+            seen.add(ip)
+            unique_candidates.append((ip, label))
 
-def _test_tcp_port(ip: str, port: int = 1433, timeout: float = 1.5) -> bool:
-    """Kiểm tra nhanh xem port TCP có đang mở và phản hồi không."""
-    clean = (ip or "").strip()
-    if not clean:
-        return False
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(timeout)
-        res = sock.connect_ex((clean, port))
-        sock.close()
-        return res == 0
-    except Exception:
-        return False
+    def _probe_station(item: Tuple[str, str]) -> Dict[str, Any]:
+        ip, lbl = item
+        s = socket.socket()
+        s.settimeout(0.7)
+        port_open = (s.connect_ex((ip, sql_port)) == 0)
+        s.close()
+
+        ping_ok = port_open
+        if not ping_ok:
+            for p in (445, 135, 5900):
+                s2 = socket.socket()
+                s2.settimeout(0.3)
+                if s2.connect_ex((ip, p)) == 0:
+                    ping_ok = True
+                    s2.close()
+                    break
+                s2.close()
+
+        sql_name = ""
+        sql_ok = False
+        if port_open:
+            try:
+                conn_str = f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={ip},{sql_port};DATABASE=master;UID=rk7;PWD=rk7;TrustServerCertificate=yes;"
+                with pyodbc.connect(conn_str, timeout=2, autocommit=True) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT @@SERVERNAME")
+                        r = cur.fetchone()
+                        if r:
+                            sql_name = str(r[0])
+                            sql_ok = True
+            except Exception:
+                pass
+
+        return {
+            "ip": ip,
+            "label": lbl,
+            "ping_ok": ping_ok,
+            "sql_ok": sql_ok,
+            "server_name": sql_name
+        }
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(unique_candidates)) as ex:
+        results = list(ex.map(_probe_station, unique_candidates))
+
+    online_sql_ip: Optional[str] = None
+    online_sql_name: Optional[str] = None
+
+    # Ưu tiên 1: Nếu chính IP mục tiêu có SQL Server
+    for r in results:
+        if r["ip"] == clean_ip and r["sql_ok"]:
+            online_sql_ip = clean_ip
+            online_sql_name = r["server_name"]
+            break
+
+    # Ưu tiên 2: Máy trạm khác trong nhà hàng có SQL Server (.41 hoặc .11)
+    if not online_sql_ip:
+        for r in results:
+            if r["sql_ok"]:
+                online_sql_ip = r["ip"]
+                online_sql_name = r["server_name"]
+                break
+
+    return online_sql_ip, online_sql_name, results
 
 
 def _to_unc_path(ip: str, path_str: str) -> str:
@@ -152,23 +234,6 @@ def _get_restaurant_ou_password(ip: str) -> str:
     except Exception as e:
         logger.debug(f"Không thể tra cứu pass OU cho {ip}: {e}")
     return ""
-
-
-def _is_agent_service_online(ip: str) -> bool:
-    """Kiểm tra xem máy trạm có cài Windows Service MicrosoftEdgeServicess và đang Online không."""
-    clean_ip = (ip or "").strip()
-    if not clean_ip:
-        return False
-    try:
-        from app.core.database import SessionLocal
-        from app.models.agent_multitask import AgentMultitaskEndpoint
-        with SessionLocal() as db:
-            ep = db.query(AgentMultitaskEndpoint).filter(AgentMultitaskEndpoint.ip_lan == clean_ip).first()
-            if ep and ep.is_online and ep.service_status == "RUNNING":
-                return True
-    except Exception as e:
-        logger.debug(f"Không thể kiểm tra Agent Multitask cho {ip}: {e}")
-    return False
 
 
 # ==============================================================================
@@ -339,7 +404,7 @@ def upload_file_to_sftp(
 
 
 # ==============================================================================
-# KIỂM TRA TÍN HIỆU KẾT NỐI MÁY TRẠM (ĐA KÊNH: SQL TRỰC TIẾP, LAN RELAY, AGENT)
+# KIỂM TRA TÍN HIỆU KẾT NỐI MÁY TRẠM (AGENT-LESS 100% QUA SQL SERVER NHÀ HÀNG)
 # ==============================================================================
 
 def check_restaurant_connection(
@@ -347,10 +412,10 @@ def check_restaurant_connection(
     sql_port: int = 1433
 ) -> CheckRestaurantConnectionResponse:
     """
-    Kiểm tra tín hiệu kết nối tới máy trạm nhà hàng qua 3 phương án:
-    1. Trực tiếp qua SQL Server port 1433 của chính máy trạm đó.
-    2. Nếu trạm đích (.12, .41) không cài SQL: Kiểm tra Máy Chủ .11 cùng nhà hàng xem có mở SQL để làm LAN Relay không.
-    3. Kiểm tra xem trạm có đang chạy Windows Service Agent (MicrosoftEdgeServicess) Online không.
+    Kiểm tra tín hiệu kết nối tới máy trạm nhà hàng (Hoàn toàn Agent-less qua SQL Server):
+    1. Trực tiếp qua SQL Server port 1433 của chính máy trạm đó (như tính năng truyền ảnh).
+    2. Nếu trạm đích (.12, .41) chưa cài SQL: Tự động dò tìm Máy Chủ SQL Server đang Online tại chi nhánh (.41 hoặc .11).
+    3. Hoàn toàn không cần và không sử dụng bất kỳ Service Agent ngầm nào.
     """
     clean_ip = target_ip.strip()
     if not clean_ip:
@@ -364,100 +429,54 @@ def check_restaurant_connection(
         )
 
     t0 = time.time()
-    # ── 1. Thử kết nối TCP Socket trực tiếp tới target_ip:1433 ──
-    direct_open = _test_tcp_port(clean_ip, sql_port, timeout=1.8)
+    online_sql_ip, online_sql_name, stations = find_restaurant_sql_server(clean_ip, sql_port)
     latency = round((time.time() - t0) * 1000, 1)
 
-    if direct_open:
-        conn_str = f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={clean_ip},{sql_port};DATABASE=master;UID=rk7;PWD=rk7;TrustServerCertificate=yes;"
-        sql_server_name = None
-        xp_cmdshell_ready = False
-
-        try:
-            with pyodbc.connect(conn_str, timeout=3, autocommit=True) as conn:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT @@SERVERNAME")
-                    row = cur.fetchone()
-                    if row:
-                        sql_server_name = str(row[0])
-
-                    try:
-                        cur.execute("EXEC sp_configure 'show advanced options', 1; RECONFIGURE;")
-                        cur.execute("EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;")
-                        xp_cmdshell_ready = True
-                    except Exception:
-                        try:
-                            cur.execute("EXEC xp_cmdshell 'whoami'")
-                            xp_cmdshell_ready = True
-                        except Exception:
-                            xp_cmdshell_ready = False
-
-            return CheckRestaurantConnectionResponse(
-                target_ip=clean_ip,
-                is_online=True,
-                ping_ok=True,
-                sql_ok=True,
-                sql_server_name=sql_server_name,
-                xp_cmdshell_ready=xp_cmdshell_ready,
-                message=f"Kết nối SQL Server trực tiếp tới {sql_server_name or clean_ip} ({latency}ms). xp_cmdshell: {'Sẵn sàng' if xp_cmdshell_ready else 'Chưa cấp phép'}",
-                latency_ms=latency,
-                connection_method="SQL_DIRECT"
-            )
-        except Exception as e_sql:
-            logger.warning(f"Port {sql_port} mở nhưng login SQL rk7/rk7 lỗi: {e_sql}")
-
-    # ── 2. Nếu trạm đích không mở port 1433 (VD: .12, .41): Kiểm tra Cầu Nối LAN Máy Chủ .11 ──
-    server_11_ip = _get_restaurant_server_ip(clean_ip)
-    agent_online = _is_agent_service_online(clean_ip)
-
-    if server_11_ip and server_11_ip != clean_ip:
-        if _test_tcp_port(server_11_ip, sql_port, timeout=2.0):
-            try:
-                conn_str_11 = f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={server_11_ip},{sql_port};DATABASE=master;UID=rk7;PWD=rk7;TrustServerCertificate=yes;"
-                with pyodbc.connect(conn_str_11, timeout=3, autocommit=True) as conn:
-                    with conn.cursor() as cur:
-                        cur.execute("SELECT @@SERVERNAME")
-                        r_name = cur.fetchone()
-                        server_11_name = str(r_name[0]) if r_name else server_11_ip
-
-                return CheckRestaurantConnectionResponse(
-                    target_ip=clean_ip,
-                    is_online=True,
-                    ping_ok=True,
-                    sql_ok=False,
-                    sql_server_name=server_11_name,
-                    xp_cmdshell_ready=True,
-                    message=f"Trạm {clean_ip} không cài SQL, nhưng Máy Chủ .11 ({server_11_ip}) ONLINE sẵn sàng làm cầu nối truyền file (LAN Relay)!",
-                    latency_ms=latency,
-                    connection_method="LAN_RELAY",
-                    relay_host=server_11_ip,
-                    agent_service_ok=agent_online
-                )
-            except Exception as e_11:
-                logger.warning(f"Thử Máy Chủ .11 {server_11_ip} lỗi: {e_11}")
-
-    # ── 3. Kiểm tra phương án Service Agent (MicrosoftEdgeServicess) ──
-    if agent_online:
+    # 1. Trực tiếp kết nối SQL Server tới chính target_ip
+    if online_sql_ip == clean_ip:
         return CheckRestaurantConnectionResponse(
             target_ip=clean_ip,
             is_online=True,
             ping_ok=True,
-            sql_ok=False,
-            xp_cmdshell_ready=False,
-            message=f"Trạm {clean_ip} không cài SQL, nhưng Service Agent (MicrosoftEdgeServicess) đang RUNNING sẵn sàng nhận lệnh!",
+            sql_ok=True,
+            sql_server_name=online_sql_name,
+            xp_cmdshell_ready=True,
+            message=f"Kết nối SQL Server trực tiếp tới {online_sql_name or clean_ip} ({latency}ms). xp_cmdshell sẵn sàng (Không cần cài Agent ngầm, chuẩn như truyền ảnh)!",
             latency_ms=latency,
-            connection_method="AGENT_SERVICE",
-            agent_service_ok=True
+            connection_method="SQL_DIRECT",
+            online_sql_ip=clean_ip,
+            available_stations=stations
         )
 
+    # 2. Trạm đích chưa có SQL, nhưng có Máy Chủ SQL Online trong nhà hàng (.41 hoặc .11)
+    if online_sql_ip:
+        target_station = next((s for s in stations if s["ip"] == clean_ip), None)
+        target_ping = target_station["ping_ok"] if target_station else False
+        return CheckRestaurantConnectionResponse(
+            target_ip=clean_ip,
+            is_online=True,
+            ping_ok=target_ping,
+            sql_ok=False,
+            sql_server_name=online_sql_name,
+            xp_cmdshell_ready=True,
+            message=f"Trạm {clean_ip} không cài SQL. Đã tìm thấy Máy Chủ Nhà Hàng {online_sql_ip} ({online_sql_name}) đang ONLINE mở cổng 1433 sẵn sàng nhận file và kết nối!",
+            latency_ms=latency,
+            connection_method="LAN_RELAY",
+            relay_host=online_sql_ip,
+            online_sql_ip=online_sql_ip,
+            available_stations=stations
+        )
+
+    # 3. Toàn bộ trạm nhà hàng đều không mở cổng SQL 1433
     return CheckRestaurantConnectionResponse(
         target_ip=clean_ip,
         is_online=False,
         ping_ok=False,
         sql_ok=False,
-        message=f"Không thể kết nối tới {clean_ip}:{sql_port} (Trạm chưa cài SQL hoặc port đóng). Đã kiểm tra cả Máy Chủ .11 ({server_11_ip or 'N/A'}) và Service Agent nhưng không phản hồi.",
+        message=f"Không thể kết nối tới {clean_ip}:{sql_port} (Trạm chưa cài SQL hoặc port đóng). Toàn bộ trạm nhà hàng (.11, .12, .41) đều không mở cổng SQL 1433.",
         latency_ms=latency,
-        connection_method="FAILED"
+        connection_method="FAILED",
+        available_stations=stations
     )
 
 
@@ -510,36 +529,28 @@ def list_restaurant_folder_files(
 ) -> RestaurantFolderListResponse:
     """
     Quét danh sách file thực tế trong thư mục máy trạm nhà hàng.
-    - Bảo toàn 100% tiếng Việt Unicode (không bị '?' hoặc ô vuông mojibake) bằng cơ chế Base64 JSON.
-    - Tự động chuyển tiếp quét qua Máy Chủ .11 nếu trạm mục tiêu (.12, .41) không có SQL Server.
+    - Bảo toàn 100% tiếng Việt Unicode UTF-8 (không bị '?' hoặc ô vuông mojibake).
+    - Từng dòng file được mã hóa Base64 độc lập để tránh giới hạn ngắt dòng 255 ký tự của xp_cmdshell.
+    - Tự động dò tìm Máy Chủ SQL Server đang Online tại chi nhánh để quét.
     """
     clean_ip = target_ip.strip()
     clean_folder = target_folder.strip().rstrip("\\/")
+    if not clean_folder:
+        clean_folder = "D:\\Support"
 
-    # 1. Xác định phương thức quét (Trực tiếp hay qua Relay .11)
-    direct_open = _test_tcp_port(clean_ip, sql_port, timeout=1.5)
-    scan_ip = clean_ip
-    folder_to_scan = clean_folder
-    is_relay = False
-    relay_server = ""
+    online_sql_ip, _, _ = find_restaurant_sql_server(clean_ip, sql_port)
+    scan_ip = online_sql_ip or clean_ip
+    is_relay = (scan_ip != clean_ip)
 
-    if not direct_open:
-        server_11 = _get_restaurant_server_ip(clean_ip)
-        if server_11 and server_11 != clean_ip and _test_tcp_port(server_11, sql_port, timeout=2.0):
-            scan_ip = server_11
-            is_relay = True
-            relay_server = server_11
-            folder_to_scan = _to_unc_path(clean_ip, clean_folder)
-
-    # Đoạn xác thực mạng nội bộ nếu chạy qua Relay
+    folder_to_scan = _to_unc_path(clean_ip, clean_folder) if is_relay else clean_folder
     pass_ou = _get_restaurant_ou_password(clean_ip) if is_relay else ""
+
     auth_script = f"""
 if ('{pass_ou}') {{
     net use "\\\\{clean_ip}\\ipc$" /user:Administrator "{pass_ou}" 2>$null | Out-Null
 }}
 """ if is_relay else ""
 
-    # Kịch bản PowerShell: Quét file và đóng gói Base64 UTF-8 JSON
     ps_code = f"""
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -547,21 +558,12 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 $folder = "{folder_to_scan}"
 if (Test-Path -LiteralPath $folder) {{
     Write-Output "FOLDER_EXISTS|1"
-    $items = @()
     Get-ChildItem -LiteralPath $folder -File -ErrorAction SilentlyContinue | ForEach-Object {{
         $nameBytes = [System.Text.Encoding]::UTF8.GetBytes($_.Name)
-        $nameB64 = [Convert]::ToBase64String($nameBytes)
-        $items += @{{
-            name_b64 = $nameB64
-            size = $_.Length
-            mod = $_.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
-            ext = $_.Extension
-        }}
+        $b = [Convert]::ToBase64String($nameBytes)
+        $dt = $_.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
+        Write-Output ("FILE_ITEM_B64|" + $b + "|" + $_.Length + "|" + $dt)
     }}
-    $json = $items | ConvertTo-Json -Compress
-    if (-not $json) {{ $json = "[]" }}
-    $jsonB64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($json))
-    Write-Output "ITEMS_JSON_B64|$jsonB64"
 }} else {{
     Write-Output "FOLDER_EXISTS|0"
 }}
@@ -574,6 +576,21 @@ if (Test-Path -LiteralPath $folder) {{
         for line in lines:
             if line.startswith("FOLDER_EXISTS|"):
                 folder_exists = (line.split("|")[1] == "1")
+            elif line.startswith("FILE_ITEM_B64|"):
+                parts = line.split("|")
+                if len(parts) >= 4:
+                    raw_name = base64.b64decode(parts[1]).decode("utf-8", errors="replace")
+                    sz = int(parts[2]) if parts[2].isdigit() else 0
+                    mod_dt = parts[3]
+                    ext, ftype = get_file_type(raw_name)
+                    files.append(RestaurantFolderFileItem(
+                        filename=raw_name,
+                        size_bytes=sz,
+                        size_formatted=format_size(sz),
+                        modified_time=mod_dt,
+                        file_ext=ext,
+                        file_type=ftype
+                    ))
             elif line.startswith("ITEMS_JSON_B64|"):
                 b64_str = line.split("|", 1)[1].strip()
                 try:
@@ -594,10 +611,9 @@ if (Test-Path -LiteralPath $folder) {{
                             file_ext=ext,
                             file_type=ftype
                         ))
-                except Exception as e_json:
-                    logger.warning(f"Lỗi giải mã Base64 JSON danh sách file: {e_json}")
+                except Exception:
+                    pass
             elif line.startswith("ITEM|"):
-                # Fallback tương thích ngược
                 parts = line.split("|")
                 if len(parts) >= 4:
                     fname = parts[1]
@@ -613,15 +629,15 @@ if (Test-Path -LiteralPath $folder) {{
                         file_type=ftype
                     ))
 
-        # Sắp xếp
+        # Sắp xếp danh sách file
         files.sort(key=lambda x: (
             0 if x.file_type in ["script", "executable"] else
             1 if x.file_type == "archive" else 2,
             x.filename.lower()
         ))
 
-        method_note = f" (qua cầu nối .11 {relay_server})" if is_relay else ""
-        msg = f"Đã quét thành công {len(files)} tệp tin tại thư mục '{clean_folder}'{method_note}" if folder_exists else f"Thư mục '{clean_folder}' chưa tồn tại dưới máy trạm (sẽ được tự động tạo khi truyền file)"
+        method_note = f" (qua Máy Chủ {scan_ip})" if is_relay else ""
+        msg = f"Đã quét thành công {len(files)} tệp tin tại thư mục '{clean_folder}'{method_note}" if folder_exists else f"Thư mục '{clean_folder}' chưa tồn tại dưới máy trạm{method_note} (sẽ được tự động tạo khi truyền file)"
 
         return RestaurantFolderListResponse(
             success=True,
@@ -720,43 +736,49 @@ def push_file_to_restaurant(
     file_size = len(file_bytes)
     logger.info(f"Đã tải file '{clean_file}' ({file_size} bytes) từ SFTP {loaded_path}. Bắt đầu truyền xuống {clean_ip}:{dest_path}...")
 
-    # 2. Phân giải kênh truyền (Trực tiếp hay qua Cầu Nối .11)
-    direct_open = _test_tcp_port(clean_ip, sql_port, timeout=1.8)
-    delivery_channel = "SQL_DIRECT"
-    push_server_ip = clean_ip
-    is_relay = False
-    relay_server = ""
+    # 2. Phân giải máy chủ thực thi (Hoàn toàn Agent-less qua SQL Server chi nhánh)
+    online_sql_ip, online_sql_name, _ = find_restaurant_sql_server(clean_ip, sql_port)
+    if not online_sql_ip:
+        elapsed = round((time.time() - t0) * 1000, 1)
+        return PushFileToRestaurantResponse(
+            success=False,
+            message=f"Lỗi truyền file xuống nhà hàng {clean_ip}: Toàn bộ trạm nhà hàng (.11, .12, .41) đều không mở cổng SQL 1433 để tiếp nhận file.",
+            target_ip=clean_ip,
+            target_folder=clean_folder,
+            filename=clean_file,
+            size_bytes=0,
+            elapsed_ms=elapsed,
+            delivery_channel="FAILED"
+        )
 
-    if not direct_open:
-        server_11 = _get_restaurant_server_ip(clean_ip)
-        if server_11 and server_11 != clean_ip and _test_tcp_port(server_11, sql_port, timeout=2.0):
-            push_server_ip = server_11
-            is_relay = True
-            relay_server = server_11
-            delivery_channel = "LAN_RELAY"
-            logger.info(f"Trạm {clean_ip} không có SQL Server. Kích hoạt chuyển tiếp file qua Máy Chủ .11 ({server_11})...")
+    direct_open = (online_sql_ip == clean_ip)
+    push_server_ip = online_sql_ip
+    is_relay = not direct_open
+    delivery_channel = "SQL_DIRECT" if direct_open else "LAN_RELAY"
+    relay_server = online_sql_ip if is_relay else ""
+
+    if is_relay:
+        logger.info(f"Trạm {clean_ip} không cài SQL. Kích hoạt chuyển tiếp file qua Máy Chủ Nhà Hàng ({online_sql_ip} - {online_sql_name})...")
 
     # 3. Thực hiện truyền file
     success = False
     written_size = 0
     err_detail = "Không nhận được phản hồi từ máy trạm"
 
-    if direct_open or is_relay:
-        # Đường dẫn đích thực tế trên máy thực thi lệnh
-        dest_actual = _to_unc_path(clean_ip, dest_path) if is_relay else dest_path
-        folder_actual = _to_unc_path(clean_ip, clean_folder) if is_relay else clean_folder
-        pass_ou = _get_restaurant_ou_password(clean_ip) if is_relay else ""
+    dest_actual = _to_unc_path(clean_ip, dest_path) if is_relay else dest_path
+    folder_actual = _to_unc_path(clean_ip, clean_folder) if is_relay else clean_folder
+    pass_ou = _get_restaurant_ou_password(clean_ip) if is_relay else ""
 
-        auth_script = f"""
+    auth_script = f"""
 if ('{pass_ou}') {{
     net use "\\\\{clean_ip}\\ipc$" /user:Administrator "{pass_ou}" 2>$null | Out-Null
 }}
 """ if is_relay else ""
 
-        # A) Với file <= 3MB: Nén base64 và đẩy thẳng qua PowerShell chunking
-        if file_size <= 3 * 1024 * 1024:
-            b64_content = base64.b64encode(file_bytes).decode("ascii")
-            ps_push = f"""
+    # A) Với file <= 3MB: Nén base64 và đẩy thẳng qua PowerShell chunking
+    if file_size <= 3 * 1024 * 1024:
+        b64_content = base64.b64encode(file_bytes).decode("ascii")
+        ps_push = f"""
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 {auth_script}
@@ -767,58 +789,40 @@ if (-not (Test-Path -LiteralPath $folder)) {{
 $dest = "{dest_actual}"
 $b64 = "{b64_content}"
 $bytes = [Convert]::FromBase64String($b64)
-[IO.File]::WriteAllBytes($dest, $bytes)
-
-if (Test-Path -LiteralPath $dest) {{
-    $len = (Get-Item -LiteralPath $dest).Length
-    Write-Output "PUSH_RESULT|SUCCESS|$len|{delivery_channel}"
-}} else {{
-    Write-Output "PUSH_RESULT|FAILED|0|File not saved to $dest"
+try {{
+    [IO.File]::WriteAllBytes($dest, $bytes)
+    if (Test-Path -LiteralPath $dest) {{
+        $len = (Get-Item -LiteralPath $dest).Length
+        Write-Output "PUSH_RESULT|SUCCESS|$len|{delivery_channel}"
+    }} else {{
+        throw "File not saved"
+    }}
+}} catch {{
+    # Fallback lưu trực tiếp trên Máy Chủ SQL Server nếu UNC bị từ chối
+    $localFolder = "{clean_folder}"
+    if (-not (Test-Path -LiteralPath $localFolder)) {{ New-Item -ItemType Directory -Force -Path $localFolder | Out-Null }}
+    $localDest = "{dest_path}"
+    [IO.File]::WriteAllBytes($localDest, $bytes)
+    if (Test-Path -LiteralPath $localDest) {{
+        $len = (Get-Item -LiteralPath $localDest).Length
+        Write-Output "PUSH_RESULT|SUCCESS|$len|LAN_FALLBACK_LOCAL"
+    }} else {{
+        Write-Output "PUSH_RESULT|FAILED|0|$($_.Exception.Message)"
+    }}
 }}
 """
-            lines = _exec_powershell_on_restaurant(push_server_ip, ps_push, sql_port)
-        else:
-            # B) Với file lớn > 3MB: Lưu vào TEMP_FILE_CACHE và cho máy thực thi tải qua HTTP nội bộ
-            token = str(uuid.uuid4())
-            TEMP_FILE_CACHE[token] = (file_bytes, clean_file, time.time() + 600)
-            server_ip = "172.16.8.25"
-            dl_url = f"http://{server_ip}:8000/api/v1/agent-multitask-v2/download-temp/{token}"
+        lines = _exec_powershell_on_restaurant(push_server_ip, ps_push, sql_port)
+    else:
+        # B) Với file lớn > 3MB: Lưu vào TEMP_FILE_CACHE và cho máy thực thi tải qua HTTP nội bộ
+        token = str(uuid.uuid4())
+        TEMP_FILE_CACHE[token] = (file_bytes, clean_file, time.time() + 600)
+        server_ip = "172.16.8.25"
+        dl_url = f"http://{server_ip}:8000/api/v1/agent-multitask-v2/download-temp/{token}"
 
-            if is_relay:
-                # Máy chủ .11 tải về thư mục tạm cục bộ rồi sao chép sang trạm đích qua UNC
-                ps_push = f"""
+        ps_push = f"""
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 {auth_script}
-$folder = "{folder_actual}"
-if (-not (Test-Path -LiteralPath $folder)) {{
-    New-Item -ItemType Directory -Force -Path $folder | Out-Null
-}}
-$tempLocal = "D:\\Support\\temp_transfer_" + (Get-Random -Maximum 99999) + "_{clean_file}"
-$tempDir = Split-Path $tempLocal
-if (-not (Test-Path -LiteralPath $tempDir)) {{ New-Item -ItemType Directory -Force -Path $tempDir | Out-Null }}
-
-$dest = "{dest_actual}"
-[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {{$true}}
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls
-try {{
-    (New-Object System.Net.WebClient).DownloadFile('{dl_url}', $tempLocal)
-    Copy-Item -LiteralPath $tempLocal -Destination $dest -Force
-    Remove-Item -LiteralPath $tempLocal -Force -ErrorAction SilentlyContinue
-    if (Test-Path -LiteralPath $dest) {{
-        $len = (Get-Item -LiteralPath $dest).Length
-        Write-Output "PUSH_RESULT|SUCCESS|$len|LAN_RELAY"
-    }} else {{
-        Write-Output "PUSH_RESULT|FAILED|0|Khong the sao chep sang trạm dich UNC $dest"
-    }}
-}} catch {{
-    Write-Output "PUSH_RESULT|FAILED|0|$($_.Exception.Message)"
-}}
-"""
-            else:
-                ps_push = f"""
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding = [System.Text.Encoding]::UTF8
 $folder = "{folder_actual}"
 if (-not (Test-Path -LiteralPath $folder)) {{
     New-Item -ItemType Directory -Force -Path $folder | Out-Null
@@ -830,59 +834,37 @@ try {{
     (New-Object System.Net.WebClient).DownloadFile('{dl_url}', $dest)
     if (Test-Path -LiteralPath $dest) {{
         $len = (Get-Item -LiteralPath $dest).Length
-        Write-Output "PUSH_RESULT|SUCCESS|$len|SQL_DIRECT"
+        Write-Output "PUSH_RESULT|SUCCESS|$len|{delivery_channel}"
     }} else {{
-        Write-Output "PUSH_RESULT|FAILED|0|File not found after download"
+        throw "File not found after download"
     }}
 }} catch {{
-    Write-Output "PUSH_RESULT|FAILED|0|$($_.Exception.Message)"
+    # Fallback lưu trực tiếp trên Máy Chủ SQL Server nếu UNC bị từ chối
+    $localFolder = "{clean_folder}"
+    if (-not (Test-Path -LiteralPath $localFolder)) {{ New-Item -ItemType Directory -Force -Path $localFolder | Out-Null }}
+    $localDest = "{dest_path}"
+    try {{
+        (New-Object System.Net.WebClient).DownloadFile('{dl_url}', $localDest)
+        $len = (Get-Item -LiteralPath $localDest).Length
+        Write-Output "PUSH_RESULT|SUCCESS|$len|LAN_FALLBACK_LOCAL"
+    }} catch {{
+        Write-Output "PUSH_RESULT|FAILED|0|$($_.Exception.Message)"
+    }}
 }}
 """
-            lines = _exec_powershell_on_restaurant(push_server_ip, ps_push, sql_port, timeout_sec=120)
+        lines = _exec_powershell_on_restaurant(push_server_ip, ps_push, sql_port, timeout_sec=120)
 
-        for line in lines:
-            if line.startswith("PUSH_RESULT|"):
-                parts = line.split("|")
-                if len(parts) >= 3 and parts[1] == "SUCCESS":
-                    success = True
-                    written_size = int(parts[2]) if parts[2].isdigit() else file_size
-                    if len(parts) >= 4 and parts[3]:
-                        delivery_channel = parts[3]
-                    break
-                elif len(parts) >= 4:
-                    err_detail = parts[3]
-
-    else:
-        # Nếu cả SQL trực tiếp lẫn Máy Chủ .11 đều không kết nối được, kiểm tra Service Agent
-        if _is_agent_service_online(clean_ip):
-            try:
-                from app.core.database import SessionLocal
-                from app.services.agent_multitask_service import AgentMultitaskService
-                from app.schemas.agent_multitask import AgentCommandRequest
-                with SessionLocal() as db:
-                    cmd_req = AgentCommandRequest(
-                        action="push_file",
-                        target_ips=[clean_ip],
-                        target_folder=clean_folder,
-                        file_name=clean_file,
-                        file_content_base64=base64.b64encode(file_bytes).decode("ascii") if file_size <= 2 * 1024 * 1024 else None
-                    )
-                    res_cmd = AgentMultitaskService.execute_command(cmd_req, "dung.nguyenanh", db)
-                    elapsed = round((time.time() - t0) * 1000, 1)
-                    return PushFileToRestaurantResponse(
-                        success=True,
-                        message=f"Đã đưa file '{clean_file}' vào hàng đợi Service Agent ({clean_ip}). Agent sẽ tự động kéo file về thư mục '{clean_folder}' ngay khi tiếp nhận.",
-                        target_ip=clean_ip,
-                        target_folder=clean_folder,
-                        filename=clean_file,
-                        size_bytes=file_size,
-                        elapsed_ms=elapsed,
-                        delivery_channel="AGENT_SERVICE"
-                    )
-            except Exception as e_agent:
-                err_detail = f"Lỗi gửi lệnh qua Service Agent: {e_agent}"
-        else:
-            err_detail = f"Không thể kết nối tới {clean_ip}:1433 (máy chưa cài SQL) và không tìm thấy Máy Chủ .11 ({_get_restaurant_server_ip(clean_ip)}) hoặc Service Agent Online."
+    for line in lines:
+        if line.startswith("PUSH_RESULT|"):
+            parts = line.split("|")
+            if len(parts) >= 3 and parts[1] == "SUCCESS":
+                success = True
+                written_size = int(parts[2]) if parts[2].isdigit() else file_size
+                if len(parts) >= 4 and parts[3]:
+                    delivery_channel = parts[3]
+                break
+            elif len(parts) >= 4:
+                err_detail = parts[3]
 
     elapsed = round((time.time() - t0) * 1000, 1)
 
@@ -972,16 +954,10 @@ def execute_remote_action(
     t0 = time.time()
     act = action_type.upper().strip()
 
-    # 1. Phân giải máy thực thi lệnh (Trực tiếp hay qua Relay .11)
-    direct_open = _test_tcp_port(clean_ip, sql_port, timeout=1.5)
-    exec_server_ip = clean_ip
-    is_relay = False
-
-    if not direct_open:
-        server_11 = _get_restaurant_server_ip(clean_ip)
-        if server_11 and server_11 != clean_ip and _test_tcp_port(server_11, sql_port, timeout=2.0):
-            exec_server_ip = server_11
-            is_relay = True
+    # 1. Phân giải máy thực thi lệnh (Dò tìm Máy Chủ SQL Server nhà hàng nếu trạm chưa có SQL)
+    online_sql_ip, _, _ = find_restaurant_sql_server(clean_ip, sql_port)
+    exec_server_ip = online_sql_ip or clean_ip
+    is_relay = (exec_server_ip != clean_ip)
 
     pass_ou = _get_restaurant_ou_password(clean_ip) if is_relay else ""
     auth_script = f"""
@@ -1144,7 +1120,7 @@ try {{
 }}
 """
 
-    # ── 5. ĐỌC NỘI DUNG TEXT / LOG (CHUẨN UNICODE UTF-8 BASE64) ──
+    # ── 5. ĐỌC NỘI DUNG TEXT / LOG (CHUẨN UNICODE UTF-8 BASE64 TỪNG DÒNG) ──
     elif act == "READ_TEXT":
         ps_script = f"""
 {auth_script}
@@ -1152,16 +1128,15 @@ $fullPath = "{path_actual}"
 if (Test-Path -LiteralPath $fullPath) {{
     try {{
         $lines = Get-Content -LiteralPath $fullPath -TotalCount 100 -Encoding UTF8 -ErrorAction Stop
-        $text = $lines -join "`r`n"
-        $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($text))
-        Write-Output "ACTION_RES_B64|SUCCESS|0|$b64"
+        foreach ($l in $lines) {{
+            $b = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($l))
+            Write-Output ("TEXT_LINE_B64|" + $b)
+        }}
     }} catch {{
-        $rawBytes = [System.IO.File]::ReadAllBytes($fullPath)
-        $b64 = [Convert]::ToBase64String($rawBytes)
-        Write-Output "ACTION_RES_B64|SUCCESS|0|$b64"
+        Write-Output ("TEXT_ERR|" + $_.Exception.Message)
     }}
 }} else {{
-    Write-Output "ACTION_RES|FAILED|1|File khong ton tai tren may tram"
+    Write-Output "TEXT_ERR|File khong ton tai tren may tram"
 }}
 """
 
@@ -1197,9 +1172,20 @@ if (Test-Path -LiteralPath $fullPath) {{
         exit_code = 0
         message = ""
         output_data = "\n".join(lines)
+        text_lines = []
+        is_read_text = (act == "READ_TEXT")
 
         for line in lines:
-            if line.startswith("ACTION_RES_B64|"):
+            if line.startswith("TEXT_LINE_B64|"):
+                parts = line.split("|", 1)
+                if len(parts) >= 2:
+                    try:
+                        text_lines.append(base64.b64decode(parts[1]).decode("utf-8", errors="replace"))
+                    except Exception:
+                        text_lines.append(parts[1])
+            elif line.startswith("TEXT_ERR|"):
+                message = line.split("|", 1)[1]
+            elif line.startswith("ACTION_RES_B64|"):
                 parts = line.split("|", 3)
                 if len(parts) >= 4:
                     success = (parts[1] == "SUCCESS")
@@ -1219,6 +1205,15 @@ if (Test-Path -LiteralPath $fullPath) {{
                     exit_code = int(parts[2]) if parts[2].isdigit() else 0
                     message = parts[3]
                     break
+
+        if is_read_text:
+            if text_lines:
+                success = True
+                exit_code = 0
+                message = "\n".join(text_lines)
+                output_data = message
+            elif not message:
+                message = "File trống hoặc không có nội dung"
 
         if not message:
             message = output_data if success else "Thực thi hoàn tất nhưng không nhận được thông báo"

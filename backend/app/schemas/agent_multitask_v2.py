@@ -57,7 +57,7 @@ class CheckRestaurantConnectionRequest(BaseModel):
 
 
 class CheckRestaurantConnectionResponse(BaseModel):
-    """Kết quả kiểm tra kết nối máy trạm."""
+    """Kết quả kiểm tra kết nối máy trạm (Hoàn toàn Agent-less qua SQL Server)."""
     target_ip: str
     is_online: bool
     ping_ok: bool
@@ -66,9 +66,10 @@ class CheckRestaurantConnectionResponse(BaseModel):
     xp_cmdshell_ready: bool = False
     message: str
     latency_ms: float = 0.0
-    connection_method: Optional[str] = "SQL_DIRECT"  # SQL_DIRECT, LAN_RELAY, AGENT_SERVICE, FAILED
+    connection_method: Optional[str] = "SQL_DIRECT"  # SQL_DIRECT, LAN_RELAY, FAILED
     relay_host: Optional[str] = None
-    agent_service_ok: bool = False
+    online_sql_ip: Optional[str] = None
+    available_stations: Optional[List[Dict[str, Any]]] = None
 
 
 class RestaurantFolderListRequest(BaseModel):

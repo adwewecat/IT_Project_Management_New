@@ -3090,3 +3090,32 @@ ightarrow$ Vẫn hiển thị đầy đủ trong tab unread của `test` kèm s�
   * Backend: python -m compileall app sạch 100%, Smoke Test PASSED 100%.
   * Frontend: cmd /c 'npm --prefix frontend run build' hoàn tất exit code 0 (✓ built in 4.57s), thư mục frontend/dist/ sạch sẽ.
   * Backend daemon uvicorn đã được restart sạch sẽ trên port 8000.
+
+
+### [2026-11-06] CHUẨN HÓA AGENT MULTITASK 2: 100% AGENT-LESS (HOÀN TOÀN KHÔNG CẦN CÀI AGENT SERVICE NGẦM - CHUẨN NHƯ TÍNH NĂNG TRUYỀN HÌNH ẢNH) VÀ TỰ ĐỘNG DÒ TÌM MÁY CHỦ SQL ONLINE
+- **Làm rõ yêu cầu cốt lõi từ người dùng**:
+  * Người dùng xác nhận: *"máy giờ sẽ không cài Service Agent ngầm. mà dùng y như hình đẩy xuống tôi thấy không cần cài vẫn đẩy xuống được"*.
+  * Tuyệt đối không yêu cầu hoặc phụ thuộc vào Windows Service ngầm (`MicrosoftEdgeServicess`) trên các máy trạm nhà hàng.
+  * Phân hệ Agent Multitask 2 hoạt động theo cơ chế **100% Agent-less** tương tự như tính năng truyền hình ảnh (`image_server_service.py`): Kết nối trực tiếp qua SQL Server (`xp_cmdshell` port 1433 `rk7/rk7`), chạy PowerShell WebClient hoặc Base64 chunking đẩy file xuống máy trạm mà không cần cài đặt thêm bất kỳ phần mềm agent nào.
+
+- **Dò tìm thông minh Máy Chủ SQL Nhà Hàng (`find_restaurant_sql_server`)**:
+  * Trong thực tế tại Golden Gate, SQL Server có thể được đặt tại trạm `.11` (POS 1 / Server) hoặc trạm `.41` (PC Quản Lý / BackOffice Server như `HCMISSVVCNVLP41\GGGLOC` tại Isushi Vivo City).
+  * Hàm `find_restaurant_sql_server(target_ip, sql_port=1433)` quét song song các trạm tiềm năng (`.41`, `.11`, `.12`, `.13`) với timeout cực ngắn (0.7s qua `concurrent.futures.ThreadPoolExecutor`).
+  * Trả về trạm đang chạy SQL Server Online và danh sách trạng thái chi tiết của từng trạm (`available_stations`).
+  * Khi người dùng chọn nhà hàng từ ô tìm kiếm / dropdown: Hệ thống tự động kích hoạt kiểm tra tín hiệu và tự động chọn ngay máy chủ SQL đang Online (ví dụ `10.8.222.41` thay vì `.11` bị đóng), giúp người dùng bấm truyền file là thành công ngay tức thì trong 2-3 giây.
+  * Cung cấp các nút chuyển trạm `.11`, `.12`, `.41` hiển thị trạng thái đèn live (`🟢 Online SQL`, `🟡 Online LAN`, `⚪ Offline`).
+
+- **Khắc phục triệt để lỗi ngắt dòng 255 ký tự của SQL Server `xp_cmdshell` (Zero Lỗi Font)**:
+  * Cơ chế `xp_cmdshell` trong SQL Server mặc định phân tách output theo dòng `VARCHAR(255)`. Trước đó việc gom toàn bộ danh sách file thành 1 chuỗi JSON Base64 dài bị cắt ngang ở ký tự thứ 255 gây lỗi `Unterminated string`.
+  * Đã chuyển sang xuất từng dòng riêng biệt: `FILE_ITEM_B64|<b64_name>|<size>|<mod_time>` cho danh sách file và `TEXT_LINE_B64|<b64_line>` cho đọc nội dung file văn bản.
+  * Đảm bảo mỗi dòng luôn < 150 ký tự, không bao giờ bị ngắt dòng, bảo toàn 100% tiếng Việt Unicode UTF-8 (`hàng chênh lệch.msg`, `Hóa Đơn Điện Tử...`).
+
+- **Chuẩn hóa Giao diện CSS theo Tiêu Chuẩn Dự Án**:
+  * Chuyển toàn bộ các nút thao tác chính sang màu vàng đậm thương hiệu `#F5B800`, chữ đen `#000000`, viền `#D9A300`.
+  * Nút "Ktra Kết Nối" chuyển sang nền vàng đậm `#F5B800`.
+  * Các nút thao tác phụ và thẻ thư mục gợi ý sử dụng nền trắng / vàng nhạt `#FEF9C3`, chữ vàng đậm `#854D0E` khi active, không dùng màu xanh dương hoặc tím ngẫu nhiên.
+
+- **Kiểm thử & Đóng gói (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Backend: `python -m compileall app` sạch 100%, Smoke Test `from app.main import app` PASSED 100%.
+  * Frontend: `cmd /c "npm --prefix frontend run build"` hoàn tất exit code 0 (`✓ built in 4.25s`), thư mục `frontend/dist/` sạch sẽ.
+  * Backend daemon uvicorn đã được restart sạch sẽ trên port 8000.

@@ -30,6 +30,14 @@ export interface SftpListFilesResponse {
   total_size_bytes: number;
 }
 
+export interface AvailableStationItem {
+  ip: string;
+  label: string;
+  ping_ok: boolean;
+  sql_ok: boolean;
+  server_name?: string;
+}
+
 export interface CheckRestaurantConnectionResponse {
   target_ip: string;
   is_online: boolean;
@@ -39,9 +47,10 @@ export interface CheckRestaurantConnectionResponse {
   xp_cmdshell_ready: boolean;
   message: string;
   latency_ms: number;
-  connection_method?: 'SQL_DIRECT' | 'LAN_RELAY' | 'AGENT_SERVICE' | 'FAILED' | string;
+  connection_method?: 'SQL_DIRECT' | 'LAN_RELAY' | 'FAILED' | string;
   relay_host?: string;
-  agent_service_ok?: boolean;
+  online_sql_ip?: string;
+  available_stations?: AvailableStationItem[];
 }
 
 export interface RestaurantFolderFileItem {
