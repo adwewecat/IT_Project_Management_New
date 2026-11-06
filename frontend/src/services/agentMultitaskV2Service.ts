@@ -80,6 +80,7 @@ export interface PushFileToRestaurantRequest {
   filename: string;
   remote_sftp_path?: string;
   overwrite?: boolean;
+  force_unlock?: boolean;
   auto_extract?: boolean;
   execute_after_push?: boolean;
   run_mode?: 'SILENT' | 'INTERACTIVE';
@@ -95,6 +96,40 @@ export interface PushFileToRestaurantResponse {
   elapsed_ms: number;
   execution_output?: string;
   delivery_channel?: string;
+}
+
+export interface BatchPushFileItemResult {
+  target_ip: string;
+  restaurant_name?: string;
+  success: boolean;
+  delivery_channel: string;
+  size_bytes: number;
+  elapsed_ms: number;
+  message: string;
+}
+
+export interface BatchPushFileRequest {
+  target_ips: string[];
+  filename: string;
+  target_folder?: string;
+  remote_sftp_path?: string;
+  overwrite?: boolean;
+  force_unlock?: boolean;
+  auto_extract?: boolean;
+  execute_after_push?: boolean;
+  run_mode?: 'SILENT' | 'INTERACTIVE';
+  sql_port?: number;
+}
+
+export interface BatchPushFileResponse {
+  success: boolean;
+  message: string;
+  filename: string;
+  target_folder: string;
+  total: number;
+  success_count: number;
+  failed_count: number;
+  results: BatchPushFileItemResult[];
 }
 
 export interface ExecuteRemoteActionRequest {
@@ -172,6 +207,12 @@ class AgentMultitaskV2Service {
   /** Truyền 1 file từ SFTP Server xuống thư mục máy trạm nhà hàng */
   async pushFileToRestaurant(payload: PushFileToRestaurantRequest): Promise<PushFileToRestaurantResponse> {
     const res = await api.post<PushFileToRestaurantResponse>('/agent-multitask-v2/restaurant/push-file', payload);
+    return res.data;
+  }
+
+  /** Truyền 1 file từ SFTP Server xuống danh sách nhiều nhà hàng theo IP */
+  async batchPushFile(payload: BatchPushFileRequest): Promise<BatchPushFileResponse> {
+    const res = await api.post<BatchPushFileResponse>('/agent-multitask-v2/restaurant/batch-push', payload);
     return res.data;
   }
 

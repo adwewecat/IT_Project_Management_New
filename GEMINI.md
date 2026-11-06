@@ -3149,3 +3149,15 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
   * Frontend: npm run build hoàn tất exit code 0 (✓ built in 4.75s).
   * Backend: Smoke Test PASSED 100%, compileall sạch 100%.
   * Backend daemon uvicorn reload thành công trên port 8000.
+
+
+### [2026-11-06] BỔ SUNG TÍNH NĂNG CHÉP ĐÈ FILE ĐANG CHẠY (HOT-SWAP) VÀ TRUYỀN FILE HÀNG LOẠT THEO DANH SÁCH IP (PASTE EXCEL / DẤU PHẨY / ENTER)
+- **1. Cơ Chế Chép Đè File Đang Chạy (Hot-Swap / Force-Unlock Overwrite)**:
+  * Khi tiến trình `.exe` hoặc script đang chạy, áp dụng Hot-Swap Rename sang `.old_<timestamp>`, kill process nếu là .exe, chép file mới và tự động dọn dẹp file tạm. Hỗ trợ cả SQL Trực tiếp và LAN Relay.
+- **2. Tính Năng Truyền File Hàng Loạt Theo Danh Sách IP (Batch Push File Modal)**:
+  * Hộp thoại `BatchPushModal.tsx` nhận diện linh hoạt IP từ Excel, dấu phẩy, chấm phẩy, enter.
+  * Tải file SFTP 1 lần vào RAM, đẩy song song đa luồng `ThreadPoolExecutor(max_workers=5)` cực nhanh.
+  * Hiển thị bảng tiến trình `TopScrollTable` (Rule 8), nút tải báo cáo Excel CSV, nút thử lại trạm lỗi 1-chạm.
+- **Build & Đóng gói**:
+  * Frontend: `cmd /c "npm run build"` hoàn tất exit code 0 (`frontend/dist/` sạch sẽ kèm `web.config`).
+  * Backend: Smoke test và compileall passed 100%.

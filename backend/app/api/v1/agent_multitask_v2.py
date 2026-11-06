@@ -25,7 +25,9 @@ from app.schemas.agent_multitask_v2 import (
     PushFileToRestaurantRequest,
     PushFileToRestaurantResponse,
     ExecuteRemoteActionRequest,
-    ExecuteRemoteActionResponse
+    ExecuteRemoteActionResponse,
+    BatchPushFileRequest,
+    BatchPushFileResponse
 )
 from app.services import agent_multitask_v2_service
 
@@ -156,6 +158,7 @@ def push_file_to_restaurant(
     Truyền 1 file từ SFTP Server 10.28.1.150 xuống thư mục máy trạm nhà hàng.
     Tự động tạo thư mục nếu chưa có.
     Hỗ trợ tùy chọn tự động giải nén hoặc tự động thực thi sau khi truyền.
+    Hỗ trợ chép đè ngay cả file đang chạy (Force Unlock / Hot-Swap).
     """
     try:
         return agent_multitask_v2_service.push_file_to_restaurant(
@@ -164,6 +167,7 @@ def push_file_to_restaurant(
             target_folder=payload.target_folder,
             remote_sftp_path=payload.remote_sftp_path,
             overwrite=payload.overwrite,
+            force_unlock=payload.force_unlock,
             auto_extract=payload.auto_extract,
             execute_after_push=payload.execute_after_push,
             run_mode=payload.run_mode
@@ -173,6 +177,26 @@ def push_file_to_restaurant(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Lỗi truyền file xuống nhà hàng: {str(ex)}"
+        )
+
+
+@router.post("/restaurant/batch-push", response_model=BatchPushFileResponse)
+def batch_push_file(
+    payload: BatchPushFileRequest,
+    current_user: UserInfo = Depends(require_super_admin_or_dung)
+):
+    """
+    Truyền 1 file từ SFTP Server 10.28.1.150 xuống danh sách hàng loạt nhà hàng/trạm theo IP.
+    Hỗ trợ chép đè ngay cả file đang chạy (Force Unlock / Hot-Swap).
+    Chạy đa luồng song song siêu tốc.
+    """
+    try:
+        return agent_multitask_v2_service.batch_push_file_to_restaurants(payload)
+    except Exception as ex:
+        logger.error(f"Lỗi truyền file hàng loạt: {ex}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi truyền file hàng loạt: {str(ex)}"
         )
 
 

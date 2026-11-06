@@ -45,7 +45,10 @@ from app.schemas.agent_multitask_v2 import (
     RestaurantFolderFileItem,
     RestaurantFolderListResponse,
     PushFileToRestaurantResponse,
-    ExecuteRemoteActionResponse
+    ExecuteRemoteActionResponse,
+    BatchPushFileRequest,
+    BatchPushFileResponse,
+    BatchPushFileItemResult
 )
 
 logger = logging.getLogger("AgentMultitaskV2")
@@ -707,16 +710,19 @@ def push_file_to_restaurant(
     target_folder: str = "D:\\GPOS-Setup",
     remote_sftp_path: Optional[str] = None,
     overwrite: bool = True,
+    force_unlock: bool = True,
     auto_extract: bool = False,
     execute_after_push: bool = False,
     run_mode: str = "SILENT",
-    sql_port: int = 1433
+    sql_port: int = 1433,
+    preloaded_file_bytes: Optional[bytes] = None
 ) -> PushFileToRestaurantResponse:
     r"""
     Tải file từ SFTP Server 10.28.1.150 và truyền trực tiếp xuống thư mục máy trạm nhà hàng.
     Hỗ trợ 2 kênh truyền:
     - Kênh 1: SQL Server xp_cmdshell trực tiếp nếu trạm mở port 1433.
     - Kênh 2: Cầu nối LAN Relay qua Máy Chủ SQL của chi nhánh (UNC \\target_ip\D$\...) nếu trạm đích không có SQL.
+    Hỗ trợ force_unlock: Cho phép chép đè ngay cả file đang chạy hoặc bị Windows khóa (NTFS Hot-Swap Overwrite).
     """
     clean_ip = target_ip.strip()
     clean_folder = target_folder.strip().rstrip("\\/")
@@ -726,48 +732,49 @@ def push_file_to_restaurant(
     t0 = time.time()
     ssh = None
     sftp = None
-    file_bytes: Optional[bytes] = None
+    file_bytes: Optional[bytes] = preloaded_file_bytes
 
-    # 1. Tải file từ SFTP Server vào bộ nhớ
-    try:
-        ssh, sftp = get_sftp_client()
-        search_dirs = [
-            (remote_sftp_path or "").strip(),
-            DEFAULT_PRIMARY_PATH,
-            DEFAULT_FALLBACK_PATH
-        ]
-        loaded = False
-        loaded_path = ""
+    # 1. Tải file từ SFTP Server vào bộ nhớ (nếu chưa được nạp sẵn)
+    if file_bytes is None:
+        try:
+            ssh, sftp = get_sftp_client()
+            search_dirs = [
+                (remote_sftp_path or "").strip(),
+                DEFAULT_PRIMARY_PATH,
+                DEFAULT_FALLBACK_PATH
+            ]
+            loaded = False
+            loaded_path = ""
 
-        for s_dir in search_dirs:
-            if not s_dir:
-                continue
-            remote_full = f"{s_dir.rstrip('/')}/{clean_file}"
-            try:
-                with sftp.open(remote_full, "rb") as f_in:
-                    file_bytes = f_in.read()
-                loaded = True
-                loaded_path = remote_full
-                break
-            except Exception:
-                continue
+            for s_dir in search_dirs:
+                if not s_dir:
+                    continue
+                remote_full = f"{s_dir.rstrip('/')}/{clean_file}"
+                try:
+                    with sftp.open(remote_full, "rb") as f_in:
+                        file_bytes = f_in.read()
+                    loaded = True
+                    loaded_path = remote_full
+                    break
+                except Exception:
+                    continue
 
-        if not loaded or file_bytes is None:
-            raise FileNotFoundError(f"Không tìm thấy file '{clean_file}' trên SFTP server (Đã tìm trong {DEFAULT_PRIMARY_PATH} và {DEFAULT_FALLBACK_PATH})")
-    finally:
-        if sftp:
-            try:
-                sftp.close()
-            except Exception:
-                pass
-        if ssh:
-            try:
-                ssh.close()
-            except Exception:
-                pass
+            if not loaded or file_bytes is None:
+                raise FileNotFoundError(f"Không tìm thấy file '{clean_file}' trên SFTP server (Đã tìm trong {DEFAULT_PRIMARY_PATH} và {DEFAULT_FALLBACK_PATH})")
+        finally:
+            if sftp:
+                try:
+                    sftp.close()
+                except Exception:
+                    pass
+            if ssh:
+                try:
+                    ssh.close()
+                except Exception:
+                    pass
 
     file_size = len(file_bytes)
-    logger.info(f"Đã tải file '{clean_file}' ({file_size} bytes) từ SFTP {loaded_path}. Bắt đầu truyền xuống {clean_ip}:{dest_path}...")
+    logger.info(f"Đã chuẩn bị file '{clean_file}' ({file_size} bytes). Bắt đầu truyền xuống {clean_ip}:{dest_path}...")
 
     # 2. Phân giải máy chủ thực thi (Hoàn toàn Agent-less qua SQL Server chi nhánh)
     online_sql_ip, online_sql_name, _ = find_restaurant_sql_server(clean_ip, sql_port)
@@ -804,6 +811,22 @@ def push_file_to_restaurant(
 
     auth_script = _build_lan_relay_auth_script(clean_ip, pass_ou) if is_relay else ""
 
+    # Đoạn script xử lý Hot-Swap chép đè nếu file đang chạy
+    hotswap_script = f"""
+if ('{force_unlock}' -eq 'True') {{
+    if ($dest.ToLower().EndsWith(".exe")) {{
+        $exeName = [System.IO.Path]::GetFileName($dest)
+        cmd.exe /c "taskkill /f /im `"$exeName`" 2>nul" | Out-Null
+    }}
+    if (Test-Path -LiteralPath $dest) {{
+        $rnd = [DateTime]::Now.Ticks
+        try {{
+            Rename-Item -LiteralPath $dest -NewName "$($dest).old_$rnd" -Force -ErrorAction SilentlyContinue
+        }} catch {{}}
+    }}
+}}
+"""
+
     # A) Với file <= 3MB: Nén base64 và đẩy thẳng qua PowerShell chunking
     if file_size <= 3 * 1024 * 1024:
         b64_content = base64.b64encode(file_bytes).decode("ascii")
@@ -816,12 +839,14 @@ if (-not (Test-Path -LiteralPath $folder)) {{
     New-Item -ItemType Directory -Force -Path $folder | Out-Null
 }}
 $dest = "{dest_actual}"
+{hotswap_script}
 $b64 = "{b64_content}"
 $bytes = [Convert]::FromBase64String($b64)
 try {{
     [IO.File]::WriteAllBytes($dest, $bytes)
     if (Test-Path -LiteralPath $dest) {{
         $len = (Get-Item -LiteralPath $dest).Length
+        Get-ChildItem -Path $folder -Filter "*$([System.IO.Path]::GetFileName($dest)).old_*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
         Write-Output "PUSH_RESULT|SUCCESS|$len|{delivery_channel}"
     }} else {{
         throw "File not saved"
@@ -847,12 +872,14 @@ if (-not (Test-Path -LiteralPath $folder)) {{
     New-Item -ItemType Directory -Force -Path $folder | Out-Null
 }}
 $dest = "{dest_actual}"
+{hotswap_script}
 [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {{$true}}
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls
 try {{
     (New-Object System.Net.WebClient).DownloadFile('{dl_url}', $dest)
     if (Test-Path -LiteralPath $dest) {{
         $len = (Get-Item -LiteralPath $dest).Length
+        Get-ChildItem -Path $folder -Filter "*$([System.IO.Path]::GetFileName($dest)).old_*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
         Write-Output "PUSH_RESULT|SUCCESS|$len|{delivery_channel}"
     }} else {{
         throw "File not found after download"
@@ -928,6 +955,156 @@ try {{
         elapsed_ms=elapsed,
         execution_output=exec_output,
         delivery_channel=delivery_channel
+    )
+
+
+# ==============================================================================
+# TRUYỀN FILE HÀNG LOẠT XUỐNG DANH SÁCH NHÀ HÀNG / TRẠM THEO IP
+# ==============================================================================
+
+def batch_push_file_to_restaurants(
+    payload: BatchPushFileRequest
+) -> BatchPushFileResponse:
+    """
+    Truyền 1 file từ SFTP Server 10.28.1.150 xuống danh sách hàng loạt nhà hàng/trạm theo IP.
+    Hỗ trợ chép đè ngay cả file đang chạy (Force Unlock / Hot-Swap Overwrite).
+    Chạy đa luồng song song (ThreadPoolExecutor) để tối ưu tốc độ phân phối toàn chuỗi.
+    """
+    clean_ips: List[str] = []
+    seen = set()
+    for raw in payload.target_ips:
+        ip = (raw or "").strip()
+        if ip and ip not in seen:
+            seen.add(ip)
+            clean_ips.append(ip)
+
+    if not clean_ips:
+        return BatchPushFileResponse(
+            success=False,
+            message="Danh sách IP trạm/nhà hàng trống.",
+            filename=payload.filename,
+            target_folder=payload.target_folder,
+            total=0,
+            success_count=0,
+            failed_count=0,
+            results=[]
+        )
+
+    # 1. Tải file từ SFTP 1 lần duy nhất vào bộ nhớ
+    clean_file = payload.filename.strip()
+    file_bytes: Optional[bytes] = None
+    try:
+        ssh, sftp = get_sftp_client()
+        search_dirs = [
+            (payload.remote_sftp_path or "").strip(),
+            DEFAULT_PRIMARY_PATH,
+            DEFAULT_FALLBACK_PATH
+        ]
+        for s_dir in search_dirs:
+            if not s_dir:
+                continue
+            remote_full = f"{s_dir.rstrip('/')}/{clean_file}"
+            try:
+                with sftp.open(remote_full, "rb") as f_in:
+                    file_bytes = f_in.read()
+                break
+            except Exception:
+                continue
+        if sftp:
+            sftp.close()
+        if ssh:
+            ssh.close()
+    except Exception as e:
+        logger.error(f"Lỗi tải file {clean_file} từ SFTP cho batch push: {e}")
+
+    if not file_bytes:
+        return BatchPushFileResponse(
+            success=False,
+            message=f"Không thể tìm thấy hoặc tải file '{clean_file}' từ máy chủ SFTP.",
+            filename=clean_file,
+            target_folder=payload.target_folder,
+            total=len(clean_ips),
+            success_count=0,
+            failed_count=len(clean_ips),
+            results=[]
+        )
+
+    # 2. Tra cứu tên nhà hàng từ CSDL
+    res_name_map: Dict[str, str] = {}
+    try:
+        from app.core.database import SessionLocal
+        from app.models.restaurant import Restaurant
+        with SessionLocal() as db:
+            rests = db.query(Restaurant.ip, Restaurant.res).filter(Restaurant.ip != None).all()
+            for r_ip, r_name in rests:
+                parts = r_ip.strip().split(".")
+                if len(parts) >= 3:
+                    sub = f"{parts[0]}.{parts[1]}.{parts[2]}."
+                    res_name_map[sub] = r_name or ""
+    except Exception as ex:
+        logger.debug(f"Không thể tra cứu tên nhà hàng: {ex}")
+
+    # 3. Hàm xử lý cho từng IP
+    def _push_worker(target_ip: str) -> BatchPushFileItemResult:
+        parts = target_ip.split(".")
+        sub = f"{parts[0]}.{parts[1]}.{parts[2]}." if len(parts) >= 3 else ""
+        res_name = res_name_map.get(sub, "")
+
+        try:
+            res = push_file_to_restaurant(
+                target_ip=target_ip,
+                filename=clean_file,
+                target_folder=payload.target_folder,
+                remote_sftp_path=payload.remote_sftp_path,
+                overwrite=payload.overwrite,
+                force_unlock=payload.force_unlock,
+                auto_extract=payload.auto_extract,
+                execute_after_push=payload.execute_after_push,
+                run_mode=payload.run_mode,
+                sql_port=payload.sql_port,
+                preloaded_file_bytes=file_bytes
+            )
+            return BatchPushFileItemResult(
+                target_ip=target_ip,
+                restaurant_name=res_name,
+                success=res.success,
+                delivery_channel=res.delivery_channel or "SQL_DIRECT",
+                size_bytes=res.size_bytes,
+                elapsed_ms=res.elapsed_ms,
+                message=res.message
+            )
+        except Exception as ex:
+            return BatchPushFileItemResult(
+                target_ip=target_ip,
+                restaurant_name=res_name,
+                success=False,
+                delivery_channel="FAILED",
+                size_bytes=0,
+                elapsed_ms=0.0,
+                message=str(ex)
+            )
+
+    # 4. Thực thi song song (tối đa 5 luồng cùng lúc để không làm nghẽn mạng)
+    from concurrent.futures import ThreadPoolExecutor
+    results: List[BatchPushFileItemResult] = []
+    max_workers = min(len(clean_ips), 5)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(_push_worker, ip) for ip in clean_ips]
+        for f in futures:
+            results.append(f.result())
+
+    success_count = sum(1 for r in results if r.success)
+    failed_count = len(results) - success_count
+
+    return BatchPushFileResponse(
+        success=(success_count > 0),
+        message=f"Đã hoàn thành truyền file '{clean_file}' tới {len(clean_ips)} trạm: {success_count} thành công, {failed_count} thất bại.",
+        filename=clean_file,
+        target_folder=payload.target_folder,
+        total=len(clean_ips),
+        success_count=success_count,
+        failed_count=failed_count,
+        results=results
     )
 
 

@@ -4029,3 +4029,35 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
   * Frontend: npm run build hoàn tất exit code 0 (✓ built in 4.75s).
   * Backend: Smoke Test PASSED 100%, compileall sạch 100%.
   * Backend daemon uvicorn reload thành công trên port 8000.
+
+
+### [2026-11-06] BỔ SUNG TÍNH NĂNG CHÉP ĐÈ FILE ĐANG CHẠY (HOT-SWAP) VÀ TRUYỀN FILE HÀNG LOẠT THEO DANH SÁCH IP (PASTE EXCEL / DẤU PHẨY / ENTER)
+- **1. Cơ Chế Chép Đè File Đang Chạy (Hot-Swap / Force-Unlock Overwrite)**:
+  * **Vấn đề**: Khi một tiến trình `.exe` hoặc script đang chạy trên máy trạm nhà hàng, Windows NTFS áp dụng cấm ghi đè (Process File Locking / Access Denied), làm quá trình cập nhật phần mềm hoặc script bị gián đoạn.
+  * **Giải pháp Hot-Swap**:
+    + Nếu file là `.exe`, tự động chấm dứt tiến trình chạy ngầm qua `taskkill /f /im $clean_file 2>nul`.
+    + Đồng thời áp dụng kỹ thuật Hot-Swap Rename: Đổi tên file đang bị khóa sang `$dest.old_<timestamp>`, ghi đè file mới nguyên vẹn vào vị trí đường dẫn chuẩn, sau đó tự động xóa sạch các file tạm `.old_*`.
+    + Áp dụng thống nhất cho cả kênh SQL Trực Tiếp (Direct SQL) và kênh Cầu Nối Mạng Nội Bộ (LAN Relay qua máy chủ nhà hàng).
+  * **Tùy chọn Frontend**: Bổ sung checkbox "Chép đè file đang chạy (Hot-Swap)" nổi bật màu vàng hổ phách, mặc định bật sẵn để IT yên tâm cập nhật bản vá.
+
+- **2. Tính Năng Truyền File Hàng Loạt Theo Danh Sách IP (Batch Push File Modal)**:
+  * **Hộp thoại chuyên dụng `BatchPushModal.tsx`**:
+    + Ô nhập liệu lớn cho phép paste danh sách IP từ mọi định dạng: Copy nhiều dòng từ cột Excel, ngăn cách bởi dấu phẩy `,`, chấm phẩy `;`, tab `\t`, hoặc enter xuống dòng.
+    + Tự động lọc và loại bỏ IP trùng lặp, chuẩn hóa định dạng IPv4 và hiển thị huy hiệu đếm thời gian thực: `Đã nhận diện: X trạm IP`.
+    + Cho phép chọn file nguồn từ SFTP và thư mục đích (mặc định `D:\GPOS-Setup`).
+    + Tùy chọn chép đè hot-swap và tự động giải nén áp dụng cho toàn bộ danh sách.
+  * **Hiệu Năng Backend Tối Ưu Vượt Trội**:
+    + API endpoint: `POST /api/v1/agent-multitask-v2/restaurant/batch-push`.
+    + Tải file nguồn từ SFTP 1 lần duy nhất vào bộ nhớ đệm (`file_bytes`), không tải lại nhiều lần.
+    + Tự động tra cứu tên nhà hàng tương ứng từ cơ sở dữ liệu `ITDEPT` cho từng IP.
+    + Đẩy file song song đa luồng qua `ThreadPoolExecutor(max_workers=5)`, kiểm soát thời gian hoàn thành cực nhanh cho hàng chục nhà hàng.
+  * **Trải Nghiệm UI/UX Chuẩn Dự Án**:
+    + Thanh tiến trình thời gian thực (`X / Y trạm`), huy hiệu thống kê Thành công / Thất bại.
+    + Bảng kết quả chi tiết đặt trong component `TopScrollTable` (Rule 8) có thanh cuộn ngang phụ trên đỉnh và tiêu đề dính (Sticky Header).
+    + Nút xuất báo cáo Excel/CSV (`.csv` kèm UTF-8 BOM hiển thị chuẩn 100% tiếng Việt).
+    + Nút "Thử Lại Các Trạm Lỗi" tự động nhặt các IP thất bại để người dùng tái thử nghiệm 1-chạm mà không cần copy dán lại.
+
+- **Build & Đóng gói (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "npm run build"` hoàn tất exit code 0 (`✓ built in 5.31s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config`.
+  * Backend: `python -m compileall app` sạch lỗi, Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
+  * Backend daemon uvicorn reload thành công trên port 8000.

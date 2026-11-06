@@ -109,6 +109,7 @@ class PushFileToRestaurantRequest(BaseModel):
     filename: str
     remote_sftp_path: Optional[str] = None
     overwrite: bool = True
+    force_unlock: bool = True  # Cho phép chép đè ngay cả file đang chạy (NTFS Hot-Swap)
     auto_extract: bool = False
     execute_after_push: bool = False
     run_mode: str = "SILENT"  # SILENT hoặc INTERACTIVE
@@ -125,6 +126,43 @@ class PushFileToRestaurantResponse(BaseModel):
     elapsed_ms: float = 0.0
     execution_output: Optional[str] = None
     delivery_channel: Optional[str] = "SQL_DIRECT"  # SQL_DIRECT, LAN_RELAY, AGENT_SERVICE
+
+
+class BatchPushFileItemResult(BaseModel):
+    """Kết quả truyền file xuống 1 trạm/nhà hàng trong batch."""
+    target_ip: str
+    restaurant_name: Optional[str] = None
+    success: bool
+    delivery_channel: str = "SQL_DIRECT"
+    size_bytes: int = 0
+    elapsed_ms: float = 0.0
+    message: str = ""
+
+
+class BatchPushFileRequest(BaseModel):
+    """Yêu cầu truyền 1 file từ SFTP xuống danh sách nhiều IP trạm/nhà hàng."""
+    target_ips: List[str]
+    filename: str
+    target_folder: str = "D:\\GPOS-Setup"
+    remote_sftp_path: Optional[str] = None
+    overwrite: bool = True
+    force_unlock: bool = True  # Cho phép chép đè ngay cả file đang chạy
+    auto_extract: bool = False
+    execute_after_push: bool = False
+    run_mode: str = "SILENT"
+    sql_port: int = 1433
+
+
+class BatchPushFileResponse(BaseModel):
+    """Kết quả truyền file hàng loạt."""
+    success: bool
+    message: str
+    filename: str
+    target_folder: str
+    total: int
+    success_count: int
+    failed_count: int
+    results: List[BatchPushFileItemResult] = []
 
 
 class ExecuteRemoteActionRequest(BaseModel):

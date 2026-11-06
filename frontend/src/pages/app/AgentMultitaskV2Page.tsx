@@ -25,6 +25,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { checkIsDungOrSuperAdmin } from '../../utils/authUtils';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
+import { BatchPushModal } from '../../components/agent-multitask/BatchPushModal';
 import {
   agentMultitaskV2Service,
   SftpFileItem,
@@ -97,7 +98,9 @@ export const AgentMultitaskV2Page: React.FC = () => {
   const [autoExtract, setAutoExtract] = useState<boolean>(true);
   const [executeAfterPush, setExecuteAfterPush] = useState<boolean>(false);
   const [runModeAfterPush, setRunModeAfterPush] = useState<'SILENT' | 'INTERACTIVE'>('SILENT');
+  const [forceUnlockSingle, setForceUnlockSingle] = useState<boolean>(true);
   const [pushingFile, setPushingFile] = useState<boolean>(false);
+  const [showBatchModal, setShowBatchModal] = useState<boolean>(false);
 
   // ── 4. THƯ MỤC NHÀ HÀNG STATE ──
   const [restaurantFiles, setRestaurantFiles] = useState<RestaurantFolderFileItem[]>([]);
@@ -333,7 +336,8 @@ export const AgentMultitaskV2Page: React.FC = () => {
         remote_sftp_path: activeSftpPath,
         auto_extract: autoExtract,
         execute_after_push: executeAfterPush,
-        run_mode: runModeAfterPush
+        run_mode: runModeAfterPush,
+        force_unlock: forceUnlockSingle
       });
 
       if (res.success) {
@@ -1215,6 +1219,15 @@ export const AgentMultitaskV2Page: React.FC = () => {
                   <span>Tự động chạy sau khi truyền</span>
                 </label>
 
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', color: '#b45309', fontWeight: 600 }}>
+                  <input
+                    type="checkbox"
+                    checked={forceUnlockSingle}
+                    onChange={(e) => setForceUnlockSingle(e.target.checked)}
+                  />
+                  <span>Chép đè file đang chạy (Hot-Swap)</span>
+                </label>
+
                 {executeAfterPush && (
                   <select
                     value={runModeAfterPush}
@@ -1227,34 +1240,59 @@ export const AgentMultitaskV2Page: React.FC = () => {
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={() => handlePushFile()}
-                disabled={pushingFile || !selectedSftpFile}
-                style={{
-                  padding: '7px 18px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  backgroundColor: selectedSftpFile ? '#059669' : '#cbd5e1',
-                  color: '#ffffff',
-                  fontSize: '12.5px',
-                  fontWeight: 800,
-                  cursor: pushingFile || !selectedSftpFile ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                {pushingFile ? <RefreshCw size={14} className="animate-spin" /> : <Upload size={14} />}
-                <span>
-                  {pushingFile
-                    ? 'Đang truyền xuống nhà hàng...'
-                    : selectedSftpFile
-                    ? `TRUYỀN FILE '${selectedSftpFile.filename}' XUỐNG NHÀ HÀNG`
-                    : 'CHỌN FILE TỪ SFTP ĐỂ TRUYỀN'}
-                </span>
-              </button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowBatchModal(true)}
+                  style={{
+                    padding: '7px 16px',
+                    borderRadius: '6px',
+                    border: '1px solid #d97706',
+                    backgroundColor: '#F5B800',
+                    color: '#000000',
+                    fontSize: '12.5px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                  title="Mở hộp thoại truyền file hàng loạt xuống nhiều nhà hàng theo danh sách IP (Paste từ Excel, dấu phẩy, enter...)"
+                >
+                  <Zap size={14} />
+                  <span>TRUYỀN HÀNG LOẠT (PASTE IP)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handlePushFile()}
+                  disabled={pushingFile || !selectedSftpFile}
+                  style={{
+                    padding: '7px 18px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: selectedSftpFile ? '#059669' : '#cbd5e1',
+                    color: '#ffffff',
+                    fontSize: '12.5px',
+                    fontWeight: 800,
+                    cursor: pushingFile || !selectedSftpFile ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  {pushingFile ? <RefreshCw size={14} className="animate-spin" /> : <Upload size={14} />}
+                  <span>
+                    {pushingFile
+                      ? 'Đang truyền xuống nhà hàng...'
+                      : selectedSftpFile
+                      ? `TRUYỀN FILE '${selectedSftpFile.filename}' XUỐNG NHÀ HÀNG`
+                      : 'CHỌN FILE TỪ SFTP ĐỂ TRUYỀN'}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1786,6 +1824,17 @@ export const AgentMultitaskV2Page: React.FC = () => {
           </div>
         </Modal>
       )}
+      {/* ── MODAL TRUYỀN HÀNG LOẠT THEO DANH SÁCH IP ── */}
+      <BatchPushModal
+        isOpen={showBatchModal}
+        onClose={() => setShowBatchModal(false)}
+        selectedFile={selectedSftpFile}
+        sftpFiles={sftpFiles}
+        defaultTargetFolder={targetFolder}
+        onSuccess={() => {
+          handleListRestaurantFolder(targetIp, targetFolder);
+        }}
+      />
     </div>
   );
 };
