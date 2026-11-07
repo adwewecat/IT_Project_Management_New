@@ -705,17 +705,17 @@ def download_package_file(package_name: str):
 # ──────────────────────────────────────────────────────────────────────────
 @router.get("/print-management", response_model=PrintManagementResponse)
 def get_print_management(
-    restaurant_code: str = Query(..., description="Mã nhà hàng (RK7, SAP hoặc ID)"),
+    restaurant_code: Optional[str] = Query("", description="Mã nhà hàng (RK7, SAP hoặc ID)"),
     ip_lan: Optional[str] = Query(None, description="IP LAN máy trạm đang chọn"),
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(get_current_user)
 ):
     """
     Lấy thông tin Print Management (danh sách máy in, Queue status, Jobs in queue, Driver name...)
-    của các máy trạm tại nhà hàng đã cài Agent Multitask.
+    trực tiếp từ máy đang kết nối MongoDB (Agent-less) hoặc từ các máy trạm tại nhà hàng.
     """
     return AgentMultitaskService.get_print_management(
-        restaurant_code=restaurant_code,
+        restaurant_code=restaurant_code or "",
         ip_lan=ip_lan,
         db=db
     )

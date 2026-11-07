@@ -50,7 +50,7 @@ export const printManagementService = {
   /**
    * Gửi lệnh yêu cầu máy trạm quét và gửi lại thông tin máy in thời gian thực (realtime)
    */
-  async refreshStationPrinters(restaurantCode: string, ipLan: string): Promise<{ status: string; message: string; task_id?: number }> {
+  async refreshStationPrinters(restaurantCode: string, ipLan: string): Promise<{ status: string; message: string; immediate?: boolean; task_id?: number }> {
     const response = await api.post('/agent-multitask/print-management/refresh', {
       restaurant_code: restaurantCode,
       ip_lan: ipLan,
@@ -61,7 +61,7 @@ export const printManagementService = {
   /**
    * Khởi động lại Spooler và xóa sạch các lệnh in bị kẹt trong hàng đợi máy trạm
    */
-  async clearStationPrintSpooler(restaurantCode: string, ipLan: string): Promise<{ status: string; message: string; task_id?: number }> {
+  async clearStationPrintSpooler(restaurantCode: string, ipLan: string): Promise<{ status: string; message: string; immediate?: boolean; task_id?: number }> {
     const response = await api.post('/agent-multitask/print-management/clear-spooler', {
       restaurant_code: restaurantCode,
       ip_lan: ipLan,

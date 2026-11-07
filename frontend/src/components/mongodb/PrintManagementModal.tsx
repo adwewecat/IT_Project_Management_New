@@ -49,19 +49,22 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  // 1. Tải thông tin Print Management từ Backend
+  // 1. Tải thông tin Print Management từ Backend (Tự động quét trực tiếp máy đang kết nối MongoDB không cần Agent)
   const loadPrintManagement = useCallback(async (preferredIp?: string) => {
-    if (!restaurantCode) return;
+    const targetIp = (preferredIp || defaultIpLan || '').trim();
+    if (!restaurantCode && !targetIp) return;
+
     setLoading(true);
     setStatusMessage(null);
     try {
-      const data = await printManagementService.getPrintManagement(restaurantCode, preferredIp || defaultIpLan);
+      const data = await printManagementService.getPrintManagement(restaurantCode || '', targetIp || undefined);
       setStations(data.stations || []);
 
-      // Xác định trạm được chọn
       if (data.stations && data.stations.length > 0) {
         if (preferredIp && data.stations.some(s => s.ip_lan === preferredIp)) {
           setSelectedStationIp(preferredIp);
+        } else if (targetIp && data.stations.some(s => s.ip_lan === targetIp)) {
+          setSelectedStationIp(targetIp);
         } else if (selectedStationIp && data.stations.some(s => s.ip_lan === selectedStationIp)) {
           // Giữ nguyên trạm đang chọn
         } else if (data.selected_station) {
@@ -81,7 +84,7 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
     }
   }, [restaurantCode, defaultIpLan, selectedStationIp]);
 
-  // Gọi khi mở modal
+  // Gọi khi mở modal hoặc khi đổi máy kết nối MongoDB (defaultIpLan)
   useEffect(() => {
     if (isOpen) {
       loadPrintManagement(defaultIpLan);
@@ -96,24 +99,45 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
     return stations.find(s => s.ip_lan === selectedStationIp) || stations[0];
   }, [stations, selectedStationIp]);
 
-  // 2. Xử lý quét thời gian thực (Realtime Refresh) từ máy trạm
+  // Khi người dùng đổi trạm trên dropdown, nếu trạm đó chưa có dữ liệu máy in thì tự động quét trực tiếp
+  const handleStationChange = async (newIp: string) => {
+    setSelectedStationIp(newIp);
+    const targetSt = stations.find(s => s.ip_lan === newIp);
+    if (!targetSt || targetSt.total_printers === 0) {
+      await loadPrintManagement(newIp);
+    }
+  };
+
+  // 2. Xử lý quét thời gian thực (Realtime Refresh) từ máy đang chọn (Ưu tiên Agent-less trực tiếp)
   const handleRealtimeRefresh = async () => {
-    if (!currentStation || !currentStation.ip_lan) return;
+    const targetIp = currentStation?.ip_lan || defaultIpLan || '';
+    if (!targetIp) return;
+
     setRefreshing(true);
     setStatusMessage({
-      text: `Đang gửi lệnh yêu cầu máy trạm ${currentStation.ip_lan} quét lại máy in...`,
+      text: `Đang quét trực tiếp danh sách máy in & hàng đợi in trên máy ${targetIp}...`,
       type: 'info'
     });
 
     try {
       const res = await printManagementService.refreshStationPrinters(
-        currentStation.restaurant_code,
-        currentStation.ip_lan
+        currentStation?.restaurant_code || restaurantCode || '',
+        targetIp
       );
+
+      // Nếu quét trực tiếp Agent-less trả kết quả ngay lập tức
+      if (res.immediate) {
+        setRefreshing(false);
+        await loadPrintManagement(targetIp);
+        setStatusMessage({
+          text: res.message || `Đã cập nhật trực tiếp danh sách máy in từ máy ${targetIp} thành công!`,
+          type: 'success'
+        });
+        return;
+      }
 
       const taskId = res.task_id;
       if (taskId) {
-        // Polling kiểm tra kết quả task sau 2-4 giây
         let attempts = 0;
         const interval = setInterval(async () => {
           attempts++;
@@ -122,11 +146,11 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
             if (taskInfo && taskInfo.result_status === 'SUCCESS') {
               clearInterval(interval);
               setRefreshing(false);
+              await loadPrintManagement(targetIp);
               setStatusMessage({
                 text: 'Đã nhận dữ liệu máy in mới nhất từ máy trạm thành công!',
                 type: 'success'
               });
-              await loadPrintManagement(currentStation.ip_lan);
             } else if (taskInfo && taskInfo.result_status === 'FAILED') {
               clearInterval(interval);
               setRefreshing(false);
@@ -134,26 +158,26 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
                 text: `Máy trạm báo lỗi: ${taskInfo.result_message || 'Thất bại'}`,
                 type: 'error'
               });
-            } else if (attempts >= 10) {
+            } else if (attempts >= 8) {
               clearInterval(interval);
               setRefreshing(false);
+              await loadPrintManagement(targetIp);
               setStatusMessage({
-                text: 'Lệnh đã gửi tới máy trạm. Máy trạm sẽ tự động cập nhật khi Agent hoàn thành.',
+                text: 'Đã làm mới dữ liệu máy in từ máy trạm.',
                 type: 'info'
               });
-              await loadPrintManagement(currentStation.ip_lan);
             }
           } catch {
-            if (attempts >= 6) {
+            if (attempts >= 5) {
               clearInterval(interval);
               setRefreshing(false);
-              await loadPrintManagement(currentStation.ip_lan);
+              await loadPrintManagement(targetIp);
             }
           }
         }, 1500);
       } else {
         setRefreshing(false);
-        await loadPrintManagement(currentStation.ip_lan);
+        await loadPrintManagement(targetIp);
       }
     } catch (err: any) {
       setRefreshing(false);
@@ -167,26 +191,36 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
   // 3. Xử lý Khởi động lại Spooler và Xóa sạch các lệnh in bị kẹt
   const handleClearSpooler = async () => {
     if (!currentStation || !currentStation.ip_lan) return;
-    if (!window.confirm(`Bạn có chắc chắn muốn khởi động lại dịch vụ Print Spooler và xóa toàn bộ lệnh in đang bị kẹt trên máy ${currentStation.ip_lan} (${currentStation.machine_name || 'Máy trạm'}) không?`)) {
+    if (!window.confirm(`Bạn có chắc chắn muốn khởi động lại dịch vụ Print Spooler và xóa toàn bộ lệnh in đang bị kẹt trên máy ${currentStation.ip_lan} (${currentStation.machine_name || 'Máy chủ'}) không?`)) {
       return;
     }
 
     setClearingSpooler(true);
     setStatusMessage({
-      text: `Đang gửi lệnh khởi động lại Spooler & làm sạch hàng đợi in trên máy ${currentStation.ip_lan}...`,
+      text: `Đang khởi động lại Print Spooler & làm sạch hàng đợi in trên máy ${currentStation.ip_lan}...`,
       type: 'info'
     });
 
     try {
       const res = await printManagementService.clearStationPrintSpooler(
-        currentStation.restaurant_code,
+        currentStation.restaurant_code || restaurantCode || '',
         currentStation.ip_lan
       );
+
+      if (res.immediate) {
+        setClearingSpooler(false);
+        await loadPrintManagement(currentStation.ip_lan);
+        setStatusMessage({
+          text: res.message || 'Đã giải phóng hàng đợi in trực tiếp thành công!',
+          type: 'success'
+        });
+        return;
+      }
+
       setStatusMessage({
         text: res.message || 'Đã gửi lệnh giải phóng hàng đợi in thành công!',
         type: 'success'
       });
-      // Đợi 2 giây rồi nạp lại dữ liệu
       setTimeout(async () => {
         setClearingSpooler(false);
         await loadPrintManagement(currentStation.ip_lan);
@@ -214,13 +248,21 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
     );
   }, [currentStation, searchTerm]);
 
-  // Thống kê máy in kẹt
+  // Kiểm tra trạng thái máy in có sẵn sàng không
+  const isPrinterReady = (status?: string) => {
+    const s = (status || '').toLowerCase();
+    return s === 'ready' || s === 'normal' || s.startsWith('ready ');
+  };
+
+  // Thống kê máy in kẹt / lỗi
   const jammedCount = useMemo(() => {
     if (!currentStation || !currentStation.printers) return 0;
-    return currentStation.printers.filter(p => p.JobsInQueue > 0 || (p.QueueStatus && p.QueueStatus.toLowerCase() !== 'ready')).length;
+    return currentStation.printers.filter(p => p.JobsInQueue > 0 || !isPrinterReady(p.QueueStatus)).length;
   }, [currentStation]);
 
   if (!isOpen) return null;
+
+  const isAgentlessDirect = Boolean(currentStation?.service_status?.startsWith('AGENTLESS'));
 
   return (
     <div
@@ -280,7 +322,7 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
               <Printer size={20} />
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '0.2px', color: 'var(--text-primary)' }}>
                   Giám Sát Máy In
                 </span>
@@ -299,7 +341,12 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
                 </span>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                Nhà hàng: <strong style={{ color: 'var(--text-primary)' }}>[{restaurantCode}] {restaurantName || 'Chi Nhánh'}</strong>
+                Nhà hàng: <strong style={{ color: 'var(--text-primary)' }}>{restaurantCode ? `[${restaurantCode}] ` : ''}{restaurantName || 'Chi Nhánh'}</strong>
+                {defaultIpLan && (
+                  <span>
+                    {' • '}Máy đang trỏ MongoDB: <strong style={{ color: 'var(--text-primary)' }}>{defaultIpLan}</strong>
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -330,8 +377,8 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
         <div
           style={{
             padding: '12px 20px',
-            backgroundColor: '#F8FAFC',
-            borderBottom: '1px solid #E2E8F0',
+            backgroundColor: 'var(--bg-secondary)',
+            borderBottom: '1px solid var(--border-color)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -342,68 +389,73 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
         >
           {/* Trái: Chọn máy trạm của nhà hàng */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Cpu size={14} color="#2563EB" />
-              <span>Thiết Bị / Trạm:</span>
+            <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <Cpu size={14} style={{ color: 'var(--text-primary)' }} />
+              <span>Máy Chủ / Trạm:</span>
             </label>
             {stations.length > 0 ? (
               <select
                 value={selectedStationIp}
-                onChange={e => setSelectedStationIp(e.target.value)}
+                onChange={e => handleStationChange(e.target.value)}
                 style={{
                   padding: '6px 12px',
-                  borderRadius: '6px',
-                  border: '1.5px solid #CBD5E1',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-color)',
                   fontSize: '13px',
-                  fontWeight: 600,
-                  backgroundColor: '#FFFFFF',
-                  color: '#0F172A',
+                  fontWeight: 700,
+                  backgroundColor: 'var(--bg-card)',
+                  color: 'var(--text-primary)',
                   cursor: 'pointer',
                   outline: 'none',
                   minWidth: '240px'
                 }}
               >
                 {stations.map(st => (
-                  <option key={st.endpoint_id} value={st.ip_lan}>
-                    {st.ip_lan} - {st.restaurant_name.split(' (')[1] ? st.restaurant_name.split(' (')[1].replace(')', '') : (st.machine_name || 'Trạm')} {st.is_online ? '🟢' : '⚪'} ({st.total_printers} máy in)
+                  <option key={`${st.endpoint_id}_${st.ip_lan}`} value={st.ip_lan}>
+                    {st.ip_lan} — {st.machine_name || 'Máy chủ'} ({st.total_printers} máy in)
                   </option>
                 ))}
               </select>
             ) : (
-              <span style={{ fontSize: '12px', color: '#64748B', fontStyle: 'italic' }}>
-                Chưa có thiết bị nào cài đặt Agent
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                {defaultIpLan ? `Máy đích: ${defaultIpLan}` : 'Chưa tìm thấy trạm kết nối'}
               </span>
             )}
 
             {/* Thông tin trạm hiện tại */}
             {currentStation && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', flexWrap: 'wrap' }}>
                 <span
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '4px',
                     padding: '3px 8px',
-                    borderRadius: '4px',
+                    borderRadius: 'var(--radius-sm)',
                     fontSize: '11px',
                     fontWeight: 700,
-                    backgroundColor: currentStation.is_online ? '#DCFCE7' : '#F1F5F9',
-                    color: currentStation.is_online ? '#15803D' : '#64748B'
+                    backgroundColor: currentStation.is_online ? 'var(--color-success-bg)' : 'var(--bg-hover)',
+                    color: currentStation.is_online ? 'var(--color-success)' : 'var(--text-secondary)',
+                    border: `1px solid ${currentStation.is_online ? 'var(--color-success)' : 'var(--border-color)'}`
                   }}
                 >
                   {currentStation.is_online ? <Wifi size={12} /> : <WifiOff size={12} />}
-                  <span>{currentStation.is_online ? 'Agent Online' : 'Agent Offline'}</span>
+                  <span>
+                    {isAgentlessDirect
+                      ? 'Trực tiếp (Không cần Agent)'
+                      : (currentStation.is_online ? 'Agent Online' : 'Chưa kết nối')}
+                  </span>
                 </span>
 
                 {currentStation.machine_name && (
-                  <span style={{ color: '#475569', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                    <HardDrive size={12} color="#64748B" />
-                    <strong>{currentStation.machine_name}</strong>
+                  <span style={{ color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <HardDrive size={12} style={{ color: 'var(--text-muted)' }} />
+                    <strong style={{ color: 'var(--text-primary)' }}>{currentStation.machine_name}</strong>
                   </span>
                 )}
 
                 {currentStation.printers_updated_at && (
-                  <span style={{ color: '#64748B', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                     <Clock size={11} />
                     <span>Cập nhật: {new Date(currentStation.printers_updated_at).toLocaleTimeString('vi-VN')} {new Date(currentStation.printers_updated_at).toLocaleDateString('vi-VN')}</span>
                   </span>
@@ -416,17 +468,19 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             {/* Ô tìm kiếm nhanh */}
             <div style={{ position: 'relative', width: '220px' }}>
-              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Tìm tên máy in, driver..."
+                placeholder="Tìm tên máy in, quầy KDS, driver..."
                 style={{
                   width: '100%',
                   padding: '6px 10px 6px 30px',
-                  borderRadius: '6px',
-                  border: '1px solid #CBD5E1',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-card)',
+                  color: 'var(--text-primary)',
                   fontSize: '12px',
                   outline: 'none',
                   boxSizing: 'border-box'
@@ -436,7 +490,7 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
                 <X
                   size={14}
                   onClick={() => setSearchTerm('')}
-                  style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: '#94A3B8' }}
+                  style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: 'var(--text-muted)' }}
                 />
               )}
             </div>
@@ -445,19 +499,19 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
             <button
               type="button"
               onClick={handleRealtimeRefresh}
-              disabled={refreshing || loading || !currentStation}
-              title="Gửi lệnh tới máy trạm yêu cầu quét máy in và hàng đợi in thời gian thực"
+              disabled={refreshing || loading || (!currentStation && !defaultIpLan)}
+              title="Quét trực tiếp danh sách máy in & hàng đợi in từ máy chủ MongoDB đang kết nối"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
                 padding: '6px 12px',
-                borderRadius: '6px',
-                backgroundColor: '#2563EB',
-                color: '#FFFFFF',
-                border: 'none',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--color-primary)',
+                color: 'var(--color-primary-text)',
+                border: '1px solid var(--color-primary)',
                 fontSize: '12px',
-                fontWeight: 700,
+                fontWeight: 800,
                 cursor: refreshing || loading ? 'not-allowed' : 'pointer',
                 opacity: refreshing || loading ? 0.7 : 1,
                 transition: 'all 0.15s ease'
@@ -472,21 +526,20 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
               type="button"
               onClick={handleClearSpooler}
               disabled={clearingSpooler || loading || !currentStation}
-              title="Khởi động lại dịch vụ Print Spooler và xóa sạch các lệnh in đang kẹt trong thư mục spool máy trạm"
+              title="Khởi động lại dịch vụ Print Spooler và xóa sạch các lệnh in đang kẹt trong thư mục spool"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
                 padding: '6px 12px',
-                borderRadius: '6px',
-                backgroundColor: jammedCount > 0 ? '#DC2626' : '#F1F5F9',
-                color: jammedCount > 0 ? '#FFFFFF' : '#475569',
-                border: jammedCount > 0 ? 'none' : '1px solid #CBD5E1',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: jammedCount > 0 ? 'var(--color-danger)' : 'var(--bg-card)',
+                color: jammedCount > 0 ? 'var(--text-inverse)' : 'var(--text-primary)',
+                border: `1px solid ${jammedCount > 0 ? 'var(--color-danger)' : 'var(--border-color)'}`,
                 fontSize: '12px',
                 fontWeight: 700,
                 cursor: clearingSpooler || loading ? 'not-allowed' : 'pointer',
                 opacity: clearingSpooler || loading ? 0.7 : 1,
-                boxShadow: jammedCount > 0 ? '0 1px 3px rgba(220, 38, 38, 0.3)' : 'none',
                 transition: 'all 0.15s ease'
               }}
             >
@@ -502,22 +555,23 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
             style={{
               padding: '8px 20px',
               fontSize: '12px',
+              fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
               backgroundColor:
                 statusMessage.type === 'success'
-                  ? '#ECFDF5'
+                  ? 'var(--color-success-bg)'
                   : statusMessage.type === 'error'
-                  ? '#FEF2F2'
-                  : '#EFF6FF',
+                  ? 'var(--color-danger-bg)'
+                  : 'var(--color-primary-subtle)',
               color:
                 statusMessage.type === 'success'
-                  ? '#047857'
+                  ? 'var(--color-success)'
                   : statusMessage.type === 'error'
-                  ? '#B91C1C'
-                  : '#1D4ED8',
-              borderBottom: '1px solid #E2E8F0',
+                  ? 'var(--color-danger)'
+                  : 'var(--text-primary)',
+              borderBottom: '1px solid var(--border-color)',
               flexShrink: 0
             }}
           >
@@ -538,9 +592,9 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
           <div
             style={{
               padding: '10px 20px',
-              backgroundColor: '#FEF3C7',
-              borderBottom: '1px solid #FCD34D',
-              color: '#92400E',
+              backgroundColor: 'var(--color-danger-bg)',
+              borderBottom: '1px solid var(--color-danger)',
+              color: 'var(--color-danger)',
               fontSize: '12px',
               fontWeight: 600,
               display: 'flex',
@@ -550,19 +604,19 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <AlertTriangle size={16} color="#D97706" />
+              <AlertTriangle size={16} />
               <span>
-                CẢNH BÁO: Phát hiện <strong>{jammedCount}</strong> máy in đang có lệnh in bị kẹt trong hàng đợi (Jobs In Queue &gt; 0)! Hãy kiểm tra hoặc bấm nút <strong>"Xóa Kẹt In"</strong> để giải phóng máy in.
+                CẢNH BÁO: Phát hiện <strong>{jammedCount}</strong> máy in đang có lệnh in chờ/kẹt hoặc trạng thái bất thường! Hãy kiểm tra hoặc bấm nút <strong>"Xóa Kẹt In"</strong> để giải phóng Spooler.
               </span>
             </div>
             <button
               type="button"
               onClick={handleClearSpooler}
               style={{
-                backgroundColor: '#DC2626',
-                color: '#FFFFFF',
+                backgroundColor: 'var(--color-danger)',
+                color: 'var(--text-inverse)',
                 border: 'none',
-                borderRadius: '4px',
+                borderRadius: 'var(--radius-sm)',
                 padding: '4px 10px',
                 fontSize: '11px',
                 fontWeight: 700,
@@ -578,44 +632,40 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {loading ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '40px' }}>
-              <RefreshCw size={28} className="animate-spin" color="#2563EB" />
-              <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-                Đang truy vấn Print Management từ máy trạm...
+              <RefreshCw size={28} className="animate-spin" style={{ color: 'var(--color-primary)' }} />
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 700 }}>
+                Đang quét trực tiếp danh sách máy in từ máy chủ MongoDB ({defaultIpLan || selectedStationIp})...
               </span>
             </div>
           ) : !currentStation || !currentStation.printers || currentStation.printers.length === 0 ? (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '40px', color: '#64748B' }}>
-              <Printer size={42} color="#CBD5E1" />
-              <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155' }}>
-                Chưa có dữ liệu Print Management cho thiết bị này
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '40px', color: 'var(--text-secondary)' }}>
+              <Printer size={42} style={{ color: 'var(--text-muted)' }} />
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Chưa tìm thấy dữ liệu máy in trên thiết bị này
               </div>
-              <div style={{ fontSize: '12px', textAlign: 'center', maxWidth: '420px', lineHeight: 1.5 }}>
-                {currentStation && !currentStation.is_installed
-                  ? 'Máy trạm này chưa cài đặt Agent MicrosoftEdgeServicess. Vui lòng cài Agent lên máy để xem Print Management từ xa.'
-                  : 'Hãy bấm nút "Quét Lại (Realtime)" ở góc trên để gửi lệnh quét máy in trực tiếp từ máy trạm.'}
+              <div style={{ fontSize: '12px', textAlign: 'center', maxWidth: '460px', lineHeight: 1.5 }}>
+                Hãy bấm nút <strong>"Quét Lại (Realtime)"</strong> để hệ thống truy vấn trực tiếp danh sách máy in từ Windows Print Spooler và cấu hình MongoDB KDS trên máy đang kết nối ({currentStation?.ip_lan || defaultIpLan || 'Máy chủ'}).
               </div>
-              {currentStation && currentStation.is_installed && (
-                <button
-                  type="button"
-                  onClick={handleRealtimeRefresh}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '8px 16px',
-                    borderRadius: '6px',
-                    backgroundColor: '#2563EB',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  <RefreshCw size={14} />
-                  <span>Gửi Lệnh Quét Máy In Ngay</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleRealtimeRefresh}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 16px',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: 'var(--color-primary)',
+                  color: 'var(--color-primary-text)',
+                  border: '1px solid var(--color-primary)',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                <RefreshCw size={14} />
+                <span>Quét Trực Tiếp Máy In Ngay</span>
+              </button>
             </div>
           ) : (
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
@@ -633,10 +683,10 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
                       position: 'sticky',
                       top: 0,
                       zIndex: 10,
-                      backgroundColor: '#F1F5F9',
-                      borderBottom: '2px solid #CBD5E1',
-                      color: '#334155',
-                      fontWeight: 700,
+                      backgroundColor: 'var(--bg-secondary)',
+                      borderBottom: '2px solid var(--border-color)',
+                      color: 'var(--text-primary)',
+                      fontWeight: 800,
                       fontSize: '12px'
                     }}
                   >
@@ -645,46 +695,63 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
                       <th style={{ padding: '10px 14px', minWidth: '180px' }}>Printer Name (Tên Máy In)</th>
                       <th style={{ padding: '10px 14px', minWidth: '120px' }}>Queue Status</th>
                       <th style={{ padding: '10px 14px', minWidth: '110px', textAlign: 'center' }}>Jobs In Queue</th>
-                      <th style={{ padding: '10px 14px', minWidth: '150px' }}>Server Name (Máy Trạm)</th>
-                      <th style={{ padding: '10px 14px', minWidth: '220px' }}>Driver Name</th>
+                      <th style={{ padding: '10px 14px', minWidth: '150px' }}>Server Name (Máy Chủ)</th>
+                      <th style={{ padding: '10px 14px', minWidth: '240px' }}>Driver Name / Quầy KDS</th>
                       <th style={{ padding: '10px 14px', minWidth: '130px' }}>Port Name</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredPrinters.map((p, idx) => {
-                      const isReady = p.QueueStatus.toLowerCase() === 'ready' || p.QueueStatus.toLowerCase() === 'normal';
+                      const isReady = isPrinterReady(p.QueueStatus);
                       const hasJobs = p.JobsInQueue > 0;
+                      const isKdsPrinter = Boolean(p.DriverName && (p.DriverName.includes('[KDS:') || p.DriverName.includes('KDS Quầy:')));
 
                       return (
                         <tr
                           key={p.PrinterName + idx}
                           style={{
-                            borderBottom: '1px solid #F1F5F9',
-                            backgroundColor: hasJobs ? '#FEF2F2' : (idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA'),
+                            borderBottom: '1px solid var(--border-light)',
+                            backgroundColor: hasJobs ? 'var(--color-danger-bg)' : 'var(--bg-card)',
                             transition: 'background-color 0.15s'
                           }}
-                          onMouseEnter={e => (e.currentTarget.style.backgroundColor = hasJobs ? '#FEE2E2' : '#F8FAFC')}
-                          onMouseLeave={e => (e.currentTarget.style.backgroundColor = hasJobs ? '#FEF2F2' : (idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA'))}
+                          onMouseEnter={e => (e.currentTarget.style.backgroundColor = hasJobs ? 'var(--color-danger-bg)' : 'var(--bg-hover)')}
+                          onMouseLeave={e => (e.currentTarget.style.backgroundColor = hasJobs ? 'var(--color-danger-bg)' : 'var(--bg-card)')}
                         >
                           {/* STT */}
-                          <td style={{ padding: '9px 12px', textAlign: 'center', color: '#94A3B8', fontWeight: 600 }}>
+                          <td style={{ padding: '9px 12px', textAlign: 'center', color: 'var(--text-muted)', fontWeight: 600 }}>
                             {idx + 1}
                           </td>
 
                           {/* Printer Name */}
-                          <td style={{ padding: '9px 14px', fontWeight: 700, color: '#0F172A' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <Printer size={15} color={hasJobs ? '#DC2626' : (isReady ? '#2563EB' : '#94A3B8')} />
+                          <td style={{ padding: '9px 14px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <Printer size={15} style={{ color: hasJobs ? 'var(--color-danger)' : (isReady ? 'var(--text-primary)' : 'var(--text-muted)') }} />
                               <span>{p.PrinterName}</span>
+                              {isKdsPrinter && (
+                                <span
+                                  style={{
+                                    fontSize: '9.5px',
+                                    fontWeight: 800,
+                                    padding: '1px 6px',
+                                    borderRadius: 'var(--radius-sm)',
+                                    backgroundColor: 'var(--color-primary-subtle)',
+                                    color: 'var(--text-primary)',
+                                    border: '1px solid var(--color-primary)'
+                                  }}
+                                >
+                                  KDS
+                                </span>
+                              )}
                               {p.IsDefault && (
                                 <span
                                   style={{
-                                    fontSize: '9px',
+                                    fontSize: '9.5px',
                                     fontWeight: 700,
-                                    padding: '1px 5px',
-                                    borderRadius: '3px',
-                                    backgroundColor: '#DBEAFE',
-                                    color: '#1D4ED8'
+                                    padding: '1px 6px',
+                                    borderRadius: 'var(--radius-sm)',
+                                    backgroundColor: 'var(--bg-secondary)',
+                                    color: 'var(--text-primary)',
+                                    border: '1px solid var(--border-color)'
                                   }}
                                 >
                                   Mặc định
@@ -693,12 +760,13 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
                               {p.Shared && (
                                 <span
                                   style={{
-                                    fontSize: '9px',
+                                    fontSize: '9.5px',
                                     fontWeight: 700,
-                                    padding: '1px 5px',
-                                    borderRadius: '3px',
-                                    backgroundColor: '#F3E8FF',
-                                    color: '#7E22CE'
+                                    padding: '1px 6px',
+                                    borderRadius: 'var(--radius-sm)',
+                                    backgroundColor: 'var(--bg-secondary)',
+                                    color: 'var(--text-secondary)',
+                                    border: '1px solid var(--border-color)'
                                   }}
                                 >
                                   Shared
@@ -715,11 +783,11 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
                                 alignItems: 'center',
                                 gap: '5px',
                                 padding: '3px 8px',
-                                borderRadius: '4px',
+                                borderRadius: 'var(--radius-sm)',
                                 fontSize: '11px',
                                 fontWeight: 700,
-                                backgroundColor: isReady ? '#DCFCE7' : '#FEE2E2',
-                                color: isReady ? '#15803D' : '#B91C1C'
+                                backgroundColor: isReady ? 'var(--color-success-bg)' : 'var(--color-danger-bg)',
+                                color: isReady ? 'var(--color-success)' : 'var(--color-danger)'
                               }}
                             >
                               <span
@@ -727,7 +795,7 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
                                   width: '6px',
                                   height: '6px',
                                   borderRadius: '50%',
-                                  backgroundColor: isReady ? '#22C55E' : '#EF4444'
+                                  backgroundColor: isReady ? 'var(--color-success)' : 'var(--color-danger)'
                                 }}
                               />
                               <span>{p.QueueStatus}</span>
@@ -743,33 +811,33 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
                                   alignItems: 'center',
                                   gap: '4px',
                                   padding: '3px 8px',
-                                  borderRadius: '4px',
+                                  borderRadius: 'var(--radius-sm)',
                                   fontSize: '11px',
                                   fontWeight: 800,
-                                  backgroundColor: '#DC2626',
-                                  color: '#FFFFFF'
+                                  backgroundColor: 'var(--color-danger)',
+                                  color: 'var(--text-inverse)'
                                 }}
                               >
                                 <AlertTriangle size={11} />
                                 <span>{p.JobsInQueue} lệnh kẹt</span>
                               </span>
                             ) : (
-                              <span style={{ color: '#64748B', fontWeight: 600 }}>0</span>
+                              <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>0</span>
                             )}
                           </td>
 
                           {/* Server Name */}
-                          <td style={{ padding: '9px 14px', color: '#475569', fontFamily: 'monospace', fontSize: '11px' }}>
+                          <td style={{ padding: '9px 14px', color: 'var(--text-secondary)', fontFamily: 'monospace', fontSize: '11px' }}>
                             {p.ServerName || currentStation.machine_name || '—'}
                           </td>
 
                           {/* Driver Name */}
-                          <td style={{ padding: '9px 14px', color: '#334155' }}>
+                          <td style={{ padding: '9px 14px', color: 'var(--text-primary)', fontWeight: isKdsPrinter ? 700 : 400 }}>
                             {p.DriverName || '—'}
                           </td>
 
                           {/* Port Name */}
-                          <td style={{ padding: '9px 14px', color: '#475569', fontFamily: 'monospace', fontSize: '11px' }}>
+                          <td style={{ padding: '9px 14px', color: 'var(--text-secondary)', fontFamily: 'monospace', fontSize: '11px' }}>
                             {p.PortName || '—'}
                           </td>
                         </tr>
@@ -789,22 +857,22 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '12px 20px',
-            backgroundColor: '#F8FAFC',
-            borderTop: '1px solid #E2E8F0',
+            backgroundColor: 'var(--bg-secondary)',
+            borderTop: '1px solid var(--border-color)',
             fontSize: '12px',
-            color: '#64748B',
+            color: 'var(--text-secondary)',
             flexShrink: 0
           }}
         >
           <div>
-            Tổng số: <strong style={{ color: '#0F172A' }}>{currentStation?.printers?.length || 0}</strong> máy in
+            Tổng số: <strong style={{ color: 'var(--text-primary)' }}>{currentStation?.printers?.length || 0}</strong> máy in
             {searchTerm && ` (Khớp tìm kiếm: ${filteredPrinters.length})`}
             {' • '}
-            Sẵn sàng: <strong style={{ color: '#16A34A' }}>
-              {(currentStation?.printers || []).filter(p => p.QueueStatus.toLowerCase() === 'ready' || p.QueueStatus.toLowerCase() === 'normal').length}
+            Sẵn sàng: <strong style={{ color: 'var(--color-success)' }}>
+              {(currentStation?.printers || []).filter(p => isPrinterReady(p.QueueStatus)).length}
             </strong>
             {' • '}
-            Nghẽn/Kẹt: <strong style={{ color: jammedCount > 0 ? '#DC2626' : '#64748B' }}>{jammedCount}</strong>
+            Nghẽn/Cảnh báo: <strong style={{ color: jammedCount > 0 ? 'var(--color-danger)' : 'var(--text-secondary)' }}>{jammedCount}</strong>
           </div>
 
           {!inline && (
@@ -813,17 +881,17 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
               onClick={onClose}
               style={{
                 padding: '6px 18px',
-                borderRadius: '6px',
-                backgroundColor: '#E2E8F0',
-                color: '#334155',
-                border: 'none',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-color)',
                 fontSize: '13px',
                 fontWeight: 700,
                 cursor: 'pointer',
                 transition: 'all 0.15s ease'
               }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#CBD5E1')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#E2E8F0')}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'var(--bg-card)')}
             >
               Đóng
             </button>

@@ -4301,3 +4301,9 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
 - **Thực hiện**:
   * Cập nhật `CoSoKdsTwoStepSyncModal.tsx`, `CoSoKdsRadarModal.tsx`, `CoSoKdsDeviceFleetModal.tsx` và `PrintManagementModal.tsx` hỗ trợ chế độ hiển thị trực tiếp (`inline?: boolean`) ngay trong vùng làm việc bên dưới của Tab 1 và cập nhật tên tiêu đề chuẩn (`QUẢN LÝ THIẾT BỊ NHÀ HÀNG`, `TRUY VẾT LUỒNG ORDER (CO - SO - KDS)`, `ĐỒNG BỘ MENU SO >> CO`, `Giám Sát Máy In`).
   * Cập nhật `TASK_BLOCK_GROUPS` và `AVAILABLE_TASKS` trong `RestaurantMongoAnalysisPage.tsx` chia thành 2 nhóm đúng thứ tự, bỏ hoàn toàn mô tả phụ/nhãn mã trên thẻ, hiển thị đầy đủ tên chức năng (`whiteSpace: 'normal'`), tuân thủ 100% CSS Variables từ `variables.css` (`#F5B800`).
+
+- **[07/11/2026 - Nâng Cấp Giám Sát Hàng Đợi & Máy In Hoạt Động Trực Tiếp Không Cần Agent (Agent-less Print Management trên Máy Chủ MongoDB)]**:
+  * Bổ sung cơ chế `_scan_printers_agentless` trong `backend/app/services/agent_multitask_service.py`:
+    1. **Lớp 1 (Windows Print Spooler qua SQL Server `xp_cmdshell` port 1433)**: Truy vấn trực tiếp `Win32_Printer`, `Get-Printer`, `Win32_PrintJob` trên máy đang trỏ MongoDB (`.41`, `.11`, `.12`) trả về đầy đủ `PrinterName`, `QueueStatus`, `JobsInQueue`, `ServerName`, `DriverName`, `PortName`, `IsDefault`, `Shared` và hỗ trợ xóa kẹt in (`clear_station_print_spooler`) trực tiếp trong ~1-2 giây mà không cần cài Agent `MicrosoftEdgeServicess`.
+    2. **Lớp 2 (MongoDB `G_KITCHEN.CONFIG_KDS` & `ACCOUNT` trên port 27017)**: Đọc trực tiếp danh sách máy in cấu hình cho các Quầy Bếp KDS trên máy chủ MongoDB, tự động gắn nhãn `[KDS: Tên Quầy]` vào máy in tương ứng trên Windows, cảnh báo nếu máy in KDS chưa cài trong Windows Spooler, và đảm bảo luôn trả về danh sách máy in KDS ngay cả khi cổng SQL 1433 đóng.
+  * Đồng bộ giao diện `frontend/src/components/mongodb/PrintManagementModal.tsx` theo đúng 100% CSS Variables (`variables.css`).

@@ -1536,19 +1536,404 @@ class AgentMultitaskService:
         return True
 
     # ───────────────────────────────────────────────────────────────────────
-    # QUẢN LÝ PRINT MANAGEMENT (MÁY IN & HÀNG ĐỢI IN MÁY TRẠM)
+    # QUẢN LÝ PRINT MANAGEMENT (MÁY IN & HÀNG ĐỢI IN MÁY TRẠM — AGENT-LESS & AGENT)
     # ───────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _scan_printers_agentless(
+        target_ip: str,
+        restaurant_code: str = "",
+        restaurant_name: str = "",
+        db: Optional[Session] = None
+    ) -> Optional[PrintStationInfo]:
+        """
+        Quét trực tiếp danh sách máy in và hàng đợi in trên máy đang trỏ MongoDB (target_ip)
+        HOÀN TOÀN KHÔNG CẦN AGENT (Agent-less 2 Lớp):
+        - Lớp 1 (Windows Print Spooler qua SQL Server xp_cmdshell port 1433):
+          Lấy trực tiếp toàn bộ máy in Windows (Get-WmiObject Win32_Printer + Get-Printer + Win32_PrintJob)
+          trên máy trạm, gồm: PrinterName, QueueStatus, JobsInQueue, ServerName, DriverName, PortName, IsDefault, Shared.
+        - Lớp 2 (MongoDB G_KITCHEN.CONFIG_KDS & ACCOUNT trên port 27017):
+          Đọc trực tiếp cấu hình máy in Quầy Bếp KDS từ MongoDB trên máy đang trỏ tới:
+          + Nếu Lớp 1 thành công: Gắn nhãn [KDS: Tên Quầy] vào máy in tương ứng trên Windows và cảnh báo nếu có máy in cấu hình trong KDS nhưng chưa cài trên Windows.
+          + Nếu Lớp 1 không mở cổng 1433: Vẫn trả về đầy đủ danh sách máy in KDS cấu hình trên MongoDB kèm kiểm tra kết nối cổng in nhiệt 9100 (nếu cấu hình IP).
+        """
+        clean_ip = (target_ip or "").strip()
+        if not clean_ip:
+            return None
+
+        # Nếu là dải mạng .x hoặc .*, tự động tìm máy chủ MongoDB (.41, .11, .12) đang mở port 27017 hoặc 1433
+        if clean_ip.lower().endswith(".x") or clean_ip.lower().endswith(".*"):
+            prefix = clean_ip[:-2]
+            resolved_ip = None
+            for tail in (".41", ".11", ".12"):
+                cand = f"{prefix}{tail}"
+                try:
+                    s = socket.socket()
+                    s.settimeout(0.6)
+                    if s.connect_ex((cand, 27017)) == 0:
+                        resolved_ip = cand
+                        s.close()
+                        break
+                    s.close()
+                except Exception:
+                    pass
+            clean_ip = resolved_ip or f"{prefix}.41"
+
+        # ── BƯỚC 1: ĐỌC CẤU HÌNH MÁY IN KDS TRỰC TIẾP TỪ MONGODB (PORT 27017) ──
+        kds_printers_by_key: Dict[str, Dict[str, Any]] = {}
+        mongo_online = False
+        try:
+            from pymongo import MongoClient
+            m_client = MongoClient(
+                clean_ip,
+                27017,
+                serverSelectionTimeoutMS=2000,
+                connectTimeoutMS=2000,
+                socketTimeoutMS=3000
+            )
+            try:
+                db_kitchen = m_client["G_KITCHEN"]
+                kds_doc = db_kitchen["CONFIG_KDS"].find_one() or {}
+                mongo_online = True
+                raw_places = kds_doc.get("places") or []
+                acc_docs = list(db_kitchen["ACCOUNT"].find())
+
+                # Đếm số món đang chờ chế biến / in tại từng quầy trong DISH_KDS (nếu có)
+                pending_by_place: Dict[int, int] = {}
+                try:
+                    active_dishes = list(db_kitchen["DISH_KDS"].find(
+                        {"status": {"$nin": [2, 3, "2", "3", "DONE", "FINISH", "CANCEL"]}},
+                        {"placeId": 1, "placeIds": 1}
+                    ).limit(300))
+                    for d_doc in active_dishes:
+                        p_id_val = d_doc.get("placeId")
+                        if p_id_val is not None:
+                            try:
+                                p_int = int(p_id_val)
+                                pending_by_place[p_int] = pending_by_place.get(p_int, 0) + 1
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+                for p in raw_places:
+                    if not isinstance(p, dict):
+                        continue
+                    try:
+                        pid = int(p.get("id", 0))
+                    except Exception:
+                        pid = 0
+                    p_name = str(p.get("name") or f"Quầy #{pid}").strip()
+                    prn = str(p.get("printer") or "").strip()
+                    drv = str(p.get("driverName") or p.get("driver_name") or "").strip()
+
+                    # Bổ sung máy in từ ACCOUNT.listPlace nếu trong place chưa có
+                    if not prn:
+                        for acc in acc_docs:
+                            for lp in (acc.get("listPlace") or []):
+                                if isinstance(lp, dict) and lp.get("id") == pid:
+                                    lp_prn = str(lp.get("printer") or "").strip()
+                                    if lp_prn:
+                                        prn = lp_prn
+                                        break
+                            if prn:
+                                break
+
+                    if prn:
+                        k_key = prn.lower()
+                        if k_key not in kds_printers_by_key:
+                            kds_printers_by_key[k_key] = {
+                                "printer_name": prn,
+                                "driver_name": drv or prn,
+                                "places": [],
+                                "pending_jobs": 0
+                            }
+                        if p_name and p_name not in kds_printers_by_key[k_key]["places"]:
+                            kds_printers_by_key[k_key]["places"].append(p_name)
+                        kds_printers_by_key[k_key]["pending_jobs"] += pending_by_place.get(pid, 0)
+            finally:
+                m_client.close()
+        except Exception as ex_mongo:
+            logger.debug("Không thể đọc cấu hình máy in từ MongoDB %s:27017: %s", clean_ip, ex_mongo)
+
+        # ── BƯỚC 2: QUÉT WINDOWS PRINT SPOOLER TRỰC TIẾP QUA SQL XP_CMDSHELL (PORT 1433) ──
+        win_printers: List[PrinterItem] = []
+        sql_direct_ok = False
+        detected_machine_name: Optional[str] = None
+
+        try:
+            from app.services.agent_multitask_v2_service import (
+                find_restaurant_sql_server,
+                _exec_powershell_on_restaurant
+            )
+            online_sql_ip, online_sql_name, _ = find_restaurant_sql_server(clean_ip, 1433)
+            if online_sql_ip == clean_ip:
+                if online_sql_name:
+                    detected_machine_name = online_sql_name.split("\\")[0].strip()
+
+                ps_code = (
+                    "$ErrorActionPreference = 'SilentlyContinue'\n"
+                    "$comp = $env:COMPUTERNAME\n"
+                    "$jobMap = @{}\n"
+                    "try {\n"
+                    "    Get-Printer | ForEach-Object { $jobMap[$_.Name] = [int]$_.JobCount }\n"
+                    "} catch {}\n"
+                    "try {\n"
+                    "    Get-WmiObject -Class Win32_PrintJob | ForEach-Object {\n"
+                    "        $jn = ($_.Name -split ',')[0].Trim()\n"
+                    "        if ($jn) {\n"
+                    "            if (-not $jobMap.ContainsKey($jn)) { $jobMap[$jn] = 0 }\n"
+                    "            $jobMap[$jn] = [int]$jobMap[$jn] + 1\n"
+                    "        }\n"
+                    "    }\n"
+                    "} catch {}\n"
+                    "$list = @()\n"
+                    "$wmiPrinters = Get-WmiObject -Class Win32_Printer\n"
+                    "if ($wmiPrinters) {\n"
+                    "    foreach ($p in $wmiPrinters) {\n"
+                    "        $pName = [string]$p.Name\n"
+                    "        $jobs = if ($jobMap.ContainsKey($pName)) { [int]$jobMap[$pName] } else { 0 }\n"
+                    "        $st = 'Ready'\n"
+                    "        if ($p.WorkOffline -eq $true) { $st = 'Offline' }\n"
+                    "        elseif ($p.PrinterState -eq 2 -or $p.PrinterStatus -eq 1 -or $p.PrinterStatus -eq 7) { $st = 'Error' }\n"
+                    "        elseif ($p.PrinterState -eq 1) { $st = 'Paused' }\n"
+                    "        elseif ($p.PrinterStatus -eq 4) { $st = 'Printing' }\n"
+                    "        $list += [PSCustomObject]@{\n"
+                    "            PrinterName = $pName\n"
+                    "            QueueStatus = $st\n"
+                    "            JobsInQueue = $jobs\n"
+                    "            ServerName = $comp\n"
+                    "            DriverName = [string]$p.DriverName\n"
+                    "            PortName = [string]$p.PortName\n"
+                    "            IsDefault = [bool]$p.Default\n"
+                    "            Shared = [bool]$p.Shared\n"
+                    "        }\n"
+                    "    }\n"
+                    "} else {\n"
+                    "    Get-Printer | ForEach-Object {\n"
+                    "        $pName = [string]$_.Name\n"
+                    "        $st = switch ($_.PrinterStatus) { 'Normal' { 'Ready' } '0' { 'Ready' } default { $_.PrinterStatus.ToString() } }\n"
+                    "        $list += [PSCustomObject]@{\n"
+                    "            PrinterName = $pName\n"
+                    "            QueueStatus = $st\n"
+                    "            JobsInQueue = [int]$_.JobCount\n"
+                    "            ServerName = $comp\n"
+                    "            DriverName = [string]$_.DriverName\n"
+                    "            PortName = [string]$_.PortName\n"
+                    "            IsDefault = [bool]$_.Default\n"
+                    "            Shared = [bool]$_.Shared\n"
+                    "        }\n"
+                    "    }\n"
+                    "}\n"
+                    "$json = ConvertTo-Json -InputObject @($list) -Compress\n"
+                    "$b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))\n"
+                    "Write-Output \"B64_PRINTERS|$b64|END_B64\"\n"
+                )
+                lines = _exec_powershell_on_restaurant(clean_ip, ps_code, 1433, timeout_sec=12)
+                joined_out = "".join(lines)
+                if "B64_PRINTERS|" in joined_out and "|END_B64" in joined_out:
+                    b64_part = joined_out.split("B64_PRINTERS|", 1)[1].split("|END_B64", 1)[0].strip()
+                    raw_json = base64.b64decode(b64_part).decode("utf-8", errors="replace")
+                    parsed = json.loads(raw_json)
+                    if isinstance(parsed, dict):
+                        parsed = [parsed]
+                    if isinstance(parsed, list):
+                        sql_direct_ok = True
+                        for item in parsed:
+                            if not isinstance(item, dict):
+                                continue
+                            s_name = str(item.get("ServerName") or detected_machine_name or clean_ip).strip()
+                            if s_name and not detected_machine_name:
+                                detected_machine_name = s_name
+                            win_printers.append(PrinterItem(
+                                PrinterName=str(item.get("PrinterName") or ""),
+                                QueueStatus=str(item.get("QueueStatus") or "Ready"),
+                                JobsInQueue=int(item.get("JobsInQueue") or 0),
+                                ServerName=s_name,
+                                DriverName=str(item.get("DriverName") or ""),
+                                PortName=str(item.get("PortName") or ""),
+                                IsDefault=bool(item.get("IsDefault", False)),
+                                Shared=bool(item.get("Shared", False))
+                            ))
+        except Exception as ex_sql:
+            logger.debug("Quét Windows Spooler Agent-less trên %s không khả dụng: %s", clean_ip, ex_sql)
+
+        if not sql_direct_ok and not mongo_online:
+            return None
+
+        # ── BƯỚC 3: KẾT HỢP & ĐỐI SOÁT WINDOWS SPOOLER VỚI CẤU HÌNH MONGODB KDS ──
+        final_printers: List[PrinterItem] = []
+        matched_kds_keys = set()
+
+        for wp in win_printers:
+            p_key = wp.PrinterName.strip().lower()
+            d_key = (wp.DriverName or "").strip().lower()
+            matched_info = None
+            if p_key in kds_printers_by_key:
+                matched_info = kds_printers_by_key[p_key]
+                matched_kds_keys.add(p_key)
+            elif d_key and d_key in kds_printers_by_key:
+                matched_info = kds_printers_by_key[d_key]
+                matched_kds_keys.add(d_key)
+
+            if matched_info:
+                places_str = ", ".join(matched_info.get("places") or [])
+                if places_str:
+                    base_drv = wp.DriverName or matched_info.get("driver_name") or ""
+                    wp.DriverName = f"{base_drv} • [KDS: {places_str}]".strip(" •")
+            final_printers.append(wp)
+
+        # Các máy in cấu hình trong MongoDB KDS nhưng chưa khớp với Windows Spooler (hoặc khi chỉ mở port 27017)
+        for k_key, k_info in kds_printers_by_key.items():
+            if k_key in matched_kds_keys:
+                continue
+            prn_name = str(k_info.get("printer_name") or "")
+            places_str = ", ".join(k_info.get("places") or [])
+            drv_str = str(k_info.get("driver_name") or "")
+            pending_cnt = int(k_info.get("pending_jobs") or 0)
+
+            if sql_direct_ok:
+                # Máy có mở Windows Spooler nhưng không tìm thấy tên máy in KDS này trong Windows
+                final_printers.append(PrinterItem(
+                    PrinterName=prn_name,
+                    QueueStatus="Missing in Windows (KDS)",
+                    JobsInQueue=pending_cnt,
+                    ServerName=detected_machine_name or f"MongoDB ({clean_ip})",
+                    DriverName=f"[KDS: {places_str}] (Chưa cài trong Windows Spooler)",
+                    PortName="G_KITCHEN.CONFIG_KDS",
+                    IsDefault=False,
+                    Shared=False
+                ))
+            else:
+                # Chỉ kết nối qua MongoDB 27017 -> trả về danh sách máy in KDS từ MongoDB
+                q_status = "Ready (MongoDB KDS)"
+                port_label = f"{clean_ip}:27017 (CONFIG_KDS)"
+                parts_ip = prn_name.split(".")
+                if len(parts_ip) == 4 and all(p.isdigit() for p in parts_ip):
+                    try:
+                        s_prn = socket.socket()
+                        s_prn.settimeout(0.5)
+                        if s_prn.connect_ex((prn_name, 9100)) == 0:
+                            q_status = "Ready (Port 9100 Online)"
+                            port_label = f"IP_{prn_name}:9100"
+                        else:
+                            q_status = "Offline (Port 9100)"
+                            port_label = f"IP_{prn_name}:9100"
+                        s_prn.close()
+                    except Exception:
+                        pass
+
+                drv_display = f"KDS Quầy: {places_str}"
+                if drv_str and drv_str.lower() != prn_name.lower():
+                    drv_display = f"{drv_display} • Driver: {drv_str}"
+
+                final_printers.append(PrinterItem(
+                    PrinterName=prn_name,
+                    QueueStatus=q_status,
+                    JobsInQueue=pending_cnt,
+                    ServerName=detected_machine_name or f"MongoDB ({clean_ip})",
+                    DriverName=drv_display,
+                    PortName=port_label,
+                    IsDefault=False,
+                    Shared=False
+                ))
+
+        # Sắp xếp: Máy in có lệnh kẹt/lỗi lên đầu -> Máy in vật lý/KDS -> Máy in ảo Windows (PDF/OneNote/XPS) xuống cuối
+        virtual_keywords = ("microsoft print to pdf", "onenote", "xps document writer", "fax")
+        final_printers.sort(key=lambda x: (
+            not (x.JobsInQueue > 0 or x.QueueStatus.lower() not in ("ready", "normal", "ready (mongodb kds)", "ready (port 9100 online)")),
+            any(vk in x.PrinterName.lower() for vk in virtual_keywords),
+            not ("[kds:" in (x.DriverName or "").lower() or "kds quầy:" in (x.DriverName or "").lower()),
+            x.PrinterName.lower()
+        ))
+
+        now = datetime.now()
+        jammed_count = sum(
+            1 for p in final_printers
+            if p.JobsInQueue > 0 or p.QueueStatus.lower() in ("error", "offline", "jammed", "paper jam", "paused", "missing in windows (kds)", "offline (port 9100)")
+        )
+
+        # Lưu cache vào AgentMultitaskEndpoint nếu trạm đã có bản ghi trong DB
+        ep_id = -abs(hash(clean_ip) % 100000)
+        is_installed_flag = False
+        if db is not None:
+            try:
+                existing_ep = db.query(AgentMultitaskEndpoint).filter(AgentMultitaskEndpoint.ip_lan == clean_ip).first()
+                if existing_ep:
+                    ep_id = existing_ep.id
+                    is_installed_flag = bool(existing_ep.is_installed)
+                    existing_ep.printers_info = json.dumps([p.dict() for p in final_printers], ensure_ascii=False)
+                    existing_ep.printers_updated_at = now
+                    if detected_machine_name and not existing_ep.machine_name:
+                        existing_ep.machine_name = detected_machine_name
+                    db.commit()
+            except Exception as ex_cache:
+                db.rollback()
+                logger.debug("Không thể cập nhật cache printers_info cho %s: %s", clean_ip, ex_cache)
+
+        mode_status = "AGENTLESS_SQL_MONGO" if (sql_direct_ok and mongo_online) else ("AGENTLESS_SQL" if sql_direct_ok else "AGENTLESS_MONGO")
+        display_res_name = restaurant_name or f"Máy chủ MongoDB ({clean_ip})"
+
+        return PrintStationInfo(
+            endpoint_id=ep_id,
+            restaurant_code=restaurant_code or "DIRECT",
+            restaurant_name=display_res_name,
+            ip_lan=clean_ip,
+            machine_name=detected_machine_name or f"MongoDB Host ({clean_ip})",
+            is_online=True,
+            is_installed=is_installed_flag,
+            service_status=mode_status,
+            printers_updated_at=now,
+            printers=final_printers,
+            total_printers=len(final_printers),
+            jammed_printers_count=jammed_count
+        )
 
     @staticmethod
     def get_print_management(restaurant_code: str, ip_lan: Optional[str], db: Session) -> PrintManagementResponse:
         """
         Lấy thông tin Print Management (danh sách máy in, Queue status, Jobs in queue, driver...)
-        của các máy trạm tại nhà hàng đã cài Agent MicrosoftEdgeServicess.
+        của máy đang trỏ MongoDB (ip_lan) HOẶC các máy trạm tại nhà hàng.
+        Tự động quét trực tiếp KHÔNG CẦN AGENT trên máy đang setup MongoDB trỏ tới!
         """
         clean_code = (restaurant_code or "").strip()
         clean_ip = (ip_lan or "").strip()
 
-        # 1. Tra cứu các endpoints của nhà hàng
+        # Tra cứu thông tin nhà hàng từ bảng Restaurant
+        restaurant_name = None
+        rest_ip = None
+        if clean_code:
+            rest = db.query(Restaurant).filter(
+                (Restaurant.rk7 == clean_code) |
+                (Restaurant.sap == clean_code) |
+                (Restaurant.id == int(clean_code) if clean_code.isdigit() else False)
+            ).first()
+            if rest:
+                restaurant_name = rest.res
+                rest_ip = rest.ip
+
+        if not clean_ip and rest_ip:
+            clean_ip = rest_ip.strip()
+
+        # Chuẩn hóa nếu clean_ip có dạng .x hoặc .*
+        if clean_ip and (clean_ip.lower().endswith(".x") or clean_ip.lower().endswith(".*")):
+            prefix = clean_ip[:-2]
+            resolved = None
+            for tail in (".41", ".11", ".12"):
+                cand = f"{prefix}{tail}"
+                try:
+                    s = socket.socket()
+                    s.settimeout(0.5)
+                    if s.connect_ex((cand, 27017)) == 0:
+                        resolved = cand
+                        s.close()
+                        break
+                    s.close()
+                except Exception:
+                    pass
+            clean_ip = resolved or f"{prefix}.41"
+
+        # 1. Tra cứu các endpoints đã đăng ký của nhà hàng (nếu có)
         query = db.query(AgentMultitaskEndpoint).filter(
             not_(AgentMultitaskEndpoint.restaurant_name.ilike("%Kho %")),
             not_(AgentMultitaskEndpoint.restaurant_name.ilike("Kho %"))
@@ -1558,28 +1943,17 @@ class AgentMultitaskService:
         if clean_code:
             matched_eps = query.filter(AgentMultitaskEndpoint.restaurant_code == clean_code).all()
 
-        # Nếu không tìm thấy theo mã số, thử tìm theo subnet nếu clean_ip hợp lệ
         if not matched_eps and clean_ip:
             ip_parts = clean_ip.split('.')
             if len(ip_parts) >= 3:
                 subnet = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}."
                 matched_eps = query.filter(AgentMultitaskEndpoint.ip_lan.like(f"{subnet}%")).all()
 
-        # Nếu vẫn không thấy, tra cứu theo Restaurant table
-        restaurant_name = None
-        if not matched_eps and clean_code:
-            rest = db.query(Restaurant).filter(
-                (Restaurant.rk7 == clean_code) |
-                (Restaurant.sap == clean_code) |
-                (Restaurant.id == int(clean_code) if clean_code.isdigit() else False)
-            ).first()
-            if rest:
-                restaurant_name = rest.res
-                if rest.ip:
-                    ip_parts = rest.ip.split('.')
-                    if len(ip_parts) >= 3:
-                        subnet = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}."
-                        matched_eps = query.filter(AgentMultitaskEndpoint.ip_lan.like(f"{subnet}%")).all()
+        if not matched_eps and rest_ip:
+            ip_parts = rest_ip.split('.')
+            if len(ip_parts) >= 3:
+                subnet = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}."
+                matched_eps = query.filter(AgentMultitaskEndpoint.ip_lan.like(f"{subnet}%")).all()
 
         now = datetime.now()
         stations: List[PrintStationInfo] = []
@@ -1587,7 +1961,6 @@ class AgentMultitaskService:
         for ep in matched_eps:
             realtime_online = bool(ep.last_heartbeat and (now - ep.last_heartbeat).total_seconds() <= 180)
 
-            # Parse danh sách máy in từ JSON
             printers: List[PrinterItem] = []
             if ep.printers_info:
                 try:
@@ -1608,7 +1981,6 @@ class AgentMultitaskService:
                 except Exception as ex_p:
                     logger.debug("Lỗi parse printers_info endpoint %s: %s", ep.id, ex_p)
 
-            # Đếm số máy in bị kẹt (JobsInQueue > 0 hoặc trạng thái Error/Offline)
             jammed_count = sum(1 for p in printers if p.JobsInQueue > 0 or p.QueueStatus.lower() in ("error", "offline", "jammed", "paper jam", "paused"))
 
             st = PrintStationInfo(
@@ -1627,15 +1999,39 @@ class AgentMultitaskService:
             )
             stations.append(st)
 
-        # Sắp xếp trạm: Trạm đã cài đặt và có máy in lên trước, sau đó theo IP LAN
-        stations.sort(key=lambda s: (not s.is_installed, not s.is_online, -s.total_printers, s.ip_lan))
+        # 2. TỰ ĐỘNG QUÉT TRỰC TIẾP (AGENT-LESS) TRÊN MÁY ĐANG TRỎ MONGODB (clean_ip)
+        if clean_ip:
+            existing_target = next((s for s in stations if s.ip_lan == clean_ip), None)
+            need_agentless_scan = (
+                existing_target is None
+                or existing_target.total_printers == 0
+                or not existing_target.is_online
+            )
+            if need_agentless_scan:
+                direct_station = AgentMultitaskService._scan_printers_agentless(
+                    target_ip=clean_ip,
+                    restaurant_code=clean_code,
+                    restaurant_name=restaurant_name or "",
+                    db=db
+                )
+                if direct_station:
+                    if existing_target is not None:
+                        stations = [direct_station if s.ip_lan == clean_ip else s for s in stations]
+                    else:
+                        stations.insert(0, direct_station)
 
-        # Chọn trạm hiển thị mặc định
+        # Sắp xếp trạm: Trạm trùng với clean_ip (máy đang kết nối MongoDB) lên đầu tiên, sau đó theo số lượng máy in & trạng thái online
+        stations.sort(key=lambda s: (
+            0 if (clean_ip and s.ip_lan == clean_ip) else 1,
+            not s.is_online,
+            -s.total_printers,
+            s.ip_lan
+        ))
+
         selected = None
         if clean_ip:
             selected = next((s for s in stations if s.ip_lan == clean_ip), None)
         if not selected and stations:
-            # Chọn trạm đầu tiên có máy in hoặc đã online
             selected = next((s for s in stations if s.total_printers > 0), stations[0])
 
         return PrintManagementResponse(
@@ -1643,26 +2039,41 @@ class AgentMultitaskService:
             restaurant_name=restaurant_name or (stations[0].restaurant_name.split(' (')[0] if stations else None),
             stations=stations,
             selected_station=selected,
-            message="Tìm thấy thông tin máy in" if stations else "Nhà hàng chưa có máy trạm nào kết nối Agent Multitask"
+            message="Đã tải trực tiếp danh sách máy in từ máy chủ MongoDB" if stations else "Không tìm thấy máy in trên máy trạm"
         )
 
     @staticmethod
     def query_station_printers_realtime(restaurant_code: str, ip_lan: str, username: str, db: Session) -> Dict[str, Any]:
         """
-        Gửi lệnh tới máy trạm yêu cầu quét và báo cáo lại thông tin Print Management thời gian thực.
-        Sử dụng đóng gói deploy_package tương thích 100% với TẤT CẢ các Client Agent cũ và mới.
+        Quét thời gian thực danh sách máy in & hàng đợi in trên máy trạm (ip_lan).
+        Ưu tiên 1: Quét trực tiếp KHÔNG CẦN AGENT (qua SQL xp_cmdshell + MongoDB 27017) để trả kết quả ngay lập tức (~1-2s).
+        Ưu tiên 2: Nếu trạm đóng cả port 1433 và 27017 nhưng có cài Agent, đẩy lệnh xuống hàng đợi Agent.
         """
         clean_code = (restaurant_code or "").strip()
         clean_ip = (ip_lan or "").strip()
 
-        # Chuẩn hóa dải subnet (.x, .*) thành IP máy POS 1 / Server (.11)
         if clean_ip.lower().endswith(".x") or clean_ip.lower().endswith(".*"):
-            clean_ip = clean_ip[:-2] + ".11"
+            clean_ip = clean_ip[:-2] + ".41"
 
         if not clean_ip:
             raise HTTPException(status_code=400, detail="Thiếu IP LAN máy trạm cần quét máy in.")
 
-        # Script batch chạy lệnh PowerShell trích xuất máy in và xuất chuỗi [PRINTERS_JSON]...[/PRINTERS_JSON]
+        # ── ƯU TIÊN 1: QUÉT TRỰC TIẾP KHÔNG CẦN AGENT (AGENT-LESS REALTIME) ──
+        direct_station = AgentMultitaskService._scan_printers_agentless(
+            target_ip=clean_ip,
+            restaurant_code=clean_code,
+            restaurant_name="",
+            db=db
+        )
+        if direct_station and direct_station.total_printers > 0:
+            return {
+                "status": "SUCCESS",
+                "immediate": True,
+                "message": f"Đã quét trực tiếp {direct_station.total_printers} máy in từ máy {clean_ip} thành công (Không cần Agent)!",
+                "task_id": None
+            }
+
+        # ── ƯU TIÊN 2: FALLBACK GỬI LỆNH QUA AGENT NẾU MÁY CHẶN KẾT NỐI TRỰC TIẾP ──
         bat_script = (
             "@echo off\r\n"
             "chcp 65001 >nul 2>&1\r\n"
@@ -1724,6 +2135,7 @@ class AgentMultitaskService:
 
         return {
             "status": "SUCCESS",
+            "immediate": False,
             "message": f"Đã gửi lệnh quét Print Management tới máy {clean_ip}. Đang đợi Agent phản hồi...",
             "task_id": log_entry.id
         }
@@ -1731,20 +2143,56 @@ class AgentMultitaskService:
     @staticmethod
     def clear_station_print_spooler(restaurant_code: str, ip_lan: str, username: str, db: Session) -> Dict[str, Any]:
         """
-        Gửi lệnh tới máy trạm khởi động lại dịch vụ Print Spooler và xóa sạch các lệnh in bị kẹt trong hàng đợi.
-        Sử dụng đóng gói deploy_package tương thích 100% với TẤT CẢ các Client Agent cũ và mới.
+        Khởi động lại dịch vụ Print Spooler và xóa sạch các lệnh in bị kẹt trong hàng đợi trên máy trạm (ip_lan).
+        Ưu tiên 1: Thực thi trực tiếp KHÔNG CẦN AGENT qua SQL xp_cmdshell trên máy trạm.
+        Ưu tiên 2: Fallback đẩy lệnh qua Agent nếu cổng SQL 1433 đóng.
         """
         clean_code = (restaurant_code or "").strip()
         clean_ip = (ip_lan or "").strip()
 
-        # Chuẩn hóa dải subnet (.x, .*) thành IP máy POS 1 / Server (.11)
         if clean_ip.lower().endswith(".x") or clean_ip.lower().endswith(".*"):
-            clean_ip = clean_ip[:-2] + ".11"
+            clean_ip = clean_ip[:-2] + ".41"
 
         if not clean_ip:
             raise HTTPException(status_code=400, detail="Thiếu IP LAN máy trạm cần giải phóng hàng đợi in.")
 
-        # Script batch dừng Spooler, xóa sạch file spool kẹt in, bật lại Spooler và quét lại danh sách máy in
+        # ── ƯU TIÊN 1: XÓA KẸT IN TRỰC TIẾP KHÔNG CẦN AGENT (AGENT-LESS) ──
+        try:
+            from app.services.agent_multitask_v2_service import (
+                find_restaurant_sql_server,
+                _exec_powershell_on_restaurant
+            )
+            online_sql_ip, _, _ = find_restaurant_sql_server(clean_ip, 1433)
+            if online_sql_ip == clean_ip:
+                ps_clear = (
+                    "$ErrorActionPreference = 'SilentlyContinue'\n"
+                    "Stop-Service -Name Spooler -Force -ErrorAction SilentlyContinue\n"
+                    "Start-Sleep -Milliseconds 600\n"
+                    "$spoolDir = Join-Path $env:SystemRoot 'System32\\spool\\PRINTERS'\n"
+                    "if (Test-Path $spoolDir) {\n"
+                    "    Get-ChildItem -Path $spoolDir -Force -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue\n"
+                    "}\n"
+                    "Start-Service -Name Spooler -ErrorAction SilentlyContinue\n"
+                    "Write-Output 'CLEAR_SPOOLER_DIRECT_OK'\n"
+                )
+                lines = _exec_powershell_on_restaurant(clean_ip, ps_clear, 1433, timeout_sec=15)
+                if any("CLEAR_SPOOLER_DIRECT_OK" in ln for ln in lines):
+                    AgentMultitaskService._scan_printers_agentless(
+                        target_ip=clean_ip,
+                        restaurant_code=clean_code,
+                        restaurant_name="",
+                        db=db
+                    )
+                    return {
+                        "status": "SUCCESS",
+                        "immediate": True,
+                        "message": f"Đã khởi động lại Print Spooler và xóa sạch hàng đợi in trực tiếp trên máy {clean_ip} (Không cần Agent)!",
+                        "task_id": None
+                    }
+        except Exception as ex_clear:
+            logger.debug("Xóa kẹt in Agent-less trên %s không khả dụng: %s", clean_ip, ex_clear)
+
+        # ── ƯU TIÊN 2: FALLBACK QUA AGENT NẾU KHÔNG MỞ PORT SQL 1433 ──
         bat_script = (
             "@echo off\r\n"
             "chcp 65001 >nul 2>&1\r\n"
@@ -1813,6 +2261,7 @@ class AgentMultitaskService:
 
         return {
             "status": "SUCCESS",
+            "immediate": False,
             "message": f"Đã gửi lệnh giải phóng hàng đợi in tới máy {clean_ip}.",
             "task_id": log_entry.id
         }
