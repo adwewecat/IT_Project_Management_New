@@ -351,7 +351,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
   // Active Main Tab: 'task_actions' | 'reports' | 'android_emulator'
 
-  const [activeTab, setActiveTab] = useState<'task_actions' | 'reports' | 'android_emulator'>('task_actions');
+  const [activeTab, setActiveTab] = useState<'task_actions' | 'android_emulator'>('task_actions');
 
 
 
@@ -550,6 +550,18 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
           <span>
 
             Tra cứu lịch sử thao tác theo phiên (GUID), lọc ngày tránh quá tải, tìm theo Bàn / GUID, phân tích chi tiết timeline gọi món &amp; hệ thống.
+
+          </span>
+
+        );
+
+      case 'table_hall_report':
+
+        return (
+
+          <span>
+
+            Truy vấn tổng số bàn ăn (<code>isCurrentRes: true</code>) và danh sách khu vực / tầng (<code>HALL_PLAN</code>) từ MongoDB của nhà hàng đang chọn hoặc toàn bộ hệ thống, hỗ trợ sao chép bảng tính Excel và xuất CSV.
 
           </span>
 
@@ -1811,7 +1823,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
       id: 'check_action_logs',
 
-      title: 'Checklogs MongoDB (Phân Tích Chi Tiết ACTION_LOG Theo Phiên GUID & Bàn)',
+      title: '10. Checklogs MongoDB (Phân Tích Chi Tiết ACTION_LOG Theo Phiên GUID & Bàn)',
 
       subtitle: 'Tra cứu lịch sử thao tác theo phiên (GUID), lọc ngày tránh quá tải, tìm theo Bàn / GUID, phân tích chi tiết timeline gọi món & hệ thống',
 
@@ -1820,6 +1832,22 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
       badge: 'Tra cứu log',
 
       icon: 'FileText'
+
+    },
+
+    {
+
+      id: 'table_hall_report',
+
+      title: '11. Báo Cáo Danh Sách Bàn & Khu Vực (TABLE & HALL_PLAN)',
+
+      subtitle: 'Quét danh sách bàn ăn (isCurrentRes: true) và khu vực tầng (HALL_PLAN) toàn nhà hàng, sao chép Excel và xuất CSV',
+
+      category: 'Hạ Tầng & Báo Cáo',
+
+      badge: 'TABLE & HALL',
+
+      icon: 'FileSpreadsheet'
 
     }
 
@@ -2421,7 +2449,195 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
   const [isTaskDropdownOpen, setIsTaskDropdownOpen] = useState<boolean>(false);
 
+  const [taskGroupFilter, setTaskGroupFilter] = useState<'ALL' | 'EXECUTION' | 'CONFIG' | 'LOGS' | 'SYSTEM'>('ALL');
+
+  const [isTaskGridCollapsed, setIsTaskGridCollapsed] = useState<boolean>(false);
+
   const taskDropdownRef = useRef<HTMLDivElement>(null);
+
+  const activeWorkspaceRef = useRef<HTMLDivElement>(null);
+
+  // Danh sách 15 khối tác vụ chia theo 4 nhóm chức năng (Thiết kế dạng Block Card trực quan như F8)
+  const TASK_BLOCK_GROUPS = useMemo(() => [
+    {
+      groupKey: 'EXECUTION' as const,
+      groupTitle: '⚡ Nhóm 1: Thực Thi & Cứu Hộ Nhanh',
+      groupSubtitle: 'Can thiệp giải phóng khóa bàn, tài khoản tablet, đồng bộ menu 2 lớp và hạ tải CPU tức thì',
+      items: [
+        {
+          id: 'clear_table_locks',
+          bannerTag: '⚡ THỰC THI • LOCK_ORDER',
+          bannerTitle: 'Xóa Khóa Bàn',
+          bannerSubtitle: 'Giải phóng bàn treo & user giữ phiên',
+          bannerGradient: 'linear-gradient(135deg, #D97706 0%, #92400E 100%)',
+          description: 'Xóa bản ghi giữ phiên trong LOCK_ORDER, gỡ cờ khóa bàn trong ORDER để phục vụ vào bàn ngay.',
+          badgeText: 'LOCK_ORDER',
+          isModal: false
+        },
+        {
+          id: 'unlock_tablet_users',
+          bannerTag: '⚡ THỰC THI • EMPLOYEE',
+          bannerTitle: 'Mở Khóa User',
+          bannerSubtitle: 'Reset user báo đăng nhập máy khác',
+          bannerGradient: 'linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%)',
+          description: 'Quét và gỡ cờ isLogin: true trong EMPLOYEE khi tablet sập nguồn hoặc văng ứng dụng.',
+          badgeText: 'EMPLOYEE',
+          isModal: false
+        },
+        {
+          id: 'two_step_sync',
+          bannerTag: '⚡ THỰC THI • POS ➔ SO ➔ CO',
+          bannerTitle: 'Đồng Bộ Menu 2 Lớp',
+          bannerSubtitle: 'Quy trình tuần tự chuẩn SO trước, CO sau',
+          bannerGradient: 'linear-gradient(135deg, #059669 0%, #064E3B 100%)',
+          description: 'Bước 1 kéo thực đơn & giá từ POS vào SO, hoàn tất 100% mới phát sóng MQTT ép toàn bộ CO cập nhật.',
+          badgeText: 'Tuần tự 100%',
+          isModal: true
+        },
+        {
+          id: 'fix_full_cpu',
+          bannerTag: '⚡ THỰC THI • INDEX CPU',
+          bannerTitle: 'Xử Lý Full CPU 100%',
+          bannerSubtitle: 'Tối ưu Index chống treo máy POS & KDS',
+          bannerGradient: 'linear-gradient(135deg, #DC2626 0%, #7F1D1D 100%)',
+          description: 'Tạo bộ Index tối ưu cho DISH_KDS, ORDER, CO_MENU_ITEM giúp hạ tải CPU từ 100% về dưới 2%.',
+          badgeText: 'Hạ tải CPU',
+          isModal: false
+        }
+      ]
+    },
+    {
+      groupKey: 'CONFIG' as const,
+      groupTitle: '🍔 Nhóm 2: Cấu Hình Thực Đơn, KDS & Tham Số',
+      groupSubtitle: 'Quản lý món ăn SO/CO, quầy bếp KDS, thời gian nấu, ẩn hiện món/menu và tham số APP_PARAM',
+      items: [
+        {
+          id: 'manage_menu_so_co',
+          bannerTag: '🍔 CẤU HÌNH • G_ORDER',
+          bannerTitle: 'Xử Lý Menu SO / CO',
+          bannerSubtitle: 'Thực đơn, nhóm món & bảng tính Excel',
+          bannerGradient: 'linear-gradient(135deg, #0284C7 0%, #0C4A6E 100%)',
+          description: 'Đối chiếu món SO & CO, thêm món hàng loạt, kích hoạt sang CO (Kalo 100) & kiểm tra lệch mã RK7.',
+          badgeText: 'SO & CO',
+          isModal: false
+        },
+        {
+          id: 'check_kds',
+          bannerTag: '🍔 CẤU HÌNH • G_KITCHEN',
+          bannerTitle: 'Check & Xử Lý KDS',
+          bannerSubtitle: 'Quầy bếp, thời gian nấu & đối chiếu giá',
+          bannerGradient: 'linear-gradient(135deg, #0D9488 0%, #134E4A 100%)',
+          description: 'Quản lý quầy bếp ACCOUNT, thời gian chế biến CONFIG_COOKING, phân tích món vào bếp & giá GPOS.',
+          badgeText: 'Bếp KDS',
+          isModal: false
+        },
+        {
+          id: 'dish_show_hide',
+          bannerTag: '🍔 CẤU HÌNH • SHOW_HIDE',
+          bannerTitle: 'Ẩn / Hiện Món Ăn',
+          bannerSubtitle: 'Bật tắt món trên CO, SO & QR Order',
+          bannerGradient: 'linear-gradient(135deg, #EA580C 0%, #7C2D12 100%)',
+          description: 'Quản lý trạng thái hiển thị món ăn độc lập trên từng kênh bán hàng (CO, SO, QR) hoặc hàng loạt.',
+          badgeText: 'CO / SO / QR',
+          isModal: false
+        },
+        {
+          id: 'menu_show_hide',
+          bannerTag: '🍔 CẤU HÌNH • MENU_AUTO',
+          bannerTitle: 'Ẩn / Hiện Menu',
+          bannerSubtitle: 'Danh mục menu & tự động ra món KDS',
+          bannerGradient: 'linear-gradient(135deg, #7C3AED 0%, #4C1D95 100%)',
+          description: 'Bật/tắt danh mục thực đơn trên CO/SO/QR và cấu hình cờ tự động ra món trên bếp (autoDeliveryInSo).',
+          badgeText: 'KDS Auto',
+          isModal: false
+        },
+        {
+          id: 'manage_app_params',
+          bannerTag: '🍔 CẤU HÌNH • APP_PARAM',
+          bannerTitle: 'Xử Lý APP_PARAM',
+          bannerSubtitle: 'Cấu hình tham số vận hành nhà hàng',
+          bannerGradient: 'linear-gradient(135deg, #334155 0%, #0F172A 100%)',
+          description: 'Tra cứu, lọc theo nghiệp vụ, bật/tắt nhanh, thêm mới hoặc chỉnh sửa bảng tham số APP_PARAM.',
+          badgeText: 'APP_PARAM',
+          isModal: false
+        }
+      ]
+    },
+    {
+      groupKey: 'LOGS' as const,
+      groupTitle: '🔍 Nhóm 3: Tra Cứu Nhật Ký (Logs) & Giám Sát Chuyên Sâu',
+      groupSubtitle: 'Truy vết luồng đơn 5 chặng CO-SO-KDS, đối soát nhật ký phiên GUID, bản đồ thiết bị & máy in',
+      items: [
+        {
+          id: 'radar_kds_logs',
+          bannerTag: '🔍 TRA CỨU LOGS • CO-SO-KDS',
+          bannerTitle: 'Radar & Nhật Ký KDS',
+          bannerSubtitle: 'Hợp nhất nhật ký KDS & truy vết 5 chặng',
+          bannerGradient: 'linear-gradient(135deg, #B45309 0%, #78350F 100%)',
+          description: 'Tra cứu giờ Order (CO/SO), giờ bếp bấm Done, lệnh in KDS, đối soát SLA & soi chi tiết 5 chặng.',
+          badgeText: 'Hợp nhất 2 in 1',
+          isModal: true
+        },
+        {
+          id: 'check_action_logs',
+          bannerTag: '🔍 TRA CỨU LOGS • ACTION_LOG',
+          bannerTitle: 'Checklogs Phiên GUID',
+          bannerSubtitle: 'Phân tích timeline thao tác theo Bàn/GUID',
+          bannerGradient: 'linear-gradient(135deg, #4F46E5 0%, #312E81 100%)',
+          description: 'Truy vấn lịch sử thao tác ACTION_LOG theo từng phiên bàn ăn, lọc theo ngày và xem chi tiết payload.',
+          badgeText: 'ACTION_LOG',
+          isModal: false
+        },
+        {
+          id: 'device_fleet_map',
+          bannerTag: '🔍 GIÁM SÁT • DEVICE FLEET',
+          bannerTitle: 'Bản Đồ Thiết Bị',
+          bannerSubtitle: 'Gộp phiên phần cứng, kiểm tra App & Pin',
+          bannerGradient: 'linear-gradient(135deg, #0369A1 0%, #082F49 100%)',
+          description: 'Xếp bàn mở muộn nhất lên đầu, nhận diện thiết Bị duy nhất theo Model/ID, kiểm tra bản App & Pin.',
+          badgeText: 'Đã gộp phiên',
+          isModal: true
+        },
+        {
+          id: 'print_management',
+          bannerTag: '🔍 GIÁM SÁT • PRINT QUEUE',
+          bannerTitle: 'Giám Sát Máy In',
+          bannerSubtitle: 'Trạng thái máy in & hàng đợi in KDS/POS',
+          bannerGradient: 'linear-gradient(135deg, #BE123C 0%, #881337 100%)',
+          description: 'Kiểm tra kết nối máy in nhiệt tại quầy bếp/thu ngân và theo dõi danh sách lệnh in đang chờ.',
+          badgeText: 'Print Queue',
+          isModal: true
+        }
+      ]
+    },
+    {
+      groupKey: 'SYSTEM' as const,
+      groupTitle: '🗄️ Nhóm 4: Hạ Tầng Dữ Liệu & Báo Cáo Bàn',
+      groupSubtitle: 'Sao chép di chuyển Database khi cài lại máy POS và xuất báo cáo sơ đồ bàn ăn toàn hệ thống',
+      items: [
+        {
+          id: 'transfer_database',
+          bannerTag: '🗄️ HỆ THỐNG • TRANSFER DB',
+          bannerTitle: 'Chuyển Database',
+          bannerSubtitle: 'Di chuyển DB giữa các máy .11, .12, .41',
+          bannerGradient: 'linear-gradient(135deg, #1D4ED8 0%, #172554 100%)',
+          description: 'Hỗ trợ khi cài lại máy POS: dọn rác ACTION_LOG giảm dung lượng và sao chép toàn bộ DB sang máy mới.',
+          badgeText: 'Transfer DB',
+          isModal: false
+        },
+        {
+          id: 'table_hall_report',
+          bannerTag: '🗄️ BÁO CÁO • TABLE & HALL',
+          bannerTitle: 'Báo Cáo Bàn & Khu Vực',
+          bannerSubtitle: 'Quét danh sách bàn ăn & xuất Excel/CSV',
+          bannerGradient: 'linear-gradient(135deg, #15803D 0%, #052E16 100%)',
+          description: 'Truy vấn tổng số bàn ăn (isCurrentRes: true) và khu vực HALL_PLAN của 1 hoặc toàn bộ nhà hàng.',
+          badgeText: 'TABLE & HALL',
+          isModal: false
+        }
+      ]
+    }
+  ], []);
 
 
 
@@ -5449,1154 +5665,70 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
       {/* Main Navigation Tabs */}
 
       <div className="tabs-nav-scrollable" style={{ display: 'flex', borderBottom: '2px solid var(--border-color)', gap: '8px', overflowX: 'auto', flexWrap: 'nowrap', WebkitOverflowScrolling: 'touch' }}>
-
         <button
-
           type="button"
-
           onClick={() => setActiveTab('task_actions')}
-
           style={{
-
             padding: '10px 18px',
-
             fontSize: '14px',
-
             fontWeight: activeTab === 'task_actions' ? 700 : 500,
-
             color: activeTab === 'task_actions' ? '#D97706' : '#6B7280',
-
             borderBottom: activeTab === 'task_actions' ? '3px solid #D97706' : '3px solid transparent',
-
             marginBottom: '-2px',
-
             backgroundColor: 'transparent',
-
             borderTop: 'none',
-
             borderLeft: 'none',
-
             borderRight: 'none',
-
             cursor: 'pointer',
-
             display: 'inline-flex',
-
             alignItems: 'center',
-
             gap: '8px',
-
             transition: 'all 0.15s ease'
-
           }}
-
         >
-
           <Wrench size={16} />
-
-          <span>Tab 1: Xử Lý Tác Vụ</span>
-
+          <span>Tab 1: Xử Lý Tác Vụ &amp; Chuyên Sâu CO-SO-KDS</span>
           {lockStatus && lockStatus.total_locked_tables > 0 && (
-
             <span
-
               style={{
-
                 backgroundColor: '#EF4444',
-
                 color: '#fff',
-
                 fontSize: '11px',
-
                 padding: '1px 6px',
-
                 borderRadius: '10px',
-
                 fontWeight: 700
-
               }}
-
             >
-
               {lockStatus.total_locked_tables}
-
             </span>
-
           )}
-
         </button>
 
-
-
         <button
-
           type="button"
-
-          onClick={() => setActiveTab('reports')}
-
-          style={{
-
-            padding: '10px 18px',
-
-            fontSize: '14px',
-
-            fontWeight: activeTab === 'reports' ? 700 : 500,
-
-            color: activeTab === 'reports' ? 'var(--color-primary, #059669)' : '#6B7280',
-
-            borderBottom: activeTab === 'reports' ? '3px solid var(--color-primary, #059669)' : '3px solid transparent',
-
-            marginBottom: '-2px',
-
-            backgroundColor: 'transparent',
-
-            borderTop: 'none',
-
-            borderLeft: 'none',
-
-            borderRight: 'none',
-
-            cursor: 'pointer',
-
-            display: 'inline-flex',
-
-            alignItems: 'center',
-
-            gap: '8px',
-
-            transition: 'all 0.15s ease'
-
-          }}
-
-        >
-
-          <FileSpreadsheet size={16} />
-
-          <span>Tab 2: Chuyên Sâu App CO-SO-KDS</span>
-
-        </button>
-
-
-
-        <button
-
-          type="button"
-
           onClick={() => setActiveTab('android_emulator')}
-
           style={{
-
             padding: '10px 18px',
-
             fontSize: '14px',
-
             fontWeight: activeTab === 'android_emulator' ? 700 : 500,
-
             color: activeTab === 'android_emulator' ? 'var(--color-primary, #059669)' : '#6B7280',
-
             borderBottom: activeTab === 'android_emulator' ? '3px solid var(--color-primary, #059669)' : '3px solid transparent',
-
             marginBottom: '-2px',
-
             backgroundColor: 'transparent',
-
             borderTop: 'none',
-
             borderLeft: 'none',
-
             borderRight: 'none',
-
             cursor: 'pointer',
-
             display: 'inline-flex',
-
             alignItems: 'center',
-
             gap: '8px',
-
             transition: 'all 0.15s ease'
-
           }}
-
         >
-
           <LayoutGrid size={16} />
-
-          <span>Tab 3: Sơ Đồ Bàn Theo Khu (Restaurant Table Map)</span>
-
+          <span>Tab 2: Sơ Đồ Bàn Theo Khu (Restaurant Table Map)</span>
         </button>
-
-        
-
       </div>
-
-
-
-
-
-      {/* ══════════════════════════════════════════════════════════════ */}
-
-      {/* TAB 2 CONTENT: BÁO CÁO XÂY DỰNG RIÊNG (DANH SÁCH BÀN) */}
-
-      {/* ══════════════════════════════════════════════════════════════ */}
-
-      {activeTab === 'reports' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          
-          {/* 4 KHUNG TÍNH NĂNG CHUYÊN SÂU APP CO - SO - KDS */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: '16px',
-            alignItems: 'stretch'
-          }}>
-            {/* KHUNG 1: TRA CỨU NHẬT KÝ & RADAR TRUY VẾT LUỒNG ĐƠN HÀNG */}
-            <div style={{
-              background: '#FFFFFF',
-              borderRadius: '10px',
-              border: '1px solid #E2E8F0',
-              padding: '18px 20px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              gap: '14px'
-            }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: 28, height: 28, borderRadius: 6, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Flame size={16} color="#D97706" />
-                    </div>
-                    <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#0F172A' }}>
-                      Nhật Ký &amp; Radar Luồng Đơn
-                    </div>
-                  </div>
-                  <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: '#DCFCE7', color: '#166534' }}>
-                    Hợp Nhất 2 Trong 1
-                  </span>
-                </div>
-
-                <div style={{ fontSize: '12px', color: '#475569', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div>
-                    <strong>• Hợp Nhất Nhật Ký KDS &amp; Radar:</strong> Gom trọn vẹn Tra Cứu Nhật Ký KDS và Radar luồng đơn vào 1 giao diện duy nhất, không bị trùng lặp.
-                  </div>
-                  <div>
-                    <strong>• Phân Biệt Nguồn Order:</strong> Hiển thị rõ món được gửi từ <code>Tablet CO</code> (Khách tự gọi tại bàn) hay <code>Staff SO</code> (Phục vụ gọi).
-                  </div>
-                  <div>
-                    <strong>• Soi Món Chuyên Sâu 5 Chặng:</strong> Khám phá chi tiết từng giây đường đi của món: Khách gửi ➔ POS nhận ➔ MQTT LineCook ➔ KDS Done ➔ SO bưng ra bàn.
-                  </div>
-                  <div>
-                    <strong>• Đối Soát SLA &amp; Lệnh In KDS:</strong> Thống kê thời gian chế biến thực tế so với chuẩn SLA, lệnh in KDS và trạng thái ra món.
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowRadarModal(true)}
-                style={{
-                  width: '100%',
-                  padding: '9px 14px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: '#F5B800',
-                  color: '#000000',
-                  fontWeight: 700,
-                  fontSize: '12.5px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                }}
-              >
-                Mở Tra Cứu Nhật Ký &amp; Radar Luồng Đơn ➔
-              </button>
-            </div>
-
-            {/* KHUNG 3: ÉP ĐỒNG BỘ MENU & GIÁ */}
-            <div style={{
-              background: '#FFFFFF',
-              borderRadius: '10px',
-              border: '1px solid #E2E8F0',
-              padding: '18px 20px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              gap: '14px'
-            }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: 28, height: 28, borderRadius: 6, background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Layers size={16} color="#15803D" />
-                    </div>
-                    <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#0F172A' }}>
-                      Ép Đồng Bộ Menu &amp; Giá
-                    </div>
-                  </div>
-                  <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: '#DCFCE7', color: '#166534' }}>
-                    Tuần Tự 100%
-                  </span>
-                </div>
-
-                <div style={{ fontSize: '12px', color: '#475569', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div>
-                    <strong>• Quy Trình Tuần Tự Tuyệt Đối:</strong> Bắt buộc đồng bộ tuần tự, Bước 1 (POS ➔ SO) phải xong 100% mới chuyển sang Bước 2 (SO ➔ CO), tránh chạy song song gây sai lệch giá!
-                  </div>
-                  <div>
-                    <strong>• Bước 1 - Kéo Menu &amp; Giá Vào SO:</strong> Kích hoạt đồng bộ POS R-Keeper nạp bảng giá và thực đơn mới nhất vào máy chủ SO nhà hàng.
-                  </div>
-                  <div>
-                    <strong>• Bước 2 - Phát Sóng Ép Tablet CO:</strong> Bắn broadcast MQTT thông báo toàn bộ tablet CO xóa bộ nhớ cache SQLite và cập nhật giá mới.
-                  </div>
-                  <div>
-                    <strong>• Không Cần Cầm Từng Máy:</strong> Chuẩn hóa toàn bộ máy trạm trong nhà hàng chỉ với 1-click từ xa.
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowTwoStepSyncModal(true)}
-                style={{
-                  width: '100%',
-                  padding: '9px 14px',
-                  borderRadius: '6px',
-                  border: '1px solid #CBD5E1',
-                  background: '#FFFFFF',
-                  color: '#0F172A',
-                  fontWeight: 700,
-                  fontSize: '12.5px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px'
-                }}
-              >
-                ⚡ Ép Đồng Bộ Tuần Tự SO ➔ CO ➔
-              </button>
-            </div>
-
-            {/* KHUNG 4: BẢN ĐỒ THIẾT BỊ DUY NHẤT */}
-            <div style={{
-              background: '#FFFFFF',
-              borderRadius: '10px',
-              border: '1px solid #E2E8F0',
-              padding: '18px 20px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              gap: '14px'
-            }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: 28, height: 28, borderRadius: 6, background: '#E0F2FE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Tablet size={16} color="#0369A1" />
-                    </div>
-                    <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#0F172A' }}>
-                      Bản Đồ Thiết Bị Duy Nhất
-                    </div>
-                  </div>
-                  <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: '#E0F2FE', color: '#0369A1' }}>
-                    Đã Gộp Phiên
-                  </span>
-                </div>
-
-                <div style={{ fontSize: '12px', color: '#475569', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div>
-                    <strong>• Sắp Xếp Order Mới Nhất Lên Đầu:</strong> Bàn nào mở hoặc phát sinh order muộn nhất luôn được xếp ở vị trí đầu tiên của bảng.
-                  </div>
-                  <div>
-                    <strong>• Nhận Diện Thiết Bị Duy Nhất:</strong> Gom nhóm các session theo Model phần cứng và ID máy thực tế, tránh tình trạng 1 máy bị đếm thành hàng chục session.
-                  </div>
-                  <div>
-                    <strong>• Kiểm Tra Phiên Bản App:</strong> So sánh phiên bản đang chạy thực tế với bản chuẩn GGG (CO v1.6.91, SO v2.4.107, KDS v1.4.51).
-                  </div>
-                  <div>
-                    <strong>• Giám Sát Pin &amp; Tín Hiệu Online:</strong> Theo dõi dung lượng pin máy tính bảng, tình trạng cắm sạc AC và kết nối mạng thực tế.
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowDeviceFleetModal(true)}
-                style={{
-                  width: '100%',
-                  padding: '9px 14px',
-                  borderRadius: '6px',
-                  border: '1px solid #CBD5E1',
-                  background: '#FFFFFF',
-                  color: '#0F172A',
-                  fontWeight: 700,
-                  fontSize: '12.5px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px'
-                }}
-              >
-                📱 Mở Bản Đồ Thiết Bị Duy Nhất ➔
-              </button>
-            </div>
-          </div>
-
-          {/* Report Configuration & Filter Card */}
-
-          <Card>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-
-                {/* Select Report Type */}
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-
-                  <div>
-
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#4B5563', marginBottom: '4px', textTransform: 'uppercase' }}>
-
-                      Chọn Loại Báo Cáo:
-
-                    </label>
-
-                    <select
-
-                      value={selectedReportType}
-
-                      onChange={(e) => setSelectedReportType(e.target.value)}
-
-                      style={{
-
-                        padding: '8px 12px',
-
-                        borderRadius: '6px',
-
-                        border: '1.5px solid var(--border-color)',
-
-                        backgroundColor: '#fff',
-
-                        fontSize: '13px',
-
-                        fontWeight: 600,
-
-                        color: '#111827',
-
-                        outline: 'none',
-
-                        minWidth: '320px'
-
-                      }}
-
-                    >
-
-                      <option value="table_report">🍽️ Báo Cáo Danh Sách Bàn Theo Nhà Hàng (TABLE &amp; HALL_PLAN)</option>
-
-                    </select>
-
-                  </div>
-
-
-
-                  {/* Scope note */}
-
-                  <div style={{ padding: '8px 12px', backgroundColor: '#F0FDF4', borderRadius: '6px', border: '1px solid #BBF7D0', fontSize: '12px', color: '#166534', marginTop: '16px' }}>
-
-                    Phạm vi: <strong>{selectedRestaurant ? `[${selectedRestaurant.sap}] ${selectedRestaurant.res}` : 'Tất Cả Nhà Hàng Đang ON/NEW'}</strong>
-
-                  </div>
-
-                </div>
-
-
-
-                {/* Right controls: Split checkbox & Run button */}
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', marginTop: '16px' }}>
-
-                  {/* Checkbox chia khu vực */}
-
-                  <label
-
-                    style={{
-
-                      display: 'flex',
-
-                      alignItems: 'center',
-
-                      gap: '8px',
-
-                      cursor: 'pointer',
-
-                      padding: '8px 12px',
-
-                      backgroundColor: splitByHall ? '#FFFBEB' : '#F9FAFB',
-
-                      border: `1px solid ${splitByHall ? '#FCD34D' : 'var(--border-color)'}`,
-
-                      borderRadius: '6px',
-
-                      userSelect: 'none'
-
-                    }}
-
-                  >
-
-                    <input
-
-                      type="checkbox"
-
-                      checked={splitByHall}
-
-                      onChange={(e) => setSplitByHall(e.target.checked)}
-
-                      style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-
-                    />
-
-                    <div>
-
-                      <span style={{ fontSize: '13px', fontWeight: 700, color: splitByHall ? '#92400E' : '#374151' }}>
-
-                        Chia theo từng Khu Vực / Tầng (HALL_PLAN)
-
-                      </span>
-
-                      <div style={{ fontSize: '11px', color: '#6B7280' }}>
-
-                        {splitByHall ? 'Tách mỗi khu vực 1 dòng riêng' : 'Gộp tổng số bàn của toàn nhà hàng'}
-
-                      </div>
-
-                    </div>
-
-                  </label>
-
-
-
-                  {/* Button Fetch Data */}
-
-                  <Button
-
-                    variant="primary"
-
-                    size="md"
-
-                    onClick={handleFetchTableReport}
-
-                    disabled={loadingReport}
-
-                    style={{
-
-                      display: 'inline-flex',
-
-                      alignItems: 'center',
-
-                      gap: '6px',
-
-                      backgroundColor: '#059669',
-
-                      borderColor: '#047857',
-
-                      color: '#fff',
-
-                      fontWeight: 700,
-
-                      padding: '8px 16px'
-
-                    }}
-
-                  >
-
-                    {loadingReport ? (
-
-                      <>
-
-                        <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} />
-
-                        <span>Đang Quét Dữ Liệu Bàn...</span>
-
-                      </>
-
-                    ) : (
-
-                      <>
-
-                        <RefreshCw size={15} />
-
-                        <span>⚡ Lấy Dữ Liệu Báo Cáo</span>
-
-                      </>
-
-                    )}
-
-                  </Button>
-
-                </div>
-
-              </div>
-
-            </div>
-
-          </Card>
-
-
-
-          {/* Results Table Section */}
-
-          <div
-
-            style={{
-
-              backgroundColor: 'var(--bg-card, #fff)',
-
-              borderRadius: '12px',
-
-              border: '1px solid var(--border-color)',
-
-              overflow: 'hidden',
-
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-
-            }}
-
-          >
-
-            {/* Table Toolbar */}
-
-            <div
-
-              style={{
-
-                padding: '12px 18px',
-
-                borderBottom: '1px solid var(--border-color)',
-
-                display: 'flex',
-
-                alignItems: 'center',
-
-                justifyContent: 'space-between',
-
-                flexWrap: 'wrap',
-
-                gap: '12px',
-
-                backgroundColor: '#F9FAFB'
-
-              }}
-
-            >
-
-              {/* Left stats */}
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-
-                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-
-                  📊 Kết quả: <strong>{summaryStats.totalRows}</strong> dòng
-
-                </span>
-
-                <span style={{ fontSize: '12px', color: '#6B7280' }}>•</span>
-
-                <span style={{ fontSize: '12px', color: '#4B5563' }}>
-
-                  Nhà hàng: <strong>{summaryStats.distinctRests}</strong>
-
-                </span>
-
-                <span style={{ fontSize: '12px', color: '#6B7280' }}>•</span>
-
-                <span style={{ fontSize: '12px', color: '#047857', fontWeight: 700 }}>
-
-                  Tổng số bàn ăn: <strong>{summaryStats.totalTables.toLocaleString()}</strong> bàn
-
-                </span>
-
-                <span style={{ fontSize: '12px', color: '#6B7280' }}>•</span>
-
-                <span style={{ fontSize: '11px', color: splitByHall ? '#92400E' : '#2563EB', fontWeight: 600 }}>
-
-                  {splitByHall ? '🏷️ Đang chia theo khu vực' : '🏷️ Đang gộp toàn nhà hàng'}
-
-                </span>
-
-              </div>
-
-
-
-              {/* Right search & export buttons */}
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-
-                <div style={{ position: 'relative', width: '220px' }}>
-
-                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} />
-
-                  <input
-
-                    type="text"
-
-                    value={reportFilterQuery}
-
-                    onChange={(e) => setReportFilterQuery(e.target.value)}
-
-                    placeholder="Lọc tên, SAP, bàn..."
-
-                    style={{
-
-                      width: '100%',
-
-                      padding: '6px 10px 6px 28px',
-
-                      fontSize: '12px',
-
-                      borderRadius: '6px',
-
-                      border: '1px solid var(--border-color)',
-
-                      outline: 'none',
-
-                      backgroundColor: '#fff'
-
-                    }}
-
-                  />
-
-                  {reportFilterQuery && (
-
-                    <button
-
-                      type="button"
-
-                      onClick={() => setReportFilterQuery('')}
-
-                      style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#9CA3AF' }}
-
-                    >
-
-                      <X size={12} />
-
-                    </button>
-
-                  )}
-
-                </div>
-
-
-
-                <Button
-
-                  variant="outline"
-
-                  size="sm"
-
-                  onClick={handleCopyTableTSV}
-
-                  disabled={filteredReportItems.length === 0}
-
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-
-                >
-
-                  {copiedAllExcel ? <Check size={14} color="#059669" /> : <Copy size={14} />}
-
-                  <span>Sao Chép Excel</span>
-
-                </Button>
-
-
-
-                <Button
-
-                  variant="outline"
-
-                  size="sm"
-
-                  onClick={handleExportCSV}
-
-                  disabled={filteredReportItems.length === 0}
-
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-
-                >
-
-                  <Download size={14} />
-
-                  <span>Xuất CSV</span>
-
-                </Button>
-
-              </div>
-
-            </div>
-
-
-
-            {/* Table */}
-
-            <TopScrollTable maxHeight="680px">
-
-              <table style={{ width: '100%', minWidth: '1000px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
-
-                <thead style={{ backgroundColor: '#F3F4F6', position: 'sticky', top: 0, zIndex: 10 }}>
-
-                  <tr style={{ borderBottom: '2px solid var(--border-color)', backgroundColor: '#F3F4F6' }}>
-
-                    <th style={{ padding: '10px 12px', fontWeight: 700, color: '#374151', width: '50px', textAlign: 'center', backgroundColor: '#F3F4F6' }}>STT</th>
-
-                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '240px', backgroundColor: '#F3F4F6' }}>Mã SAP &amp; Tên Nhà Hàng</th>
-
-                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '130px', backgroundColor: '#F3F4F6' }}>IP MongoDB</th>
-
-                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '130px', textAlign: 'center', backgroundColor: '#F3F4F6' }}>
-
-                      {splitByHall ? 'Tổng Bàn (isCurrentRes: true)' : 'Số Bàn (isCurrentRes: true)'}
-
-                    </th>
-
-                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '160px', backgroundColor: '#F3F4F6' }}>Khu Vực / Tầng (HALL_PLAN)</th>
-
-                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '320px', backgroundColor: '#F3F4F6' }}>Danh Sách Mẫu Bàn</th>
-
-                  </tr>
-
-                </thead>
-
-                <tbody>
-
-                  {loadingReport ? (
-
-                    <tr>
-
-                      <td colSpan={6} style={{ padding: '50px 20px', textAlign: 'center', color: '#6B7280' }}>
-
-                        <RefreshCw size={26} style={{ animation: 'spin 1s linear infinite', marginBottom: '8px' }} />
-
-                        <p style={{ margin: 0, fontSize: '13px', fontWeight: 600 }}>Đang kết nối MongoDB và trích xuất dữ liệu bàn...</p>
-
-                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#9CA3AF' }}>Vui lòng chờ trong giây lát (hệ thống xử lý song song đa luồng siêu tốc).</p>
-
-                      </td>
-
-                    </tr>
-
-                  ) : filteredReportItems.length === 0 ? (
-
-                    <tr>
-
-                      <td colSpan={6} style={{ padding: '60px 20px', textAlign: 'center', color: '#6B7280' }}>
-
-                        <TableProperties size={32} style={{ opacity: 0.4, marginBottom: '8px' }} />
-
-                        <p style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#374151' }}>Chưa có dữ liệu báo cáo</p>
-
-                        <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#9CA3AF' }}>
-
-                          Vui lòng bấm nút <strong>"⚡ Lấy Dữ Liệu Báo Cáo"</strong> phía trên để truy vấn dữ liệu từ MongoDB nhà hàng.
-
-                        </p>
-
-                      </td>
-
-                    </tr>
-
-                  ) : (
-
-                    filteredReportItems.map((item, idx) => {
-
-                      const isOffline = !!item.error;
-
-                      return (
-
-                        <tr
-
-                          key={`${item.restaurant_id}_${item.hall_id ?? idx}`}
-
-                          style={{
-
-                            borderBottom: '1px solid var(--border-color)',
-
-                            backgroundColor: isOffline ? '#FEF2F2' : idx % 2 === 0 ? '#FFFFFF' : '#F9FAFB',
-
-                            transition: 'background-color 0.1s'
-
-                          }}
-
-                        >
-
-                          {/* STT */}
-
-                          <td style={{ padding: '10px 12px', textAlign: 'center', color: '#6B7280', fontSize: '12px' }}>
-
-                            {idx + 1}
-
-                          </td>
-
-
-
-                          {/* Mã SAP & Tên Nhà Hàng */}
-
-                          <td style={{ padding: '10px 14px' }}>
-
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-
-                              <span
-
-                                style={{
-
-                                  display: 'inline-block',
-
-                                  padding: '2px 6px',
-
-                                  borderRadius: '4px',
-
-                                  backgroundColor: '#E0E7FF',
-
-                                  color: '#3730A3',
-
-                                  fontSize: '11px',
-
-                                  fontWeight: 700,
-
-                                  fontFamily: 'monospace'
-
-                                }}
-
-                              >
-
-                                {item.sap_code || '—'}
-
-                              </span>
-
-                              <span style={{ fontWeight: 600, color: '#111827' }}>
-
-                                {item.restaurant_name}
-
-                              </span>
-
-                            </div>
-
-                          </td>
-
-
-
-                          {/* IP MongoDB */}
-
-                          <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: '12px', color: '#4B5563' }}>
-
-                            {item.mongo_ip}
-
-                          </td>
-
-
-
-                          {/* Tổng Bàn */}
-
-                          <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-
-                            {isOffline ? (
-
-                              <span style={{ color: '#DC2626', fontSize: '12px', fontWeight: 600 }}>0 bàn</span>
-
-                            ) : (
-
-                              <span
-
-                                style={{
-
-                                  display: 'inline-block',
-
-                                  padding: '3px 10px',
-
-                                  borderRadius: '12px',
-
-                                  backgroundColor: item.total_tables > 0 ? '#ECFDF5' : '#F3F4F6',
-
-                                  color: item.total_tables > 0 ? '#065F46' : '#6B7280',
-
-                                  fontWeight: 700,
-
-                                  fontSize: '13px'
-
-                                }}
-
-                              >
-
-                                {item.total_tables} bàn
-
-                              </span>
-
-                            )}
-
-                          </td>
-
-
-
-                          {/* Khu Vực / Tầng */}
-
-                          <td style={{ padding: '10px 14px' }}>
-
-                            {isOffline ? (
-
-                              <span style={{ color: '#9CA3AF' }}>—</span>
-
-                            ) : (
-
-                              <span
-
-                                style={{
-
-                                  display: 'inline-flex',
-
-                                  alignItems: 'center',
-
-                                  gap: '4px',
-
-                                  padding: '2px 8px',
-
-                                  borderRadius: '4px',
-
-                                  backgroundColor: splitByHall ? '#FEF3C7' : '#EFF6FF',
-
-                                  color: splitByHall ? '#92400E' : '#1E40AF',
-
-                                  fontWeight: 600,
-
-                                  fontSize: '12px'
-
-                                }}
-
-                              >
-
-                                🏷️ {item.hall_name}
-
-                              </span>
-
-                            )}
-
-                          </td>
-
-
-
-                          {/* Danh Sách Mẫu Bàn */}
-
-                          <td style={{ padding: '10px 14px' }}>
-
-                            {isOffline ? (
-
-                              <span style={{ color: '#DC2626', fontSize: '12px', fontWeight: 500 }}>
-
-                                ⚠️ {item.error}
-
-                              </span>
-
-                            ) : (
-
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-
-                                <span
-
-                                  style={{
-
-                                    fontSize: '12px',
-
-                                    color: '#374151',
-
-                                    lineHeight: 1.5,
-
-                                    wordBreak: 'break-word'
-
-                                  }}
-
-                                >
-
-                                  {item.tables_sample || '—'}
-
-                                </span>
-
-                                {item.tables_sample && (
-
-                                  <button
-
-                                    type="button"
-
-                                    onClick={() => {
-
-                                      navigator.clipboard.writeText(item.tables_sample);
-
-                                      setCopiedRowIdx(idx);
-
-                                      showToast(`Đã chép danh sách bàn của [${item.restaurant_name}]`, 'success');
-
-                                      setTimeout(() => setCopiedRowIdx(null), 1500);
-
-                                    }}
-
-                                    style={{
-
-                                      border: 'none',
-
-                                      background: 'transparent',
-
-                                      cursor: 'pointer',
-
-                                      color: copiedRowIdx === idx ? '#059669' : '#9CA3AF',
-
-                                      padding: '4px',
-
-                                      flexShrink: 0
-
-                                    }}
-
-                                    title="Chép danh sách bàn"
-
-                                  >
-
-                                    {copiedRowIdx === idx ? <Check size={14} /> : <Copy size={14} />}
-
-                                  </button>
-
-                                )}
-
-                              </div>
-
-                            )}
-
-                          </td>
-
-                        </tr>
-
-                      );
-
-                    })
-
-                  )}
-
-                </tbody>
-
-              </table>
-
-            </TopScrollTable>
-
-          </div>
-
-        </div>
-
-      )}
-
-
 
       {/* ══════════════════════════════════════════════════════════════ */}
 
@@ -6636,6 +5768,391 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
           {/* ══════════════════════════════════════════════════════════ */}
 
+          {/* BẢNG PHÂN LOẠI KHỐI TÁC VỤ TRỰC QUAN (F8 COURSE CARD BLOCK GRID) */}
+          <Card>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Top Filter & Search Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', paddingBottom: isTaskGridCollapsed ? '0px' : '12px', borderBottom: isTaskGridCollapsed ? 'none' : '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: 30, height: 30, borderRadius: 8, background: '#FEF3C7', border: '1px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Wrench size={15} color="#D97706" />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
+                        Chọn Tác Vụ Cần Xử Lý
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                        Phân tách rõ khối Thực Thi, Cấu Hình Menu/KDS, Tra Cứu Logs và Hệ Thống
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Category Filter Pills */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginLeft: '6px' }}>
+                    {[
+                      { key: 'ALL', label: 'Tất cả (15)' },
+                      { key: 'EXECUTION', label: '⚡ Thực thi (4)' },
+                      { key: 'CONFIG', label: '🍔 Cấu hình (5)' },
+                      { key: 'LOGS', label: '🔍 Tra cứu Logs (4)' },
+                      { key: 'SYSTEM', label: '🗄️ Hệ thống & Báo cáo (2)' }
+                    ].map((tab) => {
+                      const active = taskGroupFilter === tab.key;
+                      return (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => {
+                            setTaskGroupFilter(tab.key as any);
+                            if (isTaskGridCollapsed) setIsTaskGridCollapsed(false);
+                          }}
+                          style={{
+                            padding: '5px 11px',
+                            borderRadius: '20px',
+                            fontSize: '11.5px',
+                            fontWeight: active ? 700 : 600,
+                            border: active ? '1.5px solid #D97706' : '1px solid #CBD5E1',
+                            backgroundColor: active ? '#FFFBEB' : '#F8FAFC',
+                            color: active ? '#B45309' : '#475569',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          {tab.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Right: Search Input & Collapse Grid Button */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ position: 'relative', width: '230px' }}>
+                    <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                    <input
+                      type="text"
+                      value={taskSearchQuery}
+                      onChange={(e) => {
+                        setTaskSearchQuery(e.target.value);
+                        if (isTaskGridCollapsed) setIsTaskGridCollapsed(false);
+                      }}
+                      placeholder="Tìm khối tác vụ, logs, KDS..."
+                      style={{
+                        width: '100%',
+                        padding: '6px 26px 6px 28px',
+                        fontSize: '12px',
+                        borderRadius: '8px',
+                        border: '1px solid #CBD5E1',
+                        outline: 'none',
+                        backgroundColor: '#FFFFFF',
+                        color: '#0F172A'
+                      }}
+                    />
+                    {taskSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setTaskSearchQuery('')}
+                        style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#94A3B8' }}
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsTaskGridCollapsed(!isTaskGridCollapsed)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: '#F8FAFC',
+                      color: '#334155',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <span>{isTaskGridCollapsed ? 'Mở rộng 15 khối tác vụ' : 'Thu gọn khối'}</span>
+                    <ChevronDown size={14} style={{ transform: isTaskGridCollapsed ? 'none' : 'rotate(180deg)', transition: 'transform 0.15s' }} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Categorized Block Cards Grid (F8 Course Card Style) */}
+              {!isTaskGridCollapsed && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {TASK_BLOCK_GROUPS.filter((g) => taskGroupFilter === 'ALL' || g.groupKey === taskGroupFilter).map((group) => {
+                    const q = removeVietnameseTones(taskSearchQuery);
+                    const visibleItems = group.items.filter((it) => {
+                      if (!q) return true;
+                      const hay = removeVietnameseTones(`${it.bannerTitle} ${it.bannerSubtitle} ${it.description} ${it.bannerTag}`);
+                      return hay.includes(q);
+                    });
+                    if (visibleItems.length === 0) return null;
+
+                    return (
+                      <div key={group.groupKey} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {/* Section Heading */}
+                        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A' }}>
+                              {group.groupTitle}
+                            </span>
+                            <span style={{ fontSize: '11px', fontWeight: 700, padding: '1px 8px', borderRadius: '12px', backgroundColor: '#F1F5F9', color: '#475569' }}>
+                              {visibleItems.length} khối
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '11.5px', color: '#64748B' }}>
+                            {group.groupSubtitle}
+                          </span>
+                        </div>
+
+                        {/* Cards Grid */}
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                            gap: '14px',
+                            alignItems: 'stretch'
+                          }}
+                        >
+                          {visibleItems.map((block) => {
+                            const isSelected = !block.isModal && selectedTaskId === block.id;
+                            const renderBannerIcon = () => {
+                              switch (block.id) {
+                                case 'clear_table_locks': return <Unlock size={16} color="#FFFFFF" />;
+                                case 'unlock_tablet_users': return <UserCheck size={16} color="#FFFFFF" />;
+                                case 'two_step_sync': return <Layers size={16} color="#FFFFFF" />;
+                                case 'fix_full_cpu': return <Cpu size={16} color="#FFFFFF" />;
+                                case 'manage_menu_so_co': return <Layers size={16} color="#FFFFFF" />;
+                                case 'check_kds': return <ChefHat size={16} color="#FFFFFF" />;
+                                case 'dish_show_hide': return <UtensilsCrossed size={16} color="#FFFFFF" />;
+                                case 'menu_show_hide': return <SlidersHorizontal size={16} color="#FFFFFF" />;
+                                case 'manage_app_params': return <Settings size={16} color="#FFFFFF" />;
+                                case 'radar_kds_logs': return <Flame size={16} color="#FFFFFF" />;
+                                case 'check_action_logs': return <FileText size={16} color="#FFFFFF" />;
+                                case 'device_fleet_map': return <Tablet size={16} color="#FFFFFF" />;
+                                case 'print_management': return <Printer size={16} color="#FFFFFF" />;
+                                case 'transfer_database': return <ArrowRightLeft size={16} color="#FFFFFF" />;
+                                case 'table_hall_report': return <FileSpreadsheet size={16} color="#FFFFFF" />;
+                                default: return <Wrench size={16} color="#FFFFFF" />;
+                              }
+                            };
+
+                            return (
+                              <div
+                                key={block.id}
+                                onClick={() => {
+                                  if (block.id === 'two_step_sync') {
+                                    setShowTwoStepSyncModal(true);
+                                  } else if (block.id === 'radar_kds_logs') {
+                                    setShowRadarModal(true);
+                                  } else if (block.id === 'device_fleet_map') {
+                                    setShowDeviceFleetModal(true);
+                                  } else if (block.id === 'print_management') {
+                                    if (!selectedRestaurant) {
+                                      showToast('Vui lòng chọn Nhà Hàng cụ thể trước để mở Giám Sát Máy In', 'info');
+                                      return;
+                                    }
+                                    setIsPrintManagementOpen(true);
+                                  } else {
+                                    setSelectedTaskId(block.id);
+                                    setTimeout(() => {
+                                      activeWorkspaceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                    }, 60);
+                                  }
+                                }}
+                                style={{
+                                  borderRadius: '12px',
+                                  overflow: 'hidden',
+                                  backgroundColor: '#FFFFFF',
+                                  border: isSelected ? '2.5px solid #F59E0B' : '1px solid #E2E8F0',
+                                  boxShadow: isSelected
+                                    ? '0 8px 20px -4px rgba(245, 158, 11, 0.28)'
+                                    : '0 2px 6px rgba(15, 23, 42, 0.05)',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  transition: 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.transform = 'translateY(-3px)';
+                                  if (!isSelected) {
+                                    e.currentTarget.style.boxShadow = '0 10px 20px -5px rgba(15, 23, 42, 0.12)';
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.transform = 'none';
+                                  if (!isSelected) {
+                                    e.currentTarget.style.boxShadow = '0 2px 6px rgba(15, 23, 42, 0.05)';
+                                  }
+                                }}
+                              >
+                                {/* Top Colored Banner (F8 Style Diagonal Texture + Bold Title) */}
+                                <div
+                                  style={{
+                                    backgroundImage: `repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 10px, transparent 10px, transparent 20px), ${block.bannerGradient}`,
+                                    padding: '14px 16px',
+                                    minHeight: '104px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between',
+                                    position: 'relative'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                    <span
+                                      style={{
+                                        fontSize: '10px',
+                                        fontWeight: 800,
+                                        letterSpacing: '0.4px',
+                                        color: 'rgba(255,255,255,0.92)',
+                                        backgroundColor: 'rgba(0,0,0,0.22)',
+                                        padding: '2px 8px',
+                                        borderRadius: '6px'
+                                      }}
+                                    >
+                                      {block.bannerTag}
+                                    </span>
+                                    <div
+                                      style={{
+                                        width: '28px',
+                                        height: '28px',
+                                        borderRadius: '8px',
+                                        backgroundColor: 'rgba(255,255,255,0.18)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        flexShrink: 0
+                                      }}
+                                    >
+                                      {renderBannerIcon()}
+                                    </div>
+                                  </div>
+
+                                  <div style={{ marginTop: '8px' }}>
+                                    <div
+                                      style={{
+                                        fontSize: '17px',
+                                        fontWeight: 800,
+                                        color: '#FFFFFF',
+                                        lineHeight: 1.25,
+                                        letterSpacing: '-0.2px',
+                                        textShadow: '0 1px 2px rgba(0,0,0,0.18)'
+                                      }}
+                                    >
+                                      {block.bannerTitle}
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: '11.5px',
+                                        fontWeight: 500,
+                                        color: 'rgba(255,255,255,0.9)',
+                                        marginTop: '3px',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis'
+                                      }}
+                                    >
+                                      {block.bannerSubtitle}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Bottom Card Body */}
+                                <div
+                                  style={{
+                                    padding: '12px 16px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between',
+                                    flex: 1,
+                                    gap: '10px',
+                                    backgroundColor: isSelected ? '#FFFBEB' : '#FFFFFF'
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontSize: '12px',
+                                      color: '#475569',
+                                      lineHeight: 1.45
+                                    }}
+                                  >
+                                    {block.description}
+                                  </div>
+
+                                  <div
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      paddingTop: '8px',
+                                      borderTop: '1px solid #F1F5F9',
+                                      fontSize: '11.5px'
+                                    }}
+                                  >
+                                    {isSelected ? (
+                                      <span style={{ color: '#D97706', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                        <CheckCircle2 size={13} color="#D97706" />
+                                        <span>Đang mở bên dưới</span>
+                                      </span>
+                                    ) : block.isModal ? (
+                                      <span style={{ color: '#0284C7', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                        <span>Mở cửa sổ chuyên sâu ↗</span>
+                                      </span>
+                                    ) : (
+                                      <span style={{ color: '#EA580C', fontWeight: 700 }}>
+                                        Chọn tác vụ ➔
+                                      </span>
+                                    )}
+
+                                    {block.id === 'clear_table_locks' && lockStatus && lockStatus.total_locked_tables > 0 ? (
+                                      <span
+                                        style={{
+                                          backgroundColor: '#FEE2E2',
+                                          color: '#DC2626',
+                                          fontWeight: 800,
+                                          fontSize: '10.5px',
+                                          padding: '2px 7px',
+                                          borderRadius: '10px',
+                                          border: '1px solid #FCA5A5'
+                                        }}
+                                      >
+                                        {lockStatus.total_locked_tables} bàn kẹt
+                                      </span>
+                                    ) : (
+                                      <span
+                                        style={{
+                                          backgroundColor: '#F1F5F9',
+                                          color: '#475569',
+                                          fontWeight: 700,
+                                          fontSize: '10.5px',
+                                          padding: '2px 7px',
+                                          borderRadius: '6px'
+                                        }}
+                                      >
+                                        {block.badgeText}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </Card>
+
+          <div ref={activeWorkspaceRef} />
           {/* BỘ CHỌN TÁC VỤ CẦN XỬ LÝ (COMBOBOX TỪNG DÒNG + TÌM KIẾM) */}
 
           {/* ══════════════════════════════════════════════════════════ */}
@@ -7375,6 +6892,10 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                         } else if (selectedTaskId === 'check_action_logs') {
 
                           fetchActionLogSessions();
+
+                        } else if (selectedTaskId === 'table_hall_report') {
+
+                          handleFetchTableReport();
 
                         }
 
@@ -14546,6 +14067,755 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
         </div>
 
+      )}
+
+      {/* ────────────────────────────────────────────────────────── */}
+      {/* TÁC VỤ 11: BÁO CÁO DANH SÁCH BÀN & KHU VỰC (TABLE & HALL)   */}
+      {/* ────────────────────────────────────────────────────────── */}
+      {selectedTaskId === 'table_hall_report' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Report Configuration & Filter Card */}
+
+          <Card>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+
+                {/* Select Report Type */}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+
+                  <div>
+
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#4B5563', marginBottom: '4px', textTransform: 'uppercase' }}>
+
+                      Chọn Loại Báo Cáo:
+
+                    </label>
+
+                    <select
+
+                      value={selectedReportType}
+
+                      onChange={(e) => setSelectedReportType(e.target.value)}
+
+                      style={{
+
+                        padding: '8px 12px',
+
+                        borderRadius: '6px',
+
+                        border: '1.5px solid var(--border-color)',
+
+                        backgroundColor: '#fff',
+
+                        fontSize: '13px',
+
+                        fontWeight: 600,
+
+                        color: '#111827',
+
+                        outline: 'none',
+
+                        minWidth: '320px'
+
+                      }}
+
+                    >
+
+                      <option value="table_report">🍽️ Báo Cáo Danh Sách Bàn Theo Nhà Hàng (TABLE &amp; HALL_PLAN)</option>
+
+                    </select>
+
+                  </div>
+
+
+
+                  {/* Scope note */}
+
+                  <div style={{ padding: '8px 12px', backgroundColor: '#F0FDF4', borderRadius: '6px', border: '1px solid #BBF7D0', fontSize: '12px', color: '#166534', marginTop: '16px' }}>
+
+                    Phạm vi: <strong>{selectedRestaurant ? `[${selectedRestaurant.sap}] ${selectedRestaurant.res}` : 'Tất Cả Nhà Hàng Đang ON/NEW'}</strong>
+
+                  </div>
+
+                </div>
+
+
+
+                {/* Right controls: Split checkbox & Run button */}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', marginTop: '16px' }}>
+
+                  {/* Checkbox chia khu vực */}
+
+                  <label
+
+                    style={{
+
+                      display: 'flex',
+
+                      alignItems: 'center',
+
+                      gap: '8px',
+
+                      cursor: 'pointer',
+
+                      padding: '8px 12px',
+
+                      backgroundColor: splitByHall ? '#FFFBEB' : '#F9FAFB',
+
+                      border: `1px solid ${splitByHall ? '#FCD34D' : 'var(--border-color)'}`,
+
+                      borderRadius: '6px',
+
+                      userSelect: 'none'
+
+                    }}
+
+                  >
+
+                    <input
+
+                      type="checkbox"
+
+                      checked={splitByHall}
+
+                      onChange={(e) => setSplitByHall(e.target.checked)}
+
+                      style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+
+                    />
+
+                    <div>
+
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: splitByHall ? '#92400E' : '#374151' }}>
+
+                        Chia theo từng Khu Vực / Tầng (HALL_PLAN)
+
+                      </span>
+
+                      <div style={{ fontSize: '11px', color: '#6B7280' }}>
+
+                        {splitByHall ? 'Tách mỗi khu vực 1 dòng riêng' : 'Gộp tổng số bàn của toàn nhà hàng'}
+
+                      </div>
+
+                    </div>
+
+                  </label>
+
+
+
+                  {/* Button Fetch Data */}
+
+                  <Button
+
+                    variant="primary"
+
+                    size="md"
+
+                    onClick={handleFetchTableReport}
+
+                    disabled={loadingReport}
+
+                    style={{
+
+                      display: 'inline-flex',
+
+                      alignItems: 'center',
+
+                      gap: '6px',
+
+                      backgroundColor: '#059669',
+
+                      borderColor: '#047857',
+
+                      color: '#fff',
+
+                      fontWeight: 700,
+
+                      padding: '8px 16px'
+
+                    }}
+
+                  >
+
+                    {loadingReport ? (
+
+                      <>
+
+                        <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} />
+
+                        <span>Đang Quét Dữ Liệu Bàn...</span>
+
+                      </>
+
+                    ) : (
+
+                      <>
+
+                        <RefreshCw size={15} />
+
+                        <span>⚡ Lấy Dữ Liệu Báo Cáo</span>
+
+                      </>
+
+                    )}
+
+                  </Button>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </Card>
+
+
+
+          {/* Results Table Section */}
+
+          <div
+
+            style={{
+
+              backgroundColor: 'var(--bg-card, #fff)',
+
+              borderRadius: '12px',
+
+              border: '1px solid var(--border-color)',
+
+              overflow: 'hidden',
+
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+
+            }}
+
+          >
+
+            {/* Table Toolbar */}
+
+            <div
+
+              style={{
+
+                padding: '12px 18px',
+
+                borderBottom: '1px solid var(--border-color)',
+
+                display: 'flex',
+
+                alignItems: 'center',
+
+                justifyContent: 'space-between',
+
+                flexWrap: 'wrap',
+
+                gap: '12px',
+
+                backgroundColor: '#F9FAFB'
+
+              }}
+
+            >
+
+              {/* Left stats */}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+
+                  📊 Kết quả: <strong>{summaryStats.totalRows}</strong> dòng
+
+                </span>
+
+                <span style={{ fontSize: '12px', color: '#6B7280' }}>•</span>
+
+                <span style={{ fontSize: '12px', color: '#4B5563' }}>
+
+                  Nhà hàng: <strong>{summaryStats.distinctRests}</strong>
+
+                </span>
+
+                <span style={{ fontSize: '12px', color: '#6B7280' }}>•</span>
+
+                <span style={{ fontSize: '12px', color: '#047857', fontWeight: 700 }}>
+
+                  Tổng số bàn ăn: <strong>{summaryStats.totalTables.toLocaleString()}</strong> bàn
+
+                </span>
+
+                <span style={{ fontSize: '12px', color: '#6B7280' }}>•</span>
+
+                <span style={{ fontSize: '11px', color: splitByHall ? '#92400E' : '#2563EB', fontWeight: 600 }}>
+
+                  {splitByHall ? '🏷️ Đang chia theo khu vực' : '🏷️ Đang gộp toàn nhà hàng'}
+
+                </span>
+
+              </div>
+
+
+
+              {/* Right search & export buttons */}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+
+                <div style={{ position: 'relative', width: '220px' }}>
+
+                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} />
+
+                  <input
+
+                    type="text"
+
+                    value={reportFilterQuery}
+
+                    onChange={(e) => setReportFilterQuery(e.target.value)}
+
+                    placeholder="Lọc tên, SAP, bàn..."
+
+                    style={{
+
+                      width: '100%',
+
+                      padding: '6px 10px 6px 28px',
+
+                      fontSize: '12px',
+
+                      borderRadius: '6px',
+
+                      border: '1px solid var(--border-color)',
+
+                      outline: 'none',
+
+                      backgroundColor: '#fff'
+
+                    }}
+
+                  />
+
+                  {reportFilterQuery && (
+
+                    <button
+
+                      type="button"
+
+                      onClick={() => setReportFilterQuery('')}
+
+                      style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#9CA3AF' }}
+
+                    >
+
+                      <X size={12} />
+
+                    </button>
+
+                  )}
+
+                </div>
+
+
+
+                <Button
+
+                  variant="outline"
+
+                  size="sm"
+
+                  onClick={handleCopyTableTSV}
+
+                  disabled={filteredReportItems.length === 0}
+
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+
+                >
+
+                  {copiedAllExcel ? <Check size={14} color="#059669" /> : <Copy size={14} />}
+
+                  <span>Sao Chép Excel</span>
+
+                </Button>
+
+
+
+                <Button
+
+                  variant="outline"
+
+                  size="sm"
+
+                  onClick={handleExportCSV}
+
+                  disabled={filteredReportItems.length === 0}
+
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+
+                >
+
+                  <Download size={14} />
+
+                  <span>Xuất CSV</span>
+
+                </Button>
+
+              </div>
+
+            </div>
+
+
+
+            {/* Table */}
+
+            <TopScrollTable maxHeight="680px">
+
+              <table style={{ width: '100%', minWidth: '1000px', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+
+                <thead style={{ backgroundColor: '#F3F4F6', position: 'sticky', top: 0, zIndex: 10 }}>
+
+                  <tr style={{ borderBottom: '2px solid var(--border-color)', backgroundColor: '#F3F4F6' }}>
+
+                    <th style={{ padding: '10px 12px', fontWeight: 700, color: '#374151', width: '50px', textAlign: 'center', backgroundColor: '#F3F4F6' }}>STT</th>
+
+                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '240px', backgroundColor: '#F3F4F6' }}>Mã SAP &amp; Tên Nhà Hàng</th>
+
+                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '130px', backgroundColor: '#F3F4F6' }}>IP MongoDB</th>
+
+                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '130px', textAlign: 'center', backgroundColor: '#F3F4F6' }}>
+
+                      {splitByHall ? 'Tổng Bàn (isCurrentRes: true)' : 'Số Bàn (isCurrentRes: true)'}
+
+                    </th>
+
+                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '160px', backgroundColor: '#F3F4F6' }}>Khu Vực / Tầng (HALL_PLAN)</th>
+
+                    <th style={{ padding: '10px 14px', fontWeight: 700, color: '#374151', minWidth: '320px', backgroundColor: '#F3F4F6' }}>Danh Sách Mẫu Bàn</th>
+
+                  </tr>
+
+                </thead>
+
+                <tbody>
+
+                  {loadingReport ? (
+
+                    <tr>
+
+                      <td colSpan={6} style={{ padding: '50px 20px', textAlign: 'center', color: '#6B7280' }}>
+
+                        <RefreshCw size={26} style={{ animation: 'spin 1s linear infinite', marginBottom: '8px' }} />
+
+                        <p style={{ margin: 0, fontSize: '13px', fontWeight: 600 }}>Đang kết nối MongoDB và trích xuất dữ liệu bàn...</p>
+
+                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#9CA3AF' }}>Vui lòng chờ trong giây lát (hệ thống xử lý song song đa luồng siêu tốc).</p>
+
+                      </td>
+
+                    </tr>
+
+                  ) : filteredReportItems.length === 0 ? (
+
+                    <tr>
+
+                      <td colSpan={6} style={{ padding: '60px 20px', textAlign: 'center', color: '#6B7280' }}>
+
+                        <TableProperties size={32} style={{ opacity: 0.4, marginBottom: '8px' }} />
+
+                        <p style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#374151' }}>Chưa có dữ liệu báo cáo</p>
+
+                        <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#9CA3AF' }}>
+
+                          Vui lòng bấm nút <strong>"⚡ Lấy Dữ Liệu Báo Cáo"</strong> phía trên để truy vấn dữ liệu từ MongoDB nhà hàng.
+
+                        </p>
+
+                      </td>
+
+                    </tr>
+
+                  ) : (
+
+                    filteredReportItems.map((item, idx) => {
+
+                      const isOffline = !!item.error;
+
+                      return (
+
+                        <tr
+
+                          key={`${item.restaurant_id}_${item.hall_id ?? idx}`}
+
+                          style={{
+
+                            borderBottom: '1px solid var(--border-color)',
+
+                            backgroundColor: isOffline ? '#FEF2F2' : idx % 2 === 0 ? '#FFFFFF' : '#F9FAFB',
+
+                            transition: 'background-color 0.1s'
+
+                          }}
+
+                        >
+
+                          {/* STT */}
+
+                          <td style={{ padding: '10px 12px', textAlign: 'center', color: '#6B7280', fontSize: '12px' }}>
+
+                            {idx + 1}
+
+                          </td>
+
+
+
+                          {/* Mã SAP & Tên Nhà Hàng */}
+
+                          <td style={{ padding: '10px 14px' }}>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+
+                              <span
+
+                                style={{
+
+                                  display: 'inline-block',
+
+                                  padding: '2px 6px',
+
+                                  borderRadius: '4px',
+
+                                  backgroundColor: '#E0E7FF',
+
+                                  color: '#3730A3',
+
+                                  fontSize: '11px',
+
+                                  fontWeight: 700,
+
+                                  fontFamily: 'monospace'
+
+                                }}
+
+                              >
+
+                                {item.sap_code || '—'}
+
+                              </span>
+
+                              <span style={{ fontWeight: 600, color: '#111827' }}>
+
+                                {item.restaurant_name}
+
+                              </span>
+
+                            </div>
+
+                          </td>
+
+
+
+                          {/* IP MongoDB */}
+
+                          <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: '12px', color: '#4B5563' }}>
+
+                            {item.mongo_ip}
+
+                          </td>
+
+
+
+                          {/* Tổng Bàn */}
+
+                          <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+
+                            {isOffline ? (
+
+                              <span style={{ color: '#DC2626', fontSize: '12px', fontWeight: 600 }}>0 bàn</span>
+
+                            ) : (
+
+                              <span
+
+                                style={{
+
+                                  display: 'inline-block',
+
+                                  padding: '3px 10px',
+
+                                  borderRadius: '12px',
+
+                                  backgroundColor: item.total_tables > 0 ? '#ECFDF5' : '#F3F4F6',
+
+                                  color: item.total_tables > 0 ? '#065F46' : '#6B7280',
+
+                                  fontWeight: 700,
+
+                                  fontSize: '13px'
+
+                                }}
+
+                              >
+
+                                {item.total_tables} bàn
+
+                              </span>
+
+                            )}
+
+                          </td>
+
+
+
+                          {/* Khu Vực / Tầng */}
+
+                          <td style={{ padding: '10px 14px' }}>
+
+                            {isOffline ? (
+
+                              <span style={{ color: '#9CA3AF' }}>—</span>
+
+                            ) : (
+
+                              <span
+
+                                style={{
+
+                                  display: 'inline-flex',
+
+                                  alignItems: 'center',
+
+                                  gap: '4px',
+
+                                  padding: '2px 8px',
+
+                                  borderRadius: '4px',
+
+                                  backgroundColor: splitByHall ? '#FEF3C7' : '#EFF6FF',
+
+                                  color: splitByHall ? '#92400E' : '#1E40AF',
+
+                                  fontWeight: 600,
+
+                                  fontSize: '12px'
+
+                                }}
+
+                              >
+
+                                🏷️ {item.hall_name}
+
+                              </span>
+
+                            )}
+
+                          </td>
+
+
+
+                          {/* Danh Sách Mẫu Bàn */}
+
+                          <td style={{ padding: '10px 14px' }}>
+
+                            {isOffline ? (
+
+                              <span style={{ color: '#DC2626', fontSize: '12px', fontWeight: 500 }}>
+
+                                ⚠️ {item.error}
+
+                              </span>
+
+                            ) : (
+
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+
+                                <span
+
+                                  style={{
+
+                                    fontSize: '12px',
+
+                                    color: '#374151',
+
+                                    lineHeight: 1.5,
+
+                                    wordBreak: 'break-word'
+
+                                  }}
+
+                                >
+
+                                  {item.tables_sample || '—'}
+
+                                </span>
+
+                                {item.tables_sample && (
+
+                                  <button
+
+                                    type="button"
+
+                                    onClick={() => {
+
+                                      navigator.clipboard.writeText(item.tables_sample);
+
+                                      setCopiedRowIdx(idx);
+
+                                      showToast(`Đã chép danh sách bàn của [${item.restaurant_name}]`, 'success');
+
+                                      setTimeout(() => setCopiedRowIdx(null), 1500);
+
+                                    }}
+
+                                    style={{
+
+                                      border: 'none',
+
+                                      background: 'transparent',
+
+                                      cursor: 'pointer',
+
+                                      color: copiedRowIdx === idx ? '#059669' : '#9CA3AF',
+
+                                      padding: '4px',
+
+                                      flexShrink: 0
+
+                                    }}
+
+                                    title="Chép danh sách bàn"
+
+                                  >
+
+                                    {copiedRowIdx === idx ? <Check size={14} /> : <Copy size={14} />}
+
+                                  </button>
+
+                                )}
+
+                              </div>
+
+                            )}
+
+                          </td>
+
+                        </tr>
+
+                      );
+
+                    })
+
+                  )}
+
+                </tbody>
+
+              </table>
+
+            </TopScrollTable>
+
+          </div>
+        </div>
       )}
 
 

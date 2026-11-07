@@ -4248,3 +4248,34 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
 - Đã ghi nhận chính thức vào mục **NGUYÊN TẮC BẤT DI BẤT DỊCH CHO AI & DEVELOPER (IMMUTABLE RULES)** (tại `AGENTS.md`, `GEMINI.md`, `Script/GEMINI.md`, `PROJECT_GUIDELINES.md`, `Script/PROJECT_GUIDELINES.md`):
   * Mọi đoạn code Python viết ra bắt buộc phải tương thích 100% với **Python 3.10** (`C:\Program Files\Python310` trên Server Production).
   * Cấm đặt backslash `\` bên trong `{...}` của f-string, cấm lồng dấu nháy cùng loại trong f-string, cấm dùng các cú pháp/thư viện chỉ có trên Python 3.11/3.12+ (`datetime.UTC`, `typing.Self`, `enum.StrEnum`, `tomllib`, `except*`, `type X = ...`), cấm để ký tự UTF-8 BOM ở đầu file `.py`.
+
+
+### [2026-11-07] HỢP NHẤT TAB 1 & TAB 2 VÀ TÁI THIẾT KẾ BỘ CHỌN TÁC VỤ DẠNG KHỐI (F8 COURSE CARD BLOCK GRID) TRONG PHÂN TÍCH MONGODB
+- **1. Hợp Nhất Tab 1 ("Xử Lý Tác Vụ") và Tab 2 ("Chuyên Sâu App CO-SO-KDS")**:
+  * Gom toàn bộ công cụ ở Tab 1 và Tab 2 về chung **Tab 1: Xử Lý Tác Vụ & Chuyên Sâu CO-SO-KDS** (`task_actions`).
+  * Đổi tên Tab 3 thành **Tab 2: Sơ Đồ Bàn Theo Khu (Restaurant Table Map)** (`android_emulator`).
+- **2. Thiết Kế Lại Bộ Chọn Tác Vụ Ở Tab 1 Thành 15 Khối Trực Quan Theo 4 Nhóm Chức Năng (Phong Cách Khối Card F8)**:
+  * Mỗi tác vụ được hiển thị thành một khối Card có phần Banner màu sắc/họa tiết chéo bên trên (kèm nhãn phân loại `⚡ THỰC THI`, `🍔 CẤU HÌNH`, `🔍 TRA CỨU LOGS`, `🗄️ HỆ THỐNG / BÁO CÁO`, icon và tiêu đề lớn) và phần mô tả ngắn gọn + trạng thái bên dưới:
+    + **⚡ Nhóm 1: Thực Thi & Cứu Hộ Nhanh (4 khối)**:
+      1. *Xóa Khóa Bàn (`clear_table_locks`)* — Giải phóng bàn treo & user giữ phiên (`LOCK_ORDER`).
+      2. *Mở Khóa User (`unlock_tablet_users`)* — Reset user báo đăng nhập máy khác (`EMPLOYEE`).
+      3. *Đồng Bộ Menu 2 Lớp (`two_step_sync`)* — Quy trình tuần tự chuẩn POS ➔ SO ➔ CO (`CoSoKdsTwoStepSyncModal`).
+      4. *Xử Lý Full CPU 100% (`fix_full_cpu`)* — Tạo bộ Index tối ưu chống treo máy POS & KDS.
+    + **🍔 Nhóm 2: Cấu Hình Thực Đơn, KDS & Tham Số (5 khối)**:
+      5. *Xử Lý Menu SO / CO (`manage_menu_so_co`)* — Thực đơn, nhóm món, bảng tính & kiểm tra lệch mã RK7.
+      6. *Check & Xử Lý KDS (`check_kds`)* — Quầy bếp, thời gian nấu, phân tích món vào bếp & đối chiếu giá GPOS.
+      7. *Ẩn / Hiện Món Ăn (`dish_show_hide`)* — Bật/tắt món độc lập trên CO, SO & QR Order (`SHOW_HIDE_ITEMS`).
+      8. *Ẩn / Hiện Menu (`menu_show_hide`)* — Danh mục menu & tự động ra món KDS (`autoDeliveryInSo`).
+      9. *Xử Lý APP_PARAM (`manage_app_params`)* — Cấu hình tham số vận hành nhà hàng (`APP_PARAM`).
+    + **🔍 Nhóm 3: Tra Cứu Nhật Ký (Logs) & Giám Sát Chuyên Sâu (4 khối)**:
+      10. *Radar & Nhật Ký KDS (`radar_kds_logs`)* — Hợp nhất nhật ký KDS & truy vết 5 chặng CO ➔ SO ➔ KDS (`CoSoKdsRadarModal`).
+      11. *Checklogs Phiên GUID (`check_action_logs`)* — Phân tích timeline thao tác `ACTION_LOG` theo Bàn/GUID.
+      12. *Bản Đồ Thiết Bị (`device_fleet_map`)* — Gộp phiên phần cứng, sắp xếp bàn mở muộn nhất lên đầu, kiểm tra App & Pin (`CoSoKdsDeviceFleetModal`).
+      13. *Giám Sát Máy In (`print_management`)* — Trạng thái máy in & hàng đợi in KDS/POS (`PrintManagementModal`).
+    + **🗄️ Nhóm 4: Hạ Tầng Dữ Liệu & Báo Cáo Bàn (2 khối)**:
+      14. *Chuyển Database (`transfer_database`)* — Di chuyển DB giữa các máy `.11`, `.12`, `.41` & dọn rác `ACTION_LOG`.
+      15. *Báo Cáo Bàn & Khu Vực (`table_hall_report`)* — Quét danh sách bàn ăn (`TABLE & HALL_PLAN`) và xuất Excel/CSV ngay trong Tab 1.
+  * Tích hợp thanh lọc nhanh theo nhóm (`Tất cả (15)`, `⚡ Thực thi (4)`, `🍔 Cấu hình (5)`, `🔍 Tra cứu Logs (4)`, `🗄️ Hệ thống & Báo cáo (2)`), ô tìm kiếm tức thời và nút **Thu gọn khối / Mở rộng 15 khối tác vụ**.
+- **3. Build & Kiểm Thử (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Frontend: `cmd /c "cd frontend && npm run build"` thành công (exit code 0, `✓ built in 4.53s`), thư mục `frontend/dist/` sạch sẽ.
+  * Backend: `python -m compileall app` & Smoke Test đạt 100%.

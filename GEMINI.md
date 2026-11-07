@@ -3397,3 +3397,17 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
   * Tách biến `clean_p = p.lstrip("\\")` ra trước rồi mới truyền vào `return f"\\\\{clean_ip}\\{clean_p}"`.
   * Quét toàn bộ mã nguồn `backend/` bằng AST kiểm tra tương thích ngược Python 3.10 (0 lỗi f-string backslash, 0 lỗi quote lồng nhau, gỡ bỏ BOM trong `backend/scripts/build_master_sql.py`).
   * Kiểm thử import toàn bộ module trong `backend/app` và Smoke Test đạt `>>> ALL MODULES IMPORTED & PASSED 100%`.
+
+
+### [2026-11-07] HỢP NHẤT TAB 1 & TAB 2 VÀ TÁI THIẾT KẾ BỘ CHỌN TÁC VỤ DẠNG KHỐI (F8 COURSE CARD BLOCK GRID) TRONG PHÂN TÍCH MONGODB
+- **1. Hợp Nhất Tab 1 ("Xử Lý Tác Vụ") và Tab 2 ("Chuyên Sâu App CO-SO-KDS")**:
+  * Gom toàn bộ công cụ ở Tab 1 và Tab 2 về chung **Tab 1: Xử Lý Tác Vụ & Chuyên Sâu CO-SO-KDS** (`task_actions`).
+  * Đổi tên Tab 3 thành **Tab 2: Sơ Đồ Bàn Theo Khu (Restaurant Table Map)** (`android_emulator`).
+- **2. Thiết Kế Lại Bộ Chọn Tác Vụ Ở Tab 1 Thành 15 Khối Trực Quan Theo 4 Nhóm Chức Năng (Phong Cách Khối Card F8)**:
+  * **⚡ Nhóm 1: Thực Thi & Cứu Hộ Nhanh (4 khối)**: *Xóa Khóa Bàn*, *Mở Khóa User*, *Đồng Bộ Menu 2 Lớp (POS ➔ SO ➔ CO)*, *Xử Lý Full CPU 100%*.
+  * **🍔 Nhóm 2: Cấu Hình Thực Đơn, KDS & Tham Số (5 khối)**: *Xử Lý Menu SO / CO*, *Check & Xử Lý KDS*, *Ẩn / Hiện Món Ăn*, *Ẩn / Hiện Menu*, *Xử Lý APP_PARAM*.
+  * **🔍 Nhóm 3: Tra Cứu Nhật Ký (Logs) & Giám Sát Chuyên Sâu (4 khối)**: *Radar & Nhật Ký KDS*, *Checklogs Phiên GUID*, *Bản Đồ Thiết Bị*, *Giám Sát Máy In*.
+  * **🗄️ Nhóm 4: Hạ Tầng Dữ Liệu & Báo Cáo Bàn (2 khối)**: *Chuyển Database*, *Báo Cáo Bàn & Khu Vực*.
+- **3. Build & Kiểm Thử (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Frontend: `cmd /c "cd frontend && npm run build"` thành công (exit code 0, `✓ built in 4.53s`), thư mục `frontend/dist/` sạch sẽ.
+  * Backend: `python -m compileall app` & Smoke Test đạt 100%.
