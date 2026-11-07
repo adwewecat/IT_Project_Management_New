@@ -477,3 +477,18 @@
 - **4. Build & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7)**:
   * Frontend: `cmd /c "cd frontend && npm run build"` thành công (exit code 0, `✓ built in 4.65s`), thư mục `frontend/dist/` sạch sẽ.
   * Backend: `python -m compileall app` không lỗi, Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
+
+
+### [2026-11-07] KHẮC PHỤC TRIỆT ĐỂ LỖI HIỂN THỊ ẢNH THỰC ĐƠN KÊNH CO TRÊN TAB 3
+- **Nguyên nhân cốt lõi**:
+  * Thẻ món ăn kênh CO trước đó dùng chung một biến `fileImg = dish.srcImg || dish.imageUrl` truyền vào thẻ `<img src={fileImg} />`.
+  * Vì `dish.srcImg` chứa đường dẫn tương đối nội bộ GPOS (ví dụ: `/menu/Com_Ca_Ri_Trung_Phu.png`), trình duyệt web gửi request tới localhost `http://localhost:5173/menu/...` bị 404 Not Found, kích hoạt hàm `onError` ẩn ảnh và chuyển sang icon `Utensils` fallback.
+- **Giải pháp khắc phục & Nâng cấp**:
+  * Tách biệt rõ ràng 2 luồng dữ liệu:
+    + `displayImgUrl`: Ưu tiên trích xuất URL online HTTP/HTTPS trực tiếp từ Cloud Gateway CDN (`https://gposgateway-hcm.ggg.com.vn:8443/...`) từ `it.image_url` hoặc `it.url_img_qr` để truyền vào `<img src={displayImgUrl} />`. Giờ đây toàn bộ ảnh món ăn hiển thị tức thời, sắc nét 100% như Tab 4.
+    + `fileImg`: Giữ nguyên đường dẫn file nội bộ phục vụ nhãn `📁 File: ...`, bấm sao chép và đối soát với SFTP Server `192.168.201.116` / máy trạm.
+  * Tối ưu `loadDishesFromMongo`: Tự động nhận diện `bestOnlineImg` từ `it.image_url` hoặc `it.url_img_qr` cho `dish.imageUrl`.
+  * Thêm popup xem ảnh lớn (Click to Zoom): Click vào ảnh món ăn trên thẻ CO sẽ mở Modal xem ảnh độ phân giải cao kèm thông tin chi tiết (Tên món, RK7, SAP, Giá, Đường dẫn file gốc).
+- **Kiểm thử & Đóng gói (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "cd frontend && npm run build"` thành công (exit code 0, `✓ built in 4.64s`), cập nhật sạch sẽ thư mục `frontend/dist/`.
+  * Backend: `python -m compileall app` không lỗi, Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.

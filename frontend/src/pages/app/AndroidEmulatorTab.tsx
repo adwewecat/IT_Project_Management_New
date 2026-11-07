@@ -360,6 +360,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
   const [dishJumpQuery, setDishJumpQuery] = useState<string>('');
   const [isJumpSearchFocused, setIsJumpSearchFocused] = useState<boolean>(false);
   const [highlightedDishId, setHighlightedDishId] = useState<string | null>(null);
+  const [previewDish, setPreviewDish] = useState<DishItem | null>(null);
   const [jumpSearchError, setJumpSearchError] = useState<string | null>(null);
   const jumpSearchContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -565,6 +566,13 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
           const dedupKey = `${groupClean.toLowerCase()}___${rk7Str.toLowerCase()}___${sapStr.toLowerCase()}___${(it.name || '').trim().toLowerCase()}___${it.price || 0}`;
 
           if (!uniqueDishMap.has(dedupKey)) {
+            const rawImgUrl = it.image_url || it.url_img_qr || '';
+            const bestOnlineImg = (rawImgUrl.startsWith('http://') || rawImgUrl.startsWith('https://'))
+              ? rawImgUrl
+              : (it.src_img && (it.src_img.startsWith('http://') || it.src_img.startsWith('https://')))
+              ? it.src_img
+              : it.image_url || undefined;
+
             uniqueDishMap.set(dedupKey, {
               id: `${it.menu_code || ''}_${it.group_code || ''}_${rk7Str || sapStr || it.name}_${idx}`,
               name: it.name,
@@ -575,7 +583,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
               isDrink,
               rk7Code: rk7Str,
               sapCode: sapStr,
-              imageUrl: it.image_url || undefined,
+              imageUrl: bestOnlineImg,
               srcImg: it.src_img || undefined,
               urlImgQr: it.url_img_qr || undefined,
               isHidden,
@@ -3748,7 +3756,18 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
               // KÈM THEO CHI TIẾT ẨN/HIỆN THEO KÊNH (CO, SO, QR_ORDER) & CHECK HÌNH
               // ══════════════════════════════════════════════════════════════
               if (orderMode === 'CO') {
-                const fileImg = dish.srcImg || dish.imageUrl || '';
+                // 1. URL online thực tế để hiển thị ảnh trên thẻ (ưu tiên link HTTP/HTTPS Gateway CDN)
+                const displayImgUrl =
+                  (dish.imageUrl && (dish.imageUrl.startsWith('http://') || dish.imageUrl.startsWith('https://')))
+                    ? dish.imageUrl
+                    : (dish.urlImgQr && (dish.urlImgQr.startsWith('http://') || dish.urlImgQr.startsWith('https://')))
+                    ? dish.urlImgQr
+                    : (dish.srcImg && (dish.srcImg.startsWith('http://') || dish.srcImg.startsWith('https://')))
+                    ? dish.srcImg
+                    : '';
+
+                // 2. Đường dẫn file cấu hình phục vụ kiểm tra SFTP, máy trạm và sao chép
+                const fileImg = dish.srcImg || dish.localFileName || (dish.imageUrl && !dish.imageUrl.startsWith('http') ? dish.imageUrl : '') || '';
                 const serverCheck = checkedDishImagesMap[dish.id];
 
                 return (
@@ -3818,15 +3837,18 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                         cursor: 'pointer'
                       }}
                       onClick={() => {
-                        if (!serverCheck) {
+                        if (displayImgUrl) {
+                          setPreviewDish(dish);
+                        } else if (!serverCheck) {
                           handleCheckSingleDish(dish);
                         }
                       }}
                     >
-                      {fileImg ? (
+                      {displayImgUrl ? (
                         <img
-                          src={fileImg}
+                          src={displayImgUrl}
                           alt={dish.name}
+                          loading="lazy"
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
@@ -3840,7 +3862,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                         style={{
                           width: '100%',
                           height: '100%',
-                          display: fileImg ? 'none' : 'flex',
+                          display: displayImgUrl ? 'none' : 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           backgroundColor: '#f8fafc',
@@ -5932,7 +5954,54 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
       )}
 
       {/* ───────────────────────────────────────────────────────────────── */}
+            {/* Modal Xem Ảnh Lớn Khi Click Vào Thẻ Món CO */}
+      {previewDish && (
+        <Modal
+          isOpen={!!previewDish}
+          onClose={() => setPreviewDish(null)}
+          title={`Chi Tiết Hình Ảnh: ${previewDish.name}`}
+          maxWidth="560px"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', alignItems: 'center' }}>
+            {(() => {
+              const previewUrl =
+                (previewDish.imageUrl && (previewDish.imageUrl.startsWith('http://') || previewDish.imageUrl.startsWith('https://')))
+                  ? previewDish.imageUrl
+                  : (previewDish.urlImgQr && (previewDish.urlImgQr.startsWith('http://') || previewDish.urlImgQr.startsWith('https://')))
+                  ? previewDish.urlImgQr
+                  : '';
+              return previewUrl ? (
+                <div style={{ width: '100%', maxHeight: '360px', overflow: 'hidden', borderRadius: '8px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <img
+                    src={previewUrl}
+                    alt={previewDish.name}
+                    style={{ maxWidth: '100%', maxHeight: '360px', objectFit: 'contain' }}
+                  />
+                </div>
+              ) : (
+                <div style={{ padding: '40px', color: '#94a3b8', textAlign: 'center' }}>
+                  <Utensils size={48} style={{ margin: '0 auto 8px auto' }} />
+                  <div>Món này chưa có ảnh online trực tiếp</div>
+                </div>
+              );
+            })()}
+
+            <div style={{ width: '100%', padding: '10px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: '#64748b' }}>RK7: <strong>{previewDish.rk7Code || '—'}</strong> | SAP: <strong>{previewDish.sapCode || '—'}</strong></span>
+                <span style={{ fontSize: '13px', fontWeight: 800, color: previewDish.price === 0 ? '#059669' : '#ea580c' }}>
+                  {previewDish.price === 0 ? 'Buffet (0đ)' : formatMoney(previewDish.price)}
+                </span>
+              </div>
+              <div style={{ color: '#64748b', fontSize: '11px', wordBreak: 'break-all' }}>
+                File cấu hình: <code style={{ backgroundColor: '#ffffff', padding: '1px 4px', borderRadius: '3px', border: '1px solid #cbd5e1' }}>{previewDish.srcImg || previewDish.imageUrl || '—'}</code>
+              </div>
+            </div>
           </div>
+        </Modal>
+      )}
+
+    </div>
   );
 };
 
