@@ -32,7 +32,9 @@ import {
   Loader2,
   Globe,
   ExternalLink,
-  Send
+  Send,
+  Utensils,
+  AlertTriangle
 } from 'lucide-react';
 import { copyToClipboard } from '../../utils/clipboard';
 import { Modal } from '../../components/ui/Modal';
@@ -84,6 +86,9 @@ export interface DishItem {
   matchRule?: string;
   isSpecialCard?: boolean;
   isHidden?: boolean; // Cờ đánh dấu món đang ẩn trên POS
+  hideInCo?: boolean; // Món bị ẩn trên kênh Khách (CO)
+  hideInSo?: boolean; // Món bị ẩn trên kênh Phục Vụ (SO)
+  hideInQr?: boolean; // Món bị ẩn trên kênh QR Order (QR_ORDER)
   isCo?: boolean; // Món thuộc kênh CO
 }
 
@@ -473,14 +478,33 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
     if (!cleanHost) return;
     setLoadingDishes(true);
     try {
-      // a. Lấy danh sách món ẩn từ getDishShowHide
+      // a. Lấy chi tiết món ẩn từ getDishShowHide (lưu map để biết ẩn ở CO, SO hay QR_ORDER)
+      const showHideDetailMap = new Map<string, { show_in_co: boolean; show_in_so: boolean; show_in_qr_order: boolean; is_hidden: boolean }>();
       const hiddenDishSet = new Set<string>();
       try {
         const showHideRes = await mongoService.getDishShowHide(cleanHost, 27017);
-        if (showHideRes && showHideRes.hidden_dishes) {
-          showHideRes.hidden_dishes.forEach((hd) => {
-            if (hd.item_code) hiddenDishSet.add(String(hd.item_code).trim());
-            if (hd.sap_code) hiddenDishSet.add(String(hd.sap_code).trim());
+        if (showHideRes) {
+          const allDishes = [
+            ...(showHideRes.hidden_dishes || []),
+            ...(showHideRes.visible_dishes || [])
+          ];
+          allDishes.forEach((hd) => {
+            const detail = {
+              show_in_co: hd.show_in_co,
+              show_in_so: hd.show_in_so,
+              show_in_qr_order: hd.show_in_qr_order,
+              is_hidden: hd.is_hidden
+            };
+            if (hd.item_code) {
+              const codeStr = String(hd.item_code).trim();
+              showHideDetailMap.set(codeStr, detail);
+              if (hd.is_hidden) hiddenDishSet.add(codeStr);
+            }
+            if (hd.sap_code) {
+              const sapStr = String(hd.sap_code).trim();
+              showHideDetailMap.set(sapStr, detail);
+              if (hd.is_hidden) hiddenDishSet.add(sapStr);
+            }
           });
         }
       } catch (e) {
@@ -512,7 +536,22 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
         res.items.forEach((it, idx) => {
           const rk7Str = String(it.rk7_code || '').trim();
           const sapStr = String(it.sap_code || '').trim();
-          const isHidden = hiddenDishSet.has(rk7Str) || hiddenDishSet.has(sapStr) || it.is_so === false;
+
+          const sh = showHideDetailMap.get(rk7Str) || (sapStr ? showHideDetailMap.get(sapStr) : undefined);
+          let hideInCo = false;
+          let hideInSo = false;
+          let hideInQr = false;
+
+          if (sh) {
+            hideInCo = !sh.show_in_co;
+            hideInSo = !sh.show_in_so;
+            hideInQr = !sh.show_in_qr_order;
+          } else {
+            if (it.is_co === false || it.group_is_co === false) hideInCo = true;
+            if (it.is_so === false) hideInSo = true;
+          }
+
+          const isHidden = hideInCo || hideInSo || hideInQr || (sh ? sh.is_hidden : false) || hiddenDishSet.has(rk7Str) || hiddenDishSet.has(sapStr);
 
           const groupClean = it.group_name ? it.group_name.trim() : 'Món Khác';
           const isDrink =
@@ -540,6 +579,9 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
               srcImg: it.src_img || undefined,
               urlImgQr: it.url_img_qr || undefined,
               isHidden,
+              hideInCo,
+              hideInSo,
+              hideInQr,
               isCo: it.is_co ?? it.group_is_co
             });
           }
@@ -3680,7 +3722,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
             overflowY: 'auto',
             padding: '10px 16px 20px 16px',
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
+            gridTemplateColumns: orderMode === 'CO' ? 'repeat(auto-fill, minmax(215px, 1fr))' : 'repeat(auto-fill, minmax(190px, 1fr))',
             gap: '12px',
             alignContent: 'start'
           }}
@@ -3701,21 +3743,590 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
               const isHidden = !!dish.isHidden;
               const isHighlighted = highlightedDishId === dish.id;
 
+              // ══════════════════════════════════════════════════════════════
+              // KÊNH CO (KHÁCH): HIỂN THỊ HÌNH ẢNH NHƯ TAB 4 (KHÔNG CÓ NÚT GỌI MÓN)
+              // KÈM THEO CHI TIẾT ẨN/HIỆN THEO KÊNH (CO, SO, QR_ORDER) & CHECK HÌNH
+              // ══════════════════════════════════════════════════════════════
+              if (orderMode === 'CO') {
+                const fileImg = dish.srcImg || dish.imageUrl || '';
+                const serverCheck = checkedDishImagesMap[dish.id];
 
+                return (
+                  <div
+                    key={dish.id}
+                    id={`dish-card-${dish.id}`}
+                    style={{
+                      backgroundColor: '#ffffff',
+                      borderRadius: '8px',
+                      border: isHighlighted
+                        ? '2px solid #ea580c'
+                        : isHidden
+                        ? '1.5px dashed #f87171'
+                        : '1px solid #e2e8f0',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      boxShadow: isHighlighted
+                        ? '0 0 0 4px rgba(234, 88, 12, 0.35), 0 8px 20px rgba(234, 88, 12, 0.25)'
+                        : '0 1px 3px rgba(0,0,0,0.04)',
+                      transition: 'all 0.15s ease',
+                      position: 'relative'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isHighlighted) {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.08)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isHighlighted) {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
+                      }
+                    }}
+                  >
+                    {/* Badge Món vừa tìm khi được Jump tới */}
+                    {isHighlighted && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '6px',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          backgroundColor: '#ea580c',
+                          color: '#ffffff',
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                          whiteSpace: 'nowrap',
+                          zIndex: 30
+                        }}
+                      >
+                        🎯 Món vừa tìm!
+                      </div>
+                    )}
 
+                    {/* ẢNH MÓN ĂN (TRÊN ĐỈNH THẺ) */}
+                    <div
+                      style={{
+                        position: 'relative',
+                        height: '120px',
+                        backgroundColor: '#f1f5f9',
+                        overflow: 'hidden',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => {
+                        if (!serverCheck) {
+                          handleCheckSingleDish(dish);
+                        }
+                      }}
+                    >
+                      {fileImg ? (
+                        <img
+                          src={fileImg}
+                          alt={dish.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            const fb = e.currentTarget.parentElement?.querySelector('.co-img-fallback');
+                            if (fb) (fb as HTMLElement).style.display = 'flex';
+                          }}
+                        />
+                      ) : null}
+                      <div
+                        className="co-img-fallback"
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          display: fileImg ? 'none' : 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: '#f8fafc',
+                          color: '#94a3b8'
+                        }}
+                      >
+                        <Utensils size={32} />
+                      </div>
+
+                      {/* Badge top-left: Buffet 0đ hoặc Alacarte */}
+                      {dish.price === 0 ? (
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: '6px',
+                            left: '6px',
+                            backgroundColor: '#059669',
+                            color: '#ffffff',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                            zIndex: 5
+                          }}
+                        >
+                          Buffet 0đ
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: '6px',
+                            left: '6px',
+                            backgroundColor: '#475569',
+                            color: '#ffffff',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                            zIndex: 5
+                          }}
+                        >
+                          Alacarte
+                        </span>
+                      )}
+
+                      {/* Nút check SFTP nhanh top-right */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCheckSingleDish(dish);
+                        }}
+                        disabled={checkingDishId === dish.id}
+                        style={{
+                          position: 'absolute',
+                          top: '6px',
+                          right: '6px',
+                          padding: '3px 7px',
+                          borderRadius: '4px',
+                          backgroundColor: serverCheck
+                            ? (serverCheck.status === 'MATCH'
+                                ? '#dcfce7'
+                                : serverCheck.status === 'CASE_MISMATCH'
+                                ? '#fef3c7'
+                                : '#fee2e2')
+                            : 'rgba(0,0,0,0.65)',
+                          color: serverCheck
+                            ? (serverCheck.status === 'MATCH'
+                                ? '#166534'
+                                : serverCheck.status === 'CASE_MISMATCH'
+                                ? '#b45309'
+                                : '#991b1b')
+                            : '#ffffff',
+                          border: 'none',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          cursor: checkingDishId === dish.id ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                          zIndex: 5
+                        }}
+                        title="Kiểm tra file ảnh trên SFTP Server 192.168.201.116"
+                      >
+                        {checkingDishId === dish.id ? (
+                          <RefreshCw size={10} className="animate-spin" />
+                        ) : serverCheck ? (
+                          serverCheck.status === 'MATCH' ? (
+                            <Check size={10} />
+                          ) : (
+                            <AlertTriangle size={10} />
+                          )
+                        ) : (
+                          <Search size={10} />
+                        )}
+                        <span>
+                          {serverCheck
+                            ? (serverCheck.status === 'MATCH'
+                                ? 'Khớp'
+                                : serverCheck.status === 'CASE_MISMATCH'
+                                ? 'Lệch chữ'
+                                : 'Lỗi ảnh')
+                            : 'Check SFTP'}
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* THÔNG TIN MÓN & TRẠNG THÁI ẨN / HIỆN THEO KÊNH */}
+                    <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                      {/* Tên món */}
+                      <div
+                        style={{
+                          fontSize: '13px',
+                          fontWeight: 700,
+                          color: '#0f172a',
+                          lineHeight: 1.3,
+                          minHeight: '34px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical'
+                        }}
+                        title={dish.name}
+                      >
+                        {dish.name}
+                      </div>
+
+                      {/* Giá & RK7 / SAP */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                        <div style={{ fontSize: '11px', color: '#64748b', lineHeight: 1.2 }}>
+                          <span>RK7: <strong>{dish.rk7Code || '—'}</strong></span>
+                          <span style={{ margin: '0 4px', color: '#cbd5e1' }}>|</span>
+                          <span>SAP: <strong>{dish.sapCode || '—'}</strong></span>
+                        </div>
+                        <span style={{ fontSize: '13px', fontWeight: 800, color: dish.price === 0 ? '#059669' : '#ea580c' }}>
+                          {dish.price === 0 ? 'Buffet (0đ)' : formatMoney(dish.price)}
+                        </span>
+                      </div>
+
+                      {/* CÁC NHÃN ẨN MÓN THEO KÊNH: CO, SO, QR_ORDER */}
+                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px', margin: '2px 0' }}>
+                        {dish.hideInCo && (
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              backgroundColor: '#fee2e2',
+                              color: '#dc2626',
+                              border: '1px solid #fca5a5',
+                              borderRadius: '4px',
+                              padding: '1px 5px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '2px'
+                            }}
+                            title="Món đang bị cài đặt ẩn trên kênh Tablet Khách (CO)"
+                          >
+                            <EyeOff size={9} /> Ẩn CO
+                          </span>
+                        )}
+                        {dish.hideInSo && (
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              backgroundColor: '#fef3c7',
+                              color: '#b45309',
+                              border: '1px solid #fde68a',
+                              borderRadius: '4px',
+                              padding: '1px 5px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '2px'
+                            }}
+                            title="Món đang bị cài đặt ẩn trên kênh Máy Phục Vụ (SO)"
+                          >
+                            <EyeOff size={9} /> Ẩn SO
+                          </span>
+                        )}
+                        {dish.hideInQr && (
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              backgroundColor: '#f3e8ff',
+                              color: '#7e22ce',
+                              border: '1px solid #d8b4fe',
+                              borderRadius: '4px',
+                              padding: '1px 5px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '2px'
+                            }}
+                            title="Món đang bị cài đặt ẩn trên kênh Gọi Món QR (QR_ORDER)"
+                          >
+                            <EyeOff size={9} /> Ẩn QR
+                          </span>
+                        )}
+                        {!dish.hideInCo && !dish.hideInSo && !dish.hideInQr && (
+                          <span
+                            style={{
+                              fontSize: '9.5px',
+                              fontWeight: 600,
+                              color: '#16a34a',
+                              backgroundColor: '#f0fdf4',
+                              border: '1px solid #bbf7d0',
+                              borderRadius: '4px',
+                              padding: '1px 5px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '2px'
+                            }}
+                            title="Món đang hiển thị đầy đủ trên mọi kênh (CO, SO, QR)"
+                          >
+                            <Check size={9} /> Hiện đủ (CO, SO, QR)
+                          </span>
+                        )}
+                      </div>
+
+                      {/* KHUNG KIỂM TRA HÌNH ẢNH (2 DÒNG: FILE & SERVER) */}
+                      <div
+                        style={{
+                          backgroundColor: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '6px',
+                          padding: '5px 7px',
+                          fontSize: '10.5px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '3px',
+                          overflow: 'hidden',
+                          marginTop: 'auto'
+                        }}
+                      >
+                        {/* Dòng 1: Hình trên file (Bấm để copy đường dẫn ảnh) */}
+                        <div
+                          onClick={(e) => {
+                            if (fileImg) {
+                              handleCopyFilePath(e, dish, fileImg);
+                            }
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            overflow: 'hidden',
+                            cursor: fileImg ? 'pointer' : 'default',
+                            borderRadius: '3px',
+                            padding: '1px 2px'
+                          }}
+                          title={fileImg ? `Bấm để copy đường dẫn ảnh: ${fileImg}` : 'Chưa có cấu hình ảnh'}
+                        >
+                          <span style={{ color: '#64748b', fontWeight: 700, flexShrink: 0 }}>📁 File:</span>
+                          <span
+                            style={{
+                              fontFamily: 'monospace',
+                              color: fileImg ? '#0f172a' : '#94a3b8',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              fontWeight: fileImg ? 600 : 400,
+                              flex: 1
+                            }}
+                          >
+                            {fileImg || '(Chưa cấu hình)'}
+                          </span>
+                          {fileImg && (
+                            <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center' }}>
+                              {copiedFileDishId === dish.id ? (
+                                <Check size={9} color="#16a34a" />
+                              ) : (
+                                <Copy size={8} style={{ opacity: 0.45 }} />
+                              )}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Dòng 2: Hình trên server (Bấm badge để copy thông báo gửi người xử lý) */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                          <span style={{ color: '#64748b', fontWeight: 700, flexShrink: 0 }}>🌐 Server:</span>
+
+                          {!serverCheck ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCheckSingleDish(dish);
+                              }}
+                              disabled={checkingDishId === dish.id}
+                              style={{
+                                padding: '1px 6px',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                borderRadius: '3px',
+                                border: '1px solid #cbd5e1',
+                                backgroundColor: '#ffffff',
+                                color: '#2563eb',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                              title="Bấm để kiểm tra ảnh trên máy chủ 192.168.201.116 (không tự load trước)"
+                            >
+                              {checkingDishId === dish.id ? (
+                                <RefreshCw size={10} className="animate-spin" />
+                              ) : (
+                                <Search size={10} />
+                              )}
+                              <span>Check hình</span>
+                            </button>
+                          ) : (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                              {/* Badge thông báo trạng thái */}
+                              <button
+                                type="button"
+                                onClick={(e) => handleCopyCheckMessage(e, dish, serverCheck.message)}
+                                title={`Bấm để copy thông báo gửi người xử lý (Shift+Click: chỉ copy nội dung lỗi):\n[${dish.name} - RK7: ${dish.rk7Code || '—'}] ${serverCheck.message}`}
+                                style={{
+                                  color:
+                                    serverCheck.status === 'MATCH'
+                                      ? '#15803d'
+                                      : serverCheck.status === 'CASE_MISMATCH'
+                                      ? '#b45309'
+                                      : serverCheck.is_fixable
+                                      ? '#c2410c'
+                                      : '#dc2626',
+                                  backgroundColor:
+                                    serverCheck.status === 'MATCH'
+                                      ? '#dcfce7'
+                                      : serverCheck.status === 'CASE_MISMATCH'
+                                      ? '#fef3c7'
+                                      : serverCheck.is_fixable
+                                      ? '#ffedd5'
+                                      : '#fee2e2',
+                                  border: `1px solid ${
+                                    serverCheck.status === 'MATCH'
+                                      ? '#bbf7d0'
+                                      : serverCheck.status === 'CASE_MISMATCH'
+                                      ? '#fde68a'
+                                      : serverCheck.is_fixable
+                                      ? '#fed7aa'
+                                      : '#fecaca'
+                                  }`,
+                                  borderRadius: '3px',
+                                  padding: '1px 5px',
+                                  fontWeight: 700,
+                                  fontSize: '9.5px',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                <span>
+                                  {serverCheck.status === 'MATCH'
+                                    ? '✅ Khớp'
+                                    : serverCheck.status === 'CASE_MISMATCH'
+                                    ? '⚠️ Lệch chữ'
+                                    : serverCheck.status === 'NO_IMAGE'
+                                    ? 'Chưa có ảnh'
+                                    : '❌ Không có'}
+                                </span>
+                                {copiedCheckDishId === dish.id ? (
+                                  <Check size={9} color="#16a34a" />
+                                ) : (
+                                  <Copy size={9} style={{ opacity: 0.65 }} />
+                                )}
+                              </button>
+
+                              {/* Nút kiểm tra lại hình ảnh */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCheckSingleDish(dish);
+                                }}
+                                disabled={checkingDishId === dish.id}
+                                title="Kiểm tra lại hình ảnh món này trên server 192.168.201.116"
+                                style={{
+                                  padding: '1px 3px',
+                                  borderRadius: '3px',
+                                  border: '1px solid #cbd5e1',
+                                  backgroundColor: '#ffffff',
+                                  color: '#475569',
+                                  cursor: checkingDishId === dish.id ? 'not-allowed' : 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  lineHeight: 1
+                                }}
+                              >
+                                <RefreshCw
+                                  size={9}
+                                  className={checkingDishId === dish.id ? 'animate-spin' : ''}
+                                />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Dòng 3a: Nút Tra cứu toàn server nếu NOT_FOUND */}
+                        {serverCheck && serverCheck.status === 'NOT_FOUND' && (
+                          <div style={{ marginTop: '3px' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenGlobalSearch(dish.srcImg || dish.name || String(dish.rk7Code || ''));
+                              }}
+                              title="Tra cứu toàn server xem ảnh món này đang nằm ở thư mục nào"
+                              style={{
+                                width: '100%',
+                                padding: '2px 4px',
+                                fontSize: '9px',
+                                fontWeight: 600,
+                                borderRadius: '3px',
+                                border: '1px solid #fed7aa',
+                                backgroundColor: '#fff7ed',
+                                color: '#c2410c',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '3px'
+                              }}
+                            >
+                              <Search size={9} />
+                              <span>Tìm vị trí trên server</span>
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Dòng 3b: Nút Đồng nhất link chuẩn */}
+                        {serverCheck && serverCheck.is_fixable && (
+                          <div style={{ marginTop: '3px' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSyncSingleDish(dish, serverCheck.suggested_fix_path);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '2.5px 5px',
+                                fontSize: '9.5px',
+                                fontWeight: 700,
+                                borderRadius: '3px',
+                                border: '1px solid #10b981',
+                                backgroundColor: '#ecfdf5',
+                                color: '#047857',
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '3px',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                              }}
+                              title={`Đồng nhất theo server: ${serverCheck.suggested_fix_path}`}
+                            >
+                              <Zap size={10} color="#059669" />
+                              <span>⚡ Đồng nhất link chuẩn</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // ══════════════════════════════════════════════════════════════
+              // KÊNH SO (STAFF ORDER): GIAO DIỆN COMPACT ĐỂ GỌI MÓN VÀO BÀN
+              // ══════════════════════════════════════════════════════════════
               return (
                 <div
                   key={dish.id}
                   id={`dish-card-${dish.id}`}
-                  onClick={() => {
-                    if (orderMode === 'CO') {
-                      if (!checkedDishImagesMap[dish.id]) {
-                        handleCheckSingleDish(dish);
-                      }
-                    } else {
-                      handleAddDishToOrder(dish);
-                    }
-                  }}
+                  onClick={() => handleAddDishToOrder(dish)}
                   style={{
                     minHeight: '85px',
                     borderRadius: '8px',
@@ -3828,316 +4439,48 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                     </div>
                   </div>
 
-                  {/* Hàng dưới: Phân biệt hiển thị SO vs CO */}
-                  {orderMode === 'SO' ? (
-                    /* CHẾ ĐỘ SO: RK7 & SAP + Ẩn nếu có (TUYỆT ĐỐI KHÔNG HIỆN CÓ HÌNH/KHÔNG HÌNH) */
+                  {/* Hàng dưới: RK7 & SAP + Cờ Ẩn SO */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-end',
+                      justifyContent: 'space-between',
+                      borderTop: `1px dashed ${isSpecial ? 'rgba(255,255,255,0.3)' : '#e5e7eb'}`,
+                      paddingTop: '6px',
+                      marginTop: '6px'
+                    }}
+                  >
                     <div
                       style={{
-                        display: 'flex',
-                        alignItems: 'flex-end',
-                        justifyContent: 'space-between',
-                        borderTop: `1px dashed ${isSpecial ? 'rgba(255,255,255,0.3)' : '#e5e7eb'}`,
-                        paddingTop: '6px',
-                        marginTop: '6px'
+                        fontSize: '11px',
+                        color: isSpecial ? 'rgba(255,255,255,0.85)' : '#6b7280',
+                        lineHeight: '1.2'
                       }}
                     >
-                      <div
+                      <div>RK7: <strong>{dish.rk7Code}</strong></div>
+                      <div>SAP: <strong>{dish.sapCode}</strong></div>
+                    </div>
+
+                    {dish.hideInSo && (
+                      <span
                         style={{
-                          fontSize: '11px',
-                          color: isSpecial ? 'rgba(255,255,255,0.85)' : '#6b7280',
-                          lineHeight: '1.2'
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          backgroundColor: '#fee2e2',
+                          color: '#dc2626',
+                          border: '1px solid #fca5a5',
+                          borderRadius: '4px',
+                          padding: '1px 5px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '2px'
                         }}
+                        title="Món này đang được ẩn trên kênh Staff Order (SO)"
                       >
-                        <div>RK7: <strong>{dish.rk7Code}</strong></div>
-                        <div>SAP: <strong>{dish.sapCode}</strong></div>
-                      </div>
-
-                      {isHidden && (
-                        <span
-                          style={{
-                            fontSize: '10px',
-                            fontWeight: 700,
-                            backgroundColor: '#fee2e2',
-                            color: '#dc2626',
-                            border: '1px solid #fca5a5',
-                            borderRadius: '4px',
-                            padding: '1px 5px',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '2px'
-                          }}
-                          title="Món này đang được ẩn trên kênh Staff Order (SO)"
-                        >
-                          <EyeOff size={10} /> Ẩn SO
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    /* CHẾ ĐỘ CO: RK7 & SAP + Ô 2 DÒNG (HÌNH TRÊN FILE & HÌNH TRÊN SERVER) */
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px', borderTop: '1px dashed #e5e7eb', paddingTop: '6px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: '#6b7280' }}>
-                        <span>RK7: <strong>{dish.rk7Code}</strong></span>
-                        <span>SAP: <strong>{dish.sapCode}</strong></span>
-                      </div>
-
-                      {/* Ô 2 DÒNG KIỂM TRA HÌNH ẢNH: DÒNG 1 HÌNH FILE, DÒNG 2 HÌNH SERVER */}
-                      {(() => {
-                        const fileImg = dish.srcImg || dish.imageUrl || '';
-                        const serverCheck = checkedDishImagesMap[dish.id];
-
-                        return (
-                          <div
-                            style={{
-                              backgroundColor: '#f8fafc',
-                              border: '1px solid #e2e8f0',
-                              borderRadius: '6px',
-                              padding: '5px 7px',
-                              fontSize: '10.5px',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '3px',
-                              overflow: 'hidden'
-                            }}
-                          >
-                            {/* Dòng 1: Hình trên file (Bấm để copy đường dẫn ảnh) */}
-                            <div
-                              onClick={(e) => {
-                                if (fileImg) {
-                                  handleCopyFilePath(e, dish, fileImg);
-                                }
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                overflow: 'hidden',
-                                cursor: fileImg ? 'pointer' : 'default',
-                                borderRadius: '3px',
-                                padding: '1px 2px'
-                              }}
-                              title={fileImg ? `Bấm để copy đường dẫn ảnh: ${fileImg}` : 'Chưa có cấu hình ảnh'}
-                            >
-                              <span style={{ color: '#64748b', fontWeight: 700, flexShrink: 0 }}>📁 File:</span>
-                              <span
-                                style={{
-                                  fontFamily: 'monospace',
-                                  color: fileImg ? '#0f172a' : '#94a3b8',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                  fontWeight: fileImg ? 600 : 400,
-                                  flex: 1
-                                }}
-                              >
-                                {fileImg || '(Chưa cấu hình)'}
-                              </span>
-                              {fileImg && (
-                                <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center' }}>
-                                  {copiedFileDishId === dish.id ? (
-                                    <Check size={9} color="#16a34a" />
-                                  ) : (
-                                    <Copy size={8} style={{ opacity: 0.45 }} />
-                                  )}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Dòng 2: Hình trên server (Bấm badge để copy thông báo gửi người xử lý) */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-                              <span style={{ color: '#64748b', fontWeight: 700, flexShrink: 0 }}>🌐 Server:</span>
-
-                              {!serverCheck ? (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleCheckSingleDish(dish);
-                                  }}
-                                  disabled={checkingDishId === dish.id}
-                                  style={{
-                                    padding: '1px 6px',
-                                    fontSize: '10px',
-                                    fontWeight: 700,
-                                    borderRadius: '3px',
-                                    border: '1px solid #cbd5e1',
-                                    backgroundColor: '#ffffff',
-                                    color: '#2563eb',
-                                    cursor: 'pointer',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '3px'
-                                  }}
-                                  title="Bấm để kiểm tra ảnh trên máy chủ 192.168.201.116 (không tự load trước)"
-                                >
-                                  {checkingDishId === dish.id ? (
-                                    <RefreshCw size={10} className="animate-spin" />
-                                  ) : (
-                                    <Search size={10} />
-                                  )}
-                                  <span>Check hình</span>
-                                </button>
-                              ) : (
-                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                  {/* Badge thông báo trạng thái: Bấm để copy thông báo gửi người xử lý */}
-                                  <button
-                                    type="button"
-                                    onClick={(e) => handleCopyCheckMessage(e, dish, serverCheck.message)}
-                                    title={`Bấm để copy thông báo gửi người xử lý (Shift+Click: chỉ copy nội dung lỗi):\n[${dish.name} - RK7: ${dish.rk7Code || '—'}] ${serverCheck.message}`}
-                                    style={{
-                                      color:
-                                        serverCheck.status === 'MATCH'
-                                          ? '#15803d'
-                                          : serverCheck.status === 'CASE_MISMATCH'
-                                          ? '#b45309'
-                                          : serverCheck.is_fixable
-                                          ? '#c2410c'
-                                          : '#dc2626',
-                                      backgroundColor:
-                                        serverCheck.status === 'MATCH'
-                                          ? '#dcfce7'
-                                          : serverCheck.status === 'CASE_MISMATCH'
-                                          ? '#fef3c7'
-                                          : serverCheck.is_fixable
-                                          ? '#ffedd5'
-                                          : '#fee2e2',
-                                      border: `1px solid ${
-                                        serverCheck.status === 'MATCH'
-                                          ? '#bbf7d0'
-                                          : serverCheck.status === 'CASE_MISMATCH'
-                                          ? '#fde68a'
-                                          : serverCheck.is_fixable
-                                          ? '#fed7aa'
-                                          : '#fecaca'
-                                      }`,
-                                      borderRadius: '3px',
-                                      padding: '1px 5px',
-                                      fontWeight: 700,
-                                      fontSize: '9.5px',
-                                      cursor: 'pointer',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '3px',
-                                      whiteSpace: 'nowrap'
-                                    }}
-                                  >
-                                    <span>
-                                      {serverCheck.status === 'MATCH'
-                                        ? '✅ Khớp'
-                                        : serverCheck.status === 'CASE_MISMATCH'
-                                        ? '⚠️ Lệch chữ'
-                                        : serverCheck.status === 'NO_IMAGE'
-                                        ? 'Chưa có ảnh'
-                                        : '❌ Không có'}
-                                    </span>
-                                    {copiedCheckDishId === dish.id ? (
-                                      <Check size={9} color="#16a34a" />
-                                    ) : (
-                                      <Copy size={9} style={{ opacity: 0.65 }} />
-                                    )}
-                                  </button>
-
-                                  {/* Nút kiểm tra lại hình ảnh riêng cho món này */}
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleCheckSingleDish(dish);
-                                    }}
-                                    disabled={checkingDishId === dish.id}
-                                    title="Kiểm tra lại hình ảnh món này trên server 192.168.201.116"
-                                    style={{
-                                      padding: '1px 3px',
-                                      borderRadius: '3px',
-                                      border: '1px solid #cbd5e1',
-                                      backgroundColor: '#ffffff',
-                                      color: '#475569',
-                                      cursor: checkingDishId === dish.id ? 'not-allowed' : 'pointer',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      lineHeight: 1
-                                    }}
-                                  >
-                                    <RefreshCw
-                                      size={9}
-                                      className={checkingDishId === dish.id ? 'animate-spin' : ''}
-                                    />
-                                  </button>
-
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Dòng 3a: Nút Tra cứu toàn server nếu hoàn toàn không có ảnh trên server (chiếm trọn 1 dòng, tuyệt đối không tràn viền) */}
-                            {serverCheck && serverCheck.status === 'NOT_FOUND' && (
-                              <div style={{ marginTop: '3px' }}>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenGlobalSearch(dish.srcImg || dish.name || String(dish.rk7Code || ''));
-                                  }}
-                                  title="Tra cứu toàn server xem ảnh món này đang nằm ở thư mục nào"
-                                  style={{
-                                    width: '100%',
-                                    padding: '2px 4px',
-                                    fontSize: '9px',
-                                    fontWeight: 600,
-                                    borderRadius: '3px',
-                                    border: '1px solid #fed7aa',
-                                    backgroundColor: '#fff7ed',
-                                    color: '#c2410c',
-                                    cursor: 'pointer',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '3px'
-                                  }}
-                                >
-                                  <Search size={9} />
-                                  <span>Tìm vị trí trên server</span>
-                                </button>
-                              </div>
-                            )}
-
-                            {/* Dòng 3b: Nút Đồng nhất xuống hẳn 1 dòng riêng để không tràn viền */}
-                            {serverCheck && serverCheck.is_fixable && (
-                              <div style={{ marginTop: '3px' }}>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSyncSingleDish(dish, serverCheck.suggested_fix_path);
-                                  }}
-                                  style={{
-                                    width: '100%',
-                                    padding: '2.5px 5px',
-                                    fontSize: '9.5px',
-                                    fontWeight: 700,
-                                    borderRadius: '3px',
-                                    border: '1px solid #10b981',
-                                    backgroundColor: '#ecfdf5',
-                                    color: '#047857',
-                                    cursor: 'pointer',
-                                    whiteSpace: 'nowrap',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '3px',
-                                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-                                  }}
-                                  title={`Đồng nhất theo server: ${serverCheck.suggested_fix_path}`}
-                                >
-                                  <Zap size={10} color="#059669" />
-                                  <span>⚡ Đồng nhất link chuẩn</span>
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
+                        <EyeOff size={10} /> Ẩn SO
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })

@@ -1,5 +1,17 @@
 [
   {
+    "id": "8449c142",
+    "job_id": "job_review_missing_restaurant_info",
+    "job_name": "Rà Soát Thông Tin Nhà Hàng Còn Thiếu",
+    "started_at": "2026-11-07 09:30:03",
+    "finished_at": "2026-11-07 09:30:19",
+    "duration_seconds": 16.29,
+    "status": "success",
+    "message": "Rà soát thông tin nhà hàng hoàn tất (2026-11-07 09:30:17): 294/425 NH đầy đủ thông tin, 36 NH online CẦN BỔ SUNG, 39 NH offline bỏ qua. Đã gửi email nhắc nhở thành công tới: it.helpdesk@ggg.com.vn, dung.nguyenanh@ggg.com.vn",
+    "details": "Kết quả Rà Soát Thông Tin Nhà Hàng Còn Thiếu:\n- Tiêu chuẩn hợp lệ: Mã SAP (4-5 số), Cost Center (>= 5 ký tự), Mã RK7 (>= 3 số), Ngày Khai Trương (> 2025), Trạng Thái ON\n- Thời gian thực hiện: 2026-11-07 09:30:17\n- Tổng số nhà hàng rà soát: 425\n- Đầy đủ thông tin: 294\n- Cần bổ sung (Ping Online): 36\n- Bỏ qua (Chưa hoạt động / Mất tín hiệu Ping): 39\n- Danh sách NH online cần bổ sung: Dao Niu Guo Lotte Cần Thơ (Thiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999), Trạng Thái chưa ON (Đang là NEW)), Sumo Goya Thiso Mall Mai Chí Thọ (Thiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)), Hutong Palace Vincom Xuân Khánh (Thiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)), Kho AMM Kha Vạn Cân (Thiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)), Gogi House Vincom Cần Thơ (Thiếu Mã RK7), GoGi Vincom Đà Nẵng (Thiếu Mã RK7), Gogi House Lê Văn Sỹ (Thiếu Mã RK7), Gogi Phan Xích Long (Thiếu Mã RK7) ...và 28 nhà hàng khác\n- Trạng thái thông báo Email: Đã gửi email nhắc nhở thành công tới: it.helpdesk@ggg.com.vn, dung.nguyenanh@ggg.com.vn\n- Server gửi Mail: smtp.office365.com:587 (ss.it@ggg.com.vn)",
+    "triggered_by": "Hệ thống (Auto)"
+  },
+  {
     "id": "4c3dbef4",
     "job_id": "job_sync_sales_daily_server",
     "job_name": "Lấy dữ liệu tổng sales, tổng khách từ SERVER Dcorp về Server IT Daily Sales",

@@ -113,9 +113,7 @@ import {
   BarChart3,
 
   Flame,
-  Network,
-  Tablet,
-  Smartphone
+  Tablet
 } from 'lucide-react';
 
 import { Card } from '../../components/ui/Card';
@@ -164,13 +162,10 @@ import { KdsKitchenIntakeModal } from './KdsKitchenIntakeModal';
 import { CoSoKdsRadarModal } from '../../components/restaurant-analysis/CoSoKdsRadarModal';
 import { CoSoKdsTwoStepSyncModal } from '../../components/restaurant-analysis/CoSoKdsTwoStepSyncModal';
 import { CoSoKdsDeviceFleetModal } from '../../components/restaurant-analysis/CoSoKdsDeviceFleetModal';
-import { CoSoKdsFlowDiagramModal } from '../../components/restaurant-analysis/CoSoKdsFlowDiagramModal';
 
 import { BatchRoleUserModal } from './BatchRoleUserModal';
 
 import { AndroidEmulatorTab } from './AndroidEmulatorTab';
-import { EmulatorIntegratedTab } from './EmulatorIntegratedTab';
-import { KdsIntegratedTab } from './KdsIntegratedTab';
 
 import { PrintManagementModal } from '../../components/mongodb/PrintManagementModal';
 
@@ -356,7 +351,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
   // Active Main Tab: 'task_actions' | 'reports' | 'android_emulator'
 
-  const [activeTab, setActiveTab] = useState<'task_actions' | 'reports' | 'android_emulator' | 'emulator_all' | 'kds_hub'>('task_actions');
+  const [activeTab, setActiveTab] = useState<'task_actions' | 'reports' | 'android_emulator'>('task_actions');
 
 
 
@@ -2896,7 +2891,6 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
   const [showRadarModal, setShowRadarModal] = useState<boolean>(false);
   const [showTwoStepSyncModal, setShowTwoStepSyncModal] = useState<boolean>(false);
   const [showDeviceFleetModal, setShowDeviceFleetModal] = useState<boolean>(false);
-  const [showFlowDiagramModal, setShowFlowDiagramModal] = useState<boolean>(false);
 
   // Dropdown gom nhóm Phân Tích Logs KDS
 
@@ -5632,54 +5626,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
         </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('emulator_all')}
-          style={{
-            padding: '10px 18px',
-            fontSize: '14px',
-            fontWeight: activeTab === 'emulator_all' ? 700 : 500,
-            color: activeTab === 'emulator_all' ? '#ea580c' : '#6B7280',
-            borderBottom: activeTab === 'emulator_all' ? '3px solid #ea580c' : '3px solid transparent',
-            marginBottom: '-2px',
-            backgroundColor: 'transparent',
-            borderTop: 'none',
-            borderLeft: 'none',
-            borderRight: 'none',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            transition: 'all 0.15s ease'
-          }}
-        >
-          <Smartphone size={16} />
-          <span>Tab 4: Giả Lập (CO - SO - Xử Lý Ảnh)</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('kds_hub')}
-          style={{
-            padding: '10px 18px',
-            fontSize: '14px',
-            fontWeight: activeTab === 'kds_hub' ? 700 : 500,
-            color: activeTab === 'kds_hub' ? '#b45309' : '#6B7280',
-            borderBottom: activeTab === 'kds_hub' ? '3px solid #b45309' : '3px solid transparent',
-            marginBottom: '-2px',
-            backgroundColor: 'transparent',
-            borderTop: 'none',
-            borderLeft: 'none',
-            borderRight: 'none',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            transition: 'all 0.15s ease'
-          }}
-        >
-          <ChefHat size={16} />
-          <span>Tab 5: KDS (Nhà Bếp & Điều Phối Món)</span>
-        </button>
+        
 
       </div>
 
@@ -5768,87 +5715,6 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
               >
                 Mở Tra Cứu Nhật Ký &amp; Radar Luồng Đơn ➔
               </button>
-            </div>
-
-            {/* KHUNG 2: LƯU ĐỒ LUỒNG GỌI MÓN & PHÂN TÍCH TẢI BẾP */}
-            <div style={{
-              background: '#FFFFFF',
-              borderRadius: '10px',
-              border: '1px solid #E2E8F0',
-              padding: '18px 20px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              gap: '14px'
-            }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: 28, height: 28, borderRadius: 6, background: '#F3E8FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <ChefHat size={16} color="#7E22CE" />
-                    </div>
-                    <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#0F172A' }}>
-                      Lưu Đồ Gọi Món &amp; Tải Bếp
-                    </div>
-                  </div>
-                  <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: '#F3E8FF', color: '#7E22CE' }}>
-                    Lưu Đồ Gọi Món
-                  </span>
-                </div>
-
-                <div style={{ fontSize: '12px', color: '#475569', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div>
-                    <strong>• Lưu Đồ Gọi Món Tường Minh:</strong> Trực quan hóa quy trình gọi món thuần túy bằng lưu đồ tuần tự kết nối giữa Tablet CO, Máy SO, POS RK7, MQTT Broker và KDS Bếp.
-                  </div>
-                  <div>
-                    <strong>• Giao Thức Gọi Món Thực Tế:</strong> Minh họa rõ ràng submitOrder(), MQTT Broker port 1883, Google Cloud TTS đọc tên món, chuông DingDong, SubmitDish() và DeliveredDishItem.
-                  </div>
-                  <div>
-                    <strong>• Phân Tích Món Vào Bếp MỚI:</strong> Thống kê tổng số món và số lượt gửi vào bếp (1 ngày / 2-5 ngày) theo từng món để đánh giá tải bếp.
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowFlowDiagramModal(true)}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid #CBD5E1',
-                    background: '#FFFFFF',
-                    color: '#0F172A',
-                    fontWeight: 700,
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <Network size={13} color="#2563EB" /> 1. Xem Lưu Đồ Gọi Món (Flowchart) ➔
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowKdsIntakeModal(true)}
-                  style={{
-                    padding: '7px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid #E2E8F0',
-                    background: '#F8FAFC',
-                    color: '#475569',
-                    fontWeight: 600,
-                    fontSize: '11.5px',
-                    cursor: 'pointer',
-                    textAlign: 'center'
-                  }}
-                >
-                  2. Phân Tích Món Vào Bếp MỚI ➔
-                </button>
-              </div>
             </div>
 
             {/* KHUNG 3: ÉP ĐỒNG BỘ MENU & GIÁ */}
@@ -6754,25 +6620,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
       {/* ══════════════════════════════════════════════════════════════ */}
       {/* TAB 4 CONTENT: GIẢ LẬP HỆ SINH THÁI CO - SO & XỬ LÝ ẢNH      */}
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {activeTab === 'emulator_all' && (
-        <EmulatorIntegratedTab
-          selectedRestaurant={selectedRestaurant}
-          connectedHost={connectedHost}
-          onToast={showToast}
-        />
-      )}
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {/* TAB 5 CONTENT: KDS (NHÀ BẾP & ĐIỀU PHỐI MÓN TOÀN DIỆN)         */}
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {activeTab === 'kds_hub' && (
-        <KdsIntegratedTab
-          selectedRestaurant={selectedRestaurant}
-          connectedHost={connectedHost}
-          onToast={showToast}
-          restaurants={restaurants}
-        />
-      )}
+      
 
 
 
@@ -16352,11 +16200,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
         restaurantId={selectedRestaurant?.id}
       />
 
-      <CoSoKdsFlowDiagramModal
-        isOpen={showFlowDiagramModal}
-        onClose={() => setShowFlowDiagramModal(false)}
-        restaurantName={restaurantGposInfo?.restaurant_name || selectedRestaurant?.res || undefined}
-      />
+
 
       <KdsLogsModal
 

@@ -360,11 +360,13 @@
   - **Quy tắc linh hoạt User Name & Email**: Cột `User Name` có thể để trống nếu đã có `Email` (hoặc ngược lại). Chỉ bỏ qua dòng khi cả 2 cột đều trống. Cơ chế tìm kiếm user trên IAM tự động ưu tiên tìm theo Email trước, nếu không thấy mới tìm theo User Name.
   - **Kiểm tra trùng lặp trước khi Tạo mới (Tác vụ 1)**: Trước khi tạo mới tài khoản trên IAM, bắt buộc phải kiểm tra tìm kiếm trước theo Email hoặc Username. Nếu tài khoản đã tồn tại trên IAM, lập tức dừng lại và báo rõ ràng: `Tài khoản đã tồn tại trên IAM... Vui lòng chọn tác vụ Cập Nhật hoặc Đổi Pass` để tránh lỗi validation `Email is already taken`.
   - Hỗ trợ 5 tác vụ chuyên sâu với quy chuẩn:
-    1. *Tạo mới tài khoản*: Kiểm tra không tồn tại trên IAM trước khi tạo $ightarrow$ `User Access Failed Count = 0`, `User Lockout End` xóa trắng, `User Lockout Enabled = false`, gán pass (từ file hoặc random) và phân quyền client (từ cột `UPDATE QUYEN`).
+    1. *Tạo mới tài khoản*: Kiểm tra không tồn tại trên IAM trước khi tạo $
+ightarrow$ `User Access Failed Count = 0`, `User Lockout End` xóa trắng, `User Lockout Enabled = false`, gán pass (từ file hoặc random) và phân quyền client (từ cột `UPDATE QUYEN`).
     2. *Update Pass & Mở khóa*: Đổi pass theo cột `Pass`, `User Access Failed Count = 0`, `User Lockout End` xóa trắng, `User Lockout Enabled = false`.
     3. *Khóa tài khoản*: `User Lockout Enabled = true` (check switch), `User Access Failed Count = 4`, `User Lockout End = ngày giờ hiện tại`.
     4. *Update Quyền*: Vào `User & Clients`, check các quyền được khai báo trong cột `UPDATE QUYEN`.
-    5. *Cập nhật thông tin*: Tìm kiếm user trên IAM theo `User Name` hoặc `Email` cũ $ightarrow$ Cập nhật thông tin mới theo 3 cột cuối: `Email Mới`, `SĐT Mới`, `Loại TK Mới`.
+    5. *Cập nhật thông tin*: Tìm kiếm user trên IAM theo `User Name` hoặc `Email` cũ $
+ightarrow$ Cập nhật thông tin mới theo 3 cột cuối: `Email Mới`, `SĐT Mới`, `Loại TK Mới`.
   - Giao diện có nút tải template Excel mẫu 10 cột, xem trước danh sách user, highlight 3 cột mới khi chọn tác vụ Cập nhật, progress bar tiến độ và trạng thái chi tiết từng dòng, hỗ trợ nút "Dừng lại" và "Thử lại các dòng lỗi".
 - **Quy Trình Xử Lý Tập Trung & Feature Hub Dashboard (`SsoManagementPage.tsx`)**:
   - Đã loại bỏ hoàn toàn khung tìm kiếm đơn lẻ và nút "Đổi Pass User Chọn" để chuyển 100% sang tự động hóa và xử lý hàng loạt theo danh sách.
@@ -3330,3 +3332,33 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
 - **Kiểm Thử & Build Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7)**:
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 5.17s`), thư mục `frontend/dist/` sạch sẽ.
   * Backend: `python -m compileall app` sạch cú pháp, Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
+
+
+### [2026-11-07] TỐI ƯU GIAO DIỆN & TÁI CẤU TRÚC PHÂN HỆ PHÂN TÍCH MONGODB NHÀ HÀNG THEO YÊU CẦU MỚI
+- **1. Xóa Bỏ Hoàn Toàn Tab 4 & Tab 5**:
+  * Đã xóa 2 file `frontend/src/pages/app/EmulatorIntegratedTab.tsx` và `frontend/src/pages/app/KdsIntegratedTab.tsx`.
+  * Thu gọn hệ thống Tab của `RestaurantMongoAnalysisPage.tsx` về đúng 3 tab chuẩn nghiệp vụ:
+    + Tab 1: Xử Lý Tác Vụ (`task_actions`)
+    + Tab 2: Chuyên Sâu App CO-SO-KDS (`reports`)
+    + Tab 3: Sơ Đồ Bàn Theo Khu (Restaurant Table Map - `android_emulator`)
+- **2. Ở Tab 2 (Chuyên Sâu App CO-SO-KDS): Loại Bỏ Khung Lưu Đồ Gọi Món & Tải Bếp**:
+  * Loại bỏ hoàn toàn khối `KHUNG 2: LƯU ĐỒ LUỒNG GỌI MÓN & PHÂN TÍCH TẢI BẾP` và modal `CoSoKdsFlowDiagramModal.tsx`.
+  * Giữ lại 3 khung nghiệp vụ trọng tâm, thiết thực nhất cho vận hành:
+    + Khung 1: Radar Truy Vết Luồng Đơn Hàng Toàn Diện (Hợp nhất 2-trong-1 với Tra Cứu Nhật Ký KDS, soi món 5 mốc thời gian chi tiết).
+    + Khung 2: Ép Đồng Bộ Menu & Giá Toàn Nhà Hàng (Quy trình 2 lớp tuần tự POS ➔ SO ➔ CO).
+    + Khung 3: Bản Đồ Giám Sát Sức Khỏe Thiết Bị Toàn Nhà Hàng (Device Fleet Health Map, sắp xếp thời gian phát sinh order muộn nhất lên trước, nhận diện model phần cứng duy nhất).
+- **3. Ở Tab 3 (Sơ Đồ Bàn Theo Khu): Nâng Cấp Kênh CO Hiển Thị Thẻ Ảnh Trực Quan Kèm Chi Tiết Ẩn Món**:
+  * Khi chọn xem thực đơn kênh CO (`orderMode === 'CO'`):
+    + Hiển thị thẻ món ăn dạng Card hình ảnh trực quan (chuẩn thiết kế Tab 4) nhưng **loại bỏ triệt để chữ và các nút "+ Gọi món", nút thêm giỏ hàng**.
+    + Ảnh món ăn đặt trên đỉnh thẻ (chiều cao 120px) với xử lý fallback mượt mà sang icon Utensils nếu thiếu ảnh.
+    + Nhãn phân loại trên ảnh: Badge `Buffet 0đ` (xanh lá) hoặc `Alacarte` (xám đậm) ở góc trái; Nút `Check SFTP` nhanh ở góc phải.
+    + Giữ nguyên 100% tính năng kiểm tra hình ảnh chuyên sâu:
+      * `📁 File:` Click 1 chạm sao chép đường dẫn file ảnh kèm icon check xác nhận.
+      * `🌐 Server:` Trạng thái Khớp / Lệch chữ / Chưa có ảnh / Không có, nút kiểm tra lại, nút tìm vị trí trên toàn máy chủ SFTP khi thiếu ảnh, nút đồng nhất link chuẩn (`⚡ Đồng nhất link chuẩn`).
+    + **Hiển thị chi tiết trạng thái ẩn/hiện theo từng kênh**:
+      * Bóc tách dữ liệu từ `SHOW_HIDE_ITEMS` trong MongoDB (`showInCO`, `showInSO`, `showInQrOrder`).
+      * Hiển thị rõ ràng: `Ẩn CO` (badge đỏ), `Ẩn SO` (badge vàng hổ phách), `Ẩn QR` (badge tím) hoặc `✓ Hiện đủ (CO, SO, QR)` (badge xanh lá) nếu món đang hiển thị trên cả 3 kênh.
+  * Kênh SO (`orderMode === 'SO'`): Giữ nguyên giao diện POS compact phục vụ nhân viên gọi món trực tiếp vào bàn ăn.
+- **4. Build & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7)**:
+  * Frontend: `cmd /c "cd frontend && npm run build"` thành công (exit code 0, `✓ built in 4.65s`), thư mục `frontend/dist/` sạch sẽ.
+  * Backend: `python -m compileall app` không lỗi, Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.

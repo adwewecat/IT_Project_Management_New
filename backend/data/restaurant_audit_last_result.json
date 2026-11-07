@@ -1,8 +1,8 @@
 {
-  "target_time": "2026-11-06 09:30:21",
+  "target_time": "2026-11-07 09:30:17",
   "total_scanned": 425,
-  "need_reminder_count": 35,
-  "skipped_offline_count": 40,
+  "need_reminder_count": 36,
+  "skipped_offline_count": 39,
   "valid_count": 294,
   "excluded_count": 56,
   "excluded_keywords": [
@@ -393,6 +393,29 @@
       "category": "need_reminder",
       "conclusion": "Cần Bổ Sung",
       "reminder_text": "Kichi Kichi Vincom Đồng Khởi\nThiếu Mã RK7\nvui lòng bổ sung"
+    },
+    {
+      "id": 671,
+      "sap": "4260",
+      "res": "Kichi Kichi Phan Xích Long",
+      "brand": "Kichi Kichi",
+      "coscenter": "30KK426001",
+      "rk7": "40",
+      "ngay_khaitruong": "12/03/2020",
+      "raw_nkt": "2020-03-12 07:00:00",
+      "trangthai": "ON",
+      "ip": "10.8.3.1",
+      "raw_ip": "10.8.3.1",
+      "matched_keyword": "",
+      "missing_fields": [
+        "Thiếu Mã RK7"
+      ],
+      "is_missing": true,
+      "is_up": true,
+      "ping_status": "Online",
+      "category": "need_reminder",
+      "conclusion": "Cần Bổ Sung",
+      "reminder_text": "Kichi Kichi Phan Xích Long\nThiếu Mã RK7\nvui lòng bổ sung"
     },
     {
       "id": 672,
@@ -7413,6 +7436,29 @@
       "reminder_text": "Kichi Kichi Vincom Đồng Khởi\nThiếu Mã RK7\nvui lòng bổ sung"
     },
     {
+      "id": 671,
+      "sap": "4260",
+      "res": "Kichi Kichi Phan Xích Long",
+      "brand": "Kichi Kichi",
+      "coscenter": "30KK426001",
+      "rk7": "40",
+      "ngay_khaitruong": "12/03/2020",
+      "raw_nkt": "2020-03-12 07:00:00",
+      "trangthai": "ON",
+      "ip": "10.8.3.1",
+      "raw_ip": "10.8.3.1",
+      "matched_keyword": "",
+      "missing_fields": [
+        "Thiếu Mã RK7"
+      ],
+      "is_missing": true,
+      "is_up": true,
+      "ping_status": "Online",
+      "category": "need_reminder",
+      "conclusion": "Cần Bổ Sung",
+      "reminder_text": "Kichi Kichi Phan Xích Long\nThiếu Mã RK7\nvui lòng bổ sung"
+    },
+    {
       "id": 672,
       "sap": "4261",
       "res": "Kichi Kichi Nguyễn Trãi",
@@ -14044,5 +14090,5 @@
       "reminder_text": ""
     }
   ],
-  "reminder_text_all": "1. Dao Niu Guo Lotte Cần Thơ (IP: 10.9.28.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999), Trạng Thái chưa ON (Đang là NEW)\nvui lòng bổ sung\n\n2. Sumo Goya Thiso Mall Mai Chí Thọ (IP: 10.9.74.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung\n\n3. Hutong Palace Vincom Xuân Khánh (IP: 10.8.114.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung\n\n4. Kho AMM Kha Vạn Cân (IP: 10.8.41.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung\n\n5. Gogi House Vincom Cần Thơ (IP: 10.8.54.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n6. GoGi Vincom Đà Nẵng (IP: 10.8.49.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n7. Gogi House Lê Văn Sỹ (IP: 10.8.30.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n8. Gogi Phan Xích Long (IP: 10.8.33.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n9. Gogi Vivo City (IP: 10.8.36.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n10. Gogi Vincom Đồng Khởi (IP: 10.8.34.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n11. Gogi Nguyễn Hồng Đào (IP: 10.8.115.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n12. Kichi Kichi Vincom Cần Thơ (IP: 10.8.53.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n13. Kichi Kichi Big C Đồng Nai (IP: 10.8.9.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n14. Kichi Kichi Phú Mỹ Hưng (IP: 10.8.0.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n15. Kichi Kichi Cao Thắng (IP: 10.8.1.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n16. Kichi Kichi Vincom Đồng Khởi (IP: 10.8.2.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n17. Kichi Kichi Nguyễn Trãi (IP: 10.8.4.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n18. Kichi Kichi Sư Vạn Hạnh (IP: 10.8.6.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n19. Kichi Kichi Cộng Hòa (IP: 10.8.10.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n20. Kichi Kichi Nguyễn Sơn (IP: 10.8.13.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n21. Kichi Kichi Vivo City (IP: 10.8.16.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n22. Kichi Kichi Aeon Tân Phú (IP: 10.8.17.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n23. Sumo Phan Xích Long (IP: 10.8.21.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n24. Ashima Nguyễn Đình Chiểu (IP: 10.8.45.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n25. Ashima Tú Xương (IP: 10.8.46.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n26. Crystal Jade Đà Nẵng (IP: 10.8.48.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n27. Dao Niu Guo Nguyễn Chí Thanh Lâm Đồng (IP: 10.9.41.1)\nThiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung\n\n28. Manwah Aeon Huế (IP: 10.9.140.1)\nThiếu Ngày Khai Trương (01/01/1999), Trạng Thái chưa ON (Đang là NEW)\nvui lòng bổ sung\n\n29. Sakura Yakiniku Lê Quý Đôn (IP: 10.9.173.1)\nTrạng Thái chưa ON (Đang là NEW)\nvui lòng bổ sung\n\n30. Kho Đông CK Bình Tân (IP: 10.9.50.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung\n\n31. Kho Nguyễn Kim GG Gia Lai (IP: 10.8.245.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương\nvui lòng bổ sung\n\n32. Kho AMM Cần Thơ (IP: 10.8.52.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung\n\n33. Kho Gia Phú (IP: 10.8.163.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung\n\n34. Kho Việt Mỹ Thành (IP: 10.8.84.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương\nvui lòng bổ sung\n\n35. Central Kitchen (Xưởng Hồ Học Lãm) (IP: 10.8.118.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung"
+  "reminder_text_all": "1. Dao Niu Guo Lotte Cần Thơ (IP: 10.9.28.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999), Trạng Thái chưa ON (Đang là NEW)\nvui lòng bổ sung\n\n2. Sumo Goya Thiso Mall Mai Chí Thọ (IP: 10.9.74.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung\n\n3. Hutong Palace Vincom Xuân Khánh (IP: 10.8.114.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung\n\n4. Kho AMM Kha Vạn Cân (IP: 10.8.41.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung\n\n5. Gogi House Vincom Cần Thơ (IP: 10.8.54.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n6. GoGi Vincom Đà Nẵng (IP: 10.8.49.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n7. Gogi House Lê Văn Sỹ (IP: 10.8.30.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n8. Gogi Phan Xích Long (IP: 10.8.33.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n9. Gogi Vivo City (IP: 10.8.36.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n10. Gogi Vincom Đồng Khởi (IP: 10.8.34.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n11. Gogi Nguyễn Hồng Đào (IP: 10.8.115.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n12. Kichi Kichi Vincom Cần Thơ (IP: 10.8.53.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n13. Kichi Kichi Big C Đồng Nai (IP: 10.8.9.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n14. Kichi Kichi Phú Mỹ Hưng (IP: 10.8.0.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n15. Kichi Kichi Cao Thắng (IP: 10.8.1.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n16. Kichi Kichi Vincom Đồng Khởi (IP: 10.8.2.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n17. Kichi Kichi Phan Xích Long (IP: 10.8.3.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n18. Kichi Kichi Nguyễn Trãi (IP: 10.8.4.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n19. Kichi Kichi Sư Vạn Hạnh (IP: 10.8.6.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n20. Kichi Kichi Cộng Hòa (IP: 10.8.10.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n21. Kichi Kichi Nguyễn Sơn (IP: 10.8.13.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n22. Kichi Kichi Vivo City (IP: 10.8.16.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n23. Kichi Kichi Aeon Tân Phú (IP: 10.8.17.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n24. Sumo Phan Xích Long (IP: 10.8.21.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n25. Ashima Nguyễn Đình Chiểu (IP: 10.8.45.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n26. Ashima Tú Xương (IP: 10.8.46.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n27. Crystal Jade Đà Nẵng (IP: 10.8.48.1)\nThiếu Mã RK7\nvui lòng bổ sung\n\n28. Dao Niu Guo Nguyễn Chí Thanh Lâm Đồng (IP: 10.9.41.1)\nThiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung\n\n29. Manwah Aeon Huế (IP: 10.9.140.1)\nThiếu Ngày Khai Trương (01/01/1999), Trạng Thái chưa ON (Đang là NEW)\nvui lòng bổ sung\n\n30. Sakura Yakiniku Lê Quý Đôn (IP: 10.9.173.1)\nTrạng Thái chưa ON (Đang là NEW)\nvui lòng bổ sung\n\n31. Kho Đông CK Bình Tân (IP: 10.9.50.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung\n\n32. Kho Nguyễn Kim GG Gia Lai (IP: 10.8.245.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương\nvui lòng bổ sung\n\n33. Kho AMM Cần Thơ (IP: 10.8.52.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung\n\n34. Kho Gia Phú (IP: 10.8.163.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung\n\n35. Kho Việt Mỹ Thành (IP: 10.8.84.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương\nvui lòng bổ sung\n\n36. Central Kitchen (Xưởng Hồ Học Lãm) (IP: 10.8.118.1)\nThiếu Mã SAP, Thiếu Cost Center, Thiếu Mã RK7, Thiếu Ngày Khai Trương (01/01/1999)\nvui lòng bổ sung"
 }
