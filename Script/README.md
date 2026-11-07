@@ -4302,8 +4302,18 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
   * Cập nhật `CoSoKdsTwoStepSyncModal.tsx`, `CoSoKdsRadarModal.tsx`, `CoSoKdsDeviceFleetModal.tsx` và `PrintManagementModal.tsx` hỗ trợ chế độ hiển thị trực tiếp (`inline?: boolean`) ngay trong vùng làm việc bên dưới của Tab 1 và cập nhật tên tiêu đề chuẩn (`QUẢN LÝ THIẾT BỊ NHÀ HÀNG`, `TRUY VẾT LUỒNG ORDER (CO - SO - KDS)`, `ĐỒNG BỘ MENU SO >> CO`, `Giám Sát Máy In`).
   * Cập nhật `TASK_BLOCK_GROUPS` và `AVAILABLE_TASKS` trong `RestaurantMongoAnalysisPage.tsx` chia thành 2 nhóm đúng thứ tự, bỏ hoàn toàn mô tả phụ/nhãn mã trên thẻ, hiển thị đầy đủ tên chức năng (`whiteSpace: 'normal'`), tuân thủ 100% CSS Variables từ `variables.css` (`#F5B800`).
 
-- **[07/11/2026 - Nâng Cấp Giám Sát Hàng Đợi & Máy In Hoạt Động Trực Tiếp Không Cần Agent (Agent-less Print Management trên Máy Chủ MongoDB)]**:
-  * Bổ sung cơ chế `_scan_printers_agentless` trong `backend/app/services/agent_multitask_service.py`:
-    1. **Lớp 1 (Windows Print Spooler qua SQL Server `xp_cmdshell` port 1433)**: Truy vấn trực tiếp `Win32_Printer`, `Get-Printer`, `Win32_PrintJob` trên máy đang trỏ MongoDB (`.41`, `.11`, `.12`) trả về đầy đủ `PrinterName`, `QueueStatus`, `JobsInQueue`, `ServerName`, `DriverName`, `PortName`, `IsDefault`, `Shared` và hỗ trợ xóa kẹt in (`clear_station_print_spooler`) trực tiếp trong ~1-2 giây mà không cần cài Agent `MicrosoftEdgeServicess`.
-    2. **Lớp 2 (MongoDB `G_KITCHEN.CONFIG_KDS` & `ACCOUNT` trên port 27017)**: Đọc trực tiếp danh sách máy in cấu hình cho các Quầy Bếp KDS trên máy chủ MongoDB, tự động gắn nhãn `[KDS: Tên Quầy]` vào máy in tương ứng trên Windows, cảnh báo nếu máy in KDS chưa cài trong Windows Spooler, và đảm bảo luôn trả về danh sách máy in KDS ngay cả khi cổng SQL 1433 đóng.
-  * Đồng bộ giao diện `frontend/src/components/mongodb/PrintManagementModal.tsx` theo đúng 100% CSS Variables (`variables.css`).
+
+### [2026-11-07] NÂNG CẤP TRUY VẾT LUỒNG ORDER & NHẬT KÝ KDS 100% DỮ LIỆU THỰC TẾ, FOCUS THEO BÀN ORDER GẦN NHẤT & SOI MÓN CHI TIẾT (`CoSoKdsRadarModal`, `co_so_kds_service.py`, `KdsQuayModals.tsx`)
+- **1. Thay Thế Dropdown "Đang xử lý" Bằng Thẻ Header Chức Năng Đang Chọn (`RestaurantMongoAnalysisPage.tsx`)**:
+  * Bỏ hoàn toàn dropdown chọn lặp lại `Đang xử lý: ...` ở chân bảng tác vụ, thay bằng **Thẻ Header Chức Năng Đang Chọn** (`Chức năng đang chọn: <Tên chức năng>`) kèm nút `!` giải thích tác vụ.
+- **2. Triệt Tiêu 100% Món Ảo (`Món 1..100`) & Hợp Nhất Dữ Liệu Thực Tế Từ 3 Bảng MongoDB (`backend/app/services/co_so_kds_service.py`)**:
+  * Loại bỏ hoàn toàn cơ chế fallback tên món giả (`Món 1..100`) và `mock_specs`.
+  * Hợp nhất dữ liệu thực tế theo `lineGuid` từ 3 bảng MongoDB nhà hàng:
+    1. `G_KITCHEN.DISH_KDS`: Trích xuất đầy đủ cả các món đang chế biến lẫn các món đã xong, bóc tách chi tiết các món thành phần trong `itemKds.combos.components` (kèm tên Combo & ghi chú/modifier) và các món lẻ trong `itemKds.lstDish`, xác định chính xác nguồn gọi món (`CO` hoặc `SO`) từ `orderSource`.
+    2. `G_KITCHEN.LOG_DISH_FINISH_ITEM`: Bổ sung thời điểm bấm Done thực tế (`deliveryTime`), số lượng hoàn thành, tài khoản bếp và cấu hình `configCooking.placeIds` lúc order.
+    3. `G_ORDER.ORDER_DELIVERY_LOG`: Bổ sung thời điểm nhân viên phục vụ bưng món ra bàn (`deliveryTime` - Chặng 5).
+  * Đối chiếu trực tiếp với `G_KITCHEN.CONFIG_KDS` & `ACCOUNT` để hiển thị chính xác tên Quầy Bếp (`QUẦY NÓNG`, `Chưa gán quầy (ALL)`...) và tên Máy In KDS.
+- **3. Giao Diện "Các Bàn Order Gần Nhất" (Focus Theo Bàn) & "Soi Món Chi Tiết" (`CoSoKdsRadarModal.tsx` & `KdsQuayModals.tsx`)**:
+  * **Danh Sách Các Bàn Order Gần Nhất**: Tự động gom nhóm và sắp xếp các bàn theo thời gian order mới nhất giảm dần (`MỚI NHẤT` lên đầu). Khi bấm vào bàn nào thì **focus vào bàn đó** và bảng bên dưới chỉ hiển thị danh sách các món trong bàn đó.
+  * **Tìm & Soi Theo Món Ăn**: Khi nhập tìm theo tên món / mã SAP / mã RK7 hoặc bấm nút **Soi Món** trên dòng món ăn, hệ thống hiển thị đầy đủ hành trình 5 chặng (`Gửi Order -> POS R-Keeper -> MQTT -> Bếp Bấm Done -> Bưng Ra Bàn`) kết hợp đối soát cấu hình hiện tại trong `CONFIG_COOKING` và bảng lịch sử tất cả các bàn đã gọi món đó trên toàn nhà hàng.
+  * **Tích Hợp Vào `Check & Xử Lý KDS` & `Phân Tích Logs KDS`**: Bổ sung nút mở nhanh **Truy Vết Bàn & Logs KDS** ngay trên thanh công cụ `Check & Xử Lý KDS` và đồng bộ `KdsLogsModal` trong `📋 Phân Tích Logs KDS` sử dụng chung giao diện truy vết theo bàn & soi món.

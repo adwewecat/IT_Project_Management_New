@@ -1051,12 +1051,6 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
       }
 
-      if (taskDropdownRef.current && !taskDropdownRef.current.contains(e.target as Node)) {
-
-        setIsTaskDropdownOpen(false);
-
-      }
-
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -1909,10 +1903,8 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
   const [selectedTaskId, setSelectedTaskId] = useState<string>('clear_table_locks');
   const [taskSearchQuery, setTaskSearchQuery] = useState<string>('');
-  const [isTaskDropdownOpen, setIsTaskDropdownOpen] = useState<boolean>(false);
   const [taskGroupFilter, setTaskGroupFilter] = useState<'ALL' | 'GROUP_1' | 'GROUP_2'>('ALL');
   const [isTaskGridCollapsed, setIsTaskGridCollapsed] = useState<boolean>(false);
-  const taskDropdownRef = useRef<HTMLDivElement>(null);
   const activeWorkspaceRef = useRef<HTMLDivElement>(null);
 
   // Danh sách 15 chức năng gom thành đúng 2 nhóm theo thứ tự chuẩn yêu cầu
@@ -1949,17 +1941,6 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
   const selectedTask = useMemo(() => {
     return AVAILABLE_TASKS.find((t) => t.id === selectedTaskId) || AVAILABLE_TASKS[0];
   }, [AVAILABLE_TASKS, selectedTaskId]);
-
-  const filteredTasks = useMemo(() => {
-    if (!taskSearchQuery.trim()) return AVAILABLE_TASKS;
-    const q = removeVietnameseTones(taskSearchQuery);
-    return AVAILABLE_TASKS.filter((t) => {
-      const title = removeVietnameseTones(t.title);
-      const sub = removeVietnameseTones(t.subtitle);
-      const cat = removeVietnameseTones(t.category);
-      return title.includes(q) || sub.includes(q) || cat.includes(q);
-    });
-  }, [AVAILABLE_TASKS, taskSearchQuery]);
 
   // Lock status state for Task 1
 
@@ -5330,100 +5311,37 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                   borderTop: '1px solid var(--border-color)'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 320px', minWidth: 0 }}>
-                  <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)', flexShrink: 0 }}>
-                    Đang xử lý:
-                  </span>
-
-                  <div ref={taskDropdownRef} style={{ position: 'relative', flex: 1, maxWidth: '520px', minWidth: 0 }}>
-                    <div
-                      onClick={() => setIsTaskDropdownOpen(!isTaskDropdownOpen)}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 320px', minWidth: 0, flexWrap: 'wrap' }}>
+                  {/* Thẻ Header hiển thị chức năng đang chọn */}
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '5px 12px',
+                      backgroundColor: 'var(--color-primary-subtle)',
+                      border: '1.5px solid var(--color-primary)',
+                      borderLeft: '4px solid var(--color-primary)',
+                      borderRadius: 'var(--radius-sm)',
+                      minWidth: 0
+                    }}
+                  >
+                    {renderTaskIcon(selectedTask.id, true)}
+                    <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)', flexShrink: 0 }}>
+                      Chức năng đang chọn:
+                    </span>
+                    <span
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '5px 10px',
-                        backgroundColor: 'var(--bg-secondary)',
-                        border: isTaskDropdownOpen ? '1.5px solid var(--color-primary)' : '1px solid var(--border-color)',
-                        borderRadius: 'var(--radius-sm)',
-                        cursor: 'pointer',
-                        minWidth: 0
+                        fontSize: '13px',
+                        fontWeight: 800,
+                        color: 'var(--text-primary)',
+                        whiteSpace: 'nowrap',
+                        textOverflow: 'ellipsis',
+                        overflow: 'hidden'
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', minWidth: 0, flex: 1 }}>
-                        {renderTaskIcon(selectedTask.id, true)}
-                        <span
-                          style={{
-                            fontSize: '12.5px',
-                            fontWeight: 700,
-                            color: 'var(--text-primary)',
-                            whiteSpace: 'nowrap',
-                            textOverflow: 'ellipsis',
-                            overflow: 'hidden'
-                          }}
-                        >
-                          {renderHighlightedTitle(selectedTask, true)}
-                        </span>
-                      </div>
-                      <ChevronDown
-                        size={14}
-                        color="var(--text-secondary)"
-                        style={{
-                          transform: isTaskDropdownOpen ? 'rotate(180deg)' : 'none',
-                          transition: 'var(--transition-fast)',
-                          flexShrink: 0,
-                          marginLeft: '6px'
-                        }}
-                      />
-                    </div>
-
-                    {isTaskDropdownOpen && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: 'calc(100% + 4px)',
-                          left: 0,
-                          right: 0,
-                          zIndex: 100,
-                          backgroundColor: 'var(--bg-card)',
-                          borderRadius: 'var(--radius-md)',
-                          border: '1px solid var(--border-color)',
-                          boxShadow: 'var(--shadow-lg)',
-                          overflow: 'hidden',
-                          maxHeight: '260px',
-                          overflowY: 'auto'
-                        }}
-                      >
-                        {filteredTasks.map((t) => {
-                          const isSel = selectedTaskId === t.id;
-                          return (
-                            <div
-                              key={t.id}
-                              onClick={() => {
-                                setSelectedTaskId(t.id);
-                                setIsTaskDropdownOpen(false);
-                              }}
-                              style={{
-                                padding: '7px 12px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: '10px',
-                                cursor: 'pointer',
-                                backgroundColor: isSel ? 'var(--color-primary-subtle)' : 'var(--bg-card)',
-                                borderBottom: '1px solid var(--border-color)'
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                                {renderTaskIcon(t.id, isSel)}
-                                {renderHighlightedTitle(t, isSel)}
-                              </div>
-                              {isSel && <Check size={14} color="var(--text-primary)" />}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                      {renderHighlightedTitle(selectedTask, true)}
+                    </span>
                   </div>
 
                   {/* Nút Chấm Than Giải Thích Tác Vụ */}
@@ -8459,216 +8377,120 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
                   {/* Nút Nhóm: Phân Tích Logs KDS ▾ (Gồm Logs Order & Ra Món + Phân Tích Món Vào Bếp) */}
 
+                  {/* Nút mở nhanh Truy Vết Bàn Order Gần Nhất & Soi Món KDS ngay tại Check & Xử Lý KDS */}
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setShowKdsLogsModal(true)}
+                    leftIcon={<Flame size={14} />}
+                    title="Mở bảng các bàn order gần nhất, bấm vào bàn để xem các món trong bàn và soi chi tiết từng món"
+                  >
+                    Truy Vết Bàn &amp; Logs KDS
+                  </Button>
+
                   <div style={{ position: 'relative' }} ref={kdsLogsDropdownRef}>
 
                     <Button
-
+                      variant="outline"
                       size="sm"
-
                       style={{
-
-                        backgroundColor: '#4338CA',
-
-                        color: '#fff',
-
-                        borderColor: '#3730A3',
-
                         fontWeight: 700,
-
-                        boxShadow: '0 1px 2px rgba(67, 56, 202, 0.2)',
-
                         display: 'inline-flex',
-
                         alignItems: 'center',
-
                         gap: '6px'
-
                       }}
-
                       onClick={() => setShowKdsLogsDropdown(!showKdsLogsDropdown)}
-
                       leftIcon={<Clock size={14} />}
-
-                      title="Phân tích và tra cứu nhật ký KDS: Logs Order & Ra món và Thống kê món vào bếp"
-
+                      title="Phân tích và tra cứu nhật ký KDS: Truy vết theo bàn gần nhất, soi món và thống kê món vào bếp"
                     >
-
                       <span>📋 Phân Tích Logs KDS</span>
-
                       <ChevronDown
-
                         size={14}
-
                         style={{
-
                           transform: showKdsLogsDropdown ? 'rotate(180deg)' : 'none',
-
                           transition: 'transform 0.15s'
-
                         }}
-
                       />
-
                     </Button>
 
-
-
                     {showKdsLogsDropdown && (
-
                       <div
-
                         style={{
-
                           position: 'absolute',
-
                           top: 'calc(100% + 6px)',
-
                           right: 0,
-
-                          width: '330px',
-
-                          backgroundColor: 'var(--bg-card, #fff)',
-
-                          borderRadius: '8px',
-
+                          width: '350px',
+                          backgroundColor: 'var(--bg-card)',
+                          borderRadius: 'var(--radius-md)',
                           border: '1px solid var(--border-color)',
-
-                          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.25)',
-
+                          boxShadow: 'var(--shadow-lg)',
                           zIndex: 100,
-
                           overflow: 'hidden',
-
                           padding: '6px'
-
                         }}
-
                       >
-
-                        {/* Mục 1: Logs KDS (Order & Ra Món) */}
-
+                        {/* Mục 1: Truy Vết Luồng KDS & Các Bàn Order Gần Nhất */}
                         <div
-
                           onClick={() => {
-
                             setShowKdsLogsDropdown(false);
-
                             setShowKdsLogsModal(true);
-
                           }}
-
                           style={{
-
                             padding: '10px 12px',
-
-                            borderRadius: '6px',
-
+                            borderRadius: 'var(--radius-sm)',
                             cursor: 'pointer',
-
                             display: 'flex',
-
                             alignItems: 'flex-start',
-
                             gap: '10px',
-
                             transition: 'background-color 0.15s'
-
                           }}
-
-                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, rgba(255,255,255,0.08))')}
-
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-secondary)')}
                           onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-
                         >
-
-                          <Clock size={18} color="#4338CA" style={{ marginTop: '2px', flexShrink: 0 }} />
-
+                          <Clock size={18} color="var(--text-primary)" style={{ marginTop: '2px', flexShrink: 0 }} />
                           <div>
-
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-
-                              1. Logs KDS (Order &amp; Ra Món)
-
+                            <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                              1. Truy Vết Bàn Order Gần Nhất &amp; Soi Món KDS
                             </div>
-
-                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', lineHeight: 1.35 }}>
-
-                              Tra cứu chi tiết từng món: giờ order, giờ done, thời gian chế biến và phát lệnh in
-
+                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.35 }}>
+                              Hiển thị các bàn order gần nhất, bấm vào bàn để xem các món trong bàn đó và soi chi tiết 5 chặng từng món
                             </div>
-
                           </div>
-
                         </div>
-
-
 
                         <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 6px' }} />
 
-
-
-                        {/* Mục 2: Phân Tích Món Vào Bếp (Mới) */}
-
+                        {/* Mục 2: Phân Tích Món Vào Bếp */}
                         <div
-
                           onClick={() => {
-
                             setShowKdsLogsDropdown(false);
-
                             setShowKdsIntakeModal(true);
-
                           }}
-
                           style={{
-
                             padding: '10px 12px',
-
-                            borderRadius: '6px',
-
+                            borderRadius: 'var(--radius-sm)',
                             cursor: 'pointer',
-
                             display: 'flex',
-
                             alignItems: 'flex-start',
-
                             gap: '10px',
-
                             transition: 'background-color 0.15s'
-
                           }}
-
-                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, rgba(255,255,255,0.08))')}
-
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-secondary)')}
                           onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-
                         >
-
-                          <BarChart3 size={18} color="#D97706" style={{ marginTop: '2px', flexShrink: 0 }} />
-
+                          <BarChart3 size={18} color="var(--text-primary)" style={{ marginTop: '2px', flexShrink: 0 }} />
                           <div>
-
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-
+                            <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <span>2. Phân Tích Món Vào Bếp</span>
-
-                              <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#FEF3C7', color: '#92400E', fontWeight: 800 }}>MỚI</span>
-
+                              <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-primary-subtle)', color: 'var(--text-primary)', border: '1px solid var(--color-primary)', fontWeight: 800 }}>THỐNG KÊ</span>
                             </div>
-
-                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', lineHeight: 1.35 }}>
-
+                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.35 }}>
                               Thống kê tổng số món và số lượt gửi vào bếp (1 ngày / 2-5 ngày) theo món &amp; theo lượt
-
                             </div>
-
                           </div>
-
                         </div>
-
                       </div>
-
                     )}
-
                   </div>
 
                 </div>
@@ -13506,6 +13328,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
           ipSubnet={selectedRestaurant?.ip || ''}
           mongoHost={connectedHost || selectedRestaurant?.ip?.replace(/\.1$/, '.11') || ''}
           mongoPort={27017}
+          showToast={showToast}
         />
       )}
 

@@ -11,12 +11,16 @@ class CoSoKdsOrderFlowItem(BaseModel):
     table_name: Optional[str] = None
     order_id: str
     source: str = "CO"  # "CO" (Tablet Bàn) hoặc "SO" (Nhân viên phục vụ)
+    submit_timestamp_ms: Optional[int] = 0
+    order_date: Optional[str] = None
+    combo_name: Optional[str] = None
     time_co_sent: Optional[str] = None
     time_pos_received: Optional[str] = None
     time_kds_received: Optional[str] = None
     time_kds_completed: Optional[str] = None
     time_so_delivered: Optional[str] = None
     line_cook: Optional[str] = "Bếp Nóng"
+    is_unassigned: Optional[bool] = False
     status: str = "COOKING"  # "WAITING" | "COOKING" | "DONE" | "DELIVERED" | "DELAYED" | "CANCELLED"
     sla_minutes: int = 10
     elapsed_minutes: int = 4
@@ -27,6 +31,7 @@ class CoSoKdsOrderFlowItem(BaseModel):
     rk7_code: Optional[str] = None
     print_status: Optional[str] = None  # "PRINTED" | "NO_PRINTER" | "DISABLED" | "WAITING"
     printer_name: Optional[str] = None
+    print_message: Optional[str] = None
     account_name: Optional[str] = None
     actual_minutes: Optional[float] = None
     config_minutes: Optional[int] = 10
@@ -36,6 +41,7 @@ class CoSoKdsOrderFlowResponse(BaseModel):
     success: bool
     table_number: Optional[str] = None
     order_id: Optional[str] = None
+    effective_date: Optional[str] = None
     total_dishes: int = 0
     waiting_count: int = 0
     cooking_count: int = 0

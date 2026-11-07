@@ -2781,12 +2781,16 @@ export interface CoSoKdsOrderFlowItem {
   table_name?: string;
   order_id: string;
   source: string; // 'CO' | 'SO'
+  submit_timestamp_ms?: number;
+  order_date?: string;
+  combo_name?: string;
   time_co_sent?: string;
   time_pos_received?: string;
   time_kds_received?: string;
   time_kds_completed?: string;
   time_so_delivered?: string;
   line_cook?: string;
+  is_unassigned?: boolean;
   status: 'WAITING' | 'COOKING' | 'DONE' | 'DELIVERED' | 'DELAYED' | 'CANCELLED';
   sla_minutes: number;
   elapsed_minutes: number;
@@ -2796,6 +2800,7 @@ export interface CoSoKdsOrderFlowItem {
   rk7_code?: string;
   print_status?: string;
   printer_name?: string;
+  print_message?: string;
   account_name?: string;
   actual_minutes?: number;
   config_minutes?: number;
@@ -2805,6 +2810,7 @@ export interface CoSoKdsOrderFlowResponse {
   success: boolean;
   table_number: string;
   order_id?: string;
+  effective_date?: string;
   total_dishes: number;
   waiting_count: number;
   cooking_count: number;
