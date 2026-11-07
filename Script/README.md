@@ -4242,3 +4242,9 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
   * Tách biến `clean_p = p.lstrip("\\")` ra trước rồi mới truyền vào `return f"\\\\{clean_ip}\\{clean_p}"`.
   * Quét toàn bộ mã nguồn `backend/` bằng AST kiểm tra tương thích ngược Python 3.10 (0 lỗi f-string backslash, 0 lỗi quote lồng nhau, gỡ bỏ BOM trong `backend/scripts/build_master_sql.py`).
   * Kiểm thử import toàn bộ module trong `backend/app` và Smoke Test đạt `>>> ALL MODULES IMPORTED & PASSED 100%`.
+
+
+### [2026-11-07] BỔ SUNG NGUYÊN TẮC BẤT DI BẤT DỊCH SỐ 13: TƯƠNG THÍCH TUYỆT ĐỐI PYTHON 3.10 TRÊN SERVER PRODUCTION
+- Đã ghi nhận chính thức vào mục **NGUYÊN TẮC BẤT DI BẤT DỊCH CHO AI & DEVELOPER (IMMUTABLE RULES)** (tại `AGENTS.md`, `GEMINI.md`, `Script/GEMINI.md`, `PROJECT_GUIDELINES.md`, `Script/PROJECT_GUIDELINES.md`):
+  * Mọi đoạn code Python viết ra bắt buộc phải tương thích 100% với **Python 3.10** (`C:\Program Files\Python310` trên Server Production).
+  * Cấm đặt backslash `\` bên trong `{...}` của f-string, cấm lồng dấu nháy cùng loại trong f-string, cấm dùng các cú pháp/thư viện chỉ có trên Python 3.11/3.12+ (`datetime.UTC`, `typing.Self`, `enum.StrEnum`, `tomllib`, `except*`, `type X = ...`), cấm để ký tự UTF-8 BOM ở đầu file `.py`.

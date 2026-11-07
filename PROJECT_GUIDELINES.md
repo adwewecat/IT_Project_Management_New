@@ -36,11 +36,11 @@
 >      ```
 >    - Tuyệt đối không được kết thúc lượt làm việc hay chuyển tác vụ khi code chưa được push đồng bộ lên GitHub.
 >
-> 7. **Build sạch `backend/app` và `frontend/dist` để đẩy lên Server (Copy Là Chạy Ngay)**:
+> 7. **Build sạch `backend/app` và `frontend/dist` để đẩy lên Server (Copy Là Chạy Ngay & Tương Thích 100% Python 3.10)**:
 >    - Sau khi xử lý xong bất kỳ tính năng hoặc sửa lỗi nào, **BẮT BUỘC** phải:
 >      + Chạy build Frontend: `cmd /c "npm run build"` tại thư mục `frontend/` để tạo sẵn bản build mới sạch sẽ trong `frontend/dist/` (kèm `web.config` cho IIS, exit code 0).
->      + Kiểm tra Backend: Chạy `python -m compileall app` và Smoke Test tại thư mục `backend/` đảm bảo toàn bộ mã nguồn trong `backend/app/` hoàn toàn sạch lỗi.
->    - **Mục đích**: Đảm bảo người dùng/Dev chỉ cần copy 2 thư mục `backend/app` và `frontend/dist` đẩy thẳng lên server là hệ thống chạy mượt mà ngay lập tức mà không cần can thiệp cấu hình thủ công.
+>      + Kiểm tra Backend: Đảm bảo code tương thích 100% với **Python 3.10** (không dùng backslash `\` trong `{...}` của f-string, không dùng cú pháp chỉ có ở Python 3.11/3.12+), chạy `python -m compileall app` và Smoke Test tại thư mục `backend/` đảm bảo toàn bộ mã nguồn trong `backend/app/` hoàn toàn sạch lỗi.
+>    - **Mục đích**: Đảm bảo người dùng/Dev chỉ cần copy 2 thư mục `backend/app` và `frontend/dist` đẩy thẳng lên server (chạy Python 3.10) là hệ thống chạy mượt mà ngay lập tức mà không cần can thiệp cấu hình thủ công.
 >
 > 8. **Quy tắc Bất Di Bất Dịch Về Bảng Dữ Liệu (Sticky Header & Top Horizontal Scrollbar)**:
 >    - Cố định hàng tiêu đề (`position: 'sticky', top: 0, zIndex: 5`) trên tất cả các danh sách/bảng để tiêu đề không bị cuộn mất khi duyệt dữ liệu dài.
@@ -66,6 +66,16 @@
 >     - **Bảo vệ 2 lớp (Sidebar & Route Guard)**:
 >       + Menu Sidebar: Dùng hàm `hasNewScreenAccess(user, 'key')` (Admin luôn thấy, nhóm khác chỉ thấy khi đã được Admin phân quyền).
 >       + Route Guard: Dùng `<ProtectedRoute requiredPermission="key">` trong `AppRoutes.tsx`. Nếu người dùng không có quyền cố tình gõ link trực tiếp vào trình duyệt, hiển thị giao diện thông báo 403 Forbidden trang nhã giải thích rõ ràng và có nút quay lại.
+>
+> 13. **Quy tắc Bất Di Bất Dịch Về Tương Thích Tuyệt Đối Python 3.10 Trên Server Production (100% Python 3.10 Compatible)**:
+>     - **Môi trường Server Production chạy Python 3.10 (`C:\Program Files\Python310`)**, trong khi máy Dev có thể chạy Python 3.12 / 3.14. Do đó, **MỌI ĐOẠN CODE PYTHON VIẾT RA BẮT BUỘC PHẢI TƯƠNG THÍCH VÀ CHẠY ĐƯỢC 100% TRÊN PYTHON 3.10**.
+>     - **Các quy định cấm tuyệt đối khi viết code Python**:
+>       + **CẤM đặt ký tự gạch chéo ngược (`\`) bên trong biểu thức `{...}` của f-string** (ví dụ: tuyệt đối không viết `f"\\\\{ip}\\{p.lstrip('\\')}"` vì PEP 701 chỉ có từ Python 3.12+, khi lên Python 3.10 sẽ crash ngay lập tức với lỗi `SyntaxError: f-string expression part cannot include a backslash`). **Bắt buộc** phải tách biến xử lý chuỗi ra dòng riêng trước khi truyền vào f-string (`clean_p = p.lstrip("\\")`, sau đó `f"\\\\{ip}\\{clean_p}"`).
+>       + **CẤM lồng dấu nháy cùng loại bên trong `{...}` của f-string** (ví dụ: không viết `f"Xin chào {user["name"]}"`, bắt buộc dùng nháy đơn `f"Xin chào {user['name']}"` hoặc tách biến).
+>       + **CẤM xuống dòng hoặc đặt comment `#` bên trong biểu thức `{...}` của f-string đơn dòng**.
+>       + **CẤM sử dụng các thư viện, kiểu dữ liệu hoặc cú pháp chỉ có trên Python 3.11 / 3.12+**: Không dùng `datetime.UTC` (phải dùng `timezone.utc`), không dùng `typing.Self`, `typing.Required`, `typing.NotRequired`, `typing.override`, `enum.StrEnum` (phải dùng `class MyEnum(str, Enum)`), `tomllib`, `except*`, `type X = ...`, `def func[T]():`, `itertools.batched`.
+>       + **CẤM để ký tự UTF-8 BOM (`\ufeff`) ở đầu bất kỳ file `.py` nào**.
+>     - **Kiểm tra bắt buộc trước khi bàn giao**: Phải quét AST kiểm tra tương thích Python 3.10 (0 lỗi f-string backslash/quote, 0 cú pháp 3.11+) và chạy `python -m compileall app` + Smoke Test trước khi commit.
 
 ---
 
