@@ -3411,3 +3411,8 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
 - **3. Build & Kiểm Thử (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
   * Frontend: `cmd /c "cd frontend && npm run build"` thành công (exit code 0, `✓ built in 4.53s`), thư mục `frontend/dist/` sạch sẽ.
   * Backend: `python -m compileall app` & Smoke Test đạt 100%.
+
+
+### [2026-11-07] CHUẨN HÓA BỘ CHỌN KHỐI TÁC VỤ NHỎ GỌN & TUÂN THỦ 100% CSS VARIABLES (`variables.css`)
+- Thu nhỏ 15 ô khối tác vụ tại Tab 1 (`RestaurantMongoAnalysisPage.tsx`) thành các ô compact 2 dòng (`padding: 8px 10px`, `minmax(205px, 1fr)`).
+- Loại bỏ hoàn toàn gradient và các màu trang trí (xanh dương, tím, hồng, cam); sử dụng 100% CSS Variables từ `variables.css` (`var(--bg-card)`, `var(--bg-secondary)`, `var(--text-primary)`, `var(--color-primary)` `#F5B800`, `var(--color-primary-subtle)`, `var(--border-color)`), chỉ dùng `var(--color-error-*)` khi có bàn bị khóa kẹt.

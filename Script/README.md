@@ -4279,3 +4279,13 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
 - **3. Build & Kiểm Thử (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
   * Frontend: `cmd /c "cd frontend && npm run build"` thành công (exit code 0, `✓ built in 4.53s`), thư mục `frontend/dist/` sạch sẽ.
   * Backend: `python -m compileall app` & Smoke Test đạt 100%.
+
+
+### [2026-11-07] CHUẨN HÓA BỘ CHỌN KHỐI TÁC VỤ NHỎ GỌN & TUÂN THỦ 100% CSS VARIABLES (`variables.css`)
+- **Yêu cầu người dùng**:
+  * Loại bỏ hoàn toàn màu mè, gradient, xanh dương, tím, hồng trang trí; thu nhỏ kích thước các ô khối tác vụ cho gọn gàng, dễ quan sát.
+  * Tuân thủ tuyệt đối bảng màu chuẩn trong `frontend/src/styles/variables.css`: nền trắng (`var(--bg-card)`, `var(--bg-primary)`), chữ đen/xám đậm (`var(--text-primary)`, `var(--text-secondary)`), điểm nhấn vàng đậm `#F5B800` (`var(--color-primary)`, `var(--color-primary-subtle)`, `var(--color-primary-light)`), màu đỏ chỉ dùng cho trạng thái lỗi (`var(--color-error-*)`), màu xanh lá chỉ dùng cho thành công (`var(--color-success-*)`).
+- **Thực hiện tại `RestaurantMongoAnalysisPage.tsx`**:
+  * Thu nhỏ toàn bộ 15 ô tác vụ thành các thẻ nhỏ gọn (`padding: '8px 10px'`, lưới `minmax(205px, 1fr)`, `gap: '8px'`), chỉ gồm 2 dòng tinh gọn (Dòng 1: Icon + Tên tác vụ + Mã bảng; Dòng 2: Mô tả ngắn 1 dòng + Trạng thái `● Đang mở` / `Mở ↗`).
+  * 100% màu sắc của các ô khối, thanh lọc nhóm, thanh điều hướng Tab 1 / Tab 2 và thanh tác vụ đang xử lý đều lấy từ CSS Variables (`var(--bg-card)`, `var(--bg-secondary)`, `var(--text-primary)`, `var(--color-primary)`, `var(--border-color)`), tuyệt đối không dùng gradient hay màu trang trí ngẫu nhiên.
+  * Gộp gọn thanh "Đang xử lý" (kèm nút giải thích `!`, cấu hình Email báo cáo, `Print Management`, `Đồng Bộ SO ➔ CO`, `Quét Lại`) vào ngay chân thẻ Chọn Tác Vụ để tiết kiệm tối đa không gian dọc.

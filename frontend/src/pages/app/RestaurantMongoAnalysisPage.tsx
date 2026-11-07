@@ -1856,708 +1856,146 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
 
   const renderHighlightedTitle = (t: { id: string; title: string }, isSelected: boolean = false) => {
-
-    if (t.id === 'clear_table_locks') {
-
-      return (
-
-        <span style={{ fontSize: '13px', fontWeight: 700, color: isSelected ? '#92400E' : 'var(--text-primary)' }}>
-
-          1. Xóa{' '}
-
-          <span
-
-            style={{
-
-              backgroundColor: '#FEF08A',
-
-              color: '#854D0E',
-
-              padding: '2px 7px',
-
-              borderRadius: '5px',
-
-              fontWeight: 900,
-
-              fontSize: '13px',
-
-              border: '1.5px solid #EAB308',
-
-              boxShadow: '0 0 8px rgba(234, 179, 8, 0.45)',
-
-              display: 'inline-block',
-
-              letterSpacing: '0.2px'
-
-            }}
-
-          >
-
-            Khóa Bàn
-
-          </span>{' '}
-
-          Tablet (Giải Phóng User Chiếm Giữ & Khóa Treo Bàn)
-
-        </span>
-
-      );
-
-    }
-
-    if (t.id === 'unlock_tablet_users') {
-
-      return (
-
-        <span style={{ fontSize: '13px', fontWeight: 700, color: isSelected ? '#1E40AF' : 'var(--text-primary)' }}>
-
-          2. Mở Khóa{' '}
-
-          <span
-
-            style={{
-
-              backgroundColor: '#BFDBFE',
-
-              color: '#1D4ED8',
-
-              padding: '2px 7px',
-
-              borderRadius: '5px',
-
-              fontWeight: 900,
-
-              fontSize: '13px',
-
-              border: '1.5px solid #3B82F6',
-
-              boxShadow: '0 0 8px rgba(59, 130, 246, 0.45)',
-
-              display: 'inline-block',
-
-              letterSpacing: '0.2px'
-
-            }}
-
-          >
-
-            User
-
-          </span>{' '}
-
-          Tablet (Giải Phóng User Báo Đang Đăng Nhập Ở Thiết Bị Khác)
-
-        </span>
-
-      );
-
-    }
-
-    if (t.id === 'manage_menu_so_co') {
-
-      return (
-
-        <span style={{ fontSize: '13px', fontWeight: 700, color: isSelected ? '#1E40AF' : 'var(--text-primary)' }}>
-
-          3.{' '}
-
-          <span
-
-            style={{
-
-              backgroundColor: '#DBEAFE',
-
-              color: '#1D4ED8',
-
-              padding: '2px 7px',
-
-              borderRadius: '5px',
-
-              fontWeight: 900,
-
-              fontSize: '13px',
-
-              border: '1.5px solid #3B82F6',
-
-              boxShadow: '0 0 6px rgba(59, 130, 246, 0.35)',
-
-              display: 'inline-block',
-
-              letterSpacing: '0.2px'
-
-            }}
-
-          >
-
-            Xử Lý SO/CO
-
-          </span>{' '}
-
-          (Thực Đơn, Món Ăn &amp; Bảng Tính)
-
-        </span>
-
-      );
-
-    }
-
-    if (t.id === 'check_kds') {
-
-      return (
-
-        <span style={{ fontSize: '13px', fontWeight: 700, color: isSelected ? '#065F46' : 'var(--text-primary)' }}>
-
-          4.{' '}
-
-          <span
-
-            style={{
-
-              backgroundColor: '#D1FAE5',
-
-              color: '#047857',
-
-              padding: '2px 7px',
-
-              borderRadius: '5px',
-
-              fontWeight: 900,
-
-              fontSize: '13px',
-
-              border: '1.5px solid #10B981',
-
-              boxShadow: '0 0 6px rgba(16, 185, 129, 0.35)',
-
-              display: 'inline-block',
-
-              letterSpacing: '0.2px'
-
-            }}
-
-          >
-
-            Check / xử lý KDS
-
-          </span>
-
-        </span>
-
-      );
-
-    }
-
-    if (t.id === 'dish_show_hide') {
-
-      return (
-
-        <span style={{ fontSize: '13px', fontWeight: 700, color: isSelected ? '#C2410C' : 'var(--text-primary)' }}>
-
-          5. Cấu hình{' '}
-
-          <span
-
-            style={{
-
-              backgroundColor: '#FFEDD5',
-
-              color: '#C2410C',
-
-              padding: '2px 7px',
-
-              borderRadius: '5px',
-
-              fontWeight: 900,
-
-              fontSize: '13px',
-
-              border: '1.5px solid #F97316',
-
-              boxShadow: '0 0 6px rgba(249, 115, 22, 0.35)',
-
-              display: 'inline-block',
-
-              letterSpacing: '0.2px'
-
-            }}
-
-          >
-
-            Ẩn Hiện Món
-
-          </span>{' '}
-
-          (QrOrder, CO, SO)
-
-        </span>
-
-      );
-
-    }
-
-    if (t.id === 'menu_show_hide') {
-
-      return (
-
-        <span style={{ fontSize: '13px', fontWeight: 700, color: isSelected ? '#6B21A8' : 'var(--text-primary)' }}>
-
-          6. Cấu hình{' '}
-
-          <span
-
-            style={{
-
-              backgroundColor: '#F3E8FF',
-
-              color: '#7E22CE',
-
-              padding: '2px 7px',
-
-              borderRadius: '5px',
-
-              fontWeight: 900,
-
-              fontSize: '13px',
-
-              border: '1.5px solid #A855F7',
-
-              boxShadow: '0 0 6px rgba(168, 85, 247, 0.35)',
-
-              display: 'inline-block',
-
-              letterSpacing: '0.2px'
-
-            }}
-
-          >
-
-            Ẩn Hiện Menu
-
-          </span>{' '}
-
-          (CO, SO, QrOrder, KDS Auto)
-
-        </span>
-
-      );
-
-    }
-
-    if (t.id === 'fix_full_cpu') {
-
-      return (
-
-        <span style={{ fontSize: '13px', fontWeight: 700, color: isSelected ? '#991B1B' : 'var(--text-primary)' }}>
-
-          7. Xử Lý{' '}
-
-          <span
-
-            style={{
-
-              backgroundColor: '#FEE2E2',
-
-              color: '#B91C1C',
-
-              padding: '2px 7px',
-
-              borderRadius: '5px',
-
-              fontWeight: 900,
-
-              fontSize: '13px',
-
-              border: '1.5px solid #EF4444',
-
-              boxShadow: '0 0 8px rgba(239, 68, 68, 0.45)',
-
-              display: 'inline-block',
-
-              letterSpacing: '0.2px'
-
-            }}
-
-          >
-
-            Full CPU 100%
-
-          </span>{' '}
-
-          (Tối Ưu Index Bếp & POS)
-
-        </span>
-
-      );
-
-    }
-
-    if (t.id === 'transfer_database') {
-
-      return (
-
-        <span style={{ fontSize: '13px', fontWeight: 700, color: isSelected ? '#1E3A8A' : 'var(--text-primary)' }}>
-
-          8.{' '}
-
-          <span
-
-            style={{
-
-              backgroundColor: '#EFF6FF',
-
-              color: '#1D4ED8',
-
-              padding: '2px 7px',
-
-              borderRadius: '5px',
-
-              fontWeight: 900,
-
-              fontSize: '13px',
-
-              border: '1.5px solid #3B82F6',
-
-              boxShadow: '0 0 6px rgba(59, 130, 246, 0.35)',
-
-              display: 'inline-block',
-
-              letterSpacing: '0.2px'
-
-            }}
-
-          >
-
-            Chuyển Database
-
-          </span>{' '}
-
-          (Di Chuyển / Sao Chép Sang Máy Khác)
-
-        </span>
-
-      );
-
-    }
-
-    if (t.id === 'manage_app_params') {
-
-      return (
-
-        <span style={{ fontSize: '13px', fontWeight: 700, color: isSelected ? '#92400E' : 'var(--text-primary)' }}>
-
-          9.{' '}
-
-          <span
-
-            style={{
-
-              backgroundColor: '#FEF3C7',
-
-              color: '#B45309',
-
-              padding: '2px 7px',
-
-              borderRadius: '5px',
-
-              fontWeight: 900,
-
-              fontSize: '13px',
-
-              border: '1.5px solid #F59E0B',
-
-              boxShadow: '0 0 6px rgba(245, 158, 11, 0.35)',
-
-              display: 'inline-block',
-
-              letterSpacing: '0.2px'
-
-            }}
-
-          >
-
-            Xử Lý Param
-
-          </span>{' '}
-
-          (Cấu Hình Bảng APP_PARAM)
-
-        </span>
-
-      );
-
-    }
-
     return (
-
-      <span style={{ fontSize: '13px', fontWeight: isSelected ? 800 : 700, color: isSelected ? '#3730A3' : 'var(--text-primary)' }}>
-
+      <span
+        style={{
+          fontSize: '13px',
+          fontWeight: isSelected ? 800 : 700,
+          color: 'var(--text-primary)'
+        }}
+      >
         {t.title}
-
       </span>
-
     );
-
   };
-
-
 
   const renderTaskIcon = (taskId: string, isSelected: boolean) => {
+    const boxStyle: React.CSSProperties = {
+      width: '26px',
+      height: '26px',
+      borderRadius: 'var(--radius-sm)',
+      backgroundColor: isSelected ? 'var(--color-primary)' : 'var(--bg-secondary)',
+      border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--border-color)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+      color: isSelected ? 'var(--color-primary-text)' : 'var(--text-primary)'
+    };
 
-    if (taskId === 'clear_table_locks') {
-
-      return (
-
-        <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: isSelected ? '#FDE68A' : '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-
-          <Unlock size={14} color="#D97706" />
-
-        </div>
-
-      );
-
+    switch (taskId) {
+      case 'clear_table_locks':
+        return <div style={boxStyle}><Unlock size={13} /></div>;
+      case 'unlock_tablet_users':
+        return <div style={boxStyle}><UserCheck size={13} /></div>;
+      case 'manage_menu_so_co':
+      case 'two_step_sync':
+        return <div style={boxStyle}><Layers size={13} /></div>;
+      case 'check_kds':
+        return <div style={boxStyle}><ChefHat size={13} /></div>;
+      case 'dish_show_hide':
+        return <div style={boxStyle}><UtensilsCrossed size={13} /></div>;
+      case 'menu_show_hide':
+        return <div style={boxStyle}><SlidersHorizontal size={13} /></div>;
+      case 'fix_full_cpu':
+        return <div style={boxStyle}><Cpu size={13} /></div>;
+      case 'transfer_database':
+        return <div style={boxStyle}><ArrowRightLeft size={13} /></div>;
+      case 'manage_app_params':
+        return <div style={boxStyle}><Settings size={13} /></div>;
+      case 'radar_kds_logs':
+        return <div style={boxStyle}><Flame size={13} /></div>;
+      case 'device_fleet_map':
+        return <div style={boxStyle}><Tablet size={13} /></div>;
+      case 'print_management':
+        return <div style={boxStyle}><Printer size={13} /></div>;
+      case 'table_hall_report':
+        return <div style={boxStyle}><FileSpreadsheet size={13} /></div>;
+      default:
+        return <div style={boxStyle}><FileText size={13} /></div>;
     }
-
-    if (taskId === 'unlock_tablet_users') {
-
-      return (
-
-        <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: isSelected ? '#BFDBFE' : '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-
-          <UserCheck size={14} color="#2563EB" />
-
-        </div>
-
-      );
-
-    }
-
-    if (taskId === 'manage_menu_so_co') {
-
-      return (
-
-        <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: isSelected ? '#BFDBFE' : '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-
-          <Layers size={14} color="#1D4ED8" />
-
-        </div>
-
-      );
-
-    }
-
-    if (taskId === 'check_kds') {
-
-      return (
-
-        <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: isSelected ? '#A7F3D0' : '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-
-          <ChefHat size={14} color="#059669" />
-
-        </div>
-
-      );
-
-    }
-
-    if (taskId === 'dish_show_hide') {
-
-      return (
-
-        <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: isSelected ? '#FED7AA' : '#FFEDD5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-
-          <UtensilsCrossed size={14} color="#EA580C" />
-
-        </div>
-
-      );
-
-    }
-
-    if (taskId === 'menu_show_hide') {
-
-      return (
-
-        <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: isSelected ? '#E9D5FF' : '#F3E8FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-
-          <SlidersHorizontal size={14} color="#9333EA" />
-
-        </div>
-
-      );
-
-    }
-
-    if (taskId === 'fix_full_cpu') {
-
-      return (
-
-        <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: isSelected ? '#FEE2E2' : '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-
-          <Cpu size={14} color="#DC2626" />
-
-        </div>
-
-      );
-
-    }
-
-    if (taskId === 'transfer_database') {
-
-      return (
-
-        <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: isSelected ? '#BFDBFE' : '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-
-          <ArrowRightLeft size={14} color="#2563EB" />
-
-        </div>
-
-      );
-
-    }
-
-    if (taskId === 'manage_app_params') {
-
-      return (
-
-        <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: isSelected ? '#FDE68A' : '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-
-          <Settings size={14} color="#D97706" />
-
-        </div>
-
-      );
-
-    }
-
-    return (
-
-      <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: isSelected ? '#C7D2FE' : '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-
-        <FileText size={14} color="#4F46E5" />
-
-      </div>
-
-    );
-
   };
 
-
-
   const [selectedTaskId, setSelectedTaskId] = useState<string>('clear_table_locks');
-
   const [taskSearchQuery, setTaskSearchQuery] = useState<string>('');
-
   const [isTaskDropdownOpen, setIsTaskDropdownOpen] = useState<boolean>(false);
-
   const [taskGroupFilter, setTaskGroupFilter] = useState<'ALL' | 'EXECUTION' | 'CONFIG' | 'LOGS' | 'SYSTEM'>('ALL');
-
   const [isTaskGridCollapsed, setIsTaskGridCollapsed] = useState<boolean>(false);
-
   const taskDropdownRef = useRef<HTMLDivElement>(null);
-
   const activeWorkspaceRef = useRef<HTMLDivElement>(null);
 
-  // Danh sách 15 khối tác vụ chia theo 4 nhóm chức năng (Thiết kế dạng Block Card trực quan như F8)
+  // Danh sách 15 khối tác vụ tinh gọn chia theo 4 nhóm nghiệp vụ (Tuân thủ 100% CSS Variables Golden Gate)
   const TASK_BLOCK_GROUPS = useMemo(() => [
     {
       groupKey: 'EXECUTION' as const,
-      groupTitle: '⚡ Nhóm 1: Thực Thi & Cứu Hộ Nhanh',
-      groupSubtitle: 'Can thiệp giải phóng khóa bàn, tài khoản tablet, đồng bộ menu 2 lớp và hạ tải CPU tức thì',
+      groupTitle: 'Nhóm 1: Thực Thi & Cứu Hộ Nhanh',
       items: [
         {
           id: 'clear_table_locks',
-          bannerTag: '⚡ THỰC THI • LOCK_ORDER',
-          bannerTitle: 'Xóa Khóa Bàn',
-          bannerSubtitle: 'Giải phóng bàn treo & user giữ phiên',
-          bannerGradient: 'linear-gradient(135deg, #D97706 0%, #92400E 100%)',
-          description: 'Xóa bản ghi giữ phiên trong LOCK_ORDER, gỡ cờ khóa bàn trong ORDER để phục vụ vào bàn ngay.',
+          title: 'Xóa Khóa Bàn',
+          subtitle: 'Giải phóng bàn treo & user giữ phiên',
           badgeText: 'LOCK_ORDER',
           isModal: false
         },
         {
           id: 'unlock_tablet_users',
-          bannerTag: '⚡ THỰC THI • EMPLOYEE',
-          bannerTitle: 'Mở Khóa User',
-          bannerSubtitle: 'Reset user báo đăng nhập máy khác',
-          bannerGradient: 'linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%)',
-          description: 'Quét và gỡ cờ isLogin: true trong EMPLOYEE khi tablet sập nguồn hoặc văng ứng dụng.',
+          title: 'Mở Khóa User',
+          subtitle: 'Reset user báo đăng nhập máy khác',
           badgeText: 'EMPLOYEE',
           isModal: false
         },
         {
           id: 'two_step_sync',
-          bannerTag: '⚡ THỰC THI • POS ➔ SO ➔ CO',
-          bannerTitle: 'Đồng Bộ Menu 2 Lớp',
-          bannerSubtitle: 'Quy trình tuần tự chuẩn SO trước, CO sau',
-          bannerGradient: 'linear-gradient(135deg, #059669 0%, #064E3B 100%)',
-          description: 'Bước 1 kéo thực đơn & giá từ POS vào SO, hoàn tất 100% mới phát sóng MQTT ép toàn bộ CO cập nhật.',
-          badgeText: 'Tuần tự 100%',
+          title: 'Đồng Bộ Menu 2 Lớp',
+          subtitle: 'Quy trình tuần tự chuẩn POS ➔ SO ➔ CO',
+          badgeText: 'SO ➔ CO',
           isModal: true
         },
         {
           id: 'fix_full_cpu',
-          bannerTag: '⚡ THỰC THI • INDEX CPU',
-          bannerTitle: 'Xử Lý Full CPU 100%',
-          bannerSubtitle: 'Tối ưu Index chống treo máy POS & KDS',
-          bannerGradient: 'linear-gradient(135deg, #DC2626 0%, #7F1D1D 100%)',
-          description: 'Tạo bộ Index tối ưu cho DISH_KDS, ORDER, CO_MENU_ITEM giúp hạ tải CPU từ 100% về dưới 2%.',
-          badgeText: 'Hạ tải CPU',
+          title: 'Xử Lý Full CPU 100%',
+          subtitle: 'Tạo Index chống treo máy POS & KDS',
+          badgeText: 'INDEX CPU',
           isModal: false
         }
       ]
     },
     {
       groupKey: 'CONFIG' as const,
-      groupTitle: '🍔 Nhóm 2: Cấu Hình Thực Đơn, KDS & Tham Số',
-      groupSubtitle: 'Quản lý món ăn SO/CO, quầy bếp KDS, thời gian nấu, ẩn hiện món/menu và tham số APP_PARAM',
+      groupTitle: 'Nhóm 2: Cấu Hình Thực Đơn, KDS & Tham Số',
       items: [
         {
           id: 'manage_menu_so_co',
-          bannerTag: '🍔 CẤU HÌNH • G_ORDER',
-          bannerTitle: 'Xử Lý Menu SO / CO',
-          bannerSubtitle: 'Thực đơn, nhóm món & bảng tính Excel',
-          bannerGradient: 'linear-gradient(135deg, #0284C7 0%, #0C4A6E 100%)',
-          description: 'Đối chiếu món SO & CO, thêm món hàng loạt, kích hoạt sang CO (Kalo 100) & kiểm tra lệch mã RK7.',
-          badgeText: 'SO & CO',
+          title: 'Xử Lý Menu SO / CO',
+          subtitle: 'Thực đơn, nhóm món & bảng tính Excel',
+          badgeText: 'G_ORDER',
           isModal: false
         },
         {
           id: 'check_kds',
-          bannerTag: '🍔 CẤU HÌNH • G_KITCHEN',
-          bannerTitle: 'Check & Xử Lý KDS',
-          bannerSubtitle: 'Quầy bếp, thời gian nấu & đối chiếu giá',
-          bannerGradient: 'linear-gradient(135deg, #0D9488 0%, #134E4A 100%)',
-          description: 'Quản lý quầy bếp ACCOUNT, thời gian chế biến CONFIG_COOKING, phân tích món vào bếp & giá GPOS.',
-          badgeText: 'Bếp KDS',
+          title: 'Check & Xử Lý KDS',
+          subtitle: 'Quầy bếp, thời gian nấu & đối chiếu giá',
+          badgeText: 'G_KITCHEN',
           isModal: false
         },
         {
           id: 'dish_show_hide',
-          bannerTag: '🍔 CẤU HÌNH • SHOW_HIDE',
-          bannerTitle: 'Ẩn / Hiện Món Ăn',
-          bannerSubtitle: 'Bật tắt món trên CO, SO & QR Order',
-          bannerGradient: 'linear-gradient(135deg, #EA580C 0%, #7C2D12 100%)',
-          description: 'Quản lý trạng thái hiển thị món ăn độc lập trên từng kênh bán hàng (CO, SO, QR) hoặc hàng loạt.',
-          badgeText: 'CO / SO / QR',
+          title: 'Ẩn / Hiện Món Ăn',
+          subtitle: 'Bật tắt món trên CO, SO & QR Order',
+          badgeText: 'SHOW_HIDE',
           isModal: false
         },
         {
           id: 'menu_show_hide',
-          bannerTag: '🍔 CẤU HÌNH • MENU_AUTO',
-          bannerTitle: 'Ẩn / Hiện Menu',
-          bannerSubtitle: 'Danh mục menu & tự động ra món KDS',
-          bannerGradient: 'linear-gradient(135deg, #7C3AED 0%, #4C1D95 100%)',
-          description: 'Bật/tắt danh mục thực đơn trên CO/SO/QR và cấu hình cờ tự động ra món trên bếp (autoDeliveryInSo).',
-          badgeText: 'KDS Auto',
+          title: 'Ẩn / Hiện Menu',
+          subtitle: 'Danh mục menu & tự động ra món KDS',
+          badgeText: 'MENU_AUTO',
           isModal: false
         },
         {
           id: 'manage_app_params',
-          bannerTag: '🍔 CẤU HÌNH • APP_PARAM',
-          bannerTitle: 'Xử Lý APP_PARAM',
-          bannerSubtitle: 'Cấu hình tham số vận hành nhà hàng',
-          bannerGradient: 'linear-gradient(135deg, #334155 0%, #0F172A 100%)',
-          description: 'Tra cứu, lọc theo nghiệp vụ, bật/tắt nhanh, thêm mới hoặc chỉnh sửa bảng tham số APP_PARAM.',
+          title: 'Xử Lý APP_PARAM',
+          subtitle: 'Cấu hình tham số vận hành nhà hàng',
           badgeText: 'APP_PARAM',
           isModal: false
         }
@@ -2565,73 +2003,53 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
     },
     {
       groupKey: 'LOGS' as const,
-      groupTitle: '🔍 Nhóm 3: Tra Cứu Nhật Ký (Logs) & Giám Sát Chuyên Sâu',
-      groupSubtitle: 'Truy vết luồng đơn 5 chặng CO-SO-KDS, đối soát nhật ký phiên GUID, bản đồ thiết bị & máy in',
+      groupTitle: 'Nhóm 3: Tra Cứu Nhật Ký (Logs) & Giám Sát',
       items: [
         {
           id: 'radar_kds_logs',
-          bannerTag: '🔍 TRA CỨU LOGS • CO-SO-KDS',
-          bannerTitle: 'Radar & Nhật Ký KDS',
-          bannerSubtitle: 'Hợp nhất nhật ký KDS & truy vết 5 chặng',
-          bannerGradient: 'linear-gradient(135deg, #B45309 0%, #78350F 100%)',
-          description: 'Tra cứu giờ Order (CO/SO), giờ bếp bấm Done, lệnh in KDS, đối soát SLA & soi chi tiết 5 chặng.',
-          badgeText: 'Hợp nhất 2 in 1',
+          title: 'Radar & Nhật Ký KDS',
+          subtitle: 'Nhật ký KDS & truy vết 5 chặng đơn hàng',
+          badgeText: 'CO-SO-KDS',
           isModal: true
         },
         {
           id: 'check_action_logs',
-          bannerTag: '🔍 TRA CỨU LOGS • ACTION_LOG',
-          bannerTitle: 'Checklogs Phiên GUID',
-          bannerSubtitle: 'Phân tích timeline thao tác theo Bàn/GUID',
-          bannerGradient: 'linear-gradient(135deg, #4F46E5 0%, #312E81 100%)',
-          description: 'Truy vấn lịch sử thao tác ACTION_LOG theo từng phiên bàn ăn, lọc theo ngày và xem chi tiết payload.',
+          title: 'Checklogs Phiên GUID',
+          subtitle: 'Phân tích timeline ACTION_LOG theo bàn',
           badgeText: 'ACTION_LOG',
           isModal: false
         },
         {
           id: 'device_fleet_map',
-          bannerTag: '🔍 GIÁM SÁT • DEVICE FLEET',
-          bannerTitle: 'Bản Đồ Thiết Bị',
-          bannerSubtitle: 'Gộp phiên phần cứng, kiểm tra App & Pin',
-          bannerGradient: 'linear-gradient(135deg, #0369A1 0%, #082F49 100%)',
-          description: 'Xếp bàn mở muộn nhất lên đầu, nhận diện thiết Bị duy nhất theo Model/ID, kiểm tra bản App & Pin.',
-          badgeText: 'Đã gộp phiên',
+          title: 'Bản Đồ Thiết Bị',
+          subtitle: 'Gộp phiên phần cứng, kiểm tra App & Pin',
+          badgeText: 'DEVICE FLEET',
           isModal: true
         },
         {
           id: 'print_management',
-          bannerTag: '🔍 GIÁM SÁT • PRINT QUEUE',
-          bannerTitle: 'Giám Sát Máy In',
-          bannerSubtitle: 'Trạng thái máy in & hàng đợi in KDS/POS',
-          bannerGradient: 'linear-gradient(135deg, #BE123C 0%, #881337 100%)',
-          description: 'Kiểm tra kết nối máy in nhiệt tại quầy bếp/thu ngân và theo dõi danh sách lệnh in đang chờ.',
-          badgeText: 'Print Queue',
+          title: 'Giám Sát Máy In',
+          subtitle: 'Trạng thái máy in & hàng đợi in KDS/POS',
+          badgeText: 'PRINTER',
           isModal: true
         }
       ]
     },
     {
       groupKey: 'SYSTEM' as const,
-      groupTitle: '🗄️ Nhóm 4: Hạ Tầng Dữ Liệu & Báo Cáo Bàn',
-      groupSubtitle: 'Sao chép di chuyển Database khi cài lại máy POS và xuất báo cáo sơ đồ bàn ăn toàn hệ thống',
+      groupTitle: 'Nhóm 4: Hạ Tầng Dữ Liệu & Báo Cáo Bàn',
       items: [
         {
           id: 'transfer_database',
-          bannerTag: '🗄️ HỆ THỐNG • TRANSFER DB',
-          bannerTitle: 'Chuyển Database',
-          bannerSubtitle: 'Di chuyển DB giữa các máy .11, .12, .41',
-          bannerGradient: 'linear-gradient(135deg, #1D4ED8 0%, #172554 100%)',
-          description: 'Hỗ trợ khi cài lại máy POS: dọn rác ACTION_LOG giảm dung lượng và sao chép toàn bộ DB sang máy mới.',
-          badgeText: 'Transfer DB',
+          title: 'Chuyển Database',
+          subtitle: 'Di chuyển DB giữa các máy .11, .12, .41',
+          badgeText: 'TRANSFER DB',
           isModal: false
         },
         {
           id: 'table_hall_report',
-          bannerTag: '🗄️ BÁO CÁO • TABLE & HALL',
-          bannerTitle: 'Báo Cáo Bàn & Khu Vực',
-          bannerSubtitle: 'Quét danh sách bàn ăn & xuất Excel/CSV',
-          bannerGradient: 'linear-gradient(135deg, #15803D 0%, #052E16 100%)',
-          description: 'Truy vấn tổng số bàn ăn (isCurrentRes: true) và khu vực HALL_PLAN của 1 hoặc toàn bộ nhà hàng.',
+          title: 'Báo Cáo Bàn & Khu Vực',
+          subtitle: 'Quét danh sách bàn ăn & xuất Excel/CSV',
           badgeText: 'TABLE & HALL',
           isModal: false
         }
@@ -2639,37 +2057,20 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
     }
   ], []);
 
-
-
   const selectedTask = useMemo(() => {
-
     return AVAILABLE_TASKS.find((t) => t.id === selectedTaskId) || AVAILABLE_TASKS[0];
-
   }, [AVAILABLE_TASKS, selectedTaskId]);
 
-
-
   const filteredTasks = useMemo(() => {
-
     if (!taskSearchQuery.trim()) return AVAILABLE_TASKS;
-
     const q = removeVietnameseTones(taskSearchQuery);
-
     return AVAILABLE_TASKS.filter((t) => {
-
       const title = removeVietnameseTones(t.title);
-
       const sub = removeVietnameseTones(t.subtitle);
-
       const cat = removeVietnameseTones(t.category);
-
       return title.includes(q) || sub.includes(q) || cat.includes(q);
-
     });
-
   }, [AVAILABLE_TASKS, taskSearchQuery]);
-
-
 
   // Lock status state for Task 1
 
@@ -5663,8 +5064,17 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
 
       {/* Main Navigation Tabs */}
-
-      <div className="tabs-nav-scrollable" style={{ display: 'flex', borderBottom: '2px solid var(--border-color)', gap: '8px', overflowX: 'auto', flexWrap: 'nowrap', WebkitOverflowScrolling: 'touch' }}>
+      <div
+        className="tabs-nav-scrollable"
+        style={{
+          display: 'flex',
+          borderBottom: '2px solid var(--border-color)',
+          gap: '8px',
+          overflowX: 'auto',
+          flexWrap: 'nowrap',
+          WebkitOverflowScrolling: 'touch'
+        }}
+      >
         <button
           type="button"
           onClick={() => setActiveTab('task_actions')}
@@ -5672,8 +5082,8 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
             padding: '10px 18px',
             fontSize: '14px',
             fontWeight: activeTab === 'task_actions' ? 700 : 500,
-            color: activeTab === 'task_actions' ? '#D97706' : '#6B7280',
-            borderBottom: activeTab === 'task_actions' ? '3px solid #D97706' : '3px solid transparent',
+            color: activeTab === 'task_actions' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            borderBottom: activeTab === 'task_actions' ? '3px solid var(--color-primary)' : '3px solid transparent',
             marginBottom: '-2px',
             backgroundColor: 'transparent',
             borderTop: 'none',
@@ -5683,19 +5093,19 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
             display: 'inline-flex',
             alignItems: 'center',
             gap: '8px',
-            transition: 'all 0.15s ease'
+            transition: 'var(--transition-fast)'
           }}
         >
-          <Wrench size={16} />
+          <Wrench size={16} color={activeTab === 'task_actions' ? 'var(--color-primary)' : 'var(--text-secondary)'} />
           <span>Tab 1: Xử Lý Tác Vụ &amp; Chuyên Sâu CO-SO-KDS</span>
           {lockStatus && lockStatus.total_locked_tables > 0 && (
             <span
               style={{
-                backgroundColor: '#EF4444',
-                color: '#fff',
+                backgroundColor: 'var(--color-error)',
+                color: 'var(--text-inverse)',
                 fontSize: '11px',
                 padding: '1px 6px',
-                borderRadius: '10px',
+                borderRadius: 'var(--radius-full)',
                 fontWeight: 700
               }}
             >
@@ -5711,8 +5121,8 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
             padding: '10px 18px',
             fontSize: '14px',
             fontWeight: activeTab === 'android_emulator' ? 700 : 500,
-            color: activeTab === 'android_emulator' ? 'var(--color-primary, #059669)' : '#6B7280',
-            borderBottom: activeTab === 'android_emulator' ? '3px solid var(--color-primary, #059669)' : '3px solid transparent',
+            color: activeTab === 'android_emulator' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            borderBottom: activeTab === 'android_emulator' ? '3px solid var(--color-primary)' : '3px solid transparent',
             marginBottom: '-2px',
             backgroundColor: 'transparent',
             borderTop: 'none',
@@ -5722,80 +5132,68 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
             display: 'inline-flex',
             alignItems: 'center',
             gap: '8px',
-            transition: 'all 0.15s ease'
+            transition: 'var(--transition-fast)'
           }}
         >
-          <LayoutGrid size={16} />
+          <LayoutGrid size={16} color={activeTab === 'android_emulator' ? 'var(--color-primary)' : 'var(--text-secondary)'} />
           <span>Tab 2: Sơ Đồ Bàn Theo Khu (Restaurant Table Map)</span>
         </button>
       </div>
 
       {/* ══════════════════════════════════════════════════════════════ */}
-
-      {/* TAB 3 CONTENT: SƠ ĐỒ BÀN THEO KHU (STAFF ORDER / WAITER) */}
-
+      {/* TAB 2 CONTENT: SƠ ĐỒ BÀN THEO KHU (STAFF ORDER / WAITER)       */}
       {/* ══════════════════════════════════════════════════════════════ */}
-
       {activeTab === 'android_emulator' && (
-
         <AndroidEmulatorTab
-
           selectedRestaurant={selectedRestaurant}
-
           connectedHost={connectedHost}
-
           onToast={showToast}
-
         />
-
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
-      {/* TAB 4 CONTENT: GIẢ LẬP HỆ SINH THÁI CO - SO & XỬ LÝ ẢNH      */}
-      
-
-
-
+      {/* TAB 1 CONTENT: XỬ LÝ TÁC VỤ & CHUYÊN SÂU CO-SO-KDS             */}
       {/* ══════════════════════════════════════════════════════════════ */}
-
-      {/* TAB 1 CONTENT: XỬ LÝ TÁC VỤ */}
-
-      {/* ══════════════════════════════════════════════════════════════ */}
-
       {activeTab === 'task_actions' && (
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-          {/* ══════════════════════════════════════════════════════════ */}
-
-          {/* BẢNG PHÂN LOẠI KHỐI TÁC VỤ TRỰC QUAN (F8 COURSE CARD BLOCK GRID) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* BỘ CHỌN KHỐI TÁC VỤ NHỎ GỌN - TUÂN THỦ 100% CSS VARIABLES */}
           <Card>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Top Filter & Search Header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', paddingBottom: isTaskGridCollapsed ? '0px' : '12px', borderBottom: isTaskGridCollapsed ? 'none' : '1px solid #E2E8F0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: 30, height: 30, borderRadius: 8, background: '#FEF3C7', border: '1px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Wrench size={15} color="#D97706" />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
-                        Chọn Tác Vụ Cần Xử Lý
-                      </div>
-                      <div style={{ fontSize: '11.5px', color: '#64748B' }}>
-                        Phân tách rõ khối Thực Thi, Cấu Hình Menu/KDS, Tra Cứu Logs và Hệ Thống
-                      </div>
-                    </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* Thanh tiêu đề + Lọc nhóm + Tìm kiếm + Thu gọn */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                  paddingBottom: '10px',
+                  borderBottom: '1px solid var(--border-color)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '13px',
+                      fontWeight: 800,
+                      color: 'var(--text-primary)'
+                    }}
+                  >
+                    <Wrench size={15} color="var(--color-primary)" />
+                    <span>Chọn Tác Vụ Cần Xử Lý:</span>
                   </div>
 
                   {/* Category Filter Pills */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginLeft: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     {[
                       { key: 'ALL', label: 'Tất cả (15)' },
-                      { key: 'EXECUTION', label: '⚡ Thực thi (4)' },
-                      { key: 'CONFIG', label: '🍔 Cấu hình (5)' },
-                      { key: 'LOGS', label: '🔍 Tra cứu Logs (4)' },
-                      { key: 'SYSTEM', label: '🗄️ Hệ thống & Báo cáo (2)' }
+                      { key: 'EXECUTION', label: 'Thực thi (4)' },
+                      { key: 'CONFIG', label: 'Cấu hình (5)' },
+                      { key: 'LOGS', label: 'Tra cứu Logs (4)' },
+                      { key: 'SYSTEM', label: 'Hệ thống & Báo cáo (2)' }
                     ].map((tab) => {
                       const active = taskGroupFilter === tab.key;
                       return (
@@ -5807,15 +5205,15 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                             if (isTaskGridCollapsed) setIsTaskGridCollapsed(false);
                           }}
                           style={{
-                            padding: '5px 11px',
-                            borderRadius: '20px',
+                            padding: '4px 10px',
+                            borderRadius: 'var(--radius-sm)',
                             fontSize: '11.5px',
-                            fontWeight: active ? 700 : 600,
-                            border: active ? '1.5px solid #D97706' : '1px solid #CBD5E1',
-                            backgroundColor: active ? '#FFFBEB' : '#F8FAFC',
-                            color: active ? '#B45309' : '#475569',
+                            fontWeight: active ? 700 : 500,
+                            border: active ? '1px solid var(--color-primary)' : '1px solid var(--border-color)',
+                            backgroundColor: active ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                            color: active ? 'var(--color-primary-text)' : 'var(--text-secondary)',
                             cursor: 'pointer',
-                            transition: 'all 0.15s ease'
+                            transition: 'var(--transition-fast)'
                           }}
                         >
                           {tab.label}
@@ -5827,8 +5225,17 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
                 {/* Right: Search Input & Collapse Grid Button */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <div style={{ position: 'relative', width: '230px' }}>
-                    <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                  <div style={{ position: 'relative', width: '210px' }}>
+                    <Search
+                      size={13}
+                      style={{
+                        position: 'absolute',
+                        left: '9px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        color: 'var(--text-muted)'
+                      }}
+                    />
                     <input
                       type="text"
                       value={taskSearchQuery}
@@ -5836,23 +5243,32 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                         setTaskSearchQuery(e.target.value);
                         if (isTaskGridCollapsed) setIsTaskGridCollapsed(false);
                       }}
-                      placeholder="Tìm khối tác vụ, logs, KDS..."
+                      placeholder="Tìm tác vụ, logs, KDS..."
                       style={{
                         width: '100%',
-                        padding: '6px 26px 6px 28px',
+                        padding: '5px 24px 5px 28px',
                         fontSize: '12px',
-                        borderRadius: '8px',
-                        border: '1px solid #CBD5E1',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid var(--border-color)',
                         outline: 'none',
-                        backgroundColor: '#FFFFFF',
-                        color: '#0F172A'
+                        backgroundColor: 'var(--bg-primary)',
+                        color: 'var(--text-primary)'
                       }}
                     />
                     {taskSearchQuery && (
                       <button
                         type="button"
                         onClick={() => setTaskSearchQuery('')}
-                        style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#94A3B8' }}
+                        style={{
+                          position: 'absolute',
+                          right: '6px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          color: 'var(--text-muted)'
+                        }}
                       >
                         <X size={12} />
                       </button>
@@ -5866,82 +5282,86 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '5px',
-                      padding: '6px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
-                      backgroundColor: '#F8FAFC',
-                      color: '#334155',
-                      fontSize: '12px',
-                      fontWeight: 700,
+                      padding: '5px 10px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-secondary)',
+                      color: 'var(--text-primary)',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
                       cursor: 'pointer'
                     }}
                   >
-                    <span>{isTaskGridCollapsed ? 'Mở rộng 15 khối tác vụ' : 'Thu gọn khối'}</span>
-                    <ChevronDown size={14} style={{ transform: isTaskGridCollapsed ? 'none' : 'rotate(180deg)', transition: 'transform 0.15s' }} />
+                    <span>{isTaskGridCollapsed ? 'Mở rộng (15 ô)' : 'Thu gọn'}</span>
+                    <ChevronDown
+                      size={13}
+                      style={{
+                        transform: isTaskGridCollapsed ? 'none' : 'rotate(180deg)',
+                        transition: 'var(--transition-fast)'
+                      }}
+                    />
                   </button>
                 </div>
               </div>
 
-              {/* Categorized Block Cards Grid (F8 Course Card Style) */}
+              {/* Danh sách các khối tác vụ nhỏ gọn (Nền trắng, chữ đen, điểm nhấn vàng #F5B800) */}
               {!isTaskGridCollapsed && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {TASK_BLOCK_GROUPS.filter((g) => taskGroupFilter === 'ALL' || g.groupKey === taskGroupFilter).map((group) => {
                     const q = removeVietnameseTones(taskSearchQuery);
                     const visibleItems = group.items.filter((it) => {
                       if (!q) return true;
-                      const hay = removeVietnameseTones(`${it.bannerTitle} ${it.bannerSubtitle} ${it.description} ${it.bannerTag}`);
+                      const hay = removeVietnameseTones(`${it.title} ${it.subtitle} ${it.badgeText}`);
                       return hay.includes(q);
                     });
                     if (visibleItems.length === 0) return null;
 
                     return (
-                      <div key={group.groupKey} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {/* Section Heading */}
-                        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A' }}>
-                              {group.groupTitle}
-                            </span>
-                            <span style={{ fontSize: '11px', fontWeight: 700, padding: '1px 8px', borderRadius: '12px', backgroundColor: '#F1F5F9', color: '#475569' }}>
-                              {visibleItems.length} khối
-                            </span>
-                          </div>
-                          <span style={{ fontSize: '11.5px', color: '#64748B' }}>
-                            {group.groupSubtitle}
+                      <div key={group.groupKey} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {/* Tiêu đề nhóm nhỏ gọn */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span
+                            style={{
+                              width: '3px',
+                              height: '13px',
+                              borderRadius: 'var(--radius-sm)',
+                              backgroundColor: 'var(--color-primary)',
+                              display: 'inline-block'
+                            }}
+                          />
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {group.groupTitle}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '10.5px',
+                              fontWeight: 600,
+                              padding: '0px 6px',
+                              borderRadius: 'var(--radius-sm)',
+                              backgroundColor: 'var(--bg-secondary)',
+                              color: 'var(--text-secondary)',
+                              border: '1px solid var(--border-color)'
+                            }}
+                          >
+                            {visibleItems.length}
                           </span>
                         </div>
 
-                        {/* Cards Grid */}
+                        {/* Lưới các ô tác vụ nhỏ gọn */}
                         <div
                           style={{
                             display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-                            gap: '14px',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(205px, 1fr))',
+                            gap: '8px',
                             alignItems: 'stretch'
                           }}
                         >
                           {visibleItems.map((block) => {
                             const isSelected = !block.isModal && selectedTaskId === block.id;
-                            const renderBannerIcon = () => {
-                              switch (block.id) {
-                                case 'clear_table_locks': return <Unlock size={16} color="#FFFFFF" />;
-                                case 'unlock_tablet_users': return <UserCheck size={16} color="#FFFFFF" />;
-                                case 'two_step_sync': return <Layers size={16} color="#FFFFFF" />;
-                                case 'fix_full_cpu': return <Cpu size={16} color="#FFFFFF" />;
-                                case 'manage_menu_so_co': return <Layers size={16} color="#FFFFFF" />;
-                                case 'check_kds': return <ChefHat size={16} color="#FFFFFF" />;
-                                case 'dish_show_hide': return <UtensilsCrossed size={16} color="#FFFFFF" />;
-                                case 'menu_show_hide': return <SlidersHorizontal size={16} color="#FFFFFF" />;
-                                case 'manage_app_params': return <Settings size={16} color="#FFFFFF" />;
-                                case 'radar_kds_logs': return <Flame size={16} color="#FFFFFF" />;
-                                case 'check_action_logs': return <FileText size={16} color="#FFFFFF" />;
-                                case 'device_fleet_map': return <Tablet size={16} color="#FFFFFF" />;
-                                case 'print_management': return <Printer size={16} color="#FFFFFF" />;
-                                case 'transfer_database': return <ArrowRightLeft size={16} color="#FFFFFF" />;
-                                case 'table_hall_report': return <FileSpreadsheet size={16} color="#FFFFFF" />;
-                                default: return <Wrench size={16} color="#FFFFFF" />;
-                              }
-                            };
+                            const hasLockError =
+                              block.id === 'clear_table_locks' &&
+                              lockStatus &&
+                              lockStatus.total_locked_tables > 0;
 
                             return (
                               <div
@@ -5963,182 +5383,117 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                                     setSelectedTaskId(block.id);
                                     setTimeout(() => {
                                       activeWorkspaceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                                    }, 60);
+                                    }, 50);
                                   }
                                 }}
                                 style={{
-                                  borderRadius: '12px',
-                                  overflow: 'hidden',
-                                  backgroundColor: '#FFFFFF',
-                                  border: isSelected ? '2.5px solid #F59E0B' : '1px solid #E2E8F0',
-                                  boxShadow: isSelected
-                                    ? '0 8px 20px -4px rgba(245, 158, 11, 0.28)'
-                                    : '0 2px 6px rgba(15, 23, 42, 0.05)',
+                                  padding: '8px 10px',
+                                  borderRadius: 'var(--radius-md)',
+                                  backgroundColor: isSelected ? 'var(--color-primary-subtle)' : 'var(--bg-card)',
+                                  border: isSelected
+                                    ? '1.5px solid var(--color-primary)'
+                                    : '1px solid var(--border-color)',
+                                  borderLeft: isSelected
+                                    ? '4px solid var(--color-primary)'
+                                    : '1px solid var(--border-color)',
+                                  boxShadow: 'var(--shadow-sm)',
                                   cursor: 'pointer',
                                   display: 'flex',
                                   flexDirection: 'column',
-                                  transition: 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease'
+                                  justifyContent: 'space-between',
+                                  gap: '5px',
+                                  transition: 'var(--transition-fast)'
                                 }}
                                 onMouseEnter={(e) => {
-                                  e.currentTarget.style.transform = 'translateY(-3px)';
                                   if (!isSelected) {
-                                    e.currentTarget.style.boxShadow = '0 10px 20px -5px rgba(15, 23, 42, 0.12)';
+                                    e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                                    e.currentTarget.style.borderColor = 'var(--border-color-dark)';
                                   }
                                 }}
                                 onMouseLeave={(e) => {
-                                  e.currentTarget.style.transform = 'none';
                                   if (!isSelected) {
-                                    e.currentTarget.style.boxShadow = '0 2px 6px rgba(15, 23, 42, 0.05)';
+                                    e.currentTarget.style.backgroundColor = 'var(--bg-card)';
+                                    e.currentTarget.style.borderColor = 'var(--border-color)';
                                   }
                                 }}
                               >
-                                {/* Top Colored Banner (F8 Style Diagonal Texture + Bold Title) */}
-                                <div
-                                  style={{
-                                    backgroundImage: `repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 10px, transparent 10px, transparent 20px), ${block.bannerGradient}`,
-                                    padding: '14px 16px',
-                                    minHeight: '104px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    justifyContent: 'space-between',
-                                    position: 'relative'
-                                  }}
-                                >
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                {/* Dòng 1: Icon + Tên tác vụ + Nhãn mã bảng */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0, flex: 1 }}>
+                                    {renderTaskIcon(block.id, isSelected)}
                                     <span
                                       style={{
-                                        fontSize: '10px',
-                                        fontWeight: 800,
-                                        letterSpacing: '0.4px',
-                                        color: 'rgba(255,255,255,0.92)',
-                                        backgroundColor: 'rgba(0,0,0,0.22)',
-                                        padding: '2px 8px',
-                                        borderRadius: '6px'
-                                      }}
-                                    >
-                                      {block.bannerTag}
-                                    </span>
-                                    <div
-                                      style={{
-                                        width: '28px',
-                                        height: '28px',
-                                        borderRadius: '8px',
-                                        backgroundColor: 'rgba(255,255,255,0.18)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        flexShrink: 0
-                                      }}
-                                    >
-                                      {renderBannerIcon()}
-                                    </div>
-                                  </div>
-
-                                  <div style={{ marginTop: '8px' }}>
-                                    <div
-                                      style={{
-                                        fontSize: '17px',
-                                        fontWeight: 800,
-                                        color: '#FFFFFF',
-                                        lineHeight: 1.25,
-                                        letterSpacing: '-0.2px',
-                                        textShadow: '0 1px 2px rgba(0,0,0,0.18)'
-                                      }}
-                                    >
-                                      {block.bannerTitle}
-                                    </div>
-                                    <div
-                                      style={{
-                                        fontSize: '11.5px',
-                                        fontWeight: 500,
-                                        color: 'rgba(255,255,255,0.9)',
-                                        marginTop: '3px',
+                                        fontSize: '12.5px',
+                                        fontWeight: isSelected ? 800 : 700,
+                                        color: 'var(--text-primary)',
                                         whiteSpace: 'nowrap',
                                         overflow: 'hidden',
                                         textOverflow: 'ellipsis'
                                       }}
                                     >
-                                      {block.bannerSubtitle}
-                                    </div>
+                                      {block.title}
+                                    </span>
                                   </div>
+
+                                  {hasLockError ? (
+                                    <span
+                                      style={{
+                                        backgroundColor: 'var(--color-error-bg)',
+                                        color: 'var(--color-error-text)',
+                                        border: '1px solid var(--color-error-border)',
+                                        fontWeight: 700,
+                                        fontSize: '10px',
+                                        padding: '1px 5px',
+                                        borderRadius: 'var(--radius-sm)',
+                                        flexShrink: 0
+                                      }}
+                                    >
+                                      {lockStatus.total_locked_tables} kẹt
+                                    </span>
+                                  ) : (
+                                    <span
+                                      style={{
+                                        backgroundColor: isSelected ? 'var(--color-primary-light)' : 'var(--bg-secondary)',
+                                        color: 'var(--text-secondary)',
+                                        border: '1px solid var(--border-color)',
+                                        fontWeight: 600,
+                                        fontSize: '9.5px',
+                                        padding: '1px 5px',
+                                        borderRadius: 'var(--radius-sm)',
+                                        flexShrink: 0
+                                      }}
+                                    >
+                                      {block.badgeText}
+                                    </span>
+                                  )}
                                 </div>
 
-                                {/* Bottom Card Body */}
-                                <div
-                                  style={{
-                                    padding: '12px 16px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    justifyContent: 'space-between',
-                                    flex: 1,
-                                    gap: '10px',
-                                    backgroundColor: isSelected ? '#FFFBEB' : '#FFFFFF'
-                                  }}
-                                >
-                                  <div
+                                {/* Dòng 2: Mô tả ngắn 1 dòng + Trạng thái chọn */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                  <span
                                     style={{
-                                      fontSize: '12px',
-                                      color: '#475569',
-                                      lineHeight: 1.45
+                                      fontSize: '11px',
+                                      color: 'var(--text-secondary)',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      flex: 1
+                                    }}
+                                    title={block.subtitle}
+                                  >
+                                    {block.subtitle}
+                                  </span>
+
+                                  <span
+                                    style={{
+                                      fontSize: '10.5px',
+                                      fontWeight: isSelected ? 800 : 600,
+                                      color: 'var(--text-primary)',
+                                      flexShrink: 0
                                     }}
                                   >
-                                    {block.description}
-                                  </div>
-
-                                  <div
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'space-between',
-                                      paddingTop: '8px',
-                                      borderTop: '1px solid #F1F5F9',
-                                      fontSize: '11.5px'
-                                    }}
-                                  >
-                                    {isSelected ? (
-                                      <span style={{ color: '#D97706', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                        <CheckCircle2 size={13} color="#D97706" />
-                                        <span>Đang mở bên dưới</span>
-                                      </span>
-                                    ) : block.isModal ? (
-                                      <span style={{ color: '#0284C7', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                        <span>Mở cửa sổ chuyên sâu ↗</span>
-                                      </span>
-                                    ) : (
-                                      <span style={{ color: '#EA580C', fontWeight: 700 }}>
-                                        Chọn tác vụ ➔
-                                      </span>
-                                    )}
-
-                                    {block.id === 'clear_table_locks' && lockStatus && lockStatus.total_locked_tables > 0 ? (
-                                      <span
-                                        style={{
-                                          backgroundColor: '#FEE2E2',
-                                          color: '#DC2626',
-                                          fontWeight: 800,
-                                          fontSize: '10.5px',
-                                          padding: '2px 7px',
-                                          borderRadius: '10px',
-                                          border: '1px solid #FCA5A5'
-                                        }}
-                                      >
-                                        {lockStatus.total_locked_tables} bàn kẹt
-                                      </span>
-                                    ) : (
-                                      <span
-                                        style={{
-                                          backgroundColor: '#F1F5F9',
-                                          color: '#475569',
-                                          fontWeight: 700,
-                                          fontSize: '10.5px',
-                                          padding: '2px 7px',
-                                          borderRadius: '6px'
-                                        }}
-                                      >
-                                        {block.badgeText}
-                                      </span>
-                                    )}
-                                  </div>
+                                    {isSelected ? '● Đang mở' : block.isModal ? 'Mở ↗' : ''}
+                                  </span>
                                 </div>
                               </div>
                             );
@@ -6149,781 +5504,274 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                   })}
                 </div>
               )}
-            </div>
-          </Card>
 
-          <div ref={activeWorkspaceRef} />
-          {/* BỘ CHỌN TÁC VỤ CẦN XỬ LÝ (COMBOBOX TỪNG DÒNG + TÌM KIẾM) */}
+              {/* Thanh tác vụ đang mở + Nút Giải thích (!) + Cấu hình Mail + Quét lại */}
+              <div
+                ref={activeWorkspaceRef}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                  paddingTop: '10px',
+                  borderTop: '1px solid var(--border-color)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 320px', minWidth: 0 }}>
+                  <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)', flexShrink: 0 }}>
+                    Đang xử lý:
+                  </span>
 
-          {/* ══════════════════════════════════════════════════════════ */}
-
-          <Card>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', width: '100%' }}>
-
-                {/* Left: Task Dropdown Selector */}
-
-                <div style={{ display: 'flex', alignItems: 'flex-start', flexDirection: 'column', gap: '4px', flex: '1 1 360px', minWidth: 0, maxWidth: '680px' }}>
-
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-
-                    <Wrench size={13} color="#D97706" />
-
-                    <span>Chọn Tác Vụ Cần Xử Lý:</span>
-
-                  </label>
-
-
-
-                  {/* Combobox Trigger Box & Nút Chấm Than Giải Thích Tác Vụ */}
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', minWidth: 0 }}>
-
-                    <div ref={taskDropdownRef} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-
-                      <div
-
-                        onClick={() => setIsTaskDropdownOpen(!isTaskDropdownOpen)}
-
-                        style={{
-
-                          display: 'flex',
-
-                          alignItems: 'center',
-
-                          justifyContent: 'space-between',
-
-                          padding: '8px 12px',
-
-                          backgroundColor: 'var(--bg-card, #fff)',
-
-                          border: isTaskDropdownOpen ? '1.5px solid #D97706' : '1px solid var(--border-color)',
-
-                          borderRadius: '8px',
-
-                          cursor: 'pointer',
-
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-
-                          transition: 'all 0.15s ease',
-
-                          minWidth: 0
-
-                        }}
-
-                      >
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden', minWidth: 0, flex: 1 }}>
-
-                          {renderTaskIcon(selectedTask.id, false)}
-
-                          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'block', minWidth: 0 }}>
-
-                            {renderHighlightedTitle(selectedTask, false)}
-
-                          </span>
-
-                        </div>
-
-                        <ChevronDown
-
-                          size={16}
-
-                          color="var(--text-muted, #6B7280)"
-
+                  <div ref={taskDropdownRef} style={{ position: 'relative', flex: 1, maxWidth: '520px', minWidth: 0 }}>
+                    <div
+                      onClick={() => setIsTaskDropdownOpen(!isTaskDropdownOpen)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '5px 10px',
+                        backgroundColor: 'var(--bg-secondary)',
+                        border: isTaskDropdownOpen ? '1.5px solid var(--color-primary)' : '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer',
+                        minWidth: 0
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', minWidth: 0, flex: 1 }}>
+                        {renderTaskIcon(selectedTask.id, true)}
+                        <span
                           style={{
-
-                            transform: isTaskDropdownOpen ? 'rotate(180deg)' : 'none',
-
-                            transition: 'transform 0.15s',
-
-                            flexShrink: 0,
-
-                            marginLeft: '8px'
-
-                          }}
-
-                        />
-
-                      </div>
-
-
-
-                      {/* Dropdown Menu (Hiển thị từng dòng tác vụ kèm search input) */}
-
-                      {isTaskDropdownOpen && (
-
-                        <div
-
-                          style={{
-
-                            position: 'absolute',
-
-                            top: 'calc(100% + 6px)',
-
-                            left: 0,
-
-                            right: 0,
-
-                            zIndex: 100,
-
-                            backgroundColor: 'var(--bg-card, #fff)',
-
-                            borderRadius: '8px',
-
-                            border: '1px solid var(--border-color)',
-
-                            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.25)',
-
+                            fontSize: '12.5px',
+                            fontWeight: 700,
+                            color: 'var(--text-primary)',
+                            whiteSpace: 'nowrap',
+                            textOverflow: 'ellipsis',
                             overflow: 'hidden'
-
                           }}
-
                         >
-
-                          {/* Input search trong dropdown để nhập tìm kiếm tác vụ */}
-
-                          <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary, #F9FAFB)' }}>
-
-                            <div style={{ position: 'relative' }}>
-
-                              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted, #9CA3AF)' }} />
-
-                              <input
-
-                                type="text"
-
-                                value={taskSearchQuery}
-
-                                onChange={(e) => setTaskSearchQuery(e.target.value)}
-
-                                placeholder="Nhập tên tác vụ, từ khóa (khóa bàn, logs, guid, tablet...)..."
-
-                                autoFocus
-
-                                style={{
-
-                                  width: '100%',
-
-                                  padding: '6px 10px 6px 30px',
-
-                                  fontSize: '12px',
-
-                                  border: '1px solid var(--border-color)',
-
-                                  borderRadius: '6px',
-
-                                  outline: 'none',
-
-                                  backgroundColor: 'var(--bg-primary, #fff)',
-
-                                  color: 'var(--text-primary)'
-
-                                }}
-
-                                onClick={(e) => e.stopPropagation()}
-
-                              />
-
-                            </div>
-
-                          </div>
-
-
-
-                          {/* Danh sách từng dòng tác vụ */}
-
-                          <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
-
-                            {filteredTasks.length === 0 ? (
-
-                              <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted, #9CA3AF)', fontSize: '12px' }}>
-
-                                Không tìm thấy tác vụ nào khớp với từ khóa "{taskSearchQuery}".
-
-                              </div>
-
-                            ) : (
-
-                              filteredTasks.map((t) => {
-
-                                const isSelected = selectedTaskId === t.id;
-
-                                return (
-
-                                  <div
-
-                                    key={t.id}
-
-                                    onClick={() => {
-
-                                      setSelectedTaskId(t.id);
-
-                                      setIsTaskDropdownOpen(false);
-
-                                      setTaskSearchQuery('');
-
-                                    }}
-
-                                    style={{
-
-                                      padding: '8px 14px',
-
-                                      display: 'flex',
-
-                                      alignItems: 'center',
-
-                                      justifyContent: 'space-between',
-
-                                      gap: '12px',
-
-                                      cursor: 'pointer',
-
-                                      backgroundColor: isSelected ? 'rgba(217, 119, 6, 0.15)' : 'transparent',
-
-                                      borderBottom: '1px solid var(--border-color)',
-
-                                      transition: 'background-color 0.15s'
-
-                                    }}
-
-                                    onMouseEnter={(e) => {
-
-                                      if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-hover, rgba(255, 255, 255, 0.08))';
-
-                                    }}
-
-                                    onMouseLeave={(e) => {
-
-                                      if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
-
-                                    }}
-
-                                  >
-
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, overflow: 'hidden' }}>
-
-                                      {renderTaskIcon(t.id, isSelected)}
-
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-
-                                        {renderHighlightedTitle(t, isSelected)}
-
-                                        {t.badge && (
-
-                                          <span
-
-                                            style={{
-
-                                              fontSize: '10px',
-
-                                              fontWeight: 700,
-
-                                              padding: '1px 6px',
-
-                                              borderRadius: '4px',
-
-                                              backgroundColor:
-
-                                                t.id === 'clear_table_locks'
-
-                                                  ? '#FEF3C7'
-
-                                                  : t.id === 'unlock_tablet_users'
-
-                                                  ? '#EFF6FF'
-
-                                                  : t.id === 'manage_menu_so_co'
-
-                                                  ? '#DBEAFE'
-
-                                                  : t.id === 'check_kds'
-
-                                                  ? '#ECFDF5'
-
-                                                  : t.id === 'dish_show_hide'
-
-                                                  ? '#FFEDD5'
-
-                                                  : t.id === 'menu_show_hide'
-
-                                                  ? '#F3E8FF'
-
-                                                  : '#EEF2FF',
-
-                                              color:
-
-                                                t.id === 'clear_table_locks'
-
-                                                  ? '#92400E'
-
-                                                  : t.id === 'unlock_tablet_users'
-
-                                                  ? '#1D4ED8'
-
-                                                  : t.id === 'manage_menu_so_co'
-
-                                                  ? '#1E40AF'
-
-                                                  : t.id === 'check_kds'
-
-                                                  ? '#047857'
-
-                                                  : t.id === 'dish_show_hide'
-
-                                                  ? '#C2410C'
-
-                                                  : t.id === 'menu_show_hide'
-
-                                                  ? '#7E22CE'
-
-                                                  : '#4338CA'
-
-                                            }}
-
-                                          >
-
-                                            {t.badge}
-
-                                          </span>
-
-                                        )}
-
-                                      </div>
-
-                                    </div>
-
-
-
-                                    {isSelected && <Check size={16} color="#D97706" style={{ flexShrink: 0 }} />}
-
-                                  </div>
-
-                                );
-
-                              })
-
-                            )}
-
-                          </div>
-
-                        </div>
-
-                      )}
-
+                          {renderHighlightedTitle(selectedTask, true)}
+                        </span>
+                      </div>
+                      <ChevronDown
+                        size={14}
+                        color="var(--text-secondary)"
+                        style={{
+                          transform: isTaskDropdownOpen ? 'rotate(180deg)' : 'none',
+                          transition: 'var(--transition-fast)',
+                          flexShrink: 0,
+                          marginLeft: '6px'
+                        }}
+                      />
                     </div>
 
-
-
-                    {/* Nút Chấm Than Giải Thích Tác Vụ (Chuyển lên trên cạnh bộ chọn) */}
-
-                    <button
-
-                      type="button"
-
-                      onClick={() => toggleTaskHelp(selectedTaskId)}
-
-                      title={taskHelpOpen[selectedTaskId] ? 'Ẩn giải thích tác vụ' : 'Bấm để xem chi tiết giải thích tác vụ'}
-
-                      style={{
-
-                        display: 'inline-flex',
-
-                        alignItems: 'center',
-
-                        justifyContent: 'center',
-
-                        width: '32px',
-
-                        height: '32px',
-
-                        borderRadius: '50%',
-
-                        backgroundColor: taskHelpOpen[selectedTaskId] ? '#D97706' : '#FEF3C7',
-
-                        color: taskHelpOpen[selectedTaskId] ? '#FFFFFF' : '#B45309',
-
-                        border: '1.5px solid #F59E0B',
-
-                        fontSize: '15px',
-
-                        fontWeight: 900,
-
-                        cursor: 'pointer',
-
-                        padding: 0,
-
-                        flexShrink: 0,
-
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-
-                        transition: 'all 0.15s ease'
-
-                      }}
-
-                    >
-
-                      !
-
-                    </button>
-
-
-
-                    {/* Nút Print Management (Kế bên dấu ! của tác vụ 4. Check / xử lý KDS) */}
-
-                    {selectedTaskId === 'check_kds' && (
-
-                      <button
-
-                        type="button"
-
-                        onClick={() => {
-
-                          if (!selectedRestaurant) {
-
-                            showToast('Vui lòng chọn Nhà Hàng cụ thể trước để xem Print Management', 'info');
-
-                            return;
-
-                          }
-
-                          setIsPrintManagementOpen(true);
-
-                        }}
-
-                        title="Xem Print Management (Trạng thái máy in & hàng đợi in máy trạm KDS/POS)"
-
+                    {isTaskDropdownOpen && (
+                      <div
                         style={{
-
-                          display: 'inline-flex',
-
-                          alignItems: 'center',
-
-                          gap: '6px',
-
-                          padding: '0 12px',
-
-                          height: '32px',
-
-                          borderRadius: '8px',
-
-                          backgroundColor: '#EFF6FF',
-
-                          color: '#1D4ED8',
-
-                          border: '1.5px solid #3B82F6',
-
-                          fontSize: '12px',
-
-                          fontWeight: 700,
-
-                          cursor: 'pointer',
-
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-
-                          transition: 'all 0.15s ease',
-
-                          flexShrink: 0
-
+                          position: 'absolute',
+                          top: 'calc(100% + 4px)',
+                          left: 0,
+                          right: 0,
+                          zIndex: 100,
+                          backgroundColor: 'var(--bg-card)',
+                          borderRadius: 'var(--radius-md)',
+                          border: '1px solid var(--border-color)',
+                          boxShadow: 'var(--shadow-lg)',
+                          overflow: 'hidden',
+                          maxHeight: '260px',
+                          overflowY: 'auto'
                         }}
-
-                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#DBEAFE')}
-
-                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#EFF6FF')}
-
                       >
-
-                        <Printer size={15} color="#1D4ED8" />
-
-                        <span>Print Management</span>
-
-                      </button>
-
+                        {filteredTasks.map((t) => {
+                          const isSel = selectedTaskId === t.id;
+                          return (
+                            <div
+                              key={t.id}
+                              onClick={() => {
+                                setSelectedTaskId(t.id);
+                                setIsTaskDropdownOpen(false);
+                              }}
+                              style={{
+                                padding: '7px 12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '10px',
+                                cursor: 'pointer',
+                                backgroundColor: isSel ? 'var(--color-primary-subtle)' : 'var(--bg-card)',
+                                borderBottom: '1px solid var(--border-color)'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                {renderTaskIcon(t.id, isSel)}
+                                {renderHighlightedTitle(t, isSel)}
+                              </div>
+                              {isSel && <Check size={14} color="var(--text-primary)" />}
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
-
-
-
-                    {/* Nút Đồng Bộ Toàn Bộ SO & CO (Chỉ hiển thị cho tác vụ ManageMenuSoCoTask) */}
-
-                    {selectedTaskId === 'manage_menu_so_co' && (
-
-                      <button
-
-                        type="button"
-
-                        onClick={handleSyncAllSoCo}
-
-                        disabled={isSyncingAllSoCo || !connectedHost}
-
-                        title="Đồng bộ toàn bộ: Đồng bộ SO trước (giá, tên, KDS cooking time), sau đó đồng bộ CO"
-
-                        style={{
-
-                          display: 'inline-flex',
-
-                          alignItems: 'center',
-
-                          justifyContent: 'center',
-
-                          gap: '6px',
-
-                          height: '32px',
-
-                          padding: '0 12px',
-
-                          borderRadius: '8px',
-
-                          backgroundColor: isSyncingAllSoCo ? '#9CA3AF' : '#059669',
-
-                          color: '#FFFFFF',
-
-                          border: '1px solid #047857',
-
-                          fontSize: '12px',
-
-                          fontWeight: 700,
-
-                          cursor: (isSyncingAllSoCo || !connectedHost) ? 'not-allowed' : 'pointer',
-
-                          flexShrink: 0,
-
-                          boxShadow: '0 1px 3px rgba(5, 150, 105, 0.25)',
-
-                          transition: 'all 0.15s ease',
-
-                          whiteSpace: 'nowrap'
-
-                        }}
-
-                      >
-
-                        <RefreshCw size={13} style={{ animation: isSyncingAllSoCo ? 'spin 1s linear infinite' : 'none' }} />
-
-                        <span>{isSyncingAllSoCo ? 'Đang đồng bộ...' : 'Đồng Bộ SO ➔ CO'}</span>
-
-                      </button>
-
-                    )}
-
                   </div>
 
+                  {/* Nút Chấm Than Giải Thích Tác Vụ */}
+                  <button
+                    type="button"
+                    onClick={() => toggleTaskHelp(selectedTaskId)}
+                    title={taskHelpOpen[selectedTaskId] ? 'Ẩn giải thích tác vụ' : 'Xem giải thích tác vụ'}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: 'var(--radius-full)',
+                      backgroundColor: taskHelpOpen[selectedTaskId] ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                      color: taskHelpOpen[selectedTaskId] ? 'var(--color-primary-text)' : 'var(--text-primary)',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '13px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      flexShrink: 0
+                    }}
+                  >
+                    !
+                  </button>
 
-
-                  {/* Chi Tiết Giải Thích Tác Vụ (Hiển thị khi nhấn nút chấm than) */}
-
-                  {taskHelpOpen[selectedTaskId] && (
-
-                    <div
-
-                      style={{
-
-                        marginTop: '6px',
-
-                        width: '100%',
-
-                        padding: '8px 12px',
-
-                        borderRadius: '6px',
-
-                        backgroundColor: '#FFFBEB',
-
-                        border: '1px solid #FDE68A',
-
-                        color: '#92400E',
-
-                        fontSize: '12px',
-
-                        lineHeight: '1.45',
-
-                        display: 'flex',
-
-                        alignItems: 'flex-start',
-
-                        gap: '8px',
-
-                        boxSizing: 'border-box'
-
+                  {selectedTaskId === 'check_kds' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (!selectedRestaurant) {
+                          showToast('Vui lòng chọn Nhà Hàng cụ thể trước để xem Print Management', 'info');
+                          return;
+                        }
+                        setIsPrintManagementOpen(true);
                       }}
-
+                      leftIcon={<Printer size={13} />}
+                      style={{ height: '28px', fontSize: '11.5px' }}
                     >
-
-                      <Info size={15} style={{ flexShrink: 0, color: '#D97706', marginTop: '2px' }} />
-
-                      <div>
-
-                        {getTaskExplanation(selectedTaskId)}
-
-                      </div>
-
-                    </div>
-
+                      Print Management
+                    </Button>
                   )}
 
+                  {selectedTaskId === 'manage_menu_so_co' && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={handleSyncAllSoCo}
+                      disabled={isSyncingAllSoCo || !connectedHost}
+                      leftIcon={<RefreshCw size={13} style={{ animation: isSyncingAllSoCo ? 'spin 1s linear infinite' : 'none' }} />}
+                      style={{ height: '28px', fontSize: '11.5px' }}
+                    >
+                      {isSyncingAllSoCo ? 'Đang đồng bộ...' : 'Đồng Bộ SO ➔ CO'}
+                    </Button>
+                  )}
                 </div>
 
-
-
-                {/* Right: Điều chỉnh Email Báo Cáo Mặc Định (Chỉ Super Admin & dung.nguyenanh) */}
-
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexWrap: 'wrap', flexShrink: 0, marginLeft: 'auto' }}>
-
+                {/* Right: Email config & Quét lại */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   {isPrivileged && (
-
-                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px' }}>
-
-                      <div>
-
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 700, color: '#92400E', marginBottom: '4px' }}>
-
-                          <Mail size={12} color="#D97706" />
-
-                          <span>Mail báo cáo mặc định:</span>
-
-                        </label>
-
-                        <input
-
-                          type="email"
-
-                          value={defaultEmail}
-
-                          onChange={(e) => setDefaultEmail(e.target.value)}
-
-                          placeholder="dung.nguyenanh@ggg.com.vn"
-
-                          style={{
-
-                            padding: '6px 10px',
-
-                            fontSize: '12px',
-
-                            borderRadius: '6px',
-
-                            border: '1px solid #D97706',
-
-                            outline: 'none',
-
-                            width: '230px',
-
-                            backgroundColor: '#FFFFFF',
-
-                            color: '#1F2937',
-
-                            fontWeight: 600
-
-                          }}
-
-                        />
-
-                      </div>
-
-                      <Button
-
-                        variant="primary"
-
-                        size="sm"
-
-                        onClick={handleSaveEmailConfig}
-
-                        isLoading={isSavingEmail}
-
-                        disabled={isSavingEmail}
-
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Mail size={13} color="var(--text-secondary)" />
+                      <input
+                        type="email"
+                        value={defaultEmail}
+                        onChange={(e) => setDefaultEmail(e.target.value)}
+                        placeholder="dung.nguyenanh@ggg.com.vn"
                         style={{
-
-                          backgroundColor: '#D97706',
-
-                          borderColor: '#B45309',
-
-                          padding: '6px 12px',
-
-                          fontSize: '12px',
-
-                          fontWeight: 700,
-
-                          height: '32px'
-
+                          padding: '4px 8px',
+                          fontSize: '11.5px',
+                          borderRadius: 'var(--radius-sm)',
+                          border: '1px solid var(--border-color)',
+                          outline: 'none',
+                          width: '200px',
+                          backgroundColor: 'var(--bg-primary)',
+                          color: 'var(--text-primary)'
                         }}
-
+                      />
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={handleSaveEmailConfig}
+                        isLoading={isSavingEmail}
+                        disabled={isSavingEmail}
+                        style={{ height: '28px', fontSize: '11.5px', padding: '0 10px' }}
                       >
-
                         Lưu Email
-
                       </Button>
-
                     </div>
-
                   )}
-
-
 
                   {selectedTaskId !== 'fix_full_cpu' && selectedTaskId !== 'transfer_database' && (
-
                     <Button
-
                       variant="outline"
-
                       size="sm"
-
                       onClick={() => {
-
                         if (selectedTaskId === 'clear_table_locks') {
-
                           fetchLockStatus();
-
                         } else if (selectedTaskId === 'unlock_tablet_users') {
-
                           fetchTabletUsers();
-
                         } else if (selectedTaskId === 'check_kds') {
-
                           fetchKdsItems();
-
                         } else if (selectedTaskId === 'dish_show_hide') {
-
                           fetchDishShowHide();
-
                         } else if (selectedTaskId === 'menu_show_hide') {
-
                           fetchMenuShowHide();
-
                         } else if (selectedTaskId === 'check_action_logs') {
-
                           fetchActionLogSessions();
-
                         } else if (selectedTaskId === 'table_hall_report') {
-
                           handleFetchTableReport();
-
                         }
-
                       }}
-
-                      leftIcon={<RefreshCw size={13} style={{ animation: (loadingLockStatus || loadingActionLogs || loadingTabletUsers || loadingKds || loadingDishShowHide || loadingMenuShowHide) ? 'spin 1s linear infinite' : 'none' }} />}
-
-                      style={{ height: '32px' }}
-
+                      leftIcon={
+                        <RefreshCw
+                          size={13}
+                          style={{
+                            animation:
+                              loadingLockStatus ||
+                              loadingActionLogs ||
+                              loadingTabletUsers ||
+                              loadingKds ||
+                              loadingDishShowHide ||
+                              loadingMenuShowHide ||
+                              loadingReport
+                                ? 'spin 1s linear infinite'
+                                : 'none'
+                          }}
+                        />
+                      }
+                      style={{ height: '28px', fontSize: '11.5px' }}
                     >
-
                       Quét Lại
-
                     </Button>
-
                   )}
-
                 </div>
-
-
-
               </div>
 
+              {/* Giải thích chi tiết tác vụ khi bấm (!) */}
+              {taskHelpOpen[selectedTaskId] && (
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: 'var(--color-primary-subtle)',
+                    border: '1px solid var(--color-primary)',
+                    color: 'var(--text-primary)',
+                    fontSize: '12px',
+                    lineHeight: 1.45,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '8px'
+                  }}
+                >
+                  <Info size={14} style={{ flexShrink: 0, color: 'var(--color-primary)', marginTop: '2px' }} />
+                  <div>{getTaskExplanation(selectedTaskId)}</div>
+                </div>
+              )}
             </div>
-
           </Card>
-
-
 
           {/* ══════════════════════════════════════════════════════════ */}
 
