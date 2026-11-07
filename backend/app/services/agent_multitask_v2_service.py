@@ -217,7 +217,8 @@ def _to_unc_path(ip: str, path_str: str) -> str:
         drive = p[0].upper()
         rest = p[2:].lstrip("\\")
         return f"\\\\{clean_ip}\\{drive}$\\{rest}" if rest else f"\\\\{clean_ip}\\{drive}$"
-    return f"\\\\{clean_ip}\\{p.lstrip('\\')}"
+    clean_p = p.lstrip("\\")
+    return f"\\\\{clean_ip}\\{clean_p}"
 
 
 def _get_restaurant_ou_password(ip: str) -> str:

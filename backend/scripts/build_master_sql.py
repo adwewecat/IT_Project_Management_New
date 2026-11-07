@@ -1,4 +1,4 @@
-﻿import urllib.parse
+import urllib.parse
 from sqlalchemy import create_engine, text
 import json
 

@@ -3377,3 +3377,13 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
 - **Kiểm thử & Đóng gói (Tuân thủ Immutable Rule 4, 6, 7)**:
   * Frontend: `cmd /c "cd frontend && npm run build"` thành công (exit code 0, `✓ built in 4.64s`), cập nhật sạch sẽ thư mục `frontend/dist/`.
   * Backend: `python -m compileall app` không lỗi, Smoke Test `from app.main import app; print('>>> PASSED 100%')` đạt 100%.
+
+
+### [2026-11-07] KHẮC PHỤC LỖI SYNTAXERROR F-STRING TRÊN PYTHON 3.10 KHI START SERVER PRODUCTION
+- **Nguyên nhân**:
+  * Máy chủ Production chạy Python 3.10 (`C:\Program Files\Python310\lib\...`), không cho phép ký tự backslash `\` nằm bên trong biểu thức `{...}` của f-string (tính năng PEP 701 chỉ có từ Python 3.12+).
+  * Tại `backend/app/services/agent_multitask_v2_service.py` dòng 220 có biểu thức `return f"\\\\{clean_ip}\\{p.lstrip('\\')}"` gây lỗi `SyntaxError: f-string expression part cannot include a backslash` khi nạp `app.main:app`.
+- **Giải pháp khắc phục**:
+  * Tách biến `clean_p = p.lstrip("\\")` ra trước rồi mới truyền vào `return f"\\\\{clean_ip}\\{clean_p}"`.
+  * Quét toàn bộ mã nguồn `backend/` bằng AST kiểm tra tương thích ngược Python 3.10 (0 lỗi f-string backslash, 0 lỗi quote lồng nhau, gỡ bỏ BOM trong `backend/scripts/build_master_sql.py`).
+  * Kiểm thử import toàn bộ module trong `backend/app` và Smoke Test đạt `>>> ALL MODULES IMPORTED & PASSED 100%`.
