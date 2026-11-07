@@ -27,6 +27,7 @@ interface PrintManagementModalProps {
   restaurantCode: string;
   restaurantName?: string;
   defaultIpLan?: string;
+  inline?: boolean;
 }
 
 export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
@@ -35,9 +36,10 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
   restaurantCode,
   restaurantName,
   defaultIpLan,
+  inline = false,
 }) => {
   // Đăng ký Modal Stack LIFO theo quy chuẩn dự án (Escape đóng modal trên cùng)
-  useModalStack(isOpen, onClose);
+  useModalStack(isOpen && !inline, onClose);
 
   const [loading, setLoading] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -222,7 +224,7 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
 
   return (
     <div
-      style={{
+      style={inline ? { width: '100%' } : {
         position: 'fixed',
         inset: 0,
         backgroundColor: 'rgba(0, 0, 0, 0.65)',
@@ -238,15 +240,15 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
       <div
         style={{
           width: '100%',
-          maxWidth: '1100px',
-          maxHeight: '92vh',
-          backgroundColor: '#FFFFFF',
-          borderRadius: '12px',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+          maxWidth: inline ? '100%' : '1100px',
+          maxHeight: inline ? 'none' : '92vh',
+          backgroundColor: 'var(--bg-card)',
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: inline ? 'var(--shadow-sm)' : 'var(--shadow-lg)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          border: '1px solid #E5E7EB'
+          border: '1px solid var(--border-color)'
         }}
       >
         {/* ── HEADER MODAL ── */}
@@ -256,9 +258,9 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '14px 20px',
-            backgroundColor: '#1E293B',
-            color: '#FFFFFF',
-            borderBottom: '1px solid #334155',
+            backgroundColor: 'var(--bg-secondary)',
+            color: 'var(--text-primary)',
+            borderBottom: '1px solid var(--border-color)',
             flexShrink: 0
           }}
         >
@@ -267,61 +269,61 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
               style={{
                 width: '36px',
                 height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#3B82F6',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--color-primary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#FFFFFF'
+                color: 'var(--color-primary-text)'
               }}
             >
               <Printer size={20} />
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '0.2px' }}>
-                  Print Management
+                <span style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '0.2px', color: 'var(--text-primary)' }}>
+                  Giám Sát Máy In
                 </span>
                 <span
                   style={{
                     fontSize: '11px',
                     fontWeight: 700,
                     padding: '2px 8px',
-                    borderRadius: '4px',
-                    backgroundColor: '#0EA5E9',
-                    color: '#FFFFFF'
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: 'var(--color-primary-subtle)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--color-primary)'
                   }}
                 >
-                  Giám Sát Hàng Đợi & Máy In
+                  Hàng Đợi &amp; Máy In KDS/POS
                 </span>
               </div>
-              <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '2px' }}>
-                Nhà hàng: <strong style={{ color: '#F8FAFC' }}>[{restaurantCode}] {restaurantName || 'Chi Nhánh'}</strong>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                Nhà hàng: <strong style={{ color: 'var(--text-primary)' }}>[{restaurantCode}] {restaurantName || 'Chi Nhánh'}</strong>
               </div>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            title="Đóng (Escape)"
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#94A3B8',
-              cursor: 'pointer',
-              padding: '6px',
-              borderRadius: '6px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={e => (e.currentTarget.style.color = '#FFFFFF')}
-            onMouseLeave={e => (e.currentTarget.style.color = '#94A3B8')}
-          >
-            <X size={20} />
-          </button>
+          {!inline && (
+            <button
+              type="button"
+              onClick={onClose}
+              title="Đóng (Escape)"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                padding: '6px',
+                borderRadius: 'var(--radius-sm)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <X size={20} />
+            </button>
+          )}
         </div>
 
         {/* ── TOOLBAR: CHỌN MÁY TRẠM & THAO TÁC ── */}
@@ -805,25 +807,27 @@ export const PrintManagementModal: React.FC<PrintManagementModalProps> = ({
             Nghẽn/Kẹt: <strong style={{ color: jammedCount > 0 ? '#DC2626' : '#64748B' }}>{jammedCount}</strong>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              padding: '6px 18px',
-              borderRadius: '6px',
-              backgroundColor: '#E2E8F0',
-              color: '#334155',
-              border: 'none',
-              fontSize: '13px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#CBD5E1')}
-            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#E2E8F0')}
-          >
-            Đóng
-          </button>
+          {!inline && (
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '6px 18px',
+                borderRadius: '6px',
+                backgroundColor: '#E2E8F0',
+                color: '#334155',
+                border: 'none',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#CBD5E1')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#E2E8F0')}
+            >
+              Đóng
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -531,3 +531,11 @@
 ### [2026-11-07] CHUẨN HÓA BỘ CHỌN KHỐI TÁC VỤ NHỎ GỌN & TUÂN THỦ 100% CSS VARIABLES (`variables.css`)
 - Thu nhỏ 15 ô khối tác vụ tại Tab 1 (`RestaurantMongoAnalysisPage.tsx`) thành các ô compact 2 dòng (`padding: 8px 10px`, `minmax(205px, 1fr)`).
 - Loại bỏ hoàn toàn gradient và các màu trang trí (xanh dương, tím, hồng, cam); sử dụng 100% CSS Variables từ `variables.css` (`var(--bg-card)`, `var(--bg-secondary)`, `var(--text-primary)`, `var(--color-primary)` `#F5B800`, `var(--color-primary-subtle)`, `var(--border-color)`), chỉ dùng `var(--color-error-*)` khi có bàn bị khóa kẹt.
+
+
+### [2026-11-07] CHUẨN HÓA 15 KHỐI CHỨC NĂNG TAB 1 THÀNH 2 NHÓM THEO ĐÚNG THỨ TỰ YÊU CẦU, HIỂN THỊ ĐỦ TÊN CHỨC NĂNG & TỰ ĐỘNG CUỘN XUỐNG MÀN HÌNH XỬ LÝ BÊN DƯỚI
+- Thiết kế các ô chức năng tại Tab 1 (`RestaurantMongoAnalysisPage.tsx`) trải dài vừa vặn, hiển thị đầy đủ 100% tên chức năng (`whiteSpace: 'normal'`, không bị cắt `...`), bỏ toàn bộ dòng chú thích phụ và mã bảng để giao diện thoáng sạch.
+- Gom 15 chức năng thành đúng **2 nhóm** theo thứ tự cố định:
+  1. **Nhóm 1 (8 chức năng)**: `Xóa Khóa Bàn`, `Mở Khóa User`, `Đồng Bộ Menu SO >> CO`, `Ẩn / Hiện Menu`, `Ẩn / Hiện Món Ăn`, `Check & Xử Lý KDS`, `Check & Xử Lý CO, SO`, `Xử Lý Param`.
+  2. **Nhóm 2 (7 chức năng)**: `Xử Lý Full CPU`, `Truy Vết Luồng Order (CO - SO - KDS)`, `Check Logs MongoDB`, `Quản Lý Thiết Bị Nhà Hàng` *(đổi tên từ "Bản Đồ Thiết Bị Duy Nhất Toàn Nhà Hàng (Device Fleet)")*, `Giám Sát Máy In`, `Chuyển Database MongoDB`, `Báo Cáo Bàn & Khu Vực`.
+- Hỗ trợ hiển thị trực tiếp (`inline={true}`) cho cả 4 công cụ `Đồng Bộ Menu SO >> CO`, `Truy Vết Luồng Order (CO - SO - KDS)`, `Quản Lý Thiết Bị Nhà Hàng`, `Giám Sát Máy In` ngay bên dưới và tự động cuộn mượt xuống vùng hiển thị (`scrollIntoView({ behavior: 'smooth', block: 'start' })`) khi click vào bất kỳ ô nào.

@@ -16,6 +16,7 @@ interface CoSoKdsRadarModalProps {
   ipSubnet: string;
   mongoHost: string;
   mongoPort: number;
+  inline?: boolean;
 }
 
 export const CoSoKdsRadarModal: React.FC<CoSoKdsRadarModalProps> = ({
@@ -24,7 +25,8 @@ export const CoSoKdsRadarModal: React.FC<CoSoKdsRadarModalProps> = ({
   restaurantName,
   ipSubnet,
   mongoHost,
-  mongoPort
+  mongoPort,
+  inline = false
 }) => {
   const [filterDate, setFilterDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [filterFromTime, setFilterFromTime] = useState<string>('');
@@ -125,7 +127,7 @@ export const CoSoKdsRadarModal: React.FC<CoSoKdsRadarModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div style={{
+    <div style={inline ? { width: '100%' } : {
       position: 'fixed',
       top: 0,
       left: 0,
@@ -139,66 +141,70 @@ export const CoSoKdsRadarModal: React.FC<CoSoKdsRadarModalProps> = ({
       padding: 16
     }}>
       <div style={{
-        background: '#FFFFFF',
+        background: 'var(--bg-card)',
         width: '100%',
-        maxWidth: 1320,
-        height: '92vh',
-        borderRadius: 12,
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+        maxWidth: inline ? '100%' : 1320,
+        height: inline ? 'auto' : '92vh',
+        minHeight: inline ? 460 : undefined,
+        borderRadius: 'var(--radius-lg)',
+        boxShadow: inline ? 'var(--shadow-sm)' : 'var(--shadow-lg)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        border: '1px solid #E2E8F0'
+        border: '1px solid var(--border-color)',
+        position: 'relative'
       }}>
         {/* Header */}
         <div style={{
           padding: '12px 20px',
-          borderBottom: '1px solid #E2E8F0',
+          borderBottom: '1px solid var(--border-color)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          background: '#F8FAFC'
+          background: 'var(--bg-secondary)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
               width: 36,
               height: 36,
-              borderRadius: 8,
-              background: '#F5B800',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--color-primary)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#000',
+              color: 'var(--color-primary-text)',
               fontWeight: 'bold'
             }}>
               <Flame size={20} />
             </div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 8 }}>
-                TRA CỨU NHẬT KÝ & RADAR TRUY VẾT LUỒNG ĐƠN HÀNG (CO - SO - KDS)
-                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: '#DCFCE7', color: '#166534', fontWeight: 700 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                TRUY VẾT LUỒNG ORDER (CO - SO - KDS)
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-success-bg)', color: 'var(--color-success-text)', fontWeight: 700 }}>
                   Hợp Nhất 2 Trong 1
                 </span>
               </div>
-              <div style={{ fontSize: 12, color: '#64748B' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                 Nhà hàng: <strong>{restaurantName}</strong> ({ipSubnet}) — Máy chủ MongoDB: <strong>{mongoHost}:{mongoPort}</strong>
               </div>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              color: '#64748B',
-              padding: 6,
-              borderRadius: 6
-            }}
-            title="Đóng (Esc)"
-          >
-            <X size={20} />
-          </button>
+          {!inline && (
+            <button
+              onClick={onClose}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                color: '#64748B',
+                padding: 6,
+                borderRadius: 6
+              }}
+              title="Đóng (Esc)"
+            >
+              <X size={20} />
+            </button>
+          )}
         </div>
 
         {/* Filter Toolbar */}
@@ -618,24 +624,26 @@ export const CoSoKdsRadarModal: React.FC<CoSoKdsRadarModalProps> = ({
           <div>
             Tổng bản ghi: <strong>{filteredDishes.length}</strong> món | Trễ SLA: <strong style={{ color: '#DC2626' }}>{filteredDishes.filter(d => d.is_delayed).length}</strong> món | Đang làm: <strong>{filteredDishes.filter(d => d.status === 'COOKING').length}</strong> món
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span>Phím tắt: <strong>Esc</strong> để đóng</span>
-            <button
-              onClick={onClose}
-              style={{
-                padding: '5px 14px',
-                borderRadius: 6,
-                border: '1px solid #CBD5E1',
-                background: '#FFFFFF',
-                color: '#334155',
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              Đóng
-            </button>
-          </div>
+          {!inline && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span>Phím tắt: <strong>Esc</strong> để đóng</span>
+              <button
+                onClick={onClose}
+                style={{
+                  padding: '5px 14px',
+                  borderRadius: 6,
+                  border: '1px solid #CBD5E1',
+                  background: '#FFFFFF',
+                  color: '#334155',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Đóng
+              </button>
+            </div>
+          )}
         </div>
 
         {/* POPUP CON: SOI MÓN & TRUY VẾT LUỒNG CHẶNG CHI TIẾT */}

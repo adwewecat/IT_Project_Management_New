@@ -567,6 +567,54 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
         );
 
+      case 'two_step_sync':
+
+        return (
+
+          <span>
+
+            Đồng bộ thực đơn tuần tự chuẩn 2 lớp: Bước 1 kéo thực đơn và giá từ POS vào SO (G_ORDER), chờ hoàn tất 100% rồi mới thực hiện Bước 2 phát sóng đẩy sang toàn bộ Tablet CO.
+
+          </span>
+
+        );
+
+      case 'radar_kds_logs':
+
+        return (
+
+          <span>
+
+            Truy vết luồng Order 5 chặng (CO ➔ SO ➔ KDS ➔ Done ➔ In phiếu) kết hợp tra cứu nhật ký KDS và thống kê sản lượng món vào bếp.
+
+          </span>
+
+        );
+
+      case 'device_fleet_map':
+
+        return (
+
+          <span>
+
+            Quản lý toàn bộ thiết bị duy nhất trong nhà hàng (Tablet CO, Điện thoại SO, Trạm KDS, POS) gộp theo phần cứng, kiểm tra phiên bản App, mức Pin và trạng thái kết nối.
+
+          </span>
+
+        );
+
+      case 'print_management':
+
+        return (
+
+          <span>
+
+            Giám sát trạng thái kết nối các máy in nhiệt tại quầy bếp/thu ngân và kiểm tra hàng đợi lệnh in đang chờ xử lý trên KDS/POS.
+
+          </span>
+
+        );
+
       default:
 
         return selectedTask ? <span>{selectedTask.subtitle}</span> : null;
@@ -1669,191 +1717,134 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
   // ══════════════════════════════════════════════════════════════════
 
-  // TAB 3: XỬ LÝ TÁC VỤ (TASK ACTIONS)
+  // TAB 1: XỬ LÝ TÁC VỤ & CHUYÊN SÂU CO-SO-KDS (15 TÁC VỤ - 2 NHÓM)
 
   // ══════════════════════════════════════════════════════════════════
 
   const AVAILABLE_TASKS = useMemo(() => [
-
+    // Nhóm 1 (8 chức năng theo đúng thứ tự yêu cầu)
     {
-
       id: 'clear_table_locks',
-
-      title: '1. Xóa Khóa Bàn Tablet (Giải Phóng User Chiếm Giữ & Khóa Treo Bàn)',
-
+      title: 'Xóa Khóa Bàn',
       subtitle: 'Xóa các bản ghi giữ phiên trong LOCK_ORDER, reset lstTgsUser và gỡ cờ lockOrder / locked / isLock trong ORDER',
-
-      category: 'Tablet & Đơn Hàng',
-
-      badge: 'Phổ biến',
-
+      category: 'Nhóm 1',
+      badge: 'LOCK_ORDER',
       icon: 'Unlock'
-
     },
-
     {
-
       id: 'unlock_tablet_users',
-
-      title: '2. Mở Khóa User Tablet (Giải Phóng User Báo Đang Đăng Nhập Ở Thiết Bị Khác)',
-
+      title: 'Mở Khóa User',
       subtitle: 'Quét và reset cờ isLogin trong EMPLOYEE, gỡ user khỏi LOCK_ORDER và lstTgsUser để nhân viên đăng nhập lại tablet bình thường',
-
-      category: 'Tài Khoản & Tablet',
-
-      badge: 'Mới',
-
+      category: 'Nhóm 1',
+      badge: 'EMPLOYEE',
       icon: 'UserCheck'
-
     },
-
     {
-
-      id: 'manage_menu_so_co',
-
-      title: '3. Xử lý SO/CO (Quản Lý Nhóm & Món Menu SO/CO, Thêm/Sửa/Xóa/Chuyển & Check Lỗi)',
-
-      subtitle: 'Phân tích thực đơn nhà hàng theo Menu, Nhóm món, đối chiếu SO & CO, thêm hàng loạt dạng bảng tính, kiểm tra lệch mã RK7/Tên món và kích hoạt CO',
-
-      category: 'Thực Đơn SO & CO',
-
-      badge: 'SO/CO',
-
+      id: 'two_step_sync',
+      title: 'Đồng Bộ Menu SO >> CO',
+      subtitle: 'Quy trình tuần tự chuẩn 2 lớp: Bước 1 kéo thực đơn từ POS vào SO, chờ hoàn tất 100% mới phát sóng sang CO',
+      category: 'Nhóm 1',
+      badge: 'SO >> CO',
       icon: 'Layers'
-
     },
-
     {
-
-      id: 'check_kds',
-
-      title: '4. Check / xử lý KDS',
-
-      subtitle: 'Tra cứu danh mục món KDS, quầy bếp (ACCOUNT), điều chỉnh thời gian chế biến món (CONFIG_COOKING) & đối chiếu giá GPOS',
-
-      category: 'Bếp KDS & Món',
-
-      badge: 'KDS',
-
-      icon: 'ChefHat'
-
-    },
-
-    {
-
-      id: 'dish_show_hide',
-
-      title: '5. Cấu hình ẩn hiện món (QrOrder, CO, SO)',
-
-      subtitle: 'Quản lý danh sách món ẩn / hiện, tìm kiếm theo tên món, điều chỉnh kênh ẩn (QrOrder, CO, SO) hoặc chuyển đổi hàng loạt',
-
-      category: 'Món Ăn & Kênh Bán',
-
-      badge: 'Món ăn',
-
-      icon: 'UtensilsCrossed'
-
-    },
-
-    {
-
       id: 'menu_show_hide',
-
-      title: '6. Cấu hình ẩn hiện menu (CO, SO, QrOrder, KDS Auto)',
-
+      title: 'Ẩn / Hiện Menu',
       subtitle: 'Cấu hình hiển thị danh mục menu, mã SAP, mã RK7 và tính năng tự động ra món trên KDS (autoDeliveryInSo)',
-
-      category: 'Menu & KDS Auto',
-
-      badge: 'Menu',
-
+      category: 'Nhóm 1',
+      badge: 'MENU',
       icon: 'SlidersHorizontal'
-
     },
-
     {
-
-      id: 'fix_full_cpu',
-
-      title: '7. Xử Lý Full CPU 100% (Tối Ưu Index Tránh Nghẽn Treo Máy Bếp KDS & POS)',
-
-      subtitle: 'Quét toàn bộ IP (.11, .12, .41) của các nhà hàng ON/NEW, tạo index tối ưu cho DISH_KDS, ORDER, CO_MENU_ITEM để triệt tiêu COLLSCAN, giảm CPU về < 2%',
-
-      category: 'Hệ Thống & Hiệu Năng',
-
-      badge: 'Khẩn cấp',
-
-      icon: 'Cpu'
-
+      id: 'dish_show_hide',
+      title: 'Ẩn / Hiện Món Ăn',
+      subtitle: 'Quản lý danh sách món ẩn / hiện, tìm kiếm theo tên món, điều chỉnh kênh ẩn (QrOrder, CO, SO) hoặc chuyển đổi hàng loạt',
+      category: 'Nhóm 1',
+      badge: 'DISH',
+      icon: 'UtensilsCrossed'
     },
-
     {
-
-      id: 'transfer_database',
-
-      title: '8. Chuyển database MongoDB (Di Chuyển / Sao Chép Sang Máy Khác)',
-
-      subtitle: 'Hỗ trợ khi máy POS lỗi/cài lại Win: quét IP các máy (.11, .12, .41), kiểm tra trùng lặp DB, xóa ACTION_LOG của G_ORDER để tối ưu dung lượng và chuyển toàn bộ database sang máy mới',
-
-      category: 'Hạ Tầng & Di Chuyển',
-
-      badge: 'Chuyển Data',
-
-      icon: 'ArrowRightLeft'
-
+      id: 'check_kds',
+      title: 'Check & Xử Lý KDS',
+      subtitle: 'Tra cứu danh mục món KDS, quầy bếp (ACCOUNT), điều chỉnh thời gian chế biến món (CONFIG_COOKING) & đối chiếu giá GPOS',
+      category: 'Nhóm 1',
+      badge: 'KDS',
+      icon: 'ChefHat'
     },
-
     {
-
+      id: 'manage_menu_so_co',
+      title: 'Check & Xử Lý CO, SO',
+      subtitle: 'Phân tích thực đơn nhà hàng theo Menu, Nhóm món, đối chiếu SO & CO, thêm hàng loạt dạng bảng tính, kiểm tra lệch mã RK7/Tên món và kích hoạt CO',
+      category: 'Nhóm 1',
+      badge: 'CO / SO',
+      icon: 'Layers'
+    },
+    {
       id: 'manage_app_params',
-
-      title: '9. Xử Lý Param (Cấu Hình Bảng APP_PARAM)',
-
+      title: 'Xử Lý Param',
       subtitle: 'Quản lý toàn bộ danh sách tham số APP_PARAM trong MongoDB nhà hàng: hiển thị, lọc, thêm mới, sửa giá trị, bật/tắt và xóa tham số',
-
-      category: 'Tham Số & Cấu Hình',
-
+      category: 'Nhóm 1',
       badge: 'APP_PARAM',
-
       icon: 'Settings'
-
     },
-
+    // Nhóm 2 (7 chức năng theo đúng thứ tự yêu cầu)
     {
-
+      id: 'fix_full_cpu',
+      title: 'Xử Lý Full CPU',
+      subtitle: 'Quét toàn bộ IP (.11, .12, .41) của các nhà hàng ON/NEW, tạo index tối ưu cho DISH_KDS, ORDER, CO_MENU_ITEM để triệt tiêu COLLSCAN, giảm CPU về < 2%',
+      category: 'Nhóm 2',
+      badge: 'CPU',
+      icon: 'Cpu'
+    },
+    {
+      id: 'radar_kds_logs',
+      title: 'Truy Vết Luồng Order (CO - SO - KDS)',
+      subtitle: 'Truy vết đơn hàng 5 chặng từ CO/SO sang KDS, kiểm tra SLA chế biến và phân tích nhật ký ra món nhà bếp',
+      category: 'Nhóm 2',
+      badge: 'RADAR',
+      icon: 'Flame'
+    },
+    {
       id: 'check_action_logs',
-
-      title: '10. Checklogs MongoDB (Phân Tích Chi Tiết ACTION_LOG Theo Phiên GUID & Bàn)',
-
+      title: 'Check Logs MongoDB',
       subtitle: 'Tra cứu lịch sử thao tác theo phiên (GUID), lọc ngày tránh quá tải, tìm theo Bàn / GUID, phân tích chi tiết timeline gọi món & hệ thống',
-
-      category: 'Nhật Ký & Kiểm Tra',
-
-      badge: 'Tra cứu log',
-
+      category: 'Nhóm 2',
+      badge: 'ACTION_LOG',
       icon: 'FileText'
-
     },
-
     {
-
+      id: 'device_fleet_map',
+      title: 'Quản Lý Thiết Bị Nhà Hàng',
+      subtitle: 'Quản lý danh sách thiết bị duy nhất toàn nhà hàng (Tablet CO, Điện thoại SO, KDS, POS), phiên bản App và mức Pin',
+      category: 'Nhóm 2',
+      badge: 'DEVICE',
+      icon: 'Tablet'
+    },
+    {
+      id: 'print_management',
+      title: 'Giám Sát Máy In',
+      subtitle: 'Kiểm tra kết nối máy in nhiệt tại quầy bếp/thu ngân và theo dõi danh sách hàng đợi lệnh in KDS/POS',
+      category: 'Nhóm 2',
+      badge: 'PRINTER',
+      icon: 'Printer'
+    },
+    {
+      id: 'transfer_database',
+      title: 'Chuyển Database MongoDB',
+      subtitle: 'Hỗ trợ khi máy POS lỗi/cài lại Win: quét IP các máy (.11, .12, .41), kiểm tra trùng lặp DB, xóa ACTION_LOG của G_ORDER để tối ưu dung lượng và chuyển toàn bộ database sang máy mới',
+      category: 'Nhóm 2',
+      badge: 'TRANSFER',
+      icon: 'ArrowRightLeft'
+    },
+    {
       id: 'table_hall_report',
-
-      title: '11. Báo Cáo Danh Sách Bàn & Khu Vực (TABLE & HALL_PLAN)',
-
+      title: 'Báo Cáo Bàn & Khu Vực',
       subtitle: 'Quét danh sách bàn ăn (isCurrentRes: true) và khu vực tầng (HALL_PLAN) toàn nhà hàng, sao chép Excel và xuất CSV',
-
-      category: 'Hạ Tầng & Báo Cáo',
-
+      category: 'Nhóm 2',
       badge: 'TABLE & HALL',
-
       icon: 'FileSpreadsheet'
-
     }
-
   ], []);
-
-
 
   const renderHighlightedTitle = (t: { id: string; title: string }, isSelected: boolean = false) => {
     return (
@@ -1919,140 +1910,38 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
   const [selectedTaskId, setSelectedTaskId] = useState<string>('clear_table_locks');
   const [taskSearchQuery, setTaskSearchQuery] = useState<string>('');
   const [isTaskDropdownOpen, setIsTaskDropdownOpen] = useState<boolean>(false);
-  const [taskGroupFilter, setTaskGroupFilter] = useState<'ALL' | 'EXECUTION' | 'CONFIG' | 'LOGS' | 'SYSTEM'>('ALL');
+  const [taskGroupFilter, setTaskGroupFilter] = useState<'ALL' | 'GROUP_1' | 'GROUP_2'>('ALL');
   const [isTaskGridCollapsed, setIsTaskGridCollapsed] = useState<boolean>(false);
   const taskDropdownRef = useRef<HTMLDivElement>(null);
   const activeWorkspaceRef = useRef<HTMLDivElement>(null);
 
-  // Danh sách 15 khối tác vụ tinh gọn chia theo 4 nhóm nghiệp vụ (Tuân thủ 100% CSS Variables Golden Gate)
+  // Danh sách 15 chức năng gom thành đúng 2 nhóm theo thứ tự chuẩn yêu cầu
   const TASK_BLOCK_GROUPS = useMemo(() => [
     {
-      groupKey: 'EXECUTION' as const,
-      groupTitle: 'Nhóm 1: Thực Thi & Cứu Hộ Nhanh',
+      groupKey: 'GROUP_1' as const,
+      groupTitle: '1. Nhóm Tác Vụ Vận Hành & Thực Đơn (CO / SO / KDS / Param)',
       items: [
-        {
-          id: 'clear_table_locks',
-          title: 'Xóa Khóa Bàn',
-          subtitle: 'Giải phóng bàn treo & user giữ phiên',
-          badgeText: 'LOCK_ORDER',
-          isModal: false
-        },
-        {
-          id: 'unlock_tablet_users',
-          title: 'Mở Khóa User',
-          subtitle: 'Reset user báo đăng nhập máy khác',
-          badgeText: 'EMPLOYEE',
-          isModal: false
-        },
-        {
-          id: 'two_step_sync',
-          title: 'Đồng Bộ Menu 2 Lớp',
-          subtitle: 'Quy trình tuần tự chuẩn POS ➔ SO ➔ CO',
-          badgeText: 'SO ➔ CO',
-          isModal: true
-        },
-        {
-          id: 'fix_full_cpu',
-          title: 'Xử Lý Full CPU 100%',
-          subtitle: 'Tạo Index chống treo máy POS & KDS',
-          badgeText: 'INDEX CPU',
-          isModal: false
-        }
+        { id: 'clear_table_locks', title: 'Xóa Khóa Bàn' },
+        { id: 'unlock_tablet_users', title: 'Mở Khóa User' },
+        { id: 'two_step_sync', title: 'Đồng Bộ Menu SO >> CO' },
+        { id: 'menu_show_hide', title: 'Ẩn / Hiện Menu' },
+        { id: 'dish_show_hide', title: 'Ẩn / Hiện Món Ăn' },
+        { id: 'check_kds', title: 'Check & Xử Lý KDS' },
+        { id: 'manage_menu_so_co', title: 'Check & Xử Lý CO, SO' },
+        { id: 'manage_app_params', title: 'Xử Lý Param' }
       ]
     },
     {
-      groupKey: 'CONFIG' as const,
-      groupTitle: 'Nhóm 2: Cấu Hình Thực Đơn, KDS & Tham Số',
+      groupKey: 'GROUP_2' as const,
+      groupTitle: '2. Nhóm Hệ Thống, Truy Vết Logs & Quản Lý Thiết Bị Nhà Hàng',
       items: [
-        {
-          id: 'manage_menu_so_co',
-          title: 'Xử Lý Menu SO / CO',
-          subtitle: 'Thực đơn, nhóm món & bảng tính Excel',
-          badgeText: 'G_ORDER',
-          isModal: false
-        },
-        {
-          id: 'check_kds',
-          title: 'Check & Xử Lý KDS',
-          subtitle: 'Quầy bếp, thời gian nấu & đối chiếu giá',
-          badgeText: 'G_KITCHEN',
-          isModal: false
-        },
-        {
-          id: 'dish_show_hide',
-          title: 'Ẩn / Hiện Món Ăn',
-          subtitle: 'Bật tắt món trên CO, SO & QR Order',
-          badgeText: 'SHOW_HIDE',
-          isModal: false
-        },
-        {
-          id: 'menu_show_hide',
-          title: 'Ẩn / Hiện Menu',
-          subtitle: 'Danh mục menu & tự động ra món KDS',
-          badgeText: 'MENU_AUTO',
-          isModal: false
-        },
-        {
-          id: 'manage_app_params',
-          title: 'Xử Lý APP_PARAM',
-          subtitle: 'Cấu hình tham số vận hành nhà hàng',
-          badgeText: 'APP_PARAM',
-          isModal: false
-        }
-      ]
-    },
-    {
-      groupKey: 'LOGS' as const,
-      groupTitle: 'Nhóm 3: Tra Cứu Nhật Ký (Logs) & Giám Sát',
-      items: [
-        {
-          id: 'radar_kds_logs',
-          title: 'Radar & Nhật Ký KDS',
-          subtitle: 'Nhật ký KDS & truy vết 5 chặng đơn hàng',
-          badgeText: 'CO-SO-KDS',
-          isModal: true
-        },
-        {
-          id: 'check_action_logs',
-          title: 'Checklogs Phiên GUID',
-          subtitle: 'Phân tích timeline ACTION_LOG theo bàn',
-          badgeText: 'ACTION_LOG',
-          isModal: false
-        },
-        {
-          id: 'device_fleet_map',
-          title: 'Bản Đồ Thiết Bị',
-          subtitle: 'Gộp phiên phần cứng, kiểm tra App & Pin',
-          badgeText: 'DEVICE FLEET',
-          isModal: true
-        },
-        {
-          id: 'print_management',
-          title: 'Giám Sát Máy In',
-          subtitle: 'Trạng thái máy in & hàng đợi in KDS/POS',
-          badgeText: 'PRINTER',
-          isModal: true
-        }
-      ]
-    },
-    {
-      groupKey: 'SYSTEM' as const,
-      groupTitle: 'Nhóm 4: Hạ Tầng Dữ Liệu & Báo Cáo Bàn',
-      items: [
-        {
-          id: 'transfer_database',
-          title: 'Chuyển Database',
-          subtitle: 'Di chuyển DB giữa các máy .11, .12, .41',
-          badgeText: 'TRANSFER DB',
-          isModal: false
-        },
-        {
-          id: 'table_hall_report',
-          title: 'Báo Cáo Bàn & Khu Vực',
-          subtitle: 'Quét danh sách bàn ăn & xuất Excel/CSV',
-          badgeText: 'TABLE & HALL',
-          isModal: false
-        }
+        { id: 'fix_full_cpu', title: 'Xử Lý Full CPU' },
+        { id: 'radar_kds_logs', title: 'Truy Vết Luồng Order (CO - SO - KDS)' },
+        { id: 'check_action_logs', title: 'Check Logs MongoDB' },
+        { id: 'device_fleet_map', title: 'Quản Lý Thiết Bị Nhà Hàng' },
+        { id: 'print_management', title: 'Giám Sát Máy In' },
+        { id: 'transfer_database', title: 'Chuyển Database MongoDB' },
+        { id: 'table_hall_report', title: 'Báo Cáo Bàn & Khu Vực' }
       ]
     }
   ], []);
@@ -2505,9 +2394,6 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
   // Modal: Phân Tích Món & Lượt Vào Bếp KDS (theo món & theo lượt, tối đa 5 ngày)
 
   const [showKdsIntakeModal, setShowKdsIntakeModal] = useState<boolean>(false);
-  const [showRadarModal, setShowRadarModal] = useState<boolean>(false);
-  const [showTwoStepSyncModal, setShowTwoStepSyncModal] = useState<boolean>(false);
-  const [showDeviceFleetModal, setShowDeviceFleetModal] = useState<boolean>(false);
 
   // Dropdown gom nhóm Phân Tích Logs KDS
 
@@ -5186,14 +5072,12 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                     <span>Chọn Tác Vụ Cần Xử Lý:</span>
                   </div>
 
-                  {/* Category Filter Pills */}
+                  {/* Category Filter Pills (2 Nhóm) */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     {[
                       { key: 'ALL', label: 'Tất cả (15)' },
-                      { key: 'EXECUTION', label: 'Thực thi (4)' },
-                      { key: 'CONFIG', label: 'Cấu hình (5)' },
-                      { key: 'LOGS', label: 'Tra cứu Logs (4)' },
-                      { key: 'SYSTEM', label: 'Hệ thống & Báo cáo (2)' }
+                      { key: 'GROUP_1', label: 'Nhóm 1: Tác Vụ & Thực Đơn (8)' },
+                      { key: 'GROUP_2', label: 'Nhóm 2: Hệ Thống, Logs & Thiết Bị (7)' }
                     ].map((tab) => {
                       const active = taskGroupFilter === tab.key;
                       return (
@@ -5243,7 +5127,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                         setTaskSearchQuery(e.target.value);
                         if (isTaskGridCollapsed) setIsTaskGridCollapsed(false);
                       }}
-                      placeholder="Tìm tác vụ, logs, KDS..."
+                      placeholder="Tìm chức năng..."
                       style={{
                         width: '100%',
                         padding: '5px 24px 5px 28px',
@@ -5304,110 +5188,83 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Danh sách các khối tác vụ nhỏ gọn (Nền trắng, chữ đen, điểm nhấn vàng #F5B800) */}
+              {/* Danh sách 15 chức năng chia làm 2 nhóm - Chỉ hiển thị tên chức năng rõ ràng, không cắt chữ, không chú thích thừa */}
               {!isTaskGridCollapsed && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   {TASK_BLOCK_GROUPS.filter((g) => taskGroupFilter === 'ALL' || g.groupKey === taskGroupFilter).map((group) => {
                     const q = removeVietnameseTones(taskSearchQuery);
                     const visibleItems = group.items.filter((it) => {
                       if (!q) return true;
-                      const hay = removeVietnameseTones(`${it.title} ${it.subtitle} ${it.badgeText}`);
+                      const hay = removeVietnameseTones(it.title);
                       return hay.includes(q);
                     });
                     if (visibleItems.length === 0) return null;
 
                     return (
-                      <div key={group.groupKey} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        {/* Tiêu đề nhóm nhỏ gọn */}
+                      <div key={group.groupKey} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {/* Tiêu đề nhóm */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span
                             style={{
-                              width: '3px',
-                              height: '13px',
+                              width: '4px',
+                              height: '14px',
                               borderRadius: 'var(--radius-sm)',
                               backgroundColor: 'var(--color-primary)',
                               display: 'inline-block'
                             }}
                           />
-                          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          <span style={{ fontSize: '12.5px', fontWeight: 800, color: 'var(--text-primary)' }}>
                             {group.groupTitle}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: '10.5px',
-                              fontWeight: 600,
-                              padding: '0px 6px',
-                              borderRadius: 'var(--radius-sm)',
-                              backgroundColor: 'var(--bg-secondary)',
-                              color: 'var(--text-secondary)',
-                              border: '1px solid var(--border-color)'
-                            }}
-                          >
-                            {visibleItems.length}
                           </span>
                         </div>
 
-                        {/* Lưới các ô tác vụ nhỏ gọn */}
+                        {/* Lưới các ô chức năng trải dài, chữ hiển thị đầy đủ 100% */}
                         <div
                           style={{
                             display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(205px, 1fr))',
-                            gap: '8px',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(225px, 1fr))',
+                            gap: '10px',
                             alignItems: 'stretch'
                           }}
                         >
                           {visibleItems.map((block) => {
-                            const isSelected = !block.isModal && selectedTaskId === block.id;
+                            const isSelected = selectedTaskId === block.id;
                             const hasLockError =
                               block.id === 'clear_table_locks' &&
                               lockStatus &&
                               lockStatus.total_locked_tables > 0;
 
                             return (
-                              <div
+                              <button
                                 key={block.id}
+                                type="button"
                                 onClick={() => {
-                                  if (block.id === 'two_step_sync') {
-                                    setShowTwoStepSyncModal(true);
-                                  } else if (block.id === 'radar_kds_logs') {
-                                    setShowRadarModal(true);
-                                  } else if (block.id === 'device_fleet_map') {
-                                    setShowDeviceFleetModal(true);
-                                  } else if (block.id === 'print_management') {
-                                    if (!selectedRestaurant) {
-                                      showToast('Vui lòng chọn Nhà Hàng cụ thể trước để mở Giám Sát Máy In', 'info');
-                                      return;
-                                    }
-                                    setIsPrintManagementOpen(true);
-                                  } else {
-                                    setSelectedTaskId(block.id);
-                                    setTimeout(() => {
-                                      activeWorkspaceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                                    }, 50);
-                                  }
+                                  setSelectedTaskId(block.id);
+                                  setTimeout(() => {
+                                    activeWorkspaceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                  }, 60);
                                 }}
                                 style={{
-                                  padding: '8px 10px',
-                                  borderRadius: 'var(--radius-md)',
+                                  padding: '11px 14px',
+                                  borderRadius: 'var(--radius-lg)',
                                   backgroundColor: isSelected ? 'var(--color-primary-subtle)' : 'var(--bg-card)',
                                   border: isSelected
-                                    ? '1.5px solid var(--color-primary)'
-                                    : '1px solid var(--border-color)',
-                                  borderLeft: isSelected
-                                    ? '4px solid var(--color-primary)'
-                                    : '1px solid var(--border-color)',
+                                    ? '2px solid var(--color-primary)'
+                                    : '1.5px solid var(--border-color)',
                                   boxShadow: 'var(--shadow-sm)',
                                   cursor: 'pointer',
                                   display: 'flex',
-                                  flexDirection: 'column',
+                                  alignItems: 'center',
                                   justifyContent: 'space-between',
-                                  gap: '5px',
-                                  transition: 'var(--transition-fast)'
+                                  gap: '10px',
+                                  textAlign: 'left',
+                                  transition: 'var(--transition-fast)',
+                                  width: '100%'
                                 }}
                                 onMouseEnter={(e) => {
                                   if (!isSelected) {
                                     e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                                    e.currentTarget.style.borderColor = 'var(--border-color-dark)';
+                                    e.currentTarget.style.borderColor = 'var(--color-primary)';
                                   }
                                 }}
                                 onMouseLeave={(e) => {
@@ -5417,85 +5274,39 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                                   }
                                 }}
                               >
-                                {/* Dòng 1: Icon + Tên tác vụ + Nhãn mã bảng */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0, flex: 1 }}>
-                                    {renderTaskIcon(block.id, isSelected)}
-                                    <span
-                                      style={{
-                                        fontSize: '12.5px',
-                                        fontWeight: isSelected ? 800 : 700,
-                                        color: 'var(--text-primary)',
-                                        whiteSpace: 'nowrap',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis'
-                                      }}
-                                    >
-                                      {block.title}
-                                    </span>
-                                  </div>
-
-                                  {hasLockError ? (
-                                    <span
-                                      style={{
-                                        backgroundColor: 'var(--color-error-bg)',
-                                        color: 'var(--color-error-text)',
-                                        border: '1px solid var(--color-error-border)',
-                                        fontWeight: 700,
-                                        fontSize: '10px',
-                                        padding: '1px 5px',
-                                        borderRadius: 'var(--radius-sm)',
-                                        flexShrink: 0
-                                      }}
-                                    >
-                                      {lockStatus.total_locked_tables} kẹt
-                                    </span>
-                                  ) : (
-                                    <span
-                                      style={{
-                                        backgroundColor: isSelected ? 'var(--color-primary-light)' : 'var(--bg-secondary)',
-                                        color: 'var(--text-secondary)',
-                                        border: '1px solid var(--border-color)',
-                                        fontWeight: 600,
-                                        fontSize: '9.5px',
-                                        padding: '1px 5px',
-                                        borderRadius: 'var(--radius-sm)',
-                                        flexShrink: 0
-                                      }}
-                                    >
-                                      {block.badgeText}
-                                    </span>
-                                  )}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '9px', flex: 1 }}>
+                                  {renderTaskIcon(block.id, isSelected)}
+                                  <span
+                                    style={{
+                                      fontSize: '13.5px',
+                                      fontWeight: isSelected ? 800 : 700,
+                                      color: 'var(--text-primary)',
+                                      lineHeight: 1.35,
+                                      whiteSpace: 'normal',
+                                      wordBreak: 'break-word'
+                                    }}
+                                  >
+                                    {block.title}
+                                  </span>
                                 </div>
 
-                                {/* Dòng 2: Mô tả ngắn 1 dòng + Trạng thái chọn */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                {hasLockError && (
                                   <span
                                     style={{
-                                      fontSize: '11px',
-                                      color: 'var(--text-secondary)',
-                                      whiteSpace: 'nowrap',
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      flex: 1
-                                    }}
-                                    title={block.subtitle}
-                                  >
-                                    {block.subtitle}
-                                  </span>
-
-                                  <span
-                                    style={{
+                                      backgroundColor: 'var(--color-error-bg)',
+                                      color: 'var(--color-error-text)',
+                                      border: '1px solid var(--color-error-border)',
+                                      fontWeight: 700,
                                       fontSize: '10.5px',
-                                      fontWeight: isSelected ? 800 : 600,
-                                      color: 'var(--text-primary)',
+                                      padding: '2px 6px',
+                                      borderRadius: 'var(--radius-sm)',
                                       flexShrink: 0
                                     }}
                                   >
-                                    {isSelected ? '● Đang mở' : block.isModal ? 'Mở ↗' : ''}
+                                    {lockStatus.total_locked_tables} kẹt
                                   </span>
-                                </div>
-                              </div>
+                                )}
+                              </button>
                             );
                           })}
                         </div>
@@ -5509,6 +5320,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
               <div
                 ref={activeWorkspaceRef}
                 style={{
+                  scrollMarginTop: '12px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -5704,7 +5516,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                     </div>
                   )}
 
-                  {selectedTaskId !== 'fix_full_cpu' && selectedTaskId !== 'transfer_database' && (
+                  {['clear_table_locks', 'unlock_tablet_users', 'check_kds', 'dish_show_hide', 'menu_show_hide', 'check_action_logs', 'table_hall_report'].includes(selectedTaskId) && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -13666,7 +13478,66 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
         </div>
       )}
 
+      {/* ────────────────────────────────────────────────────────── */}
+      {/* TÁC VỤ: ĐỒNG BỘ MENU SO >> CO (HIỂN THỊ TRỰC TIẾP BÊN DƯỚI) */}
+      {/* ────────────────────────────────────────────────────────── */}
+      {selectedTaskId === 'two_step_sync' && (
+        <CoSoKdsTwoStepSyncModal
+          inline={true}
+          isOpen={true}
+          onClose={() => {}}
+          restaurantName={restaurantGposInfo?.restaurant_name || selectedRestaurant?.res || 'Nhà hàng'}
+          ipSubnet={selectedRestaurant?.ip || ''}
+          mongoHost={connectedHost || selectedRestaurant?.ip?.replace(/\.1$/, '.11') || ''}
+          mongoPort={27017}
+          restaurantId={selectedRestaurant?.id}
+        />
+      )}
 
+      {/* ────────────────────────────────────────────────────────── */}
+      {/* TÁC VỤ: TRUY VẾT LUỒNG ORDER (CO - SO - KDS)               */}
+      {/* ────────────────────────────────────────────────────────── */}
+      {selectedTaskId === 'radar_kds_logs' && (
+        <CoSoKdsRadarModal
+          inline={true}
+          isOpen={true}
+          onClose={() => {}}
+          restaurantName={restaurantGposInfo?.restaurant_name || selectedRestaurant?.res || 'Nhà hàng'}
+          ipSubnet={selectedRestaurant?.ip || ''}
+          mongoHost={connectedHost || selectedRestaurant?.ip?.replace(/\.1$/, '.11') || ''}
+          mongoPort={27017}
+        />
+      )}
+
+      {/* ────────────────────────────────────────────────────────── */}
+      {/* TÁC VỤ: QUẢN LÝ THIẾT BỊ NHÀ HÀNG                          */}
+      {/* ────────────────────────────────────────────────────────── */}
+      {selectedTaskId === 'device_fleet_map' && (
+        <CoSoKdsDeviceFleetModal
+          inline={true}
+          isOpen={true}
+          onClose={() => {}}
+          restaurantName={restaurantGposInfo?.restaurant_name || selectedRestaurant?.res || 'Nhà hàng'}
+          ipSubnet={selectedRestaurant?.ip || ''}
+          mongoHost={connectedHost || selectedRestaurant?.ip?.replace(/\.1$/, '.11') || ''}
+          mongoPort={27017}
+          restaurantId={selectedRestaurant?.id}
+        />
+      )}
+
+      {/* ────────────────────────────────────────────────────────── */}
+      {/* TÁC VỤ: GIÁM SÁT MÁY IN                                    */}
+      {/* ────────────────────────────────────────────────────────── */}
+      {selectedTaskId === 'print_management' && (
+        <PrintManagementModal
+          inline={true}
+          isOpen={true}
+          onClose={() => {}}
+          restaurantCode={selectedRestaurant?.rk7 || selectedRestaurant?.sap || String(selectedRestaurant?.id || '')}
+          restaurantName={selectedRestaurant?.res || selectedRestaurant?.res_name || ''}
+          defaultIpLan={connectedHost || selectedRestaurant?.ip || ''}
+        />
+      )}
 
         </div>
 
@@ -15285,40 +15156,6 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
       {/* MODAL: TRA CỨU LOGS KDS (ORDER TỪ CO/SO & BẤM DONE MÓN) */}
 
       {/* ══════════════════════════════════════════════════════════════ */}
-
-      {/* ══════════════════════════════════════════════════════════════ */}
-      {/* MODALS CHUYÊN SÂU APP CO - SO - KDS */}
-      {/* ══════════════════════════════════════════════════════════════ */}
-      <CoSoKdsRadarModal
-        isOpen={showRadarModal}
-        onClose={() => setShowRadarModal(false)}
-        restaurantName={restaurantGposInfo?.restaurant_name || selectedRestaurant?.res || 'Nhà hàng'}
-        ipSubnet={selectedRestaurant?.ip || ''}
-        mongoHost={connectedHost || selectedRestaurant?.ip?.replace(/\.1$/, '.11') || ''}
-        mongoPort={27017}
-      />
-
-      <CoSoKdsTwoStepSyncModal
-        isOpen={showTwoStepSyncModal}
-        onClose={() => setShowTwoStepSyncModal(false)}
-        restaurantName={restaurantGposInfo?.restaurant_name || selectedRestaurant?.res || 'Nhà hàng'}
-        ipSubnet={selectedRestaurant?.ip || ''}
-        mongoHost={connectedHost || selectedRestaurant?.ip?.replace(/\.1$/, '.11') || ''}
-        mongoPort={27017}
-        restaurantId={selectedRestaurant?.id}
-      />
-
-      <CoSoKdsDeviceFleetModal
-        isOpen={showDeviceFleetModal}
-        onClose={() => setShowDeviceFleetModal(false)}
-        restaurantName={restaurantGposInfo?.restaurant_name || selectedRestaurant?.res || 'Nhà hàng'}
-        ipSubnet={selectedRestaurant?.ip || ''}
-        mongoHost={connectedHost || selectedRestaurant?.ip?.replace(/\.1$/, '.11') || ''}
-        mongoPort={27017}
-        restaurantId={selectedRestaurant?.id}
-      />
-
-
 
       <KdsLogsModal
 

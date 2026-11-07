@@ -18,6 +18,7 @@ interface CoSoKdsDeviceFleetModalProps {
   mongoHost: string;
   mongoPort: number;
   restaurantId?: number;
+  inline?: boolean;
 }
 
 export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = ({
@@ -27,7 +28,8 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
   ipSubnet,
   mongoHost,
   mongoPort,
-  restaurantId
+  restaurantId,
+  inline = false
 }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [data, setData] = useState<CoSoKdsDeviceFleetResponse | null>(null);
@@ -123,7 +125,7 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
   };
 
   return (
-    <div style={{
+    <div style={inline ? { width: '100%' } : {
       position: 'fixed',
       top: 0,
       left: 0,
@@ -137,66 +139,69 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
       padding: 16
     }}>
       <div style={{
-        background: '#FFFFFF',
+        background: 'var(--bg-card)',
         width: '100%',
-        maxWidth: 1300,
-        height: '92vh',
-        borderRadius: 12,
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+        maxWidth: inline ? '100%' : 1300,
+        height: inline ? 'auto' : '92vh',
+        minHeight: inline ? 420 : undefined,
+        borderRadius: 'var(--radius-lg)',
+        boxShadow: inline ? 'var(--shadow-sm)' : 'var(--shadow-lg)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        border: '1px solid #E2E8F0'
+        border: '1px solid var(--border-color)'
       }}>
         {/* Header */}
         <div style={{
           padding: '12px 20px',
-          borderBottom: '1px solid #E2E8F0',
+          borderBottom: '1px solid var(--border-color)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          background: '#F8FAFC'
+          background: 'var(--bg-secondary)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
               width: 36,
               height: 36,
-              borderRadius: 8,
-              background: '#F5B800',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--color-primary)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#000',
+              color: 'var(--color-primary-text)',
               fontWeight: 'bold'
             }}>
               <Wifi size={20} />
             </div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 8 }}>
-                BẢN ĐỒ THIẾT BỊ DUY NHẤT TOÀN NHÀ HÀNG (DEVICE FLEET)
-                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: '#DCFCE7', color: '#166534', fontWeight: 700 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                QUẢN LÝ THIẾT BỊ NHÀ HÀNG
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-success-bg)', color: 'var(--color-success-text)', fontWeight: 700 }}>
                   Đã Gom Phiên &amp; Sắp Xếp Order Mới Nhất
                 </span>
               </div>
-              <div style={{ fontSize: 11.5, color: '#64748B' }}>
+              <div style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>
                 Nhà hàng: <strong>{restaurantName}</strong> ({ipSubnet}) — Nhận diện thiết bị duy nhất: <strong>CO, SO, KDS</strong>
               </div>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              color: '#64748B',
-              padding: 6,
-              borderRadius: 6
-            }}
-            title="Đóng (Esc)"
-          >
-            <X size={20} />
-          </button>
+          {!inline && (
+            <button
+              onClick={onClose}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                color: '#64748B',
+                padding: 6,
+                borderRadius: 6
+              }}
+              title="Đóng (Esc)"
+            >
+              <X size={20} />
+            </button>
+          )}
         </div>
 
         {/* Filters and Controls */}
@@ -495,21 +500,23 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span>Bản chuẩn: CO <strong>v1.6.91</strong> | SO <strong>v2.4.107</strong> | KDS <strong>v1.4.51</strong></span>
-            <button
-              onClick={onClose}
-              style={{
-                padding: '5px 14px',
-                borderRadius: 6,
-                border: '1px solid #CBD5E1',
-                background: '#FFFFFF',
-                color: '#334155',
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              Đóng
-            </button>
+            {!inline && (
+              <button
+                onClick={onClose}
+                style={{
+                  padding: '5px 14px',
+                  borderRadius: 6,
+                  border: '1px solid #CBD5E1',
+                  background: '#FFFFFF',
+                  color: '#334155',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Đóng
+              </button>
+            )}
           </div>
         </div>
       </div>

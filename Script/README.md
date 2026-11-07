@@ -4289,3 +4289,15 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
   * Thu nhỏ toàn bộ 15 ô tác vụ thành các thẻ nhỏ gọn (`padding: '8px 10px'`, lưới `minmax(205px, 1fr)`, `gap: '8px'`), chỉ gồm 2 dòng tinh gọn (Dòng 1: Icon + Tên tác vụ + Mã bảng; Dòng 2: Mô tả ngắn 1 dòng + Trạng thái `● Đang mở` / `Mở ↗`).
   * 100% màu sắc của các ô khối, thanh lọc nhóm, thanh điều hướng Tab 1 / Tab 2 và thanh tác vụ đang xử lý đều lấy từ CSS Variables (`var(--bg-card)`, `var(--bg-secondary)`, `var(--text-primary)`, `var(--color-primary)`, `var(--border-color)`), tuyệt đối không dùng gradient hay màu trang trí ngẫu nhiên.
   * Gộp gọn thanh "Đang xử lý" (kèm nút giải thích `!`, cấu hình Email báo cáo, `Print Management`, `Đồng Bộ SO ➔ CO`, `Quét Lại`) vào ngay chân thẻ Chọn Tác Vụ để tiết kiệm tối đa không gian dọc.
+
+
+### [2026-11-07] CHUẨN HÓA 15 KHỐI CHỨC NĂNG TAB 1 THÀNH 2 NHÓM THEO ĐÚNG THỨ TỰ YÊU CẦU, HIỂN THỊ ĐỦ TÊN CHỨC NĂNG & TỰ ĐỘNG CUỘN XUỐNG MÀN HÌNH XỬ LÝ BÊN DƯỚI
+- **Yêu cầu người dùng**:
+  * Để các ô chức năng trải dài ra sao cho hiển thị đầy đủ 100% tên chức năng (không bị cắt chữ `...` như `Xóa Khóa ...`), chỉ hiển thị tên chức năng (và icon + số bàn khóa nếu có), bỏ hết chú thích phụ/mã bảng để đỡ rối.
+  * Gom 15 chức năng thành đúng **2 nhóm** theo thứ tự cố định:
+    1. **Nhóm 1 (8 chức năng)**: `Xóa Khóa Bàn`, `Mở Khóa User`, `Đồng Bộ Menu SO >> CO`, `Ẩn / Hiện Menu`, `Ẩn / Hiện Món Ăn`, `Check & Xử Lý KDS`, `Check & Xử Lý CO, SO`, `Xử Lý Param`.
+    2. **Nhóm 2 (7 chức năng)**: `Xử Lý Full CPU`, `Truy Vết Luồng Order (CO - SO - KDS)`, `Check Logs MongoDB`, `Quản Lý Thiết Bị Nhà Hàng` *(đổi tên từ "Bản Đồ Thiết Bị Duy Nhất Toàn Nhà Hàng (Device Fleet)")*, `Giám Sát Máy In`, `Chuyển Database MongoDB`, `Báo Cáo Bàn & Khu Vực`.
+  * Khi bấm vào bất kỳ chức năng nào trong 15 ô, màn hình tự động hiển thị giao diện xử lý tương ứng ở bên dưới và cuộn mượt mà (`scrollIntoView({ behavior: 'smooth', block: 'start' })`) xuống khu vực hiển thị bên dưới.
+- **Thực hiện**:
+  * Cập nhật `CoSoKdsTwoStepSyncModal.tsx`, `CoSoKdsRadarModal.tsx`, `CoSoKdsDeviceFleetModal.tsx` và `PrintManagementModal.tsx` hỗ trợ chế độ hiển thị trực tiếp (`inline?: boolean`) ngay trong vùng làm việc bên dưới của Tab 1 và cập nhật tên tiêu đề chuẩn (`QUẢN LÝ THIẾT BỊ NHÀ HÀNG`, `TRUY VẾT LUỒNG ORDER (CO - SO - KDS)`, `ĐỒNG BỘ MENU SO >> CO`, `Giám Sát Máy In`).
+  * Cập nhật `TASK_BLOCK_GROUPS` và `AVAILABLE_TASKS` trong `RestaurantMongoAnalysisPage.tsx` chia thành 2 nhóm đúng thứ tự, bỏ hoàn toàn mô tả phụ/nhãn mã trên thẻ, hiển thị đầy đủ tên chức năng (`whiteSpace: 'normal'`), tuân thủ 100% CSS Variables từ `variables.css` (`#F5B800`).
