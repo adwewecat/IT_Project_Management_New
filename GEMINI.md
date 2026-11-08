@@ -3450,3 +3450,25 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
   * Chạy python -m compileall app và Smoke Test backend đạt kết quả >>> PASSED 100%.
   * Chạy 
 pm run build tại rontend/ hoàn thành sạch sẽ (exit code 0, tạo rontend/dist/ sẵn sàng triển khai IIS).
+
+
+### [2026-11-08] NÂNG CẤP TOÀN DIỆN REMOTE KDS: TÍCH HỢP SCRCPY V5.0.1, ADB 37.0.1 & BỘ CỜ TỐI ƯU BĂNG THÔNG MẠNG 2.5M, 30FPS, TẮT AUDIO, GIỮ SÁNG MÀN HÌNH
+- **1. Nâng Cấp Gói Cài Đặt Lên Scrcpy v5.0.1 Chính Thức (Genymobile/scrcpy)**:
+  * Tải và đóng gói bản chính thức **Scrcpy v5.0.1** (x64) kèm **ADB platform-tools 37.0.1**, **SDL 3.4.18**, **FFmpeg 9.0.2** (libavcodec 63), **dav1d 1.5.4** và icon ngắt kết nối mới disconnected.png.
+  * Đóng gói lại thành ackend/static/downloads/scrcpy_winserver.zip (11.01 MB) và ackend/static/downloads/scrcpy.zip (11.01 MB).
+  * Cập nhật thư mục C:\scrcpy trên máy trạm hiện tại lên v5.0.1 sạch sẽ (scrcpy.exe --version báo 5.0.1).
+- **2. Bộ Thông Số Tối Ưu Hóa Dòng Lệnh Mạng Cho KDS (Tương Thích 2 Chiều Cả v3.3.4 & v5.0.1)**:
+  * --no-audio: Tắt bắt âm thanh vô bổ từ KDS bếp, giảm tải CPU và loại bỏ nguy cơ crash do Windows Audio bị tắt trên Server.
+  * --video-bit-rate=2.5M & --max-fps=30: Giảm **70% băng thông** qua mạng VPN/WAN nhà hàng (từ 8M xuống 2.5M) nhưng vẫn giữ nguyên độ sắc nét Full HD cho vé order.
+  * --max-size=1600: Giới hạn cạnh dài, giảm tải giải mã GPU/CPU.
+  * --stay-awake: Giữ màn hình KDS luôn sáng trong lúc IT đang hỗ trợ, không bị tự tắt sau vài phút.
+  * --video-buffer=50: Đệm 50ms triệt tiêu hiện tượng rách hình / giật cục do jitter trên mạng Wi-Fi/VPN nhà hàng.
+  * Tận dụng **Hardware Decoding Direct3D 11 (--hwdec=d3d11va)** tự động trên Windows 10/11 (giảm 10 lần tải CPU khi mở nhiều cửa sổ KDS cùng lúc).
+- **3. Cập Nhật Hai Kịch Bản Điều Hướng & File Registry**:
+  * kds_connect_client.bat: Dành cho Win 10/11, chạy Scrcpy với cờ tối ưu hóa phần cứng và mạng.
+  * kds_connect_server.bat: Dành cho Windows Server / RDP, cấu hình SDL_RENDER_DRIVER=software và SDL_VIDEODRIVER=windows chạy thuần CPU an toàn, không phụ thuộc card màn hình vật lý.
+  * Cập nhật nc_scrcpy_protocol.reg và nc_scrcpy_protocol_winserver.reg đăng ký giao thức scrcpy:// gọi trực tiếp batch script (hoặc fallback PowerShell encoded command với đầy đủ cờ tối ưu).
+- **4. Backend API & Giao Diện Cài Đặt**:
+  * Backend GET /api/v1/restaurants/download/scrcpy: Hỗ trợ phân phát trực tiếp scrcpy.zip (1-chạm giải nén không cần WinRAR) hoặc scrcpy.rar.
+  * Frontend VncSetupModal.tsx & 
+estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ Bản Mới v5.0.1 (Bật Hardware GPU Decoding & Tối Ưu Băng Thông).

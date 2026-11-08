@@ -263,16 +263,30 @@ def update_vnc_config(data: VncConfigRequest, current_user: UserInfo = Depends(g
 
 
 @router.get("/download/scrcpy")
-def download_scrcpy_package():
-    """Tải bộ cài đặt scrcpy.rar để giải nén vào ổ C:\\scrcpy"""
-    file_path = Path(__file__).resolve().parent.parent.parent.parent / "static" / "downloads" / "scrcpy.rar"
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File scrcpy.rar không tồn tại trên máy chủ")
-    return FileResponse(
-        path=str(file_path),
-        filename="scrcpy.rar",
-        media_type="application/x-rar-compressed"
-    )
+def download_scrcpy_package(format: str = "zip"):
+    """Tải bộ cài đặt scrcpy (hỗ trợ scrcpy.zip và scrcpy.rar) để giải nén vào ổ C:\\scrcpy"""
+    base_dir = Path(__file__).resolve().parent.parent.parent.parent / "static" / "downloads"
+    zip_path = base_dir / "scrcpy.zip"
+    rar_path = base_dir / "scrcpy.rar"
+    if format == "rar" and rar_path.exists():
+        return FileResponse(
+            path=str(rar_path),
+            filename="scrcpy.rar",
+            media_type="application/x-rar-compressed"
+        )
+    if zip_path.exists():
+        return FileResponse(
+            path=str(zip_path),
+            filename="scrcpy.zip",
+            media_type="application/zip"
+        )
+    if rar_path.exists():
+        return FileResponse(
+            path=str(rar_path),
+            filename="scrcpy.rar",
+            media_type="application/x-rar-compressed"
+        )
+    raise HTTPException(status_code=404, detail="File scrcpy không tồn tại trên máy chủ")
 
 
 @router.get("/download/reg")
@@ -312,7 +326,7 @@ def download_vnc_scrcpy_reg(request: Request, password: Optional[str] = Query(No
 [HKEY_CLASSES_ROOT\scrcpy\shell\open]
 
 [HKEY_CLASSES_ROOT\scrcpy\shell\open\command]
-@="cmd /c \"set KDS_URL=%1&&powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand JAB1ACAAPQAgACQAZQBuAHYAOgBLAEQAUwBfAFUAUgBMAAoAJABpAHAAIAA9ACAAKAAkAHUAIAAtAHIAZQBwAGwAYQBjAGUAIABbAHMAdAByAGkAbgBnAF0AWwBjAGgAYQByAF0AMwA0ACwAIAAnACcAIAAtAHIAZQBwAGwAYQBjAGUAIAAnAHMAYwByAGMAcAB5ADoALwAvACcALAAgACcAJwAgAC0AcgBlAHAAbABhAGMAZQAgACcALwAnACwAIAAnACcAKQAuAFQAcgBpAG0AKAApAAoAaQBmACAAKAAtAG4AbwB0ACAAKABUAGUAcwB0AC0AUABhAHQAaAAgACcAQwA6AFwAcwBjAHIAYwBwAHkAJwApACkAIAB7AAoAIAAgACAAIABXAHIAaQB0AGUALQBIAG8AcwB0ACAAJwBMAG8AaQA6ACAAVABoAHUAIABtAHUAYwAgAEMAOgBcAHMAYwByAGMAcAB5ACAAawBoAG8AbgBnACAAdABvAG4AIAB0AGEAaQAhACcAIAAtAEYAbwByAGUAZwByAG8AdQBuAGQAQwBvAGwAbwByACAAUgBlAGQACgAgACAAIAAgAFcAcgBpAHQAZQAtAEgAbwBzAHQAIAAnAFYAdQBpACAAbABvAG4AZwAgAGcAaQBhAGkAIABuAGUAbgAgAGIAbwAgAGMAYQBpACAAcwBjAHIAYwBwAHkAIAB2AGEAbwAgAHQAaAB1ACAAbQB1AGMAIABDADoAXABzAGMAcgBjAHAAeQAnAAoAIAAgACAAIABSAGUAYQBkAC0ASABvAHMAdAAgACcATgBoAGEAbgAgAEUAbgB0AGUAcgAgAGQAZQAgAGQAbwBuAGcALgAuAC4AJwAKACAAIAAgACAAZQB4AGkAdAAKAH0ACgBjAGQAIAAnAEMAOgBcAHMAYwByAGMAcAB5ACcACgAuAFwAYQBkAGIALgBlAHgAZQAgAGQAaQBzAGMAbwBuAG4AZQBjAHQAIAAiACQAewBpAHAAfQA6ADUANQA1ADUAIgAgADIAPgAkAG4AdQBsAGwAIAB8ACAATwB1AHQALQBOAHUAbABsAAoALgBcAGEAZABiAC4AZQB4AGUAIABjAG8AbgBuAGUAYwB0ACAAIgAkAHsAaQBwAH0AOgA1ADUANQA1ACIACgAuAFwAcwBjAHIAYwBwAHkALgBlAHgAZQAgAC0AcwAgACIAJAB7AGkAcAB9ADoANQA1ADUANQAiACAALQAtAHcAaQBuAGQAbwB3AC0AdABpAHQAbABlACAAIgBLAEQAUwAtACQAewBpAHAAfQAiAAoAaQBmACAAKAAkAEwAQQBTAFQARQBYAEkAVABDAE8ARABFACAALQBuAGUAIAAwACkAIAB7AAoAIAAgACAAIABSAGUAYQBkAC0ASABvAHMAdAAgACcATgBoAGEAbgAgAEUAbgB0AGUAcgAgAGQAZQAgAGQAbwBuAGcALgAuAC4AJwAKAH0A\""
+@="cmd /c \"if exist C:\\scrcpy\\kds_connect_client.bat (call C:\\scrcpy\\kds_connect_client.bat %1) else (set KDS_URL=%1&&powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand JAB1ACAAPQAgACQAZQBuAHYAOgBLAEQAUwBfAFUAUgBMAAoAJABpAHAAIAA9ACAAKAAkAHUAIAAtAHIAZQBwAGwAYQBjAGUAIABbAHMAdAByAGkAbgBnAF0AWwBjAGgAYQByAF0AMwA0ACwAIAAnACcAIAAtAHIAZQBwAGwAYQBjAGUAIAAnAHMAYwByAGMAcAB5ADoALwAvACcALAAgACcAJwAgAC0AcgBlAHAAbABhAGMAZQAgACcALwAnACwAIAAnACcAKQAuAFQAcgBpAG0AKAApAAoAaQBmACAAKAAtAG4AbwB0ACAAKABUAGUAcwB0AC0AUABhAHQAaAAgACcAQwA6AFwAcwBjAHIAYwBwAHkAJwApACkAIAB7AAoAIAAgACAAIABXAHIAaQB0AGUALQBIAG8AcwB0ACAAJwBMAG8AaQA6ACAAVABoAHUAIABtAHUAYwAgAEMAOgBcAHMAYwByAGMAcAB5ACAAawBoAG8AbgBnACAAdABvAG4AIAB0AGEAaQAhACcAIAAtAEYAbwByAGUAZwByAG8AdQBuAGQAQwBvAGwAbwByACAAUgBlAGQACgAgACAAIAAgAFcAcgBpAHQAZQAtAEgAbwBzAHQAIAAnAFYAdQBpACAAbABvAG4AZwAgAGcAaQBhAGkAIABuAGUAbgAgAGIAbwAgAGMAYQBpACAAcwBjAHIAYwBwAHkAIAB2AGEAbwAgAHQAaAB1ACAAbQB1AGMAIABDADoAXABzAGMAcgBjAHAAeQAnAAoAIAAgACAAIABSAGUAYQBkAC0ASABvAHMAdAAgACcATgBoAGEAbgAgAEUAbgB0AGUAcgAgAGQAZQAgAGQAbwBuAGcALgAuAC4AJwAKACAAIAAgACAAZQB4AGkAdAAKAH0ACgBjAGQAIAAnAEMAOgBcAHMAYwByAGMAcAB5ACcACgAuAFwAYQBkAGIALgBlAHgAZQAgAGQAaQBzAGMAbwBuAG4AZQBjAHQAIAAiACQAewBpAHAAfQA6ADUANQA1ADUAIgAgADIAPgAkAG4AdQBsAGwAIAB8ACAATwB1AHQALQBOAHUAbABsAAoALgBcAGEAZABiAC4AZQB4AGUAIABjAG8AbgBuAGUAYwB0ACAAIgAkAHsAaQBwAH0AOgA1ADUANQA1ACIACgAuAFwAcwBjAHIAYwBwAHkALgBlAHgAZQAgAC0AcwAgACIAJAB7AGkAcAB9ADoANQA1ADUANQAiACAALQAtAHcAaQBuAGQAbwB3AC0AdABpAHQAbABlACAAIgBLAEQAUwAgAC0AIAAkAHsAaQBwAH0AIgAgAC0ALQBuAG8ALQBhAHUAZABpAG8AIAAtAC0AdgBpAGQAZQBvAC0AYgBpAHQALQByAGEAdABlAD0AMgAuADUATQAgAC0ALQBtAGEAeAAtAGYAcABzAD0AMwAwACAALQAtAG0AYQB4AC0AcwBpAHoAZQA9ADEANgAwADAAIAAtAC0AcwB0AGEAeQAtAGEAdwBhAGsAZQAgAC0ALQB2AGkAZABlAG8ALQBiAHUAZgBmAGUAcgA9ADUAMAAKAGkAZgAgACgAJABMAEEAUwBUAEUAWABJAFQAQwBPAEQARQAgAC0AbgBlACAAMAApACAAewAKACAAIAAgACAALgBcAHMAYwByAGMAcAB5AC4AZQB4AGUAIAAtAHMAIAAiACQAewBpAHAAfQA6ADUANQA1ADUAIgAgAC0ALQB3AGkAbgBkAG8AdwAtAHQAaQB0AGwAZQAgACIASwBEAFMAIAAtACAAJAB7AGkAcAB9ACIAIAAtAC0AbgBvAC0AYQB1AGQAaQBvAAoAIAAgACAAIABpAGYAIAAoACQATABBAFMAVABFAFgASQBUAEMATwBEAEUAIAAtAG4AZQAgADAAKQAgAHsACgAgACAAIAAgACAAIAAgACAAUgBlAGEAZAAtAEgAbwBzAHQAIAAnAE4AaABhAG4AIABFAG4AdABlAHIAIABkAGUAIABkAG8AbgBnAC4ALgAuACcACgAgACAAIAAgAH0ACgB9AA==)\""
 
 [HKEY_CURRENT_USER\Software\Policies\Google\Chrome]
 "AutoLaunchProtocolsFromOrigins"="[{\"allowed_origins\":[\"{origin}\"],\"protocol\":\"vnc\"},{\"allowed_origins\":[\"{origin}\"],\"protocol\":\"scrcpy\"}]"

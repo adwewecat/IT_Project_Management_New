@@ -97,7 +97,7 @@ export const downloadScrcpyPackage = () => {
   const downloadUrl = '/api/v1/restaurants/download/scrcpy';
   const link = document.createElement('a');
   link.href = downloadUrl;
-  link.setAttribute('download', 'scrcpy.rar');
+  link.setAttribute('download', 'scrcpy.zip');
   document.body.appendChild(link);
   link.click();
   link.remove();

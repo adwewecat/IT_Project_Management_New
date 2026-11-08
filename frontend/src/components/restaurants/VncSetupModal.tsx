@@ -450,7 +450,7 @@ export const VncSetupModal: React.FC<VncSetupModalProps> = ({ isOpen, onClose })
                   leftIcon={<Download size={15} />}
                   onClick={handleDownloadScrcpy}
                 >
-                  Tải Bộ Cài Đặt scrcpy.rar (~6.1 MB)
+                  Tải Bộ Cài Đặt scrcpy.zip (~11 MB - Scrcpy v5.0.1)
                 </Button>
               </div>
 
@@ -467,7 +467,7 @@ export const VncSetupModal: React.FC<VncSetupModalProps> = ({ isOpen, onClose })
               >
                 <strong>Hướng dẫn giải nén chuẩn:</strong>
                 <br />
-                1. Mở file <code style={{ fontWeight: 600 }}>scrcpy.rar</code> vừa tải về.
+                1. Mở file <code style={{ fontWeight: 600 }}>scrcpy.zip</code> vừa tải về.
                 <br />
                 2. Giải nén toàn bộ thư mục vào đúng vị trí: <strong style={{ color: '#dc2626', fontFamily: 'monospace' }}>C:\scrcpy</strong>
                 <br />
