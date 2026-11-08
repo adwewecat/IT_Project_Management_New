@@ -4317,3 +4317,26 @@ pm run build hoàn tất exit code 0 (✓ built in 4.42s).
   * **Danh Sách Các Bàn Order Gần Nhất**: Tự động gom nhóm và sắp xếp các bàn theo thời gian order mới nhất giảm dần (`MỚI NHẤT` lên đầu). Khi bấm vào bàn nào thì **focus vào bàn đó** và bảng bên dưới chỉ hiển thị danh sách các món trong bàn đó.
   * **Tìm & Soi Theo Món Ăn**: Khi nhập tìm theo tên món / mã SAP / mã RK7 hoặc bấm nút **Soi Món** trên dòng món ăn, hệ thống hiển thị đầy đủ hành trình 5 chặng (`Gửi Order -> POS R-Keeper -> MQTT -> Bếp Bấm Done -> Bưng Ra Bàn`) kết hợp đối soát cấu hình hiện tại trong `CONFIG_COOKING` và bảng lịch sử tất cả các bàn đã gọi món đó trên toàn nhà hàng.
   * **Tích Hợp Vào `Check & Xử Lý KDS` & `Phân Tích Logs KDS`**: Bổ sung nút mở nhanh **Truy Vết Bàn & Logs KDS** ngay trên thanh công cụ `Check & Xử Lý KDS` và đồng bộ `KdsLogsModal` trong `📋 Phân Tích Logs KDS` sử dụng chung giao diện truy vết theo bàn & soi món.
+
+
+### [2026-11-08] TINH GỌN 13 KHỐI TÁC VỤ TAB 1, HIGHLIGHT CẤP CỨU (CPU & CHUYỂN DB), HIỆN THỊ LOADING SƠ ĐỒ BÀN TAB 2 TỪ MONGODB & TƯƠNG THÍCH 100% PYTHON 3.10
+- **1. Tinh Gọn Khối Tác Vụ Tab 1 (RestaurantMongoAnalysisPage.tsx)**:
+  * **Bỏ đi tác vụ**: Báo Cáo Bàn & Khu Vực (	able_hall_report) và Giám Sát Máy In (print_management).
+  * **Đổi tên chuẩn nghiệp vụ**:
+    - Check Logs MongoDB ➔ Check Logs Thanh Toán (tra cứu lịch sử thanh toán, kiểm tra tiền & timeline gọi món/hệ thống).
+    - Quản Lý Thiết Bị Nhà Hàng ➔ Quản Lý Tablet Nhà Hàng (CoSoKdsDeviceFleetModal).
+  * **Highlight nổi bật 2 tính năng cốt lõi**:
+    - Xử Lý Full CPU: Thêm viền vàng đậm 2px solid var(--color-primary), vạch nhấn trái 5px, nền vàng nhạt tinh tế và nhãn ⚡ CẤP CỨU CPU.
+    - Chuyển Database MongoDB: Thêm viền vàng đậm, vạch nhấn trái và nhãn 🔄 CHUYỂN DB.
+  * Điều chỉnh bộ lọc danh mục và số lượng tác vụ hiển thị: Tất cả (13), Nhóm 1: Tác Vụ & Thực Đơn (8), Nhóm 2: Hệ Thống, Logs & Tablet (5).
+- **2. Bổ Sung Hiệu Ứng Loading Cho Tab 2: Sơ Đồ Bàn Theo Khu (AndroidEmulatorTab.tsx)**:
+  * Khắc phục triệt để hiện tượng sơ đồ bàn không hiển thị trạng thái đang tải (trước đây hiển thị âm thầm danh sách bàn mẫu INITIAL_TABLES gây hiểu nhầm dữ liệu đã nạp xong).
+  * Thêm state loadingTables: boolean được kích hoạt tự động mỗi khi chuyển nhà hàng hoặc thay đổi IP trạm MongoDB kết nối.
+  * Tối ưu hóa tải song song (Promise.all) giữa getTableReport (kèm split_by_hall=True), loadMenuCategoriesFromMongo và loadDishesFromMongo giúp rút ngắn tối đa thời gian phản hồi.
+  * Thêm khối hiển thị Loading nổi bật: Spinner tròn Loader2, thông báo Đang tải sơ đồ bàn & dữ liệu nhà hàng từ MongoDB..., hiển thị IP trạm kết nối thực tế và 8 thẻ bàn giả lập hiệu ứng sóng mờ (skeleton pulse).
+  * Cập nhật nút Đồng bộ MongoDB có trạng thái isLoading và icon xoay khi đang tải.
+- **3. Đảm Bảo Tương Thích Tuyệt Đối Python 3.10 & Build Sạch Sẽ Triển Khai Server**:
+  * Quét AST toàn bộ backend đảm bảo 100% không còn lỗi f-string backslash/quote hay cú pháp chỉ có ở Python 3.11+.
+  * Chạy python -m compileall app và Smoke Test backend đạt kết quả >>> PASSED 100%.
+  * Chạy 
+pm run build tại rontend/ hoàn thành sạch sẽ (exit code 0, tạo rontend/dist/ sẵn sàng triển khai IIS).

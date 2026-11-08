@@ -1781,7 +1781,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
       badge: 'APP_PARAM',
       icon: 'Settings'
     },
-    // Nhóm 2 (7 chức năng theo đúng thứ tự yêu cầu)
+    // Nhóm 2 (5 chức năng theo đúng thứ tự yêu cầu)
     {
       id: 'fix_full_cpu',
       title: 'Xử Lý Full CPU',
@@ -1800,27 +1800,19 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
     },
     {
       id: 'check_action_logs',
-      title: 'Check Logs MongoDB',
-      subtitle: 'Tra cứu lịch sử thao tác theo phiên (GUID), lọc ngày tránh quá tải, tìm theo Bàn / GUID, phân tích chi tiết timeline gọi món & hệ thống',
+      title: 'Check Logs Thanh Toán',
+      subtitle: 'Tra cứu lịch sử thao tác theo phiên (GUID), thanh toán, kiểm tra tiền và timeline gọi món & hệ thống',
       category: 'Nhóm 2',
       badge: 'ACTION_LOG',
       icon: 'FileText'
     },
     {
       id: 'device_fleet_map',
-      title: 'Quản Lý Thiết Bị Nhà Hàng',
-      subtitle: 'Quản lý danh sách thiết bị duy nhất toàn nhà hàng (Tablet CO, Điện thoại SO, KDS, POS), phiên bản App và mức Pin',
+      title: 'Quản Lý Tablet Nhà Hàng',
+      subtitle: 'Quản lý danh sách Tablet CO, Điện thoại SO toàn nhà hàng, phiên bản App, mức Pin và bàn đang mở',
       category: 'Nhóm 2',
-      badge: 'DEVICE',
+      badge: 'TABLET',
       icon: 'Tablet'
-    },
-    {
-      id: 'print_management',
-      title: 'Giám Sát Máy In',
-      subtitle: 'Kiểm tra kết nối máy in nhiệt tại quầy bếp/thu ngân và theo dõi danh sách hàng đợi lệnh in KDS/POS',
-      category: 'Nhóm 2',
-      badge: 'PRINTER',
-      icon: 'Printer'
     },
     {
       id: 'transfer_database',
@@ -1829,14 +1821,6 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
       category: 'Nhóm 2',
       badge: 'TRANSFER',
       icon: 'ArrowRightLeft'
-    },
-    {
-      id: 'table_hall_report',
-      title: 'Báo Cáo Bàn & Khu Vực',
-      subtitle: 'Quét danh sách bàn ăn (isCurrentRes: true) và khu vực tầng (HALL_PLAN) toàn nhà hàng, sao chép Excel và xuất CSV',
-      category: 'Nhóm 2',
-      badge: 'TABLE & HALL',
-      icon: 'FileSpreadsheet'
     }
   ], []);
 
@@ -1925,15 +1909,13 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
     },
     {
       groupKey: 'GROUP_2' as const,
-      groupTitle: '2. Nhóm Hệ Thống, Truy Vết Logs & Quản Lý Thiết Bị Nhà Hàng',
+      groupTitle: '2. Nhóm Hệ Thống, Truy Vết Logs & Quản Lý Tablet Nhà Hàng',
       items: [
         { id: 'fix_full_cpu', title: 'Xử Lý Full CPU' },
         { id: 'radar_kds_logs', title: 'Truy Vết Luồng Order (CO - SO - KDS)' },
-        { id: 'check_action_logs', title: 'Check Logs MongoDB' },
-        { id: 'device_fleet_map', title: 'Quản Lý Thiết Bị Nhà Hàng' },
-        { id: 'print_management', title: 'Giám Sát Máy In' },
-        { id: 'transfer_database', title: 'Chuyển Database MongoDB' },
-        { id: 'table_hall_report', title: 'Báo Cáo Bàn & Khu Vực' }
+        { id: 'check_action_logs', title: 'Check Logs Thanh Toán' },
+        { id: 'device_fleet_map', title: 'Quản Lý Tablet Nhà Hàng' },
+        { id: 'transfer_database', title: 'Chuyển Database MongoDB' }
       ]
     }
   ], []);
@@ -5056,9 +5038,9 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                   {/* Category Filter Pills (2 Nhóm) */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     {[
-                      { key: 'ALL', label: 'Tất cả (15)' },
+                      { key: 'ALL', label: 'Tất cả (13)' },
                       { key: 'GROUP_1', label: 'Nhóm 1: Tác Vụ & Thực Đơn (8)' },
-                      { key: 'GROUP_2', label: 'Nhóm 2: Hệ Thống, Logs & Thiết Bị (7)' }
+                      { key: 'GROUP_2', label: 'Nhóm 2: Hệ Thống, Logs & Tablet (5)' }
                     ].map((tab) => {
                       const active = taskGroupFilter === tab.key;
                       return (
@@ -5157,7 +5139,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                       cursor: 'pointer'
                     }}
                   >
-                    <span>{isTaskGridCollapsed ? 'Mở rộng (15 ô)' : 'Thu gọn'}</span>
+                    <span>{isTaskGridCollapsed ? 'Mở rộng (13 ô)' : 'Thu gọn'}</span>
                     <ChevronDown
                       size={13}
                       style={{
@@ -5169,7 +5151,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Danh sách 15 chức năng chia làm 2 nhóm - Chỉ hiển thị tên chức năng rõ ràng, không cắt chữ, không chú thích thừa */}
+              {/* Danh sách 13 chức năng chia làm 2 nhóm - Chỉ hiển thị tên chức năng rõ ràng, không cắt chữ, không chú thích thừa */}
               {!isTaskGridCollapsed && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   {TASK_BLOCK_GROUPS.filter((g) => taskGroupFilter === 'ALL' || g.groupKey === taskGroupFilter).map((group) => {
@@ -5210,6 +5192,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                         >
                           {visibleItems.map((block) => {
                             const isSelected = selectedTaskId === block.id;
+                            const isFeatured = block.id === 'fix_full_cpu' || block.id === 'transfer_database';
                             const hasLockError =
                               block.id === 'clear_table_locks' &&
                               lockStatus &&
@@ -5228,11 +5211,22 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                                 style={{
                                   padding: '11px 14px',
                                   borderRadius: 'var(--radius-lg)',
-                                  backgroundColor: isSelected ? 'var(--color-primary-subtle)' : 'var(--bg-card)',
+                                  backgroundColor: isSelected
+                                    ? 'var(--color-primary-subtle)'
+                                    : isFeatured
+                                    ? 'rgba(245, 184, 0, 0.08)'
+                                    : 'var(--bg-card)',
                                   border: isSelected
                                     ? '2px solid var(--color-primary)'
+                                    : isFeatured
+                                    ? '2px solid var(--color-primary)'
                                     : '1.5px solid var(--border-color)',
-                                  boxShadow: 'var(--shadow-sm)',
+                                  borderLeft: isFeatured
+                                    ? '5px solid var(--color-primary)'
+                                    : undefined,
+                                  boxShadow: isFeatured
+                                    ? '0 2px 8px rgba(245, 184, 0, 0.22)'
+                                    : 'var(--shadow-sm)',
                                   cursor: 'pointer',
                                   display: 'flex',
                                   alignItems: 'center',
@@ -5244,14 +5238,20 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                                 }}
                                 onMouseEnter={(e) => {
                                   if (!isSelected) {
-                                    e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                                    e.currentTarget.style.backgroundColor = isFeatured
+                                      ? 'rgba(245, 184, 0, 0.16)'
+                                      : 'var(--bg-hover)';
                                     e.currentTarget.style.borderColor = 'var(--color-primary)';
                                   }
                                 }}
                                 onMouseLeave={(e) => {
                                   if (!isSelected) {
-                                    e.currentTarget.style.backgroundColor = 'var(--bg-card)';
-                                    e.currentTarget.style.borderColor = 'var(--border-color)';
+                                    e.currentTarget.style.backgroundColor = isFeatured
+                                      ? 'rgba(245, 184, 0, 0.08)'
+                                      : 'var(--bg-card)';
+                                    e.currentTarget.style.borderColor = isFeatured
+                                      ? 'var(--color-primary)'
+                                      : 'var(--border-color)';
                                   }
                                 }}
                               >
@@ -5260,7 +5260,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                                   <span
                                     style={{
                                       fontSize: '13.5px',
-                                      fontWeight: isSelected ? 800 : 700,
+                                      fontWeight: isSelected || isFeatured ? 800 : 700,
                                       color: 'var(--text-primary)',
                                       lineHeight: 1.35,
                                       whiteSpace: 'normal',
@@ -5270,6 +5270,23 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                                     {block.title}
                                   </span>
                                 </div>
+
+                                {isFeatured && (
+                                  <span
+                                    style={{
+                                      backgroundColor: 'var(--color-primary)',
+                                      color: 'var(--color-primary-text)',
+                                      fontWeight: 800,
+                                      fontSize: '10px',
+                                      padding: '2px 7px',
+                                      borderRadius: 'var(--radius-sm)',
+                                      flexShrink: 0,
+                                      letterSpacing: '0.2px'
+                                    }}
+                                  >
+                                    {block.id === 'fix_full_cpu' ? '⚡ CẤP CỨU CPU' : '🔄 CHUYỂN DB'}
+                                  </span>
+                                )}
 
                                 {hasLockError && (
                                   <span
@@ -5434,7 +5451,7 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                     </div>
                   )}
 
-                  {['clear_table_locks', 'unlock_tablet_users', 'check_kds', 'dish_show_hide', 'menu_show_hide', 'check_action_logs', 'table_hall_report'].includes(selectedTaskId) && (
+                  {['clear_table_locks', 'unlock_tablet_users', 'check_kds', 'dish_show_hide', 'menu_show_hide', 'check_action_logs'].includes(selectedTaskId) && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -5451,8 +5468,6 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
                           fetchMenuShowHide();
                         } else if (selectedTaskId === 'check_action_logs') {
                           fetchActionLogSessions();
-                        } else if (selectedTaskId === 'table_hall_report') {
-                          handleFetchTableReport();
                         }
                       }}
                       leftIcon={

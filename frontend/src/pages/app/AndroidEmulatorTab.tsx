@@ -310,6 +310,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
 
   // Danh sách bàn
   const [tables, setTables] = useState<PosTableData[]>(INITIAL_TABLES);
+  const [loadingTables, setLoadingTables] = useState<boolean>(true);
   const [selectedHall, setSelectedHall] = useState<string>('Tầng 1');
   const [activeTableId, setActiveTableId] = useState<string>('B2');
 
@@ -620,25 +621,25 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
     const rawHost = connectedHost || selectedRestaurant?.ip;
     const targetHost = getValidMongoHost(rawHost);
     if (!targetHost) {
+      setLoadingTables(false);
       if (isManual && onToastRef.current) {
         onToastRef.current('Chưa xác định IP kết nối MongoDB máy trạm nhà hàng!', 'info');
       }
       return;
     }
 
+    setLoadingTables(true);
     try {
-      // Tải danh mục menu và món ăn song song
-      await Promise.all([
+      // Tải danh mục menu, món ăn và báo cáo bàn song song để tối ưu tốc độ kết nối
+      const [, , reportRes] = await Promise.all([
         loadMenuCategoriesFromMongo(targetHost),
-        loadDishesFromMongo(targetHost)
+        loadDishesFromMongo(targetHost),
+        mongoService.getTableReport({
+          restaurant_id: selectedRestaurant?.id,
+          host: targetHost,
+          split_by_hall: true
+        })
       ]);
-
-      // Gọi getTableReport với split_by_hall=True
-      const reportRes = await mongoService.getTableReport({
-        restaurant_id: selectedRestaurant?.id,
-        host: targetHost,
-        split_by_hall: true
-      });
 
       if (reportRes && reportRes.items && reportRes.items.length > 0) {
         let lockedTablesMap = new Map<string, LockedTableItem>();
@@ -698,17 +699,21 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
       if (isManual && onToastRef.current) {
         onToastRef.current('Không kết nối được MongoDB trạm nhà hàng!', 'error');
       }
+    } finally {
+      setLoadingTables(false);
     }
   }, [connectedHost, selectedRestaurant?.ip, selectedRestaurant?.id, selectedHall, loadMenuCategoriesFromMongo, loadDishesFromMongo]);
 
   // Tự động đồng bộ một lần khi host hoặc restaurant thay đổi (KHÔNG LẶP, KHÔNG TOAST)
   useEffect(() => {
     const validHost = getValidMongoHost(connectedHost || selectedRestaurant?.ip);
-    if (validHost && validHost !== syncedHostRef.current) {
-      syncedHostRef.current = validHost;
+    const syncKey = `${validHost}_${selectedRestaurant?.id || ''}`;
+    if (validHost && syncKey !== syncedHostRef.current) {
+      syncedHostRef.current = syncKey;
+      setLoadingTables(true);
       syncWithMongo(false); // isManual = false -> Im lặng, không toast
     }
-  }, [connectedHost, selectedRestaurant?.ip, syncWithMongo]);
+  }, [connectedHost, selectedRestaurant?.ip, selectedRestaurant?.id, syncWithMongo]);
 
   // Danh sách các khu vực sảnh duy nhất
   const uniqueHalls = useMemo(() => {
@@ -2000,8 +2005,26 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minHeight: '600px' }}>
         {/* Thanh Header Sảnh: Nút chọn sảnh (Ảnh 1: Nút "Tầng 1" màu xanh đậm) */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {uniqueHalls.map((hall) => {
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {loadingTables && uniqueHalls.length === 0 ? (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)',
+                  padding: '6px 14px',
+                  backgroundColor: 'var(--bg-secondary)',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)'
+                }}
+              >
+                <Loader2 size={15} className="animate-spin" color="var(--color-primary)" />
+                Đang nạp sơ đồ sảnh & khu vực từ MongoDB...
+              </span>
+            ) : (
+              uniqueHalls.map((hall) => {
               const isSelected = selectedHall === hall;
               return (
                 <button
@@ -2023,7 +2046,8 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
                   {hall}
                 </button>
               );
-            })}
+            })
+          )}
           </div>
 
           {/* Nút đồng bộ lại dữ liệu MongoDB */}
@@ -2035,9 +2059,11 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
               variant="outline"
               size="sm"
               onClick={() => syncWithMongo(true)}
-              leftIcon={<RefreshCw size={14} />}
+              isLoading={loadingTables}
+              disabled={loadingTables}
+              leftIcon={<RefreshCw size={14} className={loadingTables ? 'animate-spin' : ''} />}
             >
-              Đồng bộ MongoDB
+              {loadingTables ? 'Đang nạp...' : 'Đồng bộ MongoDB'}
             </Button>
           </div>
         </div>
@@ -2060,23 +2086,129 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
               fontWeight: 800,
               color: '#111827',
               margin: 0,
-              letterSpacing: '-0.3px'
+              letterSpacing: '-0.3px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
             }}
           >
-            Danh sách bàn
+            <span>Danh sách bàn</span>
+            {loadingTables && (
+              <Loader2 size={16} className="animate-spin" color="var(--color-primary)" />
+            )}
           </h2>
           <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }} />
         </div>
 
         {/* Lưới các thẻ bàn (Khớp Ảnh 1: Hình chữ nhật bo góc, Tên góc trên trái, icon ghế 4 góc dưới phải) */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-            gap: '16px'
-          }}
-        >
-          {currentHallTables.map((table) => {
+        {loadingTables ? (
+          <div
+            style={{
+              padding: '36px 20px',
+              backgroundColor: 'var(--bg-card)',
+              border: '1.5px dashed var(--border-color)',
+              borderRadius: 'var(--radius-lg)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '14px',
+              minHeight: '260px'
+            }}
+          >
+            <div
+              style={{
+                width: '46px',
+                height: '46px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--color-primary-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-primary)'
+              }}
+            >
+              <Loader2 size={26} className="animate-spin" />
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                Đang tải sơ đồ bàn & dữ liệu nhà hàng từ MongoDB...
+              </div>
+              <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                Đang kết nối trạm <strong>{connectedHost || selectedRestaurant?.ip || 'MongoDB'}</strong> ({selectedRestaurant?.res || 'Nhà hàng'})
+              </div>
+            </div>
+
+            {/* Skeleton Table Cards Preview */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                gap: '14px',
+                width: '100%',
+                marginTop: '12px',
+                opacity: 0.65
+              }}
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                <div
+                  key={n}
+                  style={{
+                    height: '120px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: 'var(--bg-secondary)',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    animation: 'pulse 1.5s ease-in-out infinite'
+                  }}
+                >
+                  <div style={{ width: '45%', height: '20px', backgroundColor: 'var(--border-color)', borderRadius: '4px' }} />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <div style={{ width: '28px', height: '14px', backgroundColor: 'var(--border-color)', borderRadius: '4px' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : currentHallTables.length === 0 ? (
+          <div
+            style={{
+              padding: '48px 24px',
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 'var(--radius-lg)',
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '12px'
+            }}
+          >
+            <AlertCircle size={32} color="var(--text-secondary)" />
+            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
+              Không có bàn nào thuộc khu vực "{selectedHall}" hoặc chưa nạp được dữ liệu
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => syncWithMongo(true)}
+              leftIcon={<RefreshCw size={13} />}
+            >
+              Thử tải lại từ MongoDB
+            </Button>
+          </div>
+        ) : (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gap: '16px'
+            }}
+          >
+            {currentHallTables.map((table) => {
             const hasOrder = table.orderItems.length > 0;
             const isOccupied = table.status === 'OCCUPIED' || hasOrder;
 
@@ -2165,6 +2297,7 @@ export const AndroidEmulatorTab: React.FC<AndroidEmulatorTabProps> = ({
             );
           })}
         </div>
+      )}
       </div>
     );
   }
