@@ -4435,3 +4435,27 @@ estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ B
 - **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
   * Backend: 100% Python 3.10 compatible (0 backslash trong f-string, 0 cú pháp 3.11+), `python -m compileall app` sạch lỗi, Smoke Test `>>> PASSED 100%`.
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.74s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config` cho IIS.
+
+
+### [2026-11-09] KHẮC PHỤC TRIỆT ĐỂ LỖI LOGS ORDER BÀN HIỂN THỊ NGÀY CŨ THAY VÌ LOGS HIỆN TẠI (MULTI-COLLECTION LIVE ORDER TRACKER)
+- **1. Triệu Chứng & Nguyên Nhân Gốc Rễ**:
+  * **Triệu chứng**: Người dùng phản ánh *"sao không thấy logs hiện tại mà lại thấy logs ngày cũ"*, trong danh sách Tablet Bàn hiển thị các mốc giờ ban đêm như `22:07:05`, `22:04:50`, `21:30:56`, `21:06:38` dù thời điểm kiểm tra thực tế đang là ban ngày (~15:33 chiều).
+  * **Nguyên nhân**:
+    1. Trước đó hệ thống chỉ dò tìm hoạt động bàn từ collection `CALL_STAFF` (sự kiện khách bấm nút gọi nhân viên trên tablet). Thực tế khách rất ít khi bấm nút này, khiến phần lớn dữ liệu trong `CALL_STAFF` là các cuộc gọi từ nhiều tuần hoặc nhiều tháng trước (tháng 8, tháng 10).
+    2. Khi lấy timestamp ngày cũ (ví dụ `15/10/2026 21:06:38`), hệ thống lại format bằng `%H:%M:%S` -> `21:06:38` mà không kèm ngày, gây hiểu nhầm thành giờ của ngày hôm nay.
+    3. Chưa quét các collection nghiệp vụ order và giao món trực tiếp đang phát sinh liên tục trong ngày gồm `G_ORDER.ORDER`, `CO_ORDER`, `ORDER_DELIVERY_LOG` và `G_KITCHEN.LOG_DISH_FINISH_ITEM`.
+- **2. Giải Pháp Kỹ Thuật Đa Nguồn Toàn Diện**:
+  * **Thu thập hoạt động thời gian thực (Multi-Collection Live Activity Collector)**:
+    - Quét đồng thời 6 collections: `ORDER` (mở bàn/order hiện hành), `CO_ORDER` (khách gửi món từ tablet CO), `ORDER_DELIVERY_LOG` (bếp giao món theo bàn), `G_KITCHEN.LOG_DISH_FINISH_ITEM` (KDS hoàn tất món), `CALL_STAFF` và `QR_PREPAID_ORDER`.
+  * **Phân định ranh giới ngày hôm nay (`today_ms = 00:00:00 hôm nay`)**:
+    - **Hoạt động hôm nay**: Hiển thị chính xác giờ phút giây hiện tại (ví dụ: `⏱️ 15:08:54`, `15:01:38`, `14:51:47`, `14:50:59`), ghi chú chi tiết (`Vừa ra món (Bếp Lạnh) lúc 15:01:38 (Hôm nay)`).
+    - **Hoạt động ngày cũ**: Hiển thị rõ ràng ngày tháng `📅 dd/mm HH:MM` (ví dụ `📅 08/11 20:39`) bằng màu xám kèm tooltip giải thích, không còn bị nhầm lẫn thành hôm nay.
+    - **Bàn chưa có order hôm nay**: Hiển thị `—` và ghi chú `Bàn trống (Chưa có order hôm nay)`.
+  * **Cập nhật KDS & SO theo hoạt động thực tế hôm nay**:
+    - KDS Bếp: Lấy đúng giờ ra món gần nhất hôm nay của từng line bếp (`15:08:54`, `15:07:31`...).
+    - Staff SO: Lấy đúng giờ bắn order gần nhất hôm nay của nhân viên phục vụ (`15:01:38`...).
+  * **Sắp xếp chuẩn theo Epoch ms (`order_timestamp_ms DESC`)**:
+    - Đưa toàn bộ các thiết bị/bàn có order hoặc giao món thực tế **HÔM NAY** lên ngay các hàng đầu tiên của bảng danh sách.
+- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Backend: 100% Python 3.10 compatible, compileall sạch lỗi, Smoke Test `>>> PASSED 100%`.
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.56s`), đã cập nhật thư mục `frontend/dist/`.

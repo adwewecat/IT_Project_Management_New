@@ -886,6 +886,9 @@ class CoSoKdsService:
             db_kit = client["G_KITCHEN"]
             db_ord = client["G_ORDER"]
 
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            today_ms = int(today_start.timestamp() * 1000)
+
             # Phiên bản app ghi nhận trong Mongo
             mongo_versions: Dict[str, str] = {}
             try:
@@ -898,7 +901,7 @@ class CoSoKdsService:
             except Exception:
                 pass
 
-            # 1. Màn hình KDS Bếp
+            # 1. Màn hình KDS Bếp (kèm kiểm tra món ra gần nhất hôm nay)
             try:
                 cfg = db_kit["CONFIG_KDS"].find_one() or {}
                 places = cfg.get("places", [])
@@ -912,12 +915,34 @@ class CoSoKdsService:
                 if not places:
                     places = [{"id": 1, "name": "QUẦY BẾP CHÍNH", "placeCode": "BEP"}]
 
+                # Quét món hoàn tất gần nhất theo từng quầy/place
+                kds_activity: Dict[str, int] = {}
+                try:
+                    for doc_del in db_ord["ORDER_DELIVERY_LOG"].find({"submitTime": {"$gte": today_ms}}).sort("submitTime", -1).limit(100):
+                        p_c = str(doc_del.get("placeCode") or "").strip().upper()
+                        p_n = str(doc_del.get("placeName") or "").strip().upper()
+                        s_t = doc_del.get("deliveryTime") or doc_del.get("submitTime") or 0
+                        for k_key in [p_c, p_n]:
+                            if k_key and (k_key not in kds_activity or s_t > kds_activity[k_key]):
+                                kds_activity[k_key] = s_t
+                except Exception:
+                    pass
+
                 for idx, p in enumerate(places):
                     p_name = p.get("name") or ("Quầy " + str(idx + 1))
                     p_code = p.get("placeCode") or ("BEP_" + str(idx + 1))
                     kds_ver = mongo_versions.get("KDS") or OFFICIAL_VERSIONS["KDS"]
                     kds_tail = 41 + idx if idx < 10 else 31 + idx
-                    order_time = (now - timedelta(minutes=idx * 2 + 1)).strftime("%H:%M:%S")
+                    
+                    kds_ms = kds_activity.get(str(p_code).strip().upper()) or kds_activity.get(str(p_name).strip().upper()) or 0
+                    if kds_ms >= today_ms:
+                        dt_kds = datetime.fromtimestamp(kds_ms / 1000)
+                        order_time = dt_kds.strftime("%H:%M:%S")
+                        kds_note = "Line Bếp " + p_name + " vừa ra món lúc " + order_time + " (Nguồn AC 24/7)"
+                    else:
+                        order_time = (now - timedelta(minutes=idx * 2 + 1)).strftime("%H:%M:%S")
+                        kds_ms = int((now - timedelta(minutes=idx * 2 + 1)).timestamp() * 1000)
+                        kds_note = "Line Bếp " + p_name + " (Cắm nguồn AC 24/7)"
 
                     devices.append(
                         CoSoKdsDeviceItem(
@@ -936,15 +961,16 @@ class CoSoKdsService:
                             battery_level=None,
                             last_seen="Vừa xong",
                             last_order_time=order_time,
+                            order_timestamp_ms=kds_ms,
                             session_count=20 + (idx * 5),
                             line_cook=p_name,
-                            note="Line Bếp " + p_name + " (Cắm nguồn AC 24/7)",
+                            note=kds_note,
                         )
                     )
             except Exception as e_kds:
                 logger.warning("Lỗi trích xuất KDS: %s", e_kds)
 
-            # 2. Tablet CO Order Tại Bàn
+            # 2. Tablet CO Order Tại Bàn (Tổng hợp đa nguồn: ORDER, CO_ORDER, DELIVERY, KDS, CALL_STAFF, QR)
             try:
                 tables = list(db_ord["TABLE"].find({"isCurrentRes": True}))
                 if not tables:
@@ -952,24 +978,148 @@ class CoSoKdsService:
                 if not tables:
                     tables = list(db_ord["TABLE"].find().limit(50))
 
-                calls_by_table: Dict[str, Any] = {}
-                for cs in db_ord["CALL_STAFF"].find().sort("callTime", -1).limit(200):
-                    t_info = cs.get("table", {})
-                    t_n = str(t_info.get("name") if isinstance(t_info, dict) else t_info or "").strip()
-                    t_c = str(t_info.get("code") if isinstance(t_info, dict) else "").strip()
-                    if t_n and t_n not in calls_by_table:
-                        calls_by_table[t_n] = cs
-                    if t_c and t_c not in calls_by_table:
-                        calls_by_table[t_c] = cs
+                table_activity: Dict[str, Dict[str, Any]] = {}
 
-                qr_by_table: Dict[str, Any] = {}
-                for qr in db_ord["QR_PREPAID_ORDER"].find().sort("createdAt", -1).limit(100):
-                    qn = str(qr.get("tableName") or "").strip()
-                    qc = str(qr.get("tableCode") or "").strip()
-                    if qn and qn not in qr_by_table:
-                        qr_by_table[qn] = qr
-                    if qc and qc not in qr_by_table:
-                        qr_by_table[qc] = qr
+                def register_table_event(raw_table: Any, event_time_ms: int, note_today: str, note_old: str, app_v_event: Optional[str] = None, uid_event: Optional[str] = None):
+                    if not raw_table or not event_time_ms:
+                        return
+                    t_n = raw_table.get("name") if isinstance(raw_table, dict) else str(raw_table)
+                    t_c = raw_table.get("code") if isinstance(raw_table, dict) else ""
+                    clean_k = _clean_table_code(t_n or t_c)
+                    if not clean_k:
+                        return
+                    prev = table_activity.get(clean_k)
+                    if not prev or event_time_ms > prev["time_ms"]:
+                        is_today_event = (event_time_ms >= today_ms)
+                        dt_e = datetime.fromtimestamp(event_time_ms / 1000)
+                        final_time_str = dt_e.strftime("%H:%M:%S") if is_today_event else dt_e.strftime("%d/%m %H:%M")
+                        final_note = note_today if is_today_event else note_old
+                        table_activity[clean_k] = {
+                            "time_ms": event_time_ms,
+                            "time_str": final_time_str,
+                            "is_today": is_today_event,
+                            "note": final_note,
+                            "app_ver": app_v_event or (prev.get("app_ver") if prev else None),
+                            "uid": uid_event or (prev.get("uid") if prev else None),
+                        }
+
+                # Quét ORDER (Mở bàn, order hiện hành)
+                try:
+                    for doc_o in db_ord["ORDER"].find().sort("openTime", -1).limit(250):
+                        ot = doc_o.get("openTime", 0)
+                        if not ot:
+                            continue
+                        dt_o = datetime.fromtimestamp(ot / 1000)
+                        t_str = dt_o.strftime("%H:%M:%S")
+                        d_str = dt_o.strftime("%d/%m %H:%M")
+                        register_table_event(
+                            doc_o.get("table") or doc_o.get("tableName") or doc_o.get("tableCode"),
+                            ot,
+                            "Mở bàn order lúc " + t_str + " (Hôm nay)",
+                            "Lần order gần nhất ngày " + d_str,
+                        )
+                except Exception:
+                    pass
+
+                # Quét CO_ORDER (Khách gửi món qua tablet CO)
+                try:
+                    for doc_co in db_ord["CO_ORDER"].find().sort("openTime", -1).limit(150):
+                        ot_co = doc_co.get("openTime", 0)
+                        if not ot_co:
+                            continue
+                        submits = doc_co.get("coTotalSubmitTimes", 1)
+                        dt_co = datetime.fromtimestamp(ot_co / 1000)
+                        t_str = dt_co.strftime("%H:%M:%S")
+                        d_str = dt_co.strftime("%d/%m %H:%M")
+                        uid_co = str(doc_co.get("guid") or "")[:18].upper()
+                        register_table_event(
+                            doc_co.get("table") or doc_co.get("tableName") or doc_co.get("tableCode"),
+                            ot_co,
+                            "Khách gửi order Tablet lúc " + t_str + " (" + str(submits) + " lần)",
+                            "Order Tablet ngày " + d_str,
+                            uid_event=uid_co,
+                        )
+                except Exception:
+                    pass
+
+                # Quét ORDER_DELIVERY_LOG (Món được giao từ bếp)
+                try:
+                    for doc_del in db_ord["ORDER_DELIVERY_LOG"].find().sort("submitTime", -1).limit(250):
+                        st_del = doc_del.get("submitTime", 0)
+                        if not st_del:
+                            continue
+                        p_n = str(doc_del.get("placeName") or "Bếp").strip()
+                        dt_del = datetime.fromtimestamp(st_del / 1000)
+                        t_str = dt_del.strftime("%H:%M:%S")
+                        d_str = dt_del.strftime("%d/%m %H:%M")
+                        register_table_event(
+                            doc_del.get("tableName"),
+                            st_del,
+                            "Vừa ra món (" + p_n + ") lúc " + t_str,
+                            "Ra món ngày " + d_str,
+                        )
+                except Exception:
+                    pass
+
+                # Quét LOG_DISH_FINISH_ITEM từ G_KITCHEN
+                try:
+                    for doc_fin in db_kit["LOG_DISH_FINISH_ITEM"].find().sort("submitTime", -1).limit(150):
+                        st_fin = doc_fin.get("submitTime", 0)
+                        if not st_fin:
+                            continue
+                        dt_fin = datetime.fromtimestamp(st_fin / 1000)
+                        t_str = dt_fin.strftime("%H:%M:%S")
+                        d_str = dt_fin.strftime("%d/%m %H:%M")
+                        register_table_event(
+                            doc_fin.get("table"),
+                            st_fin,
+                            "Bếp hoàn tất món lúc " + t_str,
+                            "Hoàn tất món ngày " + d_str,
+                        )
+                except Exception:
+                    pass
+
+                # Quét CALL_STAFF (Khách bấm gọi phục vụ)
+                try:
+                    for doc_cs in db_ord["CALL_STAFF"].find().sort("callTime", -1).limit(150):
+                        ct_cs = doc_cs.get("callTime", 0)
+                        if not ct_cs:
+                            continue
+                        app_v_cs = doc_cs.get("appVersion")
+                        uid_cs = str(doc_cs.get("guid") or "")[:18].upper()
+                        dt_cs = datetime.fromtimestamp(ct_cs / 1000)
+                        t_str = dt_cs.strftime("%H:%M:%S")
+                        d_str = dt_cs.strftime("%d/%m %H:%M")
+                        register_table_event(
+                            doc_cs.get("table"),
+                            ct_cs,
+                            "Khách gọi phục vụ lúc " + t_str,
+                            "Gọi phục vụ ngày " + d_str,
+                            app_v_event=app_v_cs,
+                            uid_event=uid_cs,
+                        )
+                except Exception:
+                    pass
+
+                # Quét QR_PREPAID_ORDER
+                try:
+                    for doc_qr in db_ord["QR_PREPAID_ORDER"].find().sort("createdAt", -1).limit(100):
+                        qt = doc_qr.get("createdAt") or doc_qr.get("updatedAt") or 0
+                        if not qt:
+                            continue
+                        dt_qr = datetime.fromtimestamp(qt / 1000)
+                        t_str = dt_qr.strftime("%H:%M:%S")
+                        d_str = dt_qr.strftime("%d/%m %H:%M")
+                        uid_qr = str(doc_qr.get("deviceId") or "")[:18].upper()
+                        register_table_event(
+                            doc_qr.get("tableName") or doc_qr.get("tableCode"),
+                            qt,
+                            "Khách đặt món qua Tablet/QR lúc " + t_str,
+                            "Đặt món QR ngày " + d_str,
+                            uid_event=uid_qr,
+                        )
+                except Exception:
+                    pass
 
                 co_default_ver = mongo_versions.get("CO") or OFFICIAL_VERSIONS["CO"]
 
@@ -979,47 +1129,40 @@ class CoSoKdsService:
                     clean_name = _clean_table_code(raw_name)
                     t_status = t.get("status", 1)
 
-                    cs = calls_by_table.get(raw_name) or calls_by_table.get(raw_code)
-                    qr = qr_by_table.get(raw_name) or qr_by_table.get(raw_code)
-
                     model_idx = hash(clean_name) % len(TABLET_MODELS)
                     dev_model = TABLET_MODELS[model_idx]
 
-                    if cs:
-                        call_ms = cs.get("callTime", 0)
-                        t_order = datetime.fromtimestamp(call_ms / 1000).strftime("%H:%M:%S") if call_ms else (now - timedelta(minutes=(idx * 3) % 30)).strftime("%H:%M:%S")
-                        app_v = cs.get("appVersion") or co_default_ver
-                        uid = str(cs.get("guid") or ("TAB-" + clean_name))[:18].upper()
-                        online = True
-                        note = "Vừa gọi phục vụ lúc " + t_order
-                        battery = (hash(clean_name) % 35) + 65
-                    elif qr:
-                        qr_ms = qr.get("createdAt") or qr.get("updatedAt") or 0
-                        t_order = datetime.fromtimestamp(qr_ms / 1000).strftime("%H:%M:%S") if qr_ms else (now - timedelta(minutes=(idx * 4) % 40)).strftime("%H:%M:%S")
-                        app_v = co_default_ver
-                        uid = str(qr.get("deviceId") or ("QR-" + clean_name))[:18].upper()
-                        online = True
-                        note = "Khách đặt món qua Tablet/QR lúc " + t_order
-                        battery = (hash(clean_name) % 35) + 65
-                    elif t_status in (2, 3):
-                        t_order = (now - timedelta(minutes=(idx * 7) % 50 + 2)).strftime("%H:%M:%S")
-                        app_v = co_default_ver
-                        uid = "SM-X205-" + clean_name + "-GG"
-                        online = True
-                        note = "Khách đang dùng bữa tại bàn " + clean_name
-                        battery = (hash(clean_name) % 35) + 60
+                    act = table_activity.get(clean_name)
+                    if act:
+                        t_ms = act["time_ms"]
+                        is_today_act = act["is_today"]
+                        t_order = act["time_str"]
+                        note = act["note"]
+                        online = is_today_act or (t_status in (2, 3))
+                        # Chỉ dùng appVersion của CALL_STAFF nếu thao tác diễn ra gần đây (trong 7 ngày)
+                        if act.get("app_ver") and (t_ms >= (today_ms - 7 * 86400 * 1000)):
+                            app_v = act["app_ver"]
+                        else:
+                            app_v = co_default_ver
+                        uid = act.get("uid") or ("TAB-" + clean_name + "-GG")
+                        last_seen = "Vừa xong" if online else ("Ngày " + datetime.fromtimestamp(t_ms / 1000).strftime("%d/%m"))
+                        battery = (hash(clean_name) % 35) + 65 if online else None
                     else:
-                        online = (idx % 12 != 0)
-                        t_order = (now - timedelta(minutes=(idx * 13) % 120 + 15)).strftime("%H:%M:%S") if online else (now - timedelta(minutes=150)).strftime("%H:%M:%S")
+                        t_ms = 0
+                        if t_status in (2, 3):
+                            online = True
+                            t_order = None
+                            note = "Bàn đang có khách (" + clean_name + ")"
+                            last_seen = "Vừa xong"
+                            battery = (hash(clean_name) % 35) + 60
+                        else:
+                            online = (idx % 12 != 0)
+                            t_order = None
+                            note = "Bàn trống (Chưa có order hôm nay)" if online else "Mất kết nối Wi-Fi / Đang sạc nguồn"
+                            last_seen = "Vừa xong" if online else "Hôm qua"
+                            battery = ((hash(clean_name) % 40) + 50) if online else None
                         app_v = co_default_ver
-                        uid = ("TAB-" + clean_name + "-OFF") if not online else ("LEN-M10-" + clean_name + "-GG")
-                        note = "Bàn trống sẵn sàng đón khách" if online else "Mất kết nối Wi-Fi / Đang sạc nguồn"
-                        battery = ((hash(clean_name) % 40) + 50) if online else None
-
-                    # Cảnh báo bản cũ mẫu cho 1 vài máy nếu khớp
-                    if idx in (3, 7) and app_v == OFFICIAL_VERSIONS["CO"]:
-                        app_v = "v1.6.85"
-                        note = "⚠️ Bản app cũ (v1.6.85) cần nâng cấp | " + note
+                        uid = "TAB-" + clean_name + "-GG"
 
                     dev_tail = 101 + (idx % 140)
                     hex_p1 = hex((idx // 256) % 256)[2:].upper().zfill(2)
@@ -1041,8 +1184,9 @@ class CoSoKdsService:
                             latest_version=OFFICIAL_VERSIONS["CO"],
                             is_outdated=(app_v != OFFICIAL_VERSIONS["CO"]),
                             battery_level=battery,
-                            last_seen="Vừa xong" if online else "150 phút trước",
+                            last_seen=last_seen,
                             last_order_time=t_order,
+                            order_timestamp_ms=t_ms,
                             session_count=1 + (idx % 8),
                             line_cook=None,
                             note=note,
@@ -1064,7 +1208,15 @@ class CoSoKdsService:
                 if so_by_user:
                     for idx, (uc, log) in enumerate(so_by_user.items()):
                         act_ms = log.get("time", 0)
-                        t_order = datetime.fromtimestamp(act_ms / 1000).strftime("%H:%M:%S") if act_ms else (now - timedelta(minutes=idx * 4 + 1)).strftime("%H:%M:%S")
+                        if act_ms >= today_ms:
+                            t_order = datetime.fromtimestamp(act_ms / 1000).strftime("%H:%M:%S")
+                            so_note = "Vừa bắn order lúc " + t_order + " (NV " + uc + ")"
+                        elif act_ms > 0:
+                            t_order = datetime.fromtimestamp(act_ms / 1000).strftime("%d/%m %H:%M")
+                            so_note = "Bắn order gần nhất ngày " + t_order + " (NV " + uc + ")"
+                        else:
+                            t_order = None
+                            so_note = "Nhân viên sàn ca trực (NV " + uc + ")"
                         so_tail = 51 + idx
                         devices.append(
                             CoSoKdsDeviceItem(
@@ -1083,15 +1235,17 @@ class CoSoKdsService:
                                 battery_level=85 - (idx * 6),
                                 last_seen="Vừa xong",
                                 last_order_time=t_order,
+                                order_timestamp_ms=act_ms,
                                 session_count=10 + (idx * 3),
                                 line_cook=None,
-                                note="Vừa bắn order lúc " + t_order + " (NV " + uc + ")",
+                                note=so_note,
                             )
                         )
                 else:
                     for idx, title in enumerate(["Trưởng Ca Sảnh", "Nhân Viên Phục Vụ"]):
                         so_tail = 51 + idx
                         t_order = (now - timedelta(minutes=idx * 5 + 2)).strftime("%H:%M:%S")
+                        so_ms = int((now - timedelta(minutes=idx * 5 + 2)).timestamp() * 1000)
                         devices.append(
                             CoSoKdsDeviceItem(
                                 id="SO_HANDHELD_" + str(idx + 1),
@@ -1109,6 +1263,7 @@ class CoSoKdsService:
                                 battery_level=82 - (idx * 8),
                                 last_seen="Vừa xong",
                                 last_order_time=t_order,
+                                order_timestamp_ms=so_ms,
                                 session_count=12 + (idx * 5),
                                 line_cook=None,
                                 note="Đang phục vụ sảnh bàn lúc " + t_order,
@@ -1213,8 +1368,15 @@ class CoSoKdsService:
                     )
                 )
 
-        # SẮP XẾP BẮT BUỘC: BÀN NÀO MỞ / ORDER MUỘN NHẤT LÊN TRƯỚC (DESCENDING)
-        devices.sort(key=lambda d: d.last_order_time or "00:00:00", reverse=True)
+        # SẮP XẾP BẮT BUỘC: BÀN NÀO MỞ / ORDER MUỘN NHẤT HÔM NAY LÊN TRƯỚC (DESCENDING THEO EPOCH MS)
+        devices.sort(
+            key=lambda d: (
+                getattr(d, "order_timestamp_ms", 0) or 0,
+                1 if d.is_online else 0,
+                d.last_order_time or "00:00:00",
+            ),
+            reverse=True,
+        )
 
         co_cnt = sum(1 for d in devices if d.device_type == "CO")
         so_cnt = sum(1 for d in devices if d.device_type == "SO")

@@ -94,9 +94,12 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
     // Sắp xếp
     list.sort((a, b) => {
       if (sortBy === 'ORDER_TIME_DESC') {
+        const msA = a.order_timestamp_ms || 0;
+        const msB = b.order_timestamp_ms || 0;
+        if (msA !== msB) return msB - msA; // Số ms lớn nhất (mới nhất hôm nay) lên trước
         const timeA = a.last_order_time || '00:00:00';
         const timeB = b.last_order_time || '00:00:00';
-        return timeB.localeCompare(timeA); // Muộn nhất lên trước
+        return timeB.localeCompare(timeA);
       }
       if (sortBy === 'TABLE_ASC') {
         const tA = a.table_code || a.device_name || '';
@@ -397,9 +400,19 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
                         {device.table_code ? `Bàn ${device.table_code}` : '—'}
                       </td>
                       <td style={{ padding: '8px 12px', textAlign: 'center', background: '#F8FAFC' }}>
-                        <strong style={{ color: '#1D4ED8', fontFamily: 'monospace', fontSize: 12 }}>
-                          {device.last_order_time || '—'}
-                        </strong>
+                        {device.last_order_time ? (
+                          device.last_order_time.includes('/') ? (
+                            <span style={{ color: '#64748B', fontFamily: 'monospace', fontSize: 11, fontWeight: 600 }} title="Lần order gần nhất vào ngày trước">
+                              📅 {device.last_order_time}
+                            </span>
+                          ) : (
+                            <strong style={{ color: '#1D4ED8', fontFamily: 'monospace', fontSize: 12 }}>
+                              ⏱️ {device.last_order_time}
+                            </strong>
+                          )
+                        ) : (
+                          <span style={{ color: '#94A3B8', fontSize: 11 }}>—</span>
+                        )}
                       </td>
                       <td style={{ padding: '8px 12px' }}>
                         <div style={{ fontWeight: 700, color: '#0F172A' }}>

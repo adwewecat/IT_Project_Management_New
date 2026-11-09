@@ -86,7 +86,8 @@ class CoSoKdsDeviceItem(BaseModel):
     is_outdated: bool = False
     battery_level: Optional[int] = None
     last_seen: Optional[str] = None
-    last_order_time: Optional[str] = None  # Thời gian order / mở bàn mới nhất để sort
+    last_order_time: Optional[str] = None  # Thời gian order / mở bàn mới nhất để hiển thị
+    order_timestamp_ms: Optional[int] = 0  # Epoch ms để sắp xếp chính xác tuyệt đối
     session_count: int = 1  # Số phiên session đã gom về thiết bị duy nhất này
     line_cook: Optional[str] = None
     note: Optional[str] = None

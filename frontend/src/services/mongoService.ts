@@ -2856,6 +2856,7 @@ export interface CoSoKdsDeviceItem {
   battery_level?: number;
   last_seen?: string;
   last_order_time?: string;
+  order_timestamp_ms?: number;
   session_count?: number;
   line_cook?: string;
   note?: string;
