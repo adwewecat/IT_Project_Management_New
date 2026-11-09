@@ -3569,3 +3569,33 @@ estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ B
 - **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
   * Backend: 100% Python 3.10 compatible, compileall sạch lỗi, Smoke Test `>>> PASSED 100%`.
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.56s`), đã cập nhật thư mục `frontend/dist/`.
+
+
+### [2026-11-09] KHẮC PHỤC TRIỆT ĐỂ LỖI DÁN (PASTE) BẢNG EXCEL VÀO SOẠN THƯ BỊ TỰ ĐỘNG CHUYỂN THÀNH HÌNH ẢNH (EXCEL SPREADSHEET TABLE PASTE TO EDITABLE TEXT)
+- **1. Triệu Chứng & Nguyên Nhân Gốc Rễ**:
+  * **Triệu chứng**: Người dùng phản ánh *"PASTED file excel vào mail đang bị tự động chuyển thành hình ảnh, tôi cần pasted excel nhưng định dạng text"*. Khi sao chép các ô từ Microsoft Excel hoặc Google Sheets rồi dán (`Ctrl+V`) vào khung soạn thảo Webmail, toàn bộ bảng tính bị chèn dưới dạng thẻ `<img>` chứa dữ liệu ảnh base64 PNG cố định, mờ nhòe và không thể nhấp chuột vào chỉnh sửa nội dung văn bản.
+  * **Nguyên nhân**:
+    1. Khi sao chép một vùng ô trong Microsoft Excel, hệ điều hành và Excel luôn đưa nhiều kiểu MIME lên Clipboard cùng lúc: `text/html` (chứa thẻ `<table>...</table>`), `text/plain` (chứa dữ liệu phân cách cột bằng phím Tab `\t`) VÀ một tệp phụ `image/png` (do Excel tự render chụp ảnh vùng ô để hỗ trợ các ứng dụng đồ họa cũ).
+    2. Hàm `handleEditorPaste` trước đó duyệt qua `clipboardData.items`, bắt gặp tệp `image/png` do Excel tạo ra nên đã phân loại vào mảng `imageFiles`, gọi `e.preventDefault()` và kích hoạt lệnh `document.execCommand('insertImage', false, base64)`.
+    3. Hậu quả: Bảng Excel bị chèn thành hình ảnh đồ họa cố định, triệt tiêu hoàn toàn nội dung văn bản bảng tính và cấu trúc HTML của người dùng.
+- **2. Giải Pháp Kỹ Thuật Đa Tầng Toàn Diện**:
+  * **Nhận diện chính xác Bảng Tính / Spreadsheet / Table (`isSpreadsheetOrTable`)**:
+    - Kiểm tra `htmlData`: Có chứa các thẻ bảng `<table`, `<tr`, `<td`, `<th` hoặc định danh chữ ký của Office/Excel (`office:excel`, `ProgId="Excel.Sheet"`, `urn:schemas-microsoft-com:office:excel`) hoặc Google Sheets (`google-sheets-html-origin`).
+    - Hoặc kiểm tra `textData`: Có chứa ký tự phân cách cột bằng Tab `\t` và ký tự xuống dòng `\n`.
+    - Khi phát hiện chữ ký Bảng Tính: **Tuyệt đối bỏ qua tệp ảnh phụ `image/png` do Excel sinh ra**, ưu tiên hàng đầu cho việc hiển thị bảng văn bản.
+  * **Làm sạch và Chuẩn hóa HTML Bảng Tính (`sanitizeSpreadsheetHtml`)**:
+    - Loại bỏ triệt để các thẻ rác, metadata của Microsoft Office (`script`, `style`, `link`, `meta`, `xml`, `o:p`).
+    - Phân tích cú pháp `<style>` của Excel để trích xuất màu nền ô (`background-color`, ví dụ header màu xám `#D9D9D9`), căn lề (`text-align`) và độ đậm chữ (`font-weight`).
+    - Ép định dạng Inline CSS chuẩn email doanh nghiệp: Viền sắc nét `border: 1px solid #CBD5E1; border-collapse: collapse;`, khoảng đệm `padding: 8px 12px;`, co giãn linh hoạt `width: 100%; max-width: 100%`, font chữ đồng bộ hệ thống, `word-break: break-word`.
+    - Tự động chuyển đổi các đường dẫn URL dạng văn bản thuần (ví dụ `https://gpms.ggg.com.vn/...`) thành liên kết `<a>` màu xanh có thể nhấp chuột mở ngay trong tab mới (`linkifyElement`).
+    - Giữ nguyên 100% văn bản sống (editable text): Người dùng có thể nhấp chuột vào từng ô trong bảng để gõ thêm chữ, xóa, sửa văn bản, thay đổi nội dung linh hoạt trước khi gửi thư.
+  * **Dựng bảng dự phòng từ dữ liệu phân cách Tab (`tsvToHtmlTable`)**:
+    - Nếu nguồn sao chép chỉ có text thuần phân cách cột bằng Tab `\t` (sao chép từ CSV, Notepad, Terminal), hệ thống tự động dựng thành bảng HTML với đầy đủ viền và ô hoàn chỉnh.
+  * **Đảm bảo hài hòa tuyệt đối mọi luồng dán (Paste Workflows)**:
+    - **Sao chép ô từ Excel / Google Sheets / Bảng Web**: Dán thành BẢNG VĂN BẢN (Text / HTML Table) chỉnh sửa trực tiếp được.
+    - **Chụp ảnh màn hình (Snipping Tool, Win+Shift+S, PrtScn) & Ảnh thuần**: Dán thành hình ảnh inline trong nội dung thư như cũ.
+    - **Sao chép tệp từ Windows Explorer (File .xlsx, .docx, .pdf, .zip...)**: Tự động chuyển thành tệp đính kèm (Attachment) của email.
+    - **Sao chép đoạn văn bản thông thường**: Trình duyệt dán văn bản mượt mà, tự nhiên.
+- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Backend: 100% Python 3.10 compatible, `compileall app` sạch lỗi, Smoke Test kiểm tra AST hợp lệ 100%.
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.97s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config` cho IIS.

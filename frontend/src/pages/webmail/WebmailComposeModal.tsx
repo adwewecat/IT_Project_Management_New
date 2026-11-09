@@ -225,13 +225,248 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
     return <FileText size={14} style={{ color: '#64748B' }} />;
   };
 
+  // Tự động tìm các đường dẫn URL dạng text thuần trong phần tử và bọc vào thẻ <a> có thể click được
+  const linkifyElement = (el: HTMLElement) => {
+    try {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+      const textNodes: Text[] = [];
+      let node: Node | null;
+      while ((node = walker.nextNode())) {
+        if (node.parentElement?.tagName.toLowerCase() !== 'a') {
+          textNodes.push(node as Text);
+        }
+      }
+
+      const urlRegex = /(https?:\/\/[^\s<]+)/g;
+      for (const textNode of textNodes) {
+        const text = textNode.nodeValue || '';
+        if (urlRegex.test(text)) {
+          const span = document.createElement('span');
+          span.innerHTML = text.replace(
+            urlRegex,
+            '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #2563EB; text-decoration: underline;">$1</a>'
+          );
+          textNode.parentNode?.replaceChild(span, textNode);
+        }
+      }
+    } catch (e) {
+      console.error('Lỗi linkify:', e);
+    }
+  };
+
+  // Chuyển đổi dữ liệu bảng tính phân tách bằng tab (TSV - Tab Separated Values) thành bảng HTML
+  const tsvToHtmlTable = (tsvText: string): string => {
+    const lines = tsvText.trim().split(/\r?\n/);
+    if (lines.length === 0) return '';
+
+    const rowsHtml = lines
+      .map((line, rowIndex) => {
+        const isHeader = rowIndex === 0;
+        const cells = line.split('\t');
+        const cellsHtml = cells
+          .map((cellText) => {
+            const tag = isHeader ? 'th' : 'td';
+            const bg = isHeader ? '#F8FAFC' : '#FFFFFF';
+            const weight = isHeader ? '600' : 'normal';
+            const align = isHeader ? 'center' : 'left';
+
+            let content = cellText
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;');
+
+            // Tự động linkify URL
+            content = content.replace(
+              /(https?:\/\/[^\s<]+)/g,
+              '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #2563EB; text-decoration: underline;">$1</a>'
+            );
+
+            return `<${tag} style="border: 1px solid #CBD5E1; padding: 8px 12px; background-color: ${bg}; font-weight: ${weight}; text-align: ${align}; vertical-align: top; font-size: 13px; line-height: 1.5; word-break: break-word;">${content || '&nbsp;'}</${tag}>`;
+          })
+          .join('');
+
+        return `<tr>${cellsHtml}</tr>`;
+      })
+      .join('');
+
+    return `<table style="border-collapse: collapse; width: 100%; max-width: 100%; border: 1px solid #CBD5E1; margin: 12px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 1.5; color: #1E293B;"><tbody>${rowsHtml}</tbody></table>`;
+  };
+
+  // Làm sạch và chuẩn hóa bảng HTML từ Excel / Google Sheets / Webpage:
+  // - Loại bỏ metadata, XML, scripts, styles rác của Microsoft Office
+  // - Trích xuất màu nền cell (ví dụ header màu xám trong Excel) và căn lề từ class/style
+  // - Ép inline CSS chuẩn email: viền sắc nét 1px solid #CBD5E1, padding 8px 12px, responsive 100%
+  // - Tự động tạo link cho URL text thuần
+  // - Giữ nguyên 100% dạng văn bản có thể chỉnh sửa trực tiếp (editable text), KHÔNG bị biến thành ảnh
+  const sanitizeSpreadsheetHtml = (rawHtml: string): string => {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(rawHtml, 'text/html');
+
+      // 1. Trích xuất màu nền, căn lề và độ đậm từ thẻ <style> của Excel/Office nếu có
+      const classBgMap = new Map<string, string>();
+      const classAlignMap = new Map<string, string>();
+      const classWeightMap = new Map<string, string>();
+
+      const styleTags = doc.querySelectorAll('style');
+      styleTags.forEach((styleTag) => {
+        const cssText = styleTag.textContent || '';
+        const ruleRegex = /\.([a-zA-Z0-9_-]+)\s*\{([^}]+)\}/g;
+        let match: RegExpExecArray | null;
+        while ((match = ruleRegex.exec(cssText)) !== null) {
+          const className = match[1];
+          const rules = match[2];
+
+          const bgMatch = rules.match(/background(?:-color)?\s*:\s*([^;]+)/i);
+          if (bgMatch && bgMatch[1]) {
+            const bgVal = bgMatch[1].trim();
+            if (bgVal !== 'none' && bgVal !== 'transparent' && bgVal !== 'auto') {
+              classBgMap.set(className, bgVal);
+            }
+          }
+
+          const alignMatch = rules.match(/text-align\s*:\s*([^;]+)/i);
+          if (alignMatch && alignMatch[1]) {
+            classAlignMap.set(className, alignMatch[1].trim());
+          }
+
+          const weightMatch = rules.match(/font-weight\s*:\s*([^;]+)/i);
+          if (weightMatch && weightMatch[1]) {
+            classWeightMap.set(className, weightMatch[1].trim());
+          }
+        }
+      });
+
+      // 2. Loại bỏ metadata rác của Office/Word/Excel
+      doc.querySelectorAll('script, style, link, meta, xml, o\\:p').forEach((el) => el.remove());
+
+      const tables = doc.querySelectorAll('table');
+      if (tables.length === 0) return '';
+
+      tables.forEach((table) => {
+        // Xóa các thuộc tính cứng của Excel có thể gây vỡ layout email
+        table.removeAttribute('width');
+        table.removeAttribute('height');
+        table.removeAttribute('border');
+        table.removeAttribute('cellspacing');
+        table.removeAttribute('cellpadding');
+
+        table.setAttribute(
+          'style',
+          'border-collapse: collapse; width: 100%; max-width: 100%; border: 1px solid #CBD5E1; margin: 12px 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 1.5; color: #1E293B;'
+        );
+
+        // Xóa định dạng cứng ở thẻ col và colgroup
+        table.querySelectorAll('col, colgroup').forEach((col) => {
+          col.removeAttribute('style');
+          col.removeAttribute('width');
+        });
+
+        const rows = table.querySelectorAll('tr');
+        rows.forEach((row, rowIndex) => {
+          row.removeAttribute('height');
+          row.removeAttribute('style');
+
+          const isHeaderRow = rowIndex === 0 || row.parentElement?.tagName.toLowerCase() === 'thead';
+          const cells = row.querySelectorAll('th, td');
+
+          cells.forEach((cell) => {
+            const el = cell as HTMLElement;
+
+            // Tìm màu nền từ inline style, thuộc tính bgcolor hoặc class trích xuất được từ Excel
+            let cellBg = el.style.backgroundColor || el.getAttribute('bgcolor') || '';
+            if (!cellBg || cellBg === 'transparent' || cellBg === 'rgba(0, 0, 0, 0)') {
+              const classList = Array.from(el.classList);
+              for (const cls of classList) {
+                if (classBgMap.has(cls)) {
+                  cellBg = classBgMap.get(cls)!;
+                  break;
+                }
+              }
+            }
+
+            if (!cellBg || cellBg === 'transparent' || cellBg === 'rgba(0, 0, 0, 0)') {
+              cellBg = isHeaderRow ? '#F8FAFC' : '#FFFFFF';
+            }
+
+            // Căn lề
+            let textAlign = el.style.textAlign || '';
+            if (!textAlign) {
+              const classList = Array.from(el.classList);
+              for (const cls of classList) {
+                if (classAlignMap.has(cls)) {
+                  textAlign = classAlignMap.get(cls)!;
+                  break;
+                }
+              }
+            }
+            if (!textAlign) {
+              textAlign = isHeaderRow ? 'center' : 'left';
+            }
+
+            // Độ đậm chữ
+            let fontWeight = el.style.fontWeight || '';
+            if (!fontWeight) {
+              const classList = Array.from(el.classList);
+              for (const cls of classList) {
+                if (classWeightMap.has(cls)) {
+                  fontWeight = classWeightMap.get(cls)!;
+                  break;
+                }
+              }
+            }
+            if (!fontWeight) {
+              fontWeight = isHeaderRow ? '600' : 'normal';
+            }
+
+            el.removeAttribute('width');
+            el.removeAttribute('height');
+            el.removeAttribute('class');
+            el.setAttribute(
+              'style',
+              `border: 1px solid #CBD5E1; padding: 8px 12px; background-color: ${cellBg}; text-align: ${textAlign}; font-weight: ${fontWeight}; vertical-align: top; font-size: 13px; line-height: 1.5; word-break: break-word;`
+            );
+
+            // Tinh chỉnh margin các khối văn bản bên trong ô
+            el.querySelectorAll('p, div').forEach((block) => {
+              (block as HTMLElement).style.margin = '0 0 4px 0';
+              (block as HTMLElement).style.lineHeight = '1.5';
+            });
+
+            // Tự động chuyển link URL text thuần thành thẻ <a>
+            linkifyElement(el);
+          });
+        });
+      });
+
+      return Array.from(tables).map((t) => t.outerHTML).join('<p><br></p>');
+    } catch (err) {
+      console.error('Lỗi khi làm sạch HTML bảng:', err);
+      return '';
+    }
+  };
+
   // Xử lý dán dữ liệu (paste clipboard) trong khung soạn thảo:
-  // - HÌNH ẢNH (screenshot, copy ảnh): Dán trực tiếp vào nội dung thư như cũ (insertImage base64)
-  // - TỆP TÀI LIỆU (Excel, Word, PDF, Zip, Text...): Tự động thêm vào danh sách file đính kèm!
+  // - BẢNG EXCEL / BẢNG TÍNH / TABLE: Dán dạng BẢNG VĂN BẢN (Text / HTML Table) sạch đẹp, có thể chỉnh sửa trực tiếp
+  // - HÌNH ẢNH (screenshot Win+Shift+S, PrtScn, copy ảnh): Dán trực tiếp vào nội dung thư như cũ (insertImage base64)
+  // - TỆP TÀI LIỆU (Excel, Word, PDF, Zip... copy từ Explorer): Tự động thêm vào danh sách file đính kèm!
   const handleEditorPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     const clipboardData = e.clipboardData;
     if (!clipboardData) return;
 
+    const htmlData = clipboardData.getData('text/html') || '';
+    const textData = clipboardData.getData('text/plain') || '';
+
+    // Kiểm tra xem dữ liệu dán có phải là BẢNG TÍNH EXCEL / GOOGLE SHEETS / TABLE không:
+    // 1. htmlData chứa <table, <tbody, <tr, <td hoặc các định danh Office/Excel/Google Sheets
+    // 2. Hoặc textData chứa ký tự phân cách cột bằng phím Tab ('\t') và có ít nhất 1 dòng
+    const hasTableHtml = /<table[\s>]/i.test(htmlData) || /<(tr|td|th)[\s>]/i.test(htmlData);
+    const hasSpreadsheetMarker = /office:excel|ProgId="Excel\.Sheet"|urn:schemas-microsoft-com:office:excel|google-sheets-html-origin/i.test(htmlData);
+    const hasTsvData = textData.includes('\t') && (textData.includes('\n') || textData.includes('\r'));
+
+    const isSpreadsheetOrTable = hasTableHtml || hasSpreadsheetMarker || hasTsvData;
+
+    // Phân loại tệp trong clipboard (nếu có)
     const items = clipboardData.items;
     const clipboardFiles = clipboardData.files;
 
@@ -263,13 +498,41 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
       }
     }
 
-    // 1. Nếu có tệp tài liệu (Excel, PDF, Word, Zip...) -> Thêm vào danh sách tệp đính kèm
-    if (nonImageFiles.length > 0) {
+    // 1. NẾU LÀ TỆP TÀI LIỆU COPY TỪ EXPLORER (Excel .xlsx, Word .docx, PDF, Zip...):
+    // Không có nội dung bảng/text dán vào editor, chỉ có tệp non-image trong clipboard -> Thêm vào file đính kèm!
+    if (nonImageFiles.length > 0 && !isSpreadsheetOrTable) {
       e.preventDefault();
       addAttachmentFiles(nonImageFiles);
+      return;
     }
 
-    // 2. Nếu có hình ảnh -> Dán trực tiếp vào nội dung như cũ
+    // 2. NẾU LÀ BẢNG EXCEL / BẢNG TÍNH / TABLE:
+    // Chú ý: Khi copy ô từ Excel, Excel luôn tự động đính kèm thêm 1 file auxiliary 'image/png'.
+    // Ta BẮT BUỘC bỏ qua file ảnh phụ này để dán bảng dạng TEXT / HTML TABLE có thể chỉnh sửa!
+    if (isSpreadsheetOrTable) {
+      e.preventDefault();
+      let cleanHtml = '';
+      if (hasTableHtml || hasSpreadsheetMarker) {
+        cleanHtml = sanitizeSpreadsheetHtml(htmlData);
+      }
+      
+      // Nếu làm sạch HTML rỗng nhưng có dữ liệu TSV dạng text -> Dựng bảng từ TSV
+      if (!cleanHtml && hasTsvData) {
+        cleanHtml = tsvToHtmlTable(textData);
+      }
+
+      if (cleanHtml) {
+        document.execCommand('insertHTML', false, cleanHtml + '<p><br></p>');
+        return;
+      } else if (textData) {
+        // Fallback: nếu không render được bảng thì dán text thuần chứ tuyệt đối không biến thành ảnh
+        document.execCommand('insertText', false, textData);
+        return;
+      }
+    }
+
+    // 3. NẾU LÀ HÌNH ẢNH THỰC SỰ (Ảnh chụp màn hình Snipping Tool, Win+Shift+S, PrtScn, copy ảnh từ web, hoặc tệp ảnh):
+    // Dán trực tiếp vào nội dung thư dạng ảnh inline như cũ
     if (imageFiles.length > 0) {
       e.preventDefault();
       for (const file of imageFiles) {
@@ -282,9 +545,10 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
         };
         reader.readAsDataURL(file);
       }
+      return;
     }
 
-    // Nếu chỉ là text thuần hoặc HTML copy từ văn bản -> để trình duyệt paste text bình thường
+    // 4. Nếu là đoạn text thường hoặc văn bản không chứa bảng -> để trình duyệt tự paste tự nhiên
   };
 
   // Xử lý dán (Ctrl+V) ngoài khung soạn thảo (ví dụ: click vào modal, vùng đính kèm)
