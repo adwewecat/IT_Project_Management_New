@@ -113,7 +113,13 @@ export const webmailService = {
   },
 
   // Danh sách email & Hộp thư đến
-  async getMessages(filterType: 'unread' | 'all' | 'sent' = 'unread', search = '', top = 50, skip = 0): Promise<{
+  async getMessages(
+    filterType: 'unread' | 'all' | 'sent' = 'unread',
+    search = '',
+    top = 50,
+    skip = 0,
+    forceRefresh = false
+  ): Promise<{
     messages: WebmailMessageItem[];
     total_returned: number;
     unread_count: number;
@@ -121,13 +127,16 @@ export const webmailService = {
     search_query: string;
   }> {
     const res = await apiClient.get('/webmail/messages', {
-      params: { filter_type: filterType, search, top, skip }
+      params: { filter_type: filterType, search, top, skip, force_refresh: forceRefresh }
     });
     return res.data;
   },
 
-  async getMessageDetail(messageId: string): Promise<WebmailMessageDetail> {
-    const res = await apiClient.get<WebmailMessageDetail>(`/webmail/messages/${encodeURIComponent(messageId)}`);
+  async getMessageDetail(messageId: string, forceRefresh = false): Promise<WebmailMessageDetail> {
+    const res = await apiClient.get<WebmailMessageDetail>(
+      `/webmail/messages/${encodeURIComponent(messageId)}`,
+      { params: { force_refresh: forceRefresh } }
+    );
     return res.data;
   },
 

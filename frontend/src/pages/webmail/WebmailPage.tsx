@@ -82,25 +82,31 @@ export const WebmailPage: React.FC = () => {
   // Iframe ref để tự động chỉnh chiều cao nội dung email
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // Bộ đệm chi tiết email trên Client (RAM Cache) giúp chuyển đổi thư tức thì 0ms không phải tải lại
+  const detailCacheRef = useRef<Map<string, WebmailMessageDetail>>(new Map());
+
   // Load danh sách email khi chuyển tab hoặc vào trang
   useEffect(() => {
     setSelectedMessageId(null);
     setSelectedDetail(null);
-    loadMessages(activeTab);
+    loadMessages(activeTab, false);
   }, [activeTab]);
 
-  const loadMessages = async (filter: FilterTab) => {
+  const loadMessages = async (filter: FilterTab, forceRefresh = false) => {
     setLoadingList(true);
     try {
       // Unread: load all unread messages (backend loops all pages)
       // All: load maximum 50 most recent messages
       // Sent: load maximum 50 most recent sent messages
       const topLimit = filter === 'unread' ? 100 : 50;
-      const data = await webmailService.getMessages(filter, searchQuery, topLimit, 0);
+      const data = await webmailService.getMessages(filter, searchQuery, topLimit, 0, forceRefresh);
       setMessages(data.messages);
       setUnreadCount(data.unread_count);
 
-      // Không tự động chọn thư đầu tiên để đảm bảo user chỉ đánh dấu đã đọc khi thực sự bấm vào thư xem
+      // Nếu user chủ động bấm Làm Mới thì xóa cache client để nạp lại bản mới nhất
+      if (forceRefresh) {
+        detailCacheRef.current.clear();
+      }
     } catch (err) {
       console.error('Lỗi khi tải danh sách email:', err);
     } finally {
@@ -108,14 +114,33 @@ export const WebmailPage: React.FC = () => {
     }
   };
 
-  // Chọn email để đọc chi tiết
-  const handleSelectMessage = async (messageId: string) => {
+  // Chọn email để đọc chi tiết (ưu tiên nạp từ Client-side cache 0ms)
+  const handleSelectMessage = async (messageId: string, forceRefresh = false) => {
     setSelectedMessageId(messageId);
-    setLoadingDetail(true);
     setMobileShowDetail(true);
 
+    // 1. Kiểm tra Client-side cache: Nếu đã có và không ép refresh thì hiển thị NGAY LẬP TỨC (0ms)
+    if (!forceRefresh && detailCacheRef.current.has(messageId)) {
+      const cached = detailCacheRef.current.get(messageId)!;
+      setSelectedDetail(cached);
+      setLoadingDetail(false);
+
+      // Cập nhật trạng thái đã đọc trong danh sách hiển thị
+      setMessages((prev) => {
+        const target = prev.find((m) => m.id === messageId);
+        if (target && !target.is_read) {
+          setUnreadCount((c) => Math.max(0, c - 1));
+        }
+        return prev.map((m) => (m.id === messageId ? { ...m, is_read: true } : m));
+      });
+      return;
+    }
+
+    setLoadingDetail(true);
+
     try {
-      const detail = await webmailService.getMessageDetail(messageId);
+      const detail = await webmailService.getMessageDetail(messageId, forceRefresh);
+      detailCacheRef.current.set(messageId, detail);
       setSelectedDetail(detail);
 
       // Cập nhật trạng thái đã đọc trong danh sách hiển thị
@@ -367,9 +392,11 @@ export const WebmailPage: React.FC = () => {
         };
         setTimeout(adjustHeight, 150);
 
-        // Khi ảnh bên trong iframe load xong thì tính toán lại chiều cao
+        // Khi ảnh bên trong iframe load xong thì tính toán lại chiều cao và tối ưu giải mã ảnh
         const imgs = doc.querySelectorAll('img');
         imgs.forEach((img) => {
+          img.setAttribute('loading', 'lazy');
+          img.setAttribute('decoding', 'async');
           img.addEventListener('load', adjustHeight);
         });
       }
@@ -479,9 +506,9 @@ export const WebmailPage: React.FC = () => {
           {/* Làm mới */}
           <Button
             variant="outline"
-            onClick={() => loadMessages(activeTab)}
+            onClick={() => loadMessages(activeTab, true)}
             isLoading={loadingList}
-            title="Làm mới danh sách thư"
+            title="Làm mới danh sách thư và đồng bộ từ Microsoft 365"
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             <RefreshCw size={14} className={loadingList ? 'spin' : ''} />
@@ -976,6 +1003,17 @@ export const WebmailPage: React.FC = () => {
                       <span>Đánh dấu chưa đọc</span>
                     </Button>
                   )}
+
+                  {/* Nút ép tải lại nội dung mới nhất từ Office 365 */}
+                  <Button
+                    variant="outline"
+                    onClick={() => selectedMessageId && handleSelectMessage(selectedMessageId, true)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', padding: '5px 10px' }}
+                    title="Tải lại nội dung mới nhất của thư này từ Microsoft 365"
+                  >
+                    <RefreshCw size={13} className={loadingDetail ? 'spin' : ''} />
+                    <span>Tải lại</span>
+                  </Button>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

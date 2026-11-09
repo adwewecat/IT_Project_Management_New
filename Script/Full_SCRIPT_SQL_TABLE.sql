@@ -1833,6 +1833,33 @@ END
 GO
 
 -- ----------------------------------------------------------------------------
+-- BẢNG: WEBMAIL_DETAIL_CACHE (Bộ Đệm Chi Tiết Nội Dung & Ảnh Email Mở Tức Thì 0ms)
+-- ----------------------------------------------------------------------------
+IF OBJECT_ID(N'[dbo].[WEBMAIL_DETAIL_CACHE]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[WEBMAIL_DETAIL_CACHE] (
+        [id] NVARCHAR(255) PRIMARY KEY,
+        [subject] NVARCHAR(500) NULL,
+        [sender_name] NVARCHAR(255) NULL,
+        [sender_email] NVARCHAR(255) NULL,
+        [to_recipients_json] NVARCHAR(MAX) NULL,
+        [cc_recipients_json] NVARCHAR(MAX) NULL,
+        [received_time_vn] NVARCHAR(100) NULL,
+        [received_time_raw] NVARCHAR(100) NULL,
+        [has_attachments] BIT NOT NULL DEFAULT 0,
+        [attachments_json] NVARCHAR(MAX) NULL,
+        [body_type] NVARCHAR(50) NULL DEFAULT 'html',
+        [body_content] NVARCHAR(MAX) NULL,
+        [importance] NVARCHAR(50) NULL DEFAULT 'normal',
+        [sent_by_user] NVARCHAR(100) NULL,
+        [cached_at] DATETIME NOT NULL DEFAULT GETDATE()
+    );
+    CREATE INDEX [IX_WEBMAIL_DETAIL_CACHE_TIME] ON [dbo].[WEBMAIL_DETAIL_CACHE] ([cached_at] DESC);
+    PRINT N'Table [dbo].[WEBMAIL_DETAIL_CACHE] created successfully.';
+END
+GO
+
+-- ----------------------------------------------------------------------------
 -- BẢNG: MANAGED_APIS (Cổng Quản Lý & Điều Khiển Bật / Tắt Các Link API Hệ Thống)
 -- ----------------------------------------------------------------------------
 IF OBJECT_ID(N'[dbo].[MANAGED_APIS]', N'U') IS NULL

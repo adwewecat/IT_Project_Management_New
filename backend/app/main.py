@@ -253,6 +253,32 @@ async def lifespan(app: FastAPI):
                     END
                 """))
                 _tc.commit()
+
+                # Kiểm tra phòng vệ bảng WEBMAIL_DETAIL_CACHE (bộ đệm chi tiết email mở tức thì 0ms)
+                _tc.execute(text("""
+                    IF OBJECT_ID('dbo.WEBMAIL_DETAIL_CACHE', 'U') IS NULL
+                    BEGIN
+                        CREATE TABLE dbo.WEBMAIL_DETAIL_CACHE (
+                            id NVARCHAR(255) PRIMARY KEY,
+                            subject NVARCHAR(500) NULL,
+                            sender_name NVARCHAR(255) NULL,
+                            sender_email NVARCHAR(255) NULL,
+                            to_recipients_json NVARCHAR(MAX) NULL,
+                            cc_recipients_json NVARCHAR(MAX) NULL,
+                            received_time_vn NVARCHAR(100) NULL,
+                            received_time_raw NVARCHAR(100) NULL,
+                            has_attachments BIT NOT NULL DEFAULT 0,
+                            attachments_json NVARCHAR(MAX) NULL,
+                            body_type NVARCHAR(50) NULL DEFAULT 'html',
+                            body_content NVARCHAR(MAX) NULL,
+                            importance NVARCHAR(50) NULL DEFAULT 'normal',
+                            sent_by_user NVARCHAR(100) NULL,
+                            cached_at DATETIME NOT NULL DEFAULT GETDATE()
+                        );
+                        CREATE INDEX IX_WEBMAIL_DETAIL_CACHE_TIME ON dbo.WEBMAIL_DETAIL_CACHE (cached_at DESC);
+                    END
+                """))
+                _tc.commit()
         except Exception as _ex_tmpl:
             logger.warning("Lỗi tự động seed mẫu script hoặc tạo bảng package templates: %s", _ex_tmpl)
         # Đảm bảo các cột cần thiết tồn tại trong MEMO, SOFTWARE_VERSIONS và GHINHAN_SAIPHAM

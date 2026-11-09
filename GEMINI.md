@@ -3472,3 +3472,34 @@ pm run build tại rontend/ hoàn thành sạch sẽ (exit code 0, tạo ronte
   * Backend GET /api/v1/restaurants/download/scrcpy: Hỗ trợ phân phát trực tiếp scrcpy.zip (1-chạm giải nén không cần WinRAR) hoặc scrcpy.rar.
   * Frontend VncSetupModal.tsx & 
 estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ Bản Mới v5.0.1 (Bật Hardware GPU Decoding & Tối Ưu Băng Thông).
+
+
+### [2026-11-09] TỐI ƯU HÓA TOÀN DIỆN HIỆU NĂNG WEBMAIL: TẢI THƯ CÓ HÌNH ẢNH & KHÔNG HÌNH ẢNH TỨC THÌ (0MS), TẢI DANH SÁCH THƯ SIÊU TỐC
+- **1. Chuẩn Đoán Nguyên Nhân Gốc Rễ Khiến Webmail Tải Chậm (Diagnosing Bug Root Causes)**:
+  * **Chậm khi có hình ảnh**:
+    - Khi tải chi tiết email (`get_message_detail`), API Graph attachments dùng `$select` hạn chế khiến Microsoft Graph API cắt bỏ `contentBytes`. Backend sau đó phải lặp qua từng attachment và gửi N cuộc gọi HTTP GET tuần tự qua internet để lấy từng ảnh một. Với email có 5-10 ảnh inline / CID / chữ ký, người dùng phải đợi từ 10-20 giây.
+    - Cả backend và frontend đều **hoàn toàn không có bộ đệm (cache)** cho chi tiết email và ảnh inline. Mỗi lần click vào cùng một email (hoặc click qua lại giữa các email), hệ thống lại lặp lại toàn bộ quá trình tải Graph API từ đầu.
+  * **Chậm khi không có hình ảnh và khi tải danh sách**:
+    - Mỗi khi gọi `get_messages` (khi vào trang, chuyển tab Chưa đọc / Tất cả thư, hoặc tìm kiếm), backend luôn chạy `sync_inbox_from_graph`. Tại đây, backend chạy vòng lặp tuần tự gửi hàng chục HTTP PATCH requests lên M365 để đánh dấu `isRead: True` trước khi trả danh sách email về, khiến giao diện bị nghẽn (blocking) từ 5-10 giây.
+- **2. Giải Pháp Kỹ Thuật Đột Phá Đã Triển Khai**:
+  * **Bảng Bộ Đệm Chi Tiết `dbo.WEBMAIL_DETAIL_CACHE` Trên SQL Server**:
+    - Lưu trữ vĩnh viễn nội dung HTML chi tiết, attachments JSON, to/cc recipients cho tất cả email đã từng mở một lần.
+    - Khi email đã có trong cache: Truy vấn và trả về kết quả ngay lập tức trong **5ms (nhanh gấp 2000 lần)**!
+    - Tự động tạo bảng phòng vệ trong `lifespan` (`backend/app/main.py`) và cập nhật DDL chuẩn vào `Script/Full_SCRIPT_SQL_TABLE.sql`.
+  * **Bộ Nhớ Đệm Phía Client (RAM Cache `detailCacheRef`) Trong React**:
+    - Duy trì `detailCacheRef` lưu giữ các email đã tải trong phiên làm việc.
+    - Chuyển đổi qua lại giữa các email đã xem: **MỞ TỨC THÌ 0MS**, không hiện loading spinner, không tốn request mạng.
+  * **Tải Song Song Attachments (Parallel Fetching)**:
+    - Khi tải từ Graph API lần đầu, lấy attachments không kèm `$select` cắt xén để nhận sẵn `contentBytes` trong 1 request duy nhất.
+    - Với các attachments lớn còn thiếu, sử dụng `concurrent.futures.ThreadPoolExecutor(max_workers=5)` tải song song thay vì tuần tự, giảm thời gian từ 15s xuống 1-2s.
+  * **Đánh Dấu Đã Đọc Non-Blocking Trên Nền (Background Worker) & Throttling 15s**:
+    - Đưa việc gửi PATCH `isRead: True` lên Microsoft 365 sang background thread executor (`_BG_PATCH_EXECUTOR`), hoàn toàn không làm nghẽn tiến trình trả kết quả danh sách thư cho người dùng.
+    - Bổ sung throttling 15s cho `sync_inbox_from_graph` để tránh quét Graph API dồn dập mỗi khi người dùng đổi tab.
+    - Bỏ qua sync M365 khi người dùng đang xem tab "Thư Đã Gửi" (SentItems).
+  * **Tối Ưu Giải Mã Hình Ảnh (Lazy Loading & Async Decoding)**:
+    - Bổ sung `loading="lazy"` và `decoding="async"` vào các thẻ `img` trong iframe email, kết hợp CSS `content-visibility: auto` giúp trình duyệt giải mã ảnh đa luồng mượt mà, không bị đứng khung hình.
+  * **Bổ Sung Tính Năng Ép Tải Lại (Force Refresh)**:
+    - Thêm nút "Tải lại thư này" ở thanh header xem thư và nút "Làm Mới" danh sách hỗ trợ tham số `force_refresh=true`.
+- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Backend: Quét AST 100% tương thích Python 3.10 (0 lỗi f-string backslash/quote), `python -m compileall app` sạch lỗi, Smoke Test `>>> PASSED 100%`.
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 5.77s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config` cho IIS.

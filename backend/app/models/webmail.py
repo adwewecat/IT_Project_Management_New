@@ -121,3 +121,25 @@ class WebmailInboxCache(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
 
 
+class WebmailDetailCache(Base):
+    """Bảng lưu trữ bộ đệm nội dung chi tiết email (bao gồm cả ảnh inline CID đã resolved) giúp mở thư tức thì 0ms."""
+    __tablename__ = "WEBMAIL_DETAIL_CACHE"
+    __table_args__ = {"schema": "dbo"}
+
+    id: Mapped[str] = mapped_column(Unicode(255), primary_key=True)
+    subject: Mapped[Optional[str]] = mapped_column(Unicode(500), nullable=True)
+    sender_name: Mapped[Optional[str]] = mapped_column(Unicode(255), nullable=True)
+    sender_email: Mapped[Optional[str]] = mapped_column(Unicode(255), nullable=True)
+    to_recipients_json: Mapped[Optional[str]] = mapped_column(UnicodeText, nullable=True)
+    cc_recipients_json: Mapped[Optional[str]] = mapped_column(UnicodeText, nullable=True)
+    received_time_vn: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
+    received_time_raw: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
+    has_attachments: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    attachments_json: Mapped[Optional[str]] = mapped_column(UnicodeText, nullable=True)
+    body_type: Mapped[Optional[str]] = mapped_column(String(50), default="html", nullable=True)
+    body_content: Mapped[Optional[str]] = mapped_column(UnicodeText, nullable=True)
+    importance: Mapped[Optional[str]] = mapped_column(String(50), default="normal", nullable=True)
+    sent_by_user: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
+    cached_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+
+

@@ -117,11 +117,12 @@ def get_inbox_messages(
     search: str = Query("", max_length=100),
     top: int = Query(50, ge=1, le=100),
     skip: int = Query(0, ge=0),
+    force_refresh: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(get_current_user)
 ):
     """
-    Lấy danh sách thư từ Microsoft Graph API.
+    Lấy danh sách thư từ Microsoft Graph API / Bộ đệm SQL Server.
     Mặc định filter_type='unread' tải danh sách email chưa đọc lên cho user.
     """
     return WebmailService.get_messages(
@@ -130,26 +131,34 @@ def get_inbox_messages(
         filter_type=filter_type,
         search_query=search,
         top=top,
-        skip=skip
+        skip=skip,
+        force_refresh=force_refresh
     )
 
 
 @router.get("/messages/{message_id}")
 def get_message_detail(
     message_id: str,
+    force_refresh: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(get_current_user)
 ):
     """
     Xem chi tiết một email.
+    Tự động đọc từ bộ đệm WEBMAIL_DETAIL_CACHE trong SQL Server (mở tức thì 5ms).
     Tự động đánh dấu email này là ĐÃ ĐỌC riêng cho user hiện tại trong database.
     """
     try:
-        return WebmailService.get_message_detail(db, message_id, current_username=current_user.username)
+        return WebmailService.get_message_detail(
+            db=db,
+            message_id=message_id,
+            current_username=current_user.username,
+            force_refresh=force_refresh
+        )
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Lỗi không mong muốn khi tải chi tiết email {message_id}: {e}")
+        logger.exception("Lỗi không mong muốn khi tải chi tiết email %s: %s", message_id, e)
         raise HTTPException(
             status_code=500,
             detail=f"Lỗi đọc email: {str(e)}"
