@@ -176,13 +176,13 @@ export const CoSoKdsDeviceFleetModal: React.FC<CoSoKdsDeviceFleetModalProps> = (
             </div>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                QUẢN LÝ THIẾT BỊ NHÀ HÀNG
+                QUẢN LÝ TABLET NHÀ HÀNG
                 <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-success-bg)', color: 'var(--color-success-text)', fontWeight: 700 }}>
                   Đã Gom Phiên &amp; Sắp Xếp Order Mới Nhất
                 </span>
               </div>
               <div style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>
-                Nhà hàng: <strong>{restaurantName}</strong> ({ipSubnet}) — Nhận diện thiết bị duy nhất: <strong>CO, SO, KDS</strong>
+                Nhà hàng: <strong>{restaurantName}</strong> ({ipSubnet}) {data?.message ? `— ${data.message}` : '— Nhận diện thiết bị duy nhất: CO, SO, KDS'}
               </div>
             </div>
           </div>

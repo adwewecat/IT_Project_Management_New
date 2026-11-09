@@ -2981,10 +2981,11 @@ def get_co_so_kds_device_fleet_api(
     host: str = Query(..., description="IP may chu MongoDB nha hang"),
     port: int = Query(27017),
     restaurant_id: Optional[int] = Query(None),
-    current_user: UserInfo = Depends(require_app_or_admin)
+    current_user: UserInfo = Depends(require_app_or_admin),
+    db: Session = Depends(get_db),
 ):
     """
     Ban do giam sat suc khoe thiet bi va phien ban app toan nha hang (CO, SO, KDS).
     Phat hien thiet bi offline hoac phien ban app loi thoi can cap nhat.
     """
-    return co_so_kds_service.get_device_fleet(host=host, port=port, restaurant_id=restaurant_id)
+    return co_so_kds_service.get_device_fleet(host=host, port=port, restaurant_id=restaurant_id, db=db)

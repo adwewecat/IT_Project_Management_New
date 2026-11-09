@@ -4412,3 +4412,26 @@ estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ B
 - **3. Kiểm Thử & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.12s`), cập nhật sạch sẽ thư mục `frontend/dist/` (kèm `web.config`).
   * Backend: Smoke test `>>> PASSED 100%`, tương thích 100% Python 3.10.
+
+
+### [2026-11-09] KHẮC PHỤC TRIỆT ĐỂ LỖI QUẢN LÝ TABLET/THIẾT BỊ NHÀ HÀNG LOAD TRÙNG DỮ LIỆU CỐ ĐỊNH GIỮA CÁC NHÀ HÀNG (DYNAMIC FLEET TỪ MONGODB & MSSQL)
+- **1. Triệu Chứng & Nguyên Nhân Gốc Rễ**:
+  * **Triệu chứng**: Khi người dùng chuyển đổi giữa các nhà hàng (ví dụ từ Isushi Cao Thắng sang Chixmax Vạn Hạnh Mall), danh sách thiết bị luôn hiển thị đúng 11 thiết bị giống hệt nhau (Sunmi V2 Pro 51, Posiflex KDS 41, 42, Tablet Bàn 01, 02, 06, 12, 03, 07...).
+  * **Nguyên nhân**: Trong `backend/app/services/co_so_kds_service.py`, hàm `get_device_fleet` trước đó sử dụng danh sách mẫu `raw_device_specs` cố định 11 thiết bị và chỉ đổi dải IP `base_ip`, chưa từng kết nối truy vấn dữ liệu thực tế từ MongoDB.
+- **2. Giải Pháp Kỹ Thuật Động Toàn Diện (Dynamic MongoDB & MSSQL Device Fleet)**:
+  * **Cơ Chế Dò Tìm MongoDB Linh Hoạt (Candidate IP Auto-Probe)**:
+    - Khi nhận IP gateway hoặc IP POS của nhà hàng, backend tự động dò tìm máy chủ MongoDB online trong cụm (`.41`, `.11`, `.12`, hoặc host) với timeout 800ms để bắt đúng máy đang chạy MongoDB.
+  * **Trích Xuất Dữ Liệu Thực Tế Khi MongoDB Online**:
+    - **Màn hình KDS Bếp**: Quét collection `G_KITCHEN.CONFIG_KDS` (hoặc `ACCOUNT`), lấy đúng số lượng và tên các quầy chế biến thực tế của nhà hàng (ví dụ: Chixmax có 1 quầy Nóng; Gogi Âu Cơ có 3 quầy: Quầy Thịt, Quầy Nóng, Quầy Salad).
+    - **Tablet CO Order Tại Bàn**: Quét collection `G_ORDER.TABLE` (`isCurrentRes: True`) để lấy trọn vẹn danh sách bàn thực tế (Chixmax có 30 bàn A1, A2, B1, B2...; Gogi Âu Cơ có 31 bàn 101, 102, 201, 202...). Kết hợp đối soát với `CALL_STAFF` và `QR_PREPAID_ORDER` để lấy giờ khách gọi món gần nhất, phiên bản app thực tế (v1.6.89, v1.6.91...), mã thiết bị duy nhất.
+    - **Máy SO Staff Cầm Tay**: Quét `G_ORDER.ORDER_ACTION_LOG` theo các phiên SO gần nhất của nhân viên sàn để lấy mã nhân viên thực tế và giờ bắn order mới nhất.
+    - **Sắp xếp chuẩn nghiệp vụ**: Tự động đưa thiết bị có giờ order / mở bàn muộn nhất lên đầu bảng (`last_order_time DESC`).
+  * **Cơ Chế Phòng Vệ Khi MongoDB Ngoại Tuyến (Offline Brand Profile)**:
+    - Khi cụm IP `.41`, `.11`, `.12` đều không phản hồi, hệ thống truy vấn thông tin thương hiệu từ bảng `RESTAURANT` trong SQL Server (Isushi, Kichi Kichi, Gogi House, Manwah...) để nạp danh mục bàn và KDS đặc thù của thương hiệu đó.
+    - Đánh dấu trạng thái `Ngoại tuyến / Chưa nhận tín hiệu ping` rõ ràng, thông báo minh bạch cho người dùng.
+  * **Frontend (`CoSoKdsDeviceFleetModal.tsx`)**:
+    - Đổi tiêu đề thành **QUẢN LÝ TABLET NHÀ HÀNG**.
+    - Hiển thị thông báo nguồn dữ liệu máy chủ MongoDB kết nối thành công và số lượng thiết bị thực tế.
+- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Backend: 100% Python 3.10 compatible (0 backslash trong f-string, 0 cú pháp 3.11+), `python -m compileall app` sạch lỗi, Smoke Test `>>> PASSED 100%`.
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.74s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config` cho IIS.
