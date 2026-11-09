@@ -247,7 +247,7 @@ export const RestaurantSoftwareVersionsModal: React.FC<RestaurantSoftwareVersion
       phan_mem: finalName,
       phien_ban: formVersion.trim(),
       ngay_update: `${formDate}T00:00:00`,
-      hinh_anh: formImage.trim() || undefined,
+      hinh_anh: formImage.trim() ? formImage.trim() : null,
       sync_all_dates: formSyncAllDates,
     };
 

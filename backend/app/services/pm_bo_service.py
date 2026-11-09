@@ -1,3 +1,4 @@
+import os
 import unicodedata
 from datetime import datetime
 from typing import Optional, List
@@ -275,6 +276,7 @@ def update_software_version(db: Session, item_id: int, payload: SoftwareVersionU
     if not item:
         raise ValueError("Phần mềm không tồn tại hoặc đã bị xóa.")
 
+    fields_set = getattr(payload, "model_fields_set", None) or getattr(payload, "__fields_set__", set())
     now = datetime.now()
     if payload.phan_mem is not None:
         item.phan_mem = payload.phan_mem.strip()
@@ -282,11 +284,32 @@ def update_software_version(db: Session, item_id: int, payload: SoftwareVersionU
         item.phien_ban = payload.phien_ban.strip()
     if payload.ngay_update is not None:
         item.ngay_update = payload.ngay_update
-    if payload.noi_dung_update is not None:
+
+    if "noi_dung_update" in fields_set:
+        item.noi_dung_update = payload.noi_dung_update.strip() if (payload.noi_dung_update and payload.noi_dung_update.strip()) else None
+    elif payload.noi_dung_update is not None:
         item.noi_dung_update = payload.noi_dung_update.strip() or None
-    if payload.hinh_anh is not None:
+
+    if "hinh_anh" in fields_set:
+        new_img = payload.hinh_anh.strip() if (payload.hinh_anh and payload.hinh_anh.strip()) else None
+        # Dọn dẹp tệp ảnh cũ trên ổ đĩa nếu ảnh bị xóa hoặc thay mới
+        if item.hinh_anh and item.hinh_anh != new_img:
+            try:
+                if item.hinh_anh.startswith("/uploads/software_versions/"):
+                    from app.api.v1.pm_bo import UPLOAD_VERSIONS_DIR
+                    old_filename = os.path.basename(item.hinh_anh)
+                    old_path = os.path.join(UPLOAD_VERSIONS_DIR, old_filename)
+                    if os.path.isfile(old_path):
+                        os.remove(old_path)
+            except Exception:
+                pass
+        item.hinh_anh = new_img
+    elif payload.hinh_anh is not None:
         item.hinh_anh = payload.hinh_anh.strip() or None
-    if payload.ghi_chu is not None:
+
+    if "ghi_chu" in fields_set:
+        item.ghi_chu = payload.ghi_chu.strip() if (payload.ghi_chu and payload.ghi_chu.strip()) else None
+    elif payload.ghi_chu is not None:
         item.ghi_chu = payload.ghi_chu.strip() or None
 
     item.nguoi_update = current_username
@@ -489,18 +512,27 @@ def update_brand_print_standard(
     if not item:
         raise ValueError("Không tìm thấy thông tin chuẩn hóa in.")
 
+    fields_set = getattr(payload, "model_fields_set", None) or getattr(payload, "__fields_set__", set())
     now = datetime.now()
     if payload.brand_name is not None:
         item.brand_name = payload.brand_name.strip()
     if payload.loai_in is not None:
         item.loai_in = payload.loai_in.strip()
-    if payload.tieu_de is not None:
+    if "tieu_de" in fields_set:
+        item.tieu_de = payload.tieu_de.strip() if (payload.tieu_de and payload.tieu_de.strip()) else None
+    elif payload.tieu_de is not None:
         item.tieu_de = payload.tieu_de.strip() or None
-    if payload.ghi_chu is not None:
+    if "ghi_chu" in fields_set:
+        item.ghi_chu = payload.ghi_chu.strip() if (payload.ghi_chu and payload.ghi_chu.strip()) else None
+    elif payload.ghi_chu is not None:
         item.ghi_chu = payload.ghi_chu.strip() or None
-    if payload.images is not None:
+    if "images" in fields_set:
         item.images = payload.images
-    if payload.files is not None:
+    elif payload.images is not None:
+        item.images = payload.images
+    if "files" in fields_set:
+        item.files = payload.files
+    elif payload.files is not None:
         item.files = payload.files
 
     item.nguoi_update = current_username

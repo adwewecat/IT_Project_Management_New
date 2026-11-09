@@ -3599,3 +3599,24 @@ estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ B
 - **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
   * Backend: 100% Python 3.10 compatible, `compileall app` sạch lỗi, Smoke Test kiểm tra AST hợp lệ 100%.
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.97s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config` cho IIS.
+
+
+### [2026-11-09] KHẮC PHỤC TRIỆT ĐỂ LỖI XÓA HÌNH ẢNH MINH HỌA PHIÊN BẢN PHẦN MỀM KHÔNG LƯU ĐƯỢC (SOFTWARE VERSION IMAGE CLEAR BUG)
+- **1. Triệu Chứng & Nguyên Nhân Gốc Rễ**:
+  * **Triệu chứng**: Người dùng phản ánh *"xóa hình ảnh đính kèm và lưu lại thì đang hiện không lưu được, mà vẫn còn hình đính kèm"* trong modal Theo Dõi Phiên Bản Phần Mềm Hệ Thống (KDS, CO, SO, GPOS...). Dù đã bấm nút xóa ảnh (thùng rác đỏ) và form báo lưu thành công, hình ảnh cũ vẫn còn nguyên trong bảng danh sách.
+  * **Nguyên nhân**:
+    1. **Frontend (`RestaurantSoftwareVersionsModal.tsx`)**: Khi xóa ảnh, biến `formImage` là `""`. Lúc gửi payload update, logic cũ dùng `hinh_anh: formImage.trim() || undefined`. Vì là `undefined`, `JSON.stringify` của Axios tự động lược bỏ thuộc tính `hinh_anh` khỏi payload HTTP gửi đi.
+    2. **Backend (`pm_bo_service.py` & Pydantic)**: Khi thuộc tính `hinh_anh` bị thiếu trong JSON, Pydantic gán `payload.hinh_anh = None`. Trong `update_software_version`, câu lệnh điều kiện `if payload.hinh_anh is not None:` đánh giá thành `False`, dẫn đến backend coi như trường `hinh_anh` không được chỉnh sửa và giữ nguyên giá trị ảnh cũ trong Database!
+    3. Ngoài ra, ngay cả khi frontend gửi `{"hinh_anh": null}`, việc kiểm tra bằng `if payload.hinh_anh is not None:` cũng sẽ bỏ qua, không thể gán lại `item.hinh_anh = None`.
+- **2. Giải Pháp Kỹ Thuật Đa Tầng**:
+  * **Frontend**:
+    - Sửa `payload` trong `RestaurantSoftwareVersionsModal.tsx`: `hinh_anh: formImage.trim() ? formImage.trim() : null`. Khi người dùng xóa ảnh, frontend gửi rõ ràng giá trị `null` sang backend thay vì `undefined`.
+    - Cập nhật kiểu dữ liệu TypeScript trong `frontend/src/types/pmBo.ts`: `SoftwareVersionUpdatePayload` và `SoftwareVersionCreatePayload` cho phép `hinh_anh?: string | null;`.
+  * **Backend (`pm_bo_service.py`)**:
+    - Trích xuất tập hợp các trường thực sự được gửi lên từ client: `fields_set = getattr(payload, "model_fields_set", None) or getattr(payload, "__fields_set__", set())`.
+    - Khi `"hinh_anh" in fields_set`: Nếu `payload.hinh_anh` là `None` hoặc chuỗi rỗng `""`, gán trực tiếp `item.hinh_anh = None` và commit xuống Database.
+    - **Tự động dọn rác ổ đĩa**: Khi ảnh bị xóa hoặc thay ảnh mới, hệ thống tự động tìm và xóa tệp ảnh cũ trong thư mục máy chủ `uploads/software_versions/` để tiết kiệm dung lượng lưu trữ.
+    - Áp dụng cơ chế tương tự cho các trường ghi chú, nội dung update và chuẩn hóa in brand (`BrandPrintStandard`).
+- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Backend: 100% Python 3.10 compatible, quét AST toàn bộ dự án hợp lệ 100%, tiến trình backend daemon chạy ổn định trên port 8000.
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 6.53s`), cập nhật sạch sẽ bản build vào `frontend/dist/`.

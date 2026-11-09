@@ -47,9 +47,9 @@ export interface SoftwareVersionCreatePayload {
   phan_mem: string;
   phien_ban: string;
   ngay_update?: string;
-  noi_dung_update?: string;
-  hinh_anh?: string;
-  ghi_chu?: string;
+  noi_dung_update?: string | null;
+  hinh_anh?: string | null;
+  ghi_chu?: string | null;
   active?: boolean;
   sync_all_dates?: boolean;
 }
@@ -58,9 +58,9 @@ export interface SoftwareVersionUpdatePayload {
   phan_mem?: string;
   phien_ban?: string;
   ngay_update?: string;
-  noi_dung_update?: string;
-  hinh_anh?: string;
-  ghi_chu?: string;
+  noi_dung_update?: string | null;
+  hinh_anh?: string | null;
+  ghi_chu?: string | null;
   active?: boolean;
   sync_all_dates?: boolean;
 }
