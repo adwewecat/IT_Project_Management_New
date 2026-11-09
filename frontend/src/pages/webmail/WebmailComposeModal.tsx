@@ -172,18 +172,24 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
     document.execCommand('insertHTML', false, tableHtml);
   };
 
-  // Xử lý chọn tệp đính kèm với kiểm tra kích thước tối đa 30MB
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files) return;
-    const newFiles = Array.from(e.target.files);
+  // Hàm dùng chung thêm tệp đính kèm (hỗ trợ chọn file, dán Ctrl+V và kéo thả)
+  const addAttachmentFiles = (newFiles: File[]) => {
+    if (!newFiles || newFiles.length === 0) return;
     setErrorMessage('');
+
+    // Loại bỏ các tệp trùng lặp (cùng tên và dung lượng)
+    const uniqueFiles = newFiles.filter(
+      (nf) => !files.some((f) => f.name === nf.name && f.size === nf.size)
+    );
+
+    if (uniqueFiles.length === 0) return;
 
     // Tính tổng dung lượng hiện tại
     const currentTotal = files.reduce((acc, f) => acc + f.size, 0);
-    const addedTotal = newFiles.reduce((acc, f) => acc + f.size, 0);
+    const addedTotal = uniqueFiles.reduce((acc, f) => acc + f.size, 0);
 
     // Kiểm tra từng file
-    for (const f of newFiles) {
+    for (const f of uniqueFiles) {
       if (f.size > MAX_ATTACHMENT_BYTES) {
         setErrorMessage(`Tệp "${f.name}" có dung lượng ${(f.size / (1024 * 1024)).toFixed(2)}MB vượt quá giới hạn 30MB cho phép.`);
         return;
@@ -195,7 +201,13 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
       return;
     }
 
-    setFiles([...files, ...newFiles]);
+    setFiles((prev) => [...prev, ...uniqueFiles]);
+  };
+
+  // Xử lý chọn tệp đính kèm từ nút bấm
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    addAttachmentFiles(Array.from(e.target.files));
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -213,18 +225,54 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
     return <FileText size={14} style={{ color: '#64748B' }} />;
   };
 
-  // Xử lý dán hình ảnh (clipboard screenshot) trực tiếp vào nội dung thư
+  // Xử lý dán dữ liệu (paste clipboard) trong khung soạn thảo:
+  // - HÌNH ẢNH (screenshot, copy ảnh): Dán trực tiếp vào nội dung thư như cũ (insertImage base64)
+  // - TỆP TÀI LIỆU (Excel, Word, PDF, Zip, Text...): Tự động thêm vào danh sách file đính kèm!
   const handleEditorPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
+    const clipboardData = e.clipboardData;
+    if (!clipboardData) return;
 
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.type.indexOf('image') !== -1) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (!file) continue;
+    const items = clipboardData.items;
+    const clipboardFiles = clipboardData.files;
 
+    const nonImageFiles: File[] = [];
+    const imageFiles: File[] = [];
+
+    if (items && items.length > 0) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === 'file') {
+          const file = item.getAsFile();
+          if (!file) continue;
+
+          if (item.type.startsWith('image/') || file.type.startsWith('image/')) {
+            imageFiles.push(file);
+          } else {
+            nonImageFiles.push(file);
+          }
+        }
+      }
+    } else if (clipboardFiles && clipboardFiles.length > 0) {
+      for (let i = 0; i < clipboardFiles.length; i++) {
+        const file = clipboardFiles[i];
+        if (file.type.startsWith('image/')) {
+          imageFiles.push(file);
+        } else {
+          nonImageFiles.push(file);
+        }
+      }
+    }
+
+    // 1. Nếu có tệp tài liệu (Excel, PDF, Word, Zip...) -> Thêm vào danh sách tệp đính kèm
+    if (nonImageFiles.length > 0) {
+      e.preventDefault();
+      addAttachmentFiles(nonImageFiles);
+    }
+
+    // 2. Nếu có hình ảnh -> Dán trực tiếp vào nội dung như cũ
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      for (const file of imageFiles) {
         const reader = new FileReader();
         reader.onload = (loadEvt) => {
           const base64 = loadEvt.target?.result as string;
@@ -233,8 +281,49 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
           }
         };
         reader.readAsDataURL(file);
-        break;
       }
+    }
+
+    // Nếu chỉ là text thuần hoặc HTML copy từ văn bản -> để trình duyệt paste text bình thường
+  };
+
+  // Xử lý dán (Ctrl+V) ngoài khung soạn thảo (ví dụ: click vào modal, vùng đính kèm)
+  const handleModalPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    // Nếu sự kiện xuất phát từ editorRef thì editorRef đã tự xử lý
+    if (editorRef.current && editorRef.current.contains(e.target as Node)) {
+      return;
+    }
+
+    const clipboardFiles = e.clipboardData?.files;
+    if (clipboardFiles && clipboardFiles.length > 0) {
+      // Có tệp copy từ Windows Explorer -> Tự động thêm vào tệp đính kèm
+      e.preventDefault();
+      addAttachmentFiles(Array.from(clipboardFiles));
+    }
+  };
+
+  // Xử lý Kéo - Thả tệp (Drag & Drop) vào cửa sổ soạn thư
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDraggingOver) setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      addAttachmentFiles(Array.from(e.dataTransfer.files));
     }
   };
 
@@ -399,7 +488,47 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
         </div>
       }
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
+      <div
+        onPaste={handleModalPaste}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+          fontSize: '13px',
+          position: 'relative',
+        }}
+      >
+        {/* Overlay trực quan khi người dùng kéo thả file vào modal */}
+        {isDraggingOver && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(217, 119, 6, 0.08)',
+              border: '2px dashed #D97706',
+              borderRadius: '8px',
+              zIndex: 50,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              pointerEvents: 'none',
+            }}
+          >
+            <Paperclip size={32} style={{ color: '#D97706' }} />
+            <div style={{ fontSize: '15px', fontWeight: 700, color: '#D97706' }}>
+              Thả tệp vào đây để tự động thêm vào tệp đính kèm (tối đa 30MB)
+            </div>
+          </div>
+        )}
+
         {errorMessage && (
           <div
             style={{
@@ -521,7 +650,7 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            title="Đính kèm tệp (tối đa 30MB)"
+            title="Đính kèm tệp (hoặc copy file trong máy rồi nhấn Ctrl+V / Kéo thả tệp vào đây)"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -534,12 +663,26 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
               fontWeight: 700,
               fontSize: '12px',
               cursor: 'pointer',
-              marginRight: '6px',
+              marginRight: '4px',
             }}
           >
             <Paperclip size={14} />
             <span>Đính kèm tệp</span>
           </button>
+          <span
+            style={{
+              fontSize: '11px',
+              color: 'var(--text-secondary)',
+              marginRight: '6px',
+              backgroundColor: 'rgba(217, 119, 6, 0.08)',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              border: '1px dashed rgba(217, 119, 6, 0.3)',
+            }}
+            title="Bạn có thể copy file từ máy tính rồi nhấn Ctrl+V trực tiếp vào đây để đính kèm"
+          >
+            📎 Dán file: Ctrl+V
+          </span>
 
           <div style={{ width: '1px', height: '18px', backgroundColor: 'var(--border-color)', margin: '0 4px' }} />
 

@@ -3503,3 +3503,22 @@ estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ B
 - **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
   * Backend: Quét AST 100% tương thích Python 3.10 (0 lỗi f-string backslash/quote), `python -m compileall app` sạch lỗi, Smoke Test `>>> PASSED 100%`.
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 5.77s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config` cho IIS.
+
+
+### [2026-11-09] BỔ SUNG TÍNH NĂNG COPY & DÁN TỆP ĐÍNH KÈM (CTRL+V / DRAG & DROP FILE) TRONG SOẠN EMAIL WEBMAIL
+- **1. Yêu Cầu Người Dùng**:
+  * Cho phép người dùng copy file trong máy tính (File Explorer/Desktop) rồi nhấn `Ctrl+V` là tự động đưa vào danh sách tệp đính kèm (Attachments), không cần phải bấm nút chọn file thủ công.
+  * Nếu là hình ảnh (ảnh chụp màn hình từ clipboard hoặc copy ảnh): Vẫn giữ nguyên cơ chế dán trực tiếp vào nội dung thư (inline image) như cũ.
+- **2. Giải Pháp Kỹ Thuật Triển Khai (`WebmailComposeModal.tsx`)**:
+  * **Phân tách thông minh luồng dữ liệu Clipboard**:
+    - Khi sự kiện `onPaste` kích hoạt trên khung soạn thảo (`handleEditorPaste`):
+      + Nếu là tệp hình ảnh (`image/*`): Sử dụng `FileReader` đọc base64 và chèn trực tiếp vào nội dung thư (`insertImage`) như cũ.
+      + Nếu là tệp tài liệu (Excel, Word, PDF, Zip, CSV, Text...): Tự động gom và thêm thẳng vào danh sách tệp đính kèm `files` (Attachments).
+    - Bổ sung `handleModalPaste` ở container cấp độ Modal: Khi người dùng bấm `Ctrl+V` ở bất kỳ vùng nào ngoài khung gõ nội dung (vùng modal, vùng tệp đính kèm), tất cả các tệp copy trong clipboard đều được tự động thêm vào danh sách tệp đính kèm.
+    - Thêm cơ chế Kéo - Thả (Drag & Drop): Hỗ trợ kéo tệp từ máy tính thả trực tiếp vào cửa sổ soạn thư với khung hiệu ứng viền vàng nổi bật (`isDraggingOver`).
+  * **Kiểm tra an toàn dung lượng & trùng lặp**:
+    - Tự động lọc bỏ các file trùng lặp (cùng tên và kích thước).
+    - Kiểm tra giới hạn tối đa 30MB theo chuẩn Office 365, hiển thị cảnh báo rõ ràng nếu vượt quá giới hạn.
+- **3. Kiểm Thử & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.12s`), cập nhật sạch sẽ thư mục `frontend/dist/` (kèm `web.config`).
+  * Backend: Smoke test `>>> PASSED 100%`, tương thích 100% Python 3.10.
