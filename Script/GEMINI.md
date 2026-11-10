@@ -542,3 +542,48 @@
 
 - **[07/11/2026 - Giám Sát Máy In Trực Tiếp Không Cần Agent (`_scan_printers_agentless`)]**: Tự động lấy danh sách máy in & hàng đợi in trực tiếp từ máy đang setup MongoDB trỏ tới (`connectedHost`) qua 2 lớp: Windows Print Spooler (`SQL xp_cmdshell` port 1433) kết hợp đối soát cấu hình máy in Quầy Bếp trong `G_KITCHEN.CONFIG_KDS` & `ACCOUNT` (MongoDB port 27017), kèm tính năng Xóa Kẹt In trực tiếp không cần Agent.
 - **[07/11/2026 - Truy Vết Luồng Order & Nhật Ký KDS Theo Bàn Gần Nhất & Soi Món (`CoSoKdsRadarModal`, `co_so_kds_service.py`, `KdsLogsModal`)]**: Thay dropdown `Đang xử lý` bằng Thẻ Header hiển thị chức năng đang chọn; loại bỏ hoàn toàn món ảo (`Món 1..100`), trích xuất 100% dữ liệu thực tế từ `G_KITCHEN.DISH_KDS` (kể cả món lẻ và thành phần Combo trong `itemKds.combos.components`), `G_KITCHEN.LOG_DISH_FINISH_ITEM` và `G_ORDER.ORDER_DELIVERY_LOG`; hiển thị danh sách **Các Bàn Order Gần Nhất** (bấm vào bàn để focus xem các món trong bàn đó), hỗ trợ **Soi Món** (5 chặng + đối soát `CONFIG_COOKING` & lịch sử món toàn nhà hàng) và tích hợp đồng bộ vào `Check & Xử Lý KDS` -> `Phân Tích Logs KDS`.
+
+
+### [2026-11-10] NÂNG CẤP TOÀN DIỆN QUẢN LÝ LỊCH HẸN GIỜ ĐẨY PARAM XUỐNG NHÀ HÀNG: AUTO-POLLING TRẠNG THÁI THỜI GIAN THỰC, HIỂN THỊ CHI TIẾT CẤU HÌNH PARAM ĐÃ ĐẨY & TÍNH NĂNG TÁI SỬ DỤNG (RE-USE / CLONE) CẤU HÌNH
+- **1. Triệu Chứng & Phân Tích Nguyên Nhân Gốc Rễ**:
+  * **Hiện tượng Job #10**: Người dùng thắc mắc tác vụ hẹn giờ (Job #10: "update cấu hình ẩn món CD" hẹn 10:00 ngày 2026-11-10) chưa thấy chạy khi kiểm tra. Đối soát thực tế trên SQL Server Production `.25` (`dbo.SCHEDULED_PARAM_PUSH_JOBS`), Job #10 đã được tiến trình nền `param_schedule_worker` thực thi chuẩn xác lúc `10:00:07.190` (19 thành công, 1 thất bại).
+  * **Nguyên nhân gây hiểu nhầm**:
+    1. Ảnh chụp kiểm tra của người dùng là vào lúc `09:52:17` (trước giờ hẹn 8 phút).
+    2. Giao diện modal Quản Lý Lịch Hẹn Giờ lúc trước chưa có cơ chế tự động thăm dò (auto-polling) định kỳ, nên nếu người dùng mở sẵn modal từ 09:52 thì trạng thái trên màn hình vẫn giữ nguyên "⏳ Đang chờ" mà không tự cập nhật sau 10:00 trừ khi bấm F5 hoặc nút "Làm mới danh sách" thủ công.
+  * **Thiếu thông tin cấu hình tham số**: Trong modal Xem Kết Quả (`viewingJobDetail`), hệ thống trước đó chỉ hiển thị danh sách máy trạm và trạng thái kết nối thành công/thất bại, chưa hiển thị bảng chi tiết danh sách cấu hình tham số (paramCode, paramName, status, value, note) đã được đồng bộ trong đợt đó.
+  * **Chưa có tính năng tái sử dụng (Re-use / Clone)**: Chưa cho phép sao chép nhanh cấu hình đợt trước để người dùng có thể bổ sung thêm nhà hàng hoặc đẩy lại ngay lập tức mà không phải cấu hình lại từ đầu.
+- **2. Giải Pháp Kỹ Thuật Đa Tầng Toàn Diện**:
+  * **Auto-Polling Thời Gian Thực Trên Frontend (`MongoDbParamManagementTask.tsx`)**:
+    - Khi modal Lịch Hẹn Giờ đang mở và có ít nhất 1 tác vụ ở trạng thái `PENDING` hoặc `RUNNING`, hệ thống tự động kích hoạt background polling mỗi 8 giây để cập nhật trạng thái mới nhất từ server mà người dùng không cần phải bấm nút làm mới thủ công.
+  * **Cải Tiến Worker Chạy Nền Backend (`mongodb_service.py`)**:
+    - Chuẩn hóa phân tích cú pháp thời gian `H:mm` / `HH:mm` sang `datetime` tường minh, so sánh chính xác `job_dt <= now_dt`, giảm thời gian kiểm tra vòng lặp xuống 10 giây để đảm bảo tác vụ chạy đúng từng giây.
+  * **Hiển Thị Bảng Danh Sách Cấu Hình Param Đã Đẩy Xuống Nhà Hàng**:
+    - Trong modal Xem Kết Quả (`viewingJobDetail`), bổ sung bảng danh sách chi tiết các tham số được đẩy trong đợt đó (lấy từ `viewingJobDetail.params_payload`): STT, Mã Tham Số (`paramCode`), Tên Tham Số (`paramName`), Loại (`paramType`), Trạng Thái (Badge `✓ Bật (1)` màu xanh hoặc `✕ Tắt (0)` màu đỏ), Giá Trị (`value`) và Ghi Chú.
+  * **Tính Năng Tái Sử Dụng Cấu Hình (Re-use / Clone Cấu Hình & Nhà Hàng)**:
+    - Bổ sung nút `[🔄 Tái Sử Dụng]` trên từng dòng của Bảng Danh Sách Lịch Hẹn Giờ.
+    - Bổ sung nút `[🔄 Tái Sử Dụng Cấu Hình Này (Thêm Nhà Hàng / Đẩy Lại)]` ở footer của modal Xem Kết Quả.
+    - Khi bấm, hệ thống tự động chuyển sang tab "Tạo Lịch Hẹn Giờ Mới", nạp sẵn toàn bộ danh sách tham số, chế độ đồng bộ (`mode`), và tự động tích chọn sẵn danh sách nhà hàng đã đẩy đợt trước. Người dùng có thể giữ nguyên hoặc tích chọn thêm/bớt nhà hàng tùy ý.
+  * **Bổ Sung Nút "⚡ Đẩy Xuống Nhà Hàng Ngay"**:
+    - Đặt ngay trong form tạo cấu hình mới / tái sử dụng. Cho phép người dùng sau khi tái sử dụng cấu hình hoặc thêm nhà hàng mới có thể bấm đẩy trực tiếp tức thì xuống các nhà hàng đã chọn mà không cần chờ tới giờ hẹn, đồng thời tự động lưu vết kết quả và mở ngay bảng thống kê.
+- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Backend: 100% Python 3.10 compatible, quét AST toàn bộ thư mục `backend/app` đạt 100% Valid, Smoke Test backend `SMOKE_TEST_SUCCESSFUL_100%`.
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.32s`), thư mục `frontend/dist/` được đóng gói sạch sẽ kèm `web.config` cho IIS.
+
+
+### [2026-11-10] BỔ SUNG RÀNG BUỘC BẮT LỖI BẮT BUỘC NHẬP TIÊU ĐỀ EMAIL (SUBJECT) TRƯỚC KHI GỬI THƯ (WEBMAIL MANDATORY SUBJECT VALIDATION)
+- **1. Yêu Cầu & Hiện Trạng Cũ**:
+  * **Yêu cầu**: Người dùng yêu cầu *"bắt lỗi để khi gửi mail mà không có Subject mail sẽ không cho phép gửi mail nhé"*.
+  * **Hiện trạng cũ**: Khi soạn email trong Webmail, nếu trường Subject để trống, hệ thống tự động gán giá trị mặc định `'(Không có chủ đề)'` và cho phép gửi thư bình thường. Điều này dễ dẫn đến việc gửi nhầm các email không có tiêu đề, thiếu chuyên nghiệp và khó tra cứu.
+- **2. Giải Pháp Kỹ Thuật Đa Tầng (Frontend & Backend Defense-in-Depth)**:
+  * **Frontend (`WebmailComposeModal.tsx`)**:
+    - Thêm `subjectInputRef` liên kết trực tiếp với thẻ `<input>` của trường Subject.
+    - Trong hàm `handleSend`: Kiểm tra `subjectClean = subject.trim()`. Nếu rỗng, lập tức chặn gửi, hiển thị thông báo lỗi màu đỏ trang nhã: `⚠️ Vui lòng nhập tiêu đề email (Subject). Không được để trống tiêu đề khi gửi thư.`
+    - Tự động cuộn và focus con trỏ chuột (`subjectInputRef.current?.focus()`) vào ô Subject để người dùng nhập tiêu đề ngay mà không cần tốn thao tác chuột.
+    - Cập nhật giao diện trực quan: Bổ sung dấu sao đỏ bắt buộc `Subject * :`, đổi viền sang màu đỏ cảnh báo (`#EF4444`) và nền ửng đỏ nhẹ khi có lỗi. Khi người dùng bắt đầu gõ ký tự vào ô Subject, thông báo lỗi và viền đỏ tự động được xóa bỏ.
+  * **Backend API & Service (`webmail.py` & `webmail_service.py`)**:
+    - Triển khai bảo vệ 2 lớp tại cả API Router `/webmail/send` và tầng nghiệp vụ `WebmailService.send_email`.
+    - Kiểm tra `clean_subject = (subject or "").strip()`. Nếu để trống, ném ngoại lệ `HTTPException(status_code=400, detail="Vui lòng nhập tiêu đề email (Subject). Không được để trống tiêu đề khi gửi thư.")`.
+    - Loại bỏ triệt để chuỗi fallback `'(Không có chủ đề)'`.
+- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Backend: 100% Python 3.10 compatible, quét AST toàn bộ thư mục `backend/app` đạt 100% Valid, Smoke Test backend `>>> BACKEND SMOKE TEST PASSED 100%`, daemon backend hoạt động ổn định trên port 8000.
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.72s`), toàn bộ bundle sạch sẽ trong `frontend/dist/`.
