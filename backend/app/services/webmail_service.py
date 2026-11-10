@@ -1426,6 +1426,14 @@ class WebmailService:
         """
         cfg = cls.get_or_create_config(db)
 
+        # Bắt buộc phải có tiêu đề email (Subject)
+        clean_subject = (subject or "").strip()
+        if not clean_subject:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Vui lòng nhập tiêu đề email (Subject). Không được để trống tiêu đề khi gửi thư."
+            )
+
         # Chuẩn hóa danh sách người nhận
         clean_to = [t.strip() for t in to_recipients if t and "@" in t.strip()]
         clean_cc = [c.strip() for c in cc_recipients if c and "@" in c.strip()]
@@ -1512,7 +1520,7 @@ class WebmailService:
         msg["To"] = ", ".join(clean_to)
         if clean_cc:
             msg["Cc"] = ", ".join(clean_cc)
-        msg["Subject"] = Header(subject.strip() if subject else "(Không có chủ đề)", "utf-8")
+        msg["Subject"] = Header(clean_subject, "utf-8")
 
         # Tạo container multipart/related để chứa nội dung HTML và các hình ảnh inline (CID)
         msg_related = MIMEMultipart("related")

@@ -257,6 +257,13 @@ async def send_webmail(
     - Đính kèm file tối đa 30MB (chuẩn Office 365).
     - Tự động chèn chữ ký theo user đang đăng nhập.
     """
+    clean_subject = (subject or "").strip()
+    if not clean_subject:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Vui lòng nhập tiêu đề email (Subject). Không được để trống tiêu đề khi gửi thư."
+        )
+
     to_list = [t.strip() for t in to.replace(";", ",").split(",") if t.strip()]
     cc_list = [c.strip() for c in (cc or "").replace(";", ",").split(",") if c.strip()]
 
@@ -272,7 +279,7 @@ async def send_webmail(
         current_user=current_user,
         to_recipients=to_list,
         cc_recipients=cc_list,
-        subject=subject,
+        subject=clean_subject,
         body_html=body_html,
         files=file_tuples
     )

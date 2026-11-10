@@ -3646,3 +3646,22 @@ estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ B
 - **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
   * Backend: 100% Python 3.10 compatible, quét AST toàn bộ thư mục `backend/app` đạt 100% Valid, Smoke Test backend `SMOKE_TEST_SUCCESSFUL_100%`.
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.32s`), thư mục `frontend/dist/` được đóng gói sạch sẽ kèm `web.config` cho IIS.
+
+
+### [2026-11-10] BỔ SUNG RÀNG BUỘC BẮT LỖI BẮT BUỘC NHẬP TIÊU ĐỀ EMAIL (SUBJECT) TRƯỚC KHI GỬI THƯ (WEBMAIL MANDATORY SUBJECT VALIDATION)
+- **1. Yêu Cầu & Hiện Trạng Cũ**:
+  * **Yêu cầu**: Người dùng yêu cầu *"bắt lỗi để khi gửi mail mà không có Subject mail sẽ không cho phép gửi mail nhé"*.
+  * **Hiện trạng cũ**: Khi soạn email trong Webmail, nếu trường Subject để trống, hệ thống tự động gán giá trị mặc định `'(Không có chủ đề)'` và cho phép gửi thư bình thường. Điều này dễ dẫn đến việc gửi nhầm các email không có tiêu đề, thiếu chuyên nghiệp và khó tra cứu.
+- **2. Giải Pháp Kỹ Thuật Đa Tầng (Frontend & Backend Defense-in-Depth)**:
+  * **Frontend (`WebmailComposeModal.tsx`)**:
+    - Thêm `subjectInputRef` liên kết trực tiếp với thẻ `<input>` của trường Subject.
+    - Trong hàm `handleSend`: Kiểm tra `subjectClean = subject.trim()`. Nếu rỗng, lập tức chặn gửi, hiển thị thông báo lỗi màu đỏ trang nhã: `⚠️ Vui lòng nhập tiêu đề email (Subject). Không được để trống tiêu đề khi gửi thư.`
+    - Tự động cuộn và focus con trỏ chuột (`subjectInputRef.current?.focus()`) vào ô Subject để người dùng nhập tiêu đề ngay mà không cần tốn thao tác chuột.
+    - Cập nhật giao diện trực quan: Bổ sung dấu sao đỏ bắt buộc `Subject * :`, đổi viền sang màu đỏ cảnh báo (`#EF4444`) và nền ửng đỏ nhẹ khi có lỗi. Khi người dùng bắt đầu gõ ký tự vào ô Subject, thông báo lỗi và viền đỏ tự động được xóa bỏ.
+  * **Backend API & Service (`webmail.py` & `webmail_service.py`)**:
+    - Triển khai bảo vệ 2 lớp tại cả API Router `/webmail/send` và tầng nghiệp vụ `WebmailService.send_email`.
+    - Kiểm tra `clean_subject = (subject or "").strip()`. Nếu để trống, ném ngoại lệ `HTTPException(status_code=400, detail="Vui lòng nhập tiêu đề email (Subject). Không được để trống tiêu đề khi gửi thư.")`.
+    - Loại bỏ triệt để chuỗi fallback `'(Không có chủ đề)'`.
+- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Backend: 100% Python 3.10 compatible, quét AST toàn bộ thư mục `backend/app` đạt 100% Valid, Smoke Test backend `>>> BACKEND SMOKE TEST PASSED 100%`, daemon backend hoạt động ổn định trên port 8000.
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.72s`), toàn bộ bundle sạch sẽ trong `frontend/dist/`.

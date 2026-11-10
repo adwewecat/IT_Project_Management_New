@@ -56,6 +56,7 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const subjectInputRef = useRef<HTMLInputElement>(null);
 
   // Load chữ ký & cấu hình CC mặc định khi mở modal
   useEffect(() => {
@@ -617,6 +618,17 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
       return;
     }
 
+    // Bắt buộc phải có tiêu đề (Subject) email
+    const subjectClean = subject.trim();
+    if (!subjectClean) {
+      setErrorMessage('Vui lòng nhập tiêu đề email (Subject). Không được để trống tiêu đề khi gửi thư.');
+      if (subjectInputRef.current) {
+        subjectInputRef.current.focus();
+        subjectInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+
     // Kiểm tra định dạng các địa chỉ email To và Cc
     const parseEmails = (str: string) => str.replace(/;/g, ',').split(',').map((s) => s.trim()).filter(Boolean);
     const toList = parseEmails(toClean);
@@ -649,7 +661,7 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
       const formData = new FormData();
       formData.append('to', toClean);
       formData.append('cc', cc.trim());
-      formData.append('subject', subject.trim() || '(Không có chủ đề)');
+      formData.append('subject', subjectClean);
       formData.append('body_html', editorHtml);
 
       files.forEach((f) => {
@@ -875,16 +887,30 @@ export const WebmailComposeModal: React.FC<WebmailComposeModalProps> = ({
         {/* Dòng Subject */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ width: '60px', fontWeight: 700, color: 'var(--text-primary)', textAlign: 'right' }}>
-            Subject :
+            Subject <span style={{ color: '#EF4444' }} title="Bắt buộc">*</span> :
           </div>
           <div style={{ flex: 1 }}>
             <input
+              ref={subjectInputRef}
               type="text"
               value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="Tiêu đề email..."
+              onChange={(e) => {
+                setSubject(e.target.value);
+                if (errorMessage && e.target.value.trim()) {
+                  setErrorMessage('');
+                }
+              }}
+              placeholder="Nhập tiêu đề email (bắt buộc)..."
               className="input-field"
-              style={{ width: '100%', boxSizing: 'border-box', padding: '7px 10px', fontSize: '13px', fontWeight: 600 }}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '7px 10px',
+                fontSize: '13px',
+                fontWeight: 600,
+                borderColor: !subject.trim() && errorMessage.includes('tiêu đề') ? '#EF4444' : undefined,
+                backgroundColor: !subject.trim() && errorMessage.includes('tiêu đề') ? 'rgba(239, 68, 68, 0.04)' : undefined,
+              }}
             />
           </div>
         </div>
