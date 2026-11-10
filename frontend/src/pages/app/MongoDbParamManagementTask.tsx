@@ -354,6 +354,24 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
     loadScheduledJobs();
   }, []);
 
+  // Tự động làm mới danh sách lịch hẹn giờ mỗi 8 giây khi modal đang mở và có tác vụ PENDING hoặc RUNNING
+  useEffect(() => {
+    if (!showScheduledJobsModal) return;
+
+    const hasActiveJob = scheduledJobsList.some((j) => j.status === 'PENDING' || j.status === 'RUNNING');
+    const intervalTime = hasActiveJob ? 8000 : 20000;
+
+    const timer = setInterval(() => {
+      mongoService.getScheduledParamJobs().then((data) => {
+        setScheduledJobsList(data);
+      }).catch((err) => {
+        console.warn('Lỗi làm mới ngầm lịch hẹn giờ:', err);
+      });
+    }, intervalTime);
+
+    return () => clearInterval(timer);
+  }, [showScheduledJobsModal, scheduledJobsList]);
+
   // Filter params cho nhà hàng hiện tại
   const filteredParams = useMemo(() => {
     return paramsList
@@ -987,6 +1005,205 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
       await loadScheduledJobs();
     } catch (err: any) {
       showToast('Lỗi khi xóa lịch hẹn giờ: ' + (err.response?.data?.detail || err.message), 'error');
+    }
+  };
+
+  // Tái sử dụng cấu hình param & danh sách nhà hàng từ một tác vụ đã có
+  const handleReuseScheduledJob = (job: ScheduledParamJobItem) => {
+    setScheduledActiveTab('CREATE');
+    setViewingJobDetail(null); // Đóng modal chi tiết nếu đang mở
+
+    // Tiêu đề gợi ý
+    setNewJobTitle(`Bản sao: ${job.job_title}`);
+    setNewJobMode((job.mode as any) || 'upsert');
+
+    // Thời gian gợi ý: hôm nay, sau thời điểm hiện tại 15 phút
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const futureMinutes = now.getMinutes() + 15;
+    now.setMinutes(futureMinutes);
+    const hoursStr = String(now.getHours()).padStart(2, '0');
+    const minsStr = String(now.getMinutes()).padStart(2, '0');
+    setNewJobDate(todayStr);
+    setNewJobTime(`${hoursStr}:${minsStr}`);
+
+    // Nạp danh sách nhà hàng mục tiêu
+    if (job.target_restaurants && job.target_restaurants.length > 0) {
+      setNewJobTargetScope('MULTIPLE');
+      const ips = job.target_restaurants
+        .map((r: any) => (r.ip || (r as any).mongo_ip || '').trim())
+        .filter(Boolean);
+      setNewJobSelectedIps(ips);
+    }
+
+    // Nạp danh sách tham số cấu hình
+    if (job.params_payload && job.params_payload.length > 0) {
+      setNewJobParamMode('CUSTOM');
+      const customParams = job.params_payload.map((p: any) => ({
+        paramCode: p.paramCode,
+        paramName: p.paramName || p.paramCode,
+        paramType: (p.paramType as any) || 'FUNCTION',
+        status: p.status !== undefined ? Number(p.status) : 1,
+        value: p.value !== undefined ? String(p.value) : '1',
+        note: p.note || ''
+      }));
+      setNewJobCustomParams(customParams);
+      setNewJobSelectedParamCodes(customParams.map((cp) => cp.paramCode));
+    }
+
+    showToast(
+      `Đã nạp lại cấu hình gồm ${job.params_payload?.length || 0} param và ${job.target_restaurants?.length || 0} nhà hàng từ tác vụ #${job.id}. Bạn có thể chỉnh sửa thêm bớt nhà hàng hoặc đổi tham số tùy ý!`,
+      'success'
+    );
+  };
+
+  // Lưu tác vụ và kích hoạt đẩy param xuống các nhà hàng ngay lập tức
+  const handleCreateAndRunImmediately = async () => {
+    if (!newJobTitle.trim()) {
+      showToast('Vui lòng nhập Tiêu đề cho tác vụ!', 'error');
+      return;
+    }
+    if (newJobSelectedIps.length === 0 && newJobTargetScope !== 'CURRENT') {
+      showToast('Vui lòng chọn ít nhất 1 nhà hàng mục tiêu!', 'error');
+      return;
+    }
+
+    let targets: BatchTargetRestaurantItem[] = [];
+    if (newJobTargetScope === 'CURRENT') {
+      if (!currentHost) {
+        showToast('Chưa có thông tin host MongoDB nhà hàng hiện tại!', 'error');
+        return;
+      }
+      targets = [{
+        name: getRestaurantDisplayName(selectedRestaurant, currentHost),
+        ip: currentHost,
+        port: 27017,
+        sap_code: getRestaurantSapCode(selectedRestaurant),
+        rk7_code: getRestaurantRk7Code(selectedRestaurant)
+      }];
+    } else {
+      targets = newJobSelectedIps.map((ip) => {
+        const r = restaurants.find((item) => (item.ip || (item as any).mongo_ip) === ip);
+        return {
+          name: getRestaurantDisplayName(r, ip),
+          ip,
+          port: 27017,
+          sap_code: getRestaurantSapCode(r),
+          rk7_code: getRestaurantRk7Code(r)
+        };
+      });
+    }
+
+    let selectedCodes: string[] | undefined = undefined;
+    let customParamsPayload: any[] | undefined = undefined;
+
+    if (newJobParamMode === 'CUSTOM') {
+      const combinedCodes = Array.from(new Set([
+        ...newJobSelectedParamCodes,
+        ...newJobCustomParams.map((p) => p.paramCode)
+      ]));
+
+      if (combinedCodes.length === 0) {
+        showToast('Vui lòng chọn hoặc tự thêm ít nhất 1 tham số để đẩy xuống nhà hàng!', 'error');
+        return;
+      }
+      selectedCodes = combinedCodes;
+      customParamsPayload = combinedCodes.map((code) => {
+        const customItem = newJobCustomParams.find((cp) => cp.paramCode === code);
+        if (customItem) {
+          return {
+            paramCode: customItem.paramCode,
+            paramName: customItem.paramName || customItem.paramCode,
+            paramType: customItem.paramType,
+            status: customItem.status,
+            value: customItem.value,
+            note: customItem.note || ''
+          };
+        }
+        const std = standardParamsList.find((s) => s.param_code === code);
+        if (std) {
+          return {
+            paramCode: std.param_code,
+            paramName: std.param_name,
+            paramType: std.param_type,
+            status: std.status,
+            value: std.param_value || '',
+            note: std.note || ''
+          };
+        }
+        const cur = paramsList.find((p) => p.paramCode === code);
+        return {
+          paramCode: code,
+          paramName: cur?.paramName || code,
+          paramType: cur?.paramType || 'FUNCTION',
+          status: cur?.status ?? 1,
+          value: String(cur?.value ?? ''),
+          note: cur?.note || ''
+        };
+      });
+    } else {
+      if (newJobCustomParams.length > 0) {
+        customParamsPayload = [
+          ...standardParamsList.map((std) => ({
+            paramCode: std.param_code,
+            paramName: std.param_name,
+            paramType: std.param_type,
+            status: std.status,
+            value: std.param_value || '',
+            note: std.note || ''
+          })),
+          ...newJobCustomParams.map((cp) => ({
+            paramCode: cp.paramCode,
+            paramName: cp.paramName || cp.paramCode,
+            paramType: cp.paramType,
+            status: cp.status,
+            value: cp.value,
+            note: cp.note || ''
+          }))
+        ];
+        const map = new Map();
+        customParamsPayload.forEach((p) => map.set(p.paramCode, p));
+        customParamsPayload = Array.from(map.values());
+      }
+    }
+
+    if (!window.confirm(`Bạn có chắc chắn muốn LƯU và KÍCH HOẠT ĐẨY NGAY LẬP TỨC tham số xuống ${targets.length} nhà hàng?`)) {
+      return;
+    }
+
+    setIsCreatingJob(true);
+    try {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const hoursStr = String(now.getHours()).padStart(2, '0');
+      const minsStr = String(now.getMinutes()).padStart(2, '0');
+
+      const createdJob = await mongoService.createScheduledParamJob({
+        job_title: newJobTitle.trim(),
+        run_date: todayStr,
+        run_time: `${hoursStr}:${minsStr}`,
+        mode: newJobMode,
+        target_restaurants: targets,
+        selected_param_codes: selectedCodes,
+        custom_params: customParamsPayload
+      });
+
+      showToast(`Đã tạo tác vụ #${createdJob.id}, đang kích hoạt thực thi ngay...`, 'info');
+
+      // Kích hoạt chạy ngay tác vụ vừa tạo
+      const updated = await mongoService.runScheduledParamJobNow(createdJob.id);
+      showToast(`Đã thực thi thành công tác vụ #${createdJob.id}: ${updated.success_count} thành công, ${updated.failed_count} thất bại!`, updated.failed_count === 0 ? 'success' : 'info');
+
+      await loadScheduledJobs();
+      if (batchSelectedIps.includes(currentHost) || targets.some((t) => t.ip === currentHost)) {
+        await loadParams(currentHost);
+      }
+      setScheduledActiveTab('LIST');
+      setViewingJobDetail(updated); // Mở popup xem kết quả chi tiết ngay
+    } catch (err: any) {
+      showToast('Lỗi khi thực thi tác vụ: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setIsCreatingJob(false);
     }
   };
 
@@ -3237,6 +3454,28 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
 
                                   <button
                                     type="button"
+                                    onClick={() => handleReuseScheduledJob(job)}
+                                    title="Tái sử dụng cấu hình tham số & danh sách nhà hàng của tác vụ này"
+                                    style={{
+                                      border: '1px solid #BFDBFE',
+                                      backgroundColor: '#EFF6FF',
+                                      color: '#1D4ED8',
+                                      borderRadius: '4px',
+                                      padding: '3px 7px',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      fontSize: '11px',
+                                      fontWeight: 600
+                                    }}
+                                  >
+                                    <Copy size={11} />
+                                    <span>Tái Sử Dụng</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
                                     onClick={() => handleDeleteScheduledJob(job.id)}
                                     title="Xóa tác vụ này"
                                     style={{
@@ -4065,16 +4304,31 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                   )}
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center' }}>
                   <Button variant="outline" onClick={() => setScheduledActiveTab('LIST')} disabled={isCreatingJob}>
                     Hủy Bỏ
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleCreateAndRunImmediately}
+                    isLoading={isCreatingJob}
+                    leftIcon={<Play size={14} />}
+                    style={{
+                      borderColor: '#059669',
+                      color: '#059669',
+                      backgroundColor: '#ECFDF5',
+                      fontWeight: 700
+                    }}
+                    title="Lưu cấu hình và thực thi đẩy ngay lập tức xuống các nhà hàng đã chọn"
+                  >
+                    ⚡ Đẩy Xuống Nhà Hàng Ngay
                   </Button>
                   <Button
                     variant="primary"
                     onClick={handleCreateScheduledJob}
                     isLoading={isCreatingJob}
                     leftIcon={<Clock size={14} />}
-                    style={{ backgroundColor: '#0284C7', borderColor: '#0284C7' }}
+                    style={{ backgroundColor: '#0284C7', borderColor: '#0284C7', fontWeight: 700 }}
                   >
                     💾 Lưu Lịch Hẹn Giờ
                   </Button>
@@ -4093,16 +4347,34 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
           isOpen={!!viewingJobDetail}
           onClose={() => setViewingJobDetail(null)}
           title={`📊 Kết Quả Thực Thi: #${viewingJobDetail.id} - ${viewingJobDetail.job_title}`}
-          maxWidth="960px"
+          maxWidth="980px"
           footer={
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const jobToReuse = viewingJobDetail;
+                  setViewingJobDetail(null);
+                  handleReuseScheduledJob(jobToReuse);
+                }}
+                leftIcon={<RefreshCw size={14} />}
+                style={{
+                  borderColor: '#0284C7',
+                  color: '#0284C7',
+                  fontWeight: 700,
+                  backgroundColor: '#F0F9FF'
+                }}
+                title="Sao chép toàn bộ danh sách param và danh sách nhà hàng này sang form Tạo Mới để thêm nhà hàng hoặc đẩy lại ngay"
+              >
+                🔄 Tái Sử Dụng Cấu Hình Này (Thêm Nhà Hàng / Đẩy Lại)
+              </Button>
               <Button variant="primary" onClick={() => setViewingJobDetail(null)}>
                 Đóng
               </Button>
             </div>
           }
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
               <div style={{ padding: '10px', borderRadius: '6px', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
                 <div style={{ fontSize: '11px', color: '#1E40AF', fontWeight: 700 }}>Tổng nhà hàng</div>
@@ -4118,9 +4390,95 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
               </div>
             </div>
 
-            <div style={{ maxHeight: '380px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+            {/* 📋 DANH SÁCH CẤU HÌNH PARAM ĐÃ ĐẨY XUỐNG NHÀ HÀNG */}
+            <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', overflow: 'hidden' }}>
+              <div
+                style={{
+                  padding: '8px 12px',
+                  backgroundColor: 'var(--bg-secondary)',
+                  borderBottom: '1px solid var(--border-color)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: '12px', color: '#0369A1', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>📋 Cấu Hình Tham Số (Param) Đã Đẩy ({Array.isArray(viewingJobDetail.params_payload) ? viewingJobDetail.params_payload.length : 0} tham số)</span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  Chế độ đồng bộ: <strong style={{ textTransform: 'uppercase', color: '#0284C7' }}>{viewingJobDetail.mode || (viewingJobDetail as any).operation_mode || 'upsert'}</strong>
+                </div>
+              </div>
+              <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                {Array.isArray(viewingJobDetail.params_payload) && viewingJobDetail.params_payload.length > 0 ? (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px' }}>
+                    <thead style={{ position: 'sticky', top: 0, backgroundColor: '#F8FAFC', borderBottom: '1px solid var(--border-color)', zIndex: 1 }}>
+                      <tr>
+                        <th style={{ padding: '6px 10px', textAlign: 'center', width: '36px' }}>#</th>
+                        <th style={{ padding: '6px 10px', textAlign: 'left', minWidth: '180px' }}>Mã Tham Số (paramCode)</th>
+                        <th style={{ padding: '6px 10px', textAlign: 'left', minWidth: '150px' }}>Tên Tham Số</th>
+                        <th style={{ padding: '6px 10px', textAlign: 'center', width: '80px' }}>Loại</th>
+                        <th style={{ padding: '6px 10px', textAlign: 'center', width: '90px' }}>Trạng Thái</th>
+                        <th style={{ padding: '6px 10px', textAlign: 'left', minWidth: '120px' }}>Giá Trị (Value)</th>
+                        <th style={{ padding: '6px 10px', textAlign: 'left' }}>Ghi Chú</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {viewingJobDetail.params_payload.map((param: any, pIdx: number) => {
+                        const isEnabled = param.status === 1 || param.status === true || param.status === '1';
+                        return (
+                          <tr key={pIdx} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: pIdx % 2 === 1 ? '#FAFAFA' : '#FFF' }}>
+                            <td style={{ padding: '6px 10px', textAlign: 'center', color: 'var(--text-muted)' }}>{pIdx + 1}</td>
+                            <td style={{ padding: '6px 10px', fontFamily: 'monospace', fontWeight: 700, color: '#0F172A' }}>
+                              {param.paramCode || '—'}
+                            </td>
+                            <td style={{ padding: '6px 10px', fontWeight: 500 }}>
+                              {param.paramName || getParamDisplayName(param.paramCode) || '—'}
+                            </td>
+                            <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                              <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#F1F5F9', border: '1px solid #CBD5E1', color: '#475569' }}>
+                                {param.paramType || 'boolean'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                              <span
+                                style={{
+                                  display: 'inline-block',
+                                  padding: '2px 8px',
+                                  borderRadius: '999px',
+                                  fontSize: '10.5px',
+                                  fontWeight: 700,
+                                  backgroundColor: isEnabled ? '#DCFCE7' : '#FEE2E2',
+                                  color: isEnabled ? '#15803D' : '#B91C1C',
+                                  border: `1px solid ${isEnabled ? '#86EFAC' : '#FCA5A5'}`
+                                }}
+                              >
+                                {isEnabled ? '✓ Bật (1)' : '✕ Tắt (0)'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '6px 10px', fontFamily: 'monospace', fontSize: '11px', color: '#1E293B', maxWidth: '180px', wordBreak: 'break-all' }}>
+                              {param.value !== undefined && param.value !== null ? String(param.value) : '—'}
+                            </td>
+                            <td style={{ padding: '6px 10px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                              {param.note || '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div style={{ padding: '12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                    Không có thông tin chi tiết tham số trong cấu hình đợt này.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* DANH SÁCH CHI TIẾT TỪNG NHÀ HÀNG & MÁY TRẠM */}
+            <div style={{ maxHeight: '340px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)' }}>
+                <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)', zIndex: 1 }}>
                   <tr>
                     <th style={{ padding: '8px 10px', textAlign: 'left', minWidth: '160px' }}>Nhà Hàng</th>
                     <th style={{ padding: '8px 10px', textAlign: 'left', minWidth: '220px' }}>Máy Trạm POS / KDS</th>

@@ -8223,10 +8223,23 @@ async def param_schedule_worker(stop_event: asyncio.Event):
 
                 for job in pending_jobs:
                     should_run = False
-                    if job.run_date < today_str:
-                        should_run = True
-                    elif job.run_date == today_str and job.run_time <= curr_time_str:
-                        should_run = True
+                    try:
+                        # Ghép date và time để parse thành datetime chính xác
+                        j_date = (job.run_date or "").strip()
+                        j_time = (job.run_time or "").strip()
+                        if len(j_time) == 4 and j_time[1] == ':':  # 9:00 -> 09:00
+                            j_time = f"0{j_time}"
+                        j_dt_str = f"{j_date} {j_time}"
+                        fmt = "%Y-%m-%d %H:%M:%S" if len(j_time) > 5 else "%Y-%m-%d %H:%M"
+                        job_dt = datetime.datetime.strptime(j_dt_str, fmt)
+                        if job_dt <= now_dt:
+                            should_run = True
+                    except Exception:
+                        # Fallback so sánh chuỗi an toàn
+                        if job.run_date < today_str:
+                            should_run = True
+                        elif job.run_date == today_str and (job.run_time or "").strip() <= curr_time_str:
+                            should_run = True
 
                     if should_run:
                         # Đánh dấu RUNNING ngay trong DB để không quét trùng ở chu kỳ tiếp theo
@@ -8250,9 +8263,9 @@ async def param_schedule_worker(stop_event: asyncio.Event):
         except Exception as e:
             logger.error("Lỗi trong param_schedule_worker: %s", e)
 
-        # Chờ 20 giây kiểm tra 1 lần hoặc khi stop_event được kích hoạt
+        # Chờ 10 giây kiểm tra 1 lần hoặc khi stop_event được kích hoạt
         try:
-            await asyncio.wait_for(stop_event.wait(), timeout=20.0)
+            await asyncio.wait_for(stop_event.wait(), timeout=10.0)
         except asyncio.TimeoutError:
             pass
 

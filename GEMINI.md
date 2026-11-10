@@ -3620,3 +3620,29 @@ estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ B
 - **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
   * Backend: 100% Python 3.10 compatible, quét AST toàn bộ dự án hợp lệ 100%, tiến trình backend daemon chạy ổn định trên port 8000.
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 6.53s`), cập nhật sạch sẽ bản build vào `frontend/dist/`.
+
+
+### [2026-11-10] NÂNG CẤP TOÀN DIỆN QUẢN LÝ LỊCH HẸN GIỜ ĐẨY PARAM XUỐNG NHÀ HÀNG: AUTO-POLLING TRẠNG THÁI THỜI GIAN THỰC, HIỂN THỊ CHI TIẾT CẤU HÌNH PARAM ĐÃ ĐẨY & TÍNH NĂNG TÁI SỬ DỤNG (RE-USE / CLONE) CẤU HÌNH
+- **1. Triệu Chứng & Phân Tích Nguyên Nhân Gốc Rễ**:
+  * **Hiện tượng Job #10**: Người dùng thắc mắc tác vụ hẹn giờ (Job #10: "update cấu hình ẩn món CD" hẹn 10:00 ngày 2026-11-10) chưa thấy chạy khi kiểm tra. Đối soát thực tế trên SQL Server Production `.25` (`dbo.SCHEDULED_PARAM_PUSH_JOBS`), Job #10 đã được tiến trình nền `param_schedule_worker` thực thi chuẩn xác lúc `10:00:07.190` (19 thành công, 1 thất bại).
+  * **Nguyên nhân gây hiểu nhầm**:
+    1. Ảnh chụp kiểm tra của người dùng là vào lúc `09:52:17` (trước giờ hẹn 8 phút).
+    2. Giao diện modal Quản Lý Lịch Hẹn Giờ lúc trước chưa có cơ chế tự động thăm dò (auto-polling) định kỳ, nên nếu người dùng mở sẵn modal từ 09:52 thì trạng thái trên màn hình vẫn giữ nguyên "⏳ Đang chờ" mà không tự cập nhật sau 10:00 trừ khi bấm F5 hoặc nút "Làm mới danh sách" thủ công.
+  * **Thiếu thông tin cấu hình tham số**: Trong modal Xem Kết Quả (`viewingJobDetail`), hệ thống trước đó chỉ hiển thị danh sách máy trạm và trạng thái kết nối thành công/thất bại, chưa hiển thị bảng chi tiết danh sách cấu hình tham số (paramCode, paramName, status, value, note) đã được đồng bộ trong đợt đó.
+  * **Chưa có tính năng tái sử dụng (Re-use / Clone)**: Chưa cho phép sao chép nhanh cấu hình đợt trước để người dùng có thể bổ sung thêm nhà hàng hoặc đẩy lại ngay lập tức mà không phải cấu hình lại từ đầu.
+- **2. Giải Pháp Kỹ Thuật Đa Tầng Toàn Diện**:
+  * **Auto-Polling Thời Gian Thực Trên Frontend (`MongoDbParamManagementTask.tsx`)**:
+    - Khi modal Lịch Hẹn Giờ đang mở và có ít nhất 1 tác vụ ở trạng thái `PENDING` hoặc `RUNNING`, hệ thống tự động kích hoạt background polling mỗi 8 giây để cập nhật trạng thái mới nhất từ server mà người dùng không cần phải bấm nút làm mới thủ công.
+  * **Cải Tiến Worker Chạy Nền Backend (`mongodb_service.py`)**:
+    - Chuẩn hóa phân tích cú pháp thời gian `H:mm` / `HH:mm` sang `datetime` tường minh, so sánh chính xác `job_dt <= now_dt`, giảm thời gian kiểm tra vòng lặp xuống 10 giây để đảm bảo tác vụ chạy đúng từng giây.
+  * **Hiển Thị Bảng Danh Sách Cấu Hình Param Đã Đẩy Xuống Nhà Hàng**:
+    - Trong modal Xem Kết Quả (`viewingJobDetail`), bổ sung bảng danh sách chi tiết các tham số được đẩy trong đợt đó (lấy từ `viewingJobDetail.params_payload`): STT, Mã Tham Số (`paramCode`), Tên Tham Số (`paramName`), Loại (`paramType`), Trạng Thái (Badge `✓ Bật (1)` màu xanh hoặc `✕ Tắt (0)` màu đỏ), Giá Trị (`value`) và Ghi Chú.
+  * **Tính Năng Tái Sử Dụng Cấu Hình (Re-use / Clone Cấu Hình & Nhà Hàng)**:
+    - Bổ sung nút `[🔄 Tái Sử Dụng]` trên từng dòng của Bảng Danh Sách Lịch Hẹn Giờ.
+    - Bổ sung nút `[🔄 Tái Sử Dụng Cấu Hình Này (Thêm Nhà Hàng / Đẩy Lại)]` ở footer của modal Xem Kết Quả.
+    - Khi bấm, hệ thống tự động chuyển sang tab "Tạo Lịch Hẹn Giờ Mới", nạp sẵn toàn bộ danh sách tham số, chế độ đồng bộ (`mode`), và tự động tích chọn sẵn danh sách nhà hàng đã đẩy đợt trước. Người dùng có thể giữ nguyên hoặc tích chọn thêm/bớt nhà hàng tùy ý.
+  * **Bổ Sung Nút "⚡ Đẩy Xuống Nhà Hàng Ngay"**:
+    - Đặt ngay trong form tạo cấu hình mới / tái sử dụng. Cho phép người dùng sau khi tái sử dụng cấu hình hoặc thêm nhà hàng mới có thể bấm đẩy trực tiếp tức thì xuống các nhà hàng đã chọn mà không cần chờ tới giờ hẹn, đồng thời tự động lưu vết kết quả và mở ngay bảng thống kê.
+- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Backend: 100% Python 3.10 compatible, quét AST toàn bộ thư mục `backend/app` đạt 100% Valid, Smoke Test backend `SMOKE_TEST_SUCCESSFUL_100%`.
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.32s`), thư mục `frontend/dist/` được đóng gói sạch sẽ kèm `web.config` cho IIS.
