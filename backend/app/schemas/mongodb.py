@@ -1681,6 +1681,18 @@ class DishLookupResponse(BaseModel):
     source: Optional[str] = None
     message: Optional[str] = None
 
+class BatchLookupDishesRequest(BaseModel):
+    host: str
+    port: int = 27017
+    rk7_codes: List[str]
+
+
+class BatchLookupDishesResponse(BaseModel):
+    success: bool
+    total: int
+    found_count: int
+    items: List[DishLookupResponse]
+
 
 
 

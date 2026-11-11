@@ -1216,6 +1216,11 @@ export const mongoService = {
     return res.data;
   },
 
+  batchLookupDishes: async (payload: BatchLookupDishesRequest): Promise<BatchLookupDishesResponse> => {
+    const res = await api.post<BatchLookupDishesResponse>('/mongodb/menu-so-co/batch-lookup-dishes', payload);
+    return res.data;
+  },
+
   loadMenuSoCoItems: async (payload: LoadMenuItemsRequest): Promise<LoadMenuItemsResponse> => {
     const res = await api.post<LoadMenuItemsResponse>('/mongodb/menu-so-co/load-items', payload);
     return res.data;
@@ -2304,6 +2309,19 @@ export interface DishLookupResponse {
   image_url?: string | null;
   source?: string | null;
   message?: string | null;
+}
+
+export interface BatchLookupDishesRequest {
+  host: string;
+  port?: number;
+  rk7_codes: string[];
+}
+
+export interface BatchLookupDishesResponse {
+  success: boolean;
+  total: number;
+  found_count: number;
+  items: DishLookupResponse[];
 }
 
 export interface MenuCategoryItem {

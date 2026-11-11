@@ -2181,6 +2181,228 @@ def lookup_dish_info(host: str, rk7_code: str, port: int = 27017) -> Dict[str, A
     }
 
 
+def batch_lookup_dishes(host: str, rk7_codes: List[str], port: int = 27017) -> Dict[str, Any]:
+    """
+    Tra cứu hàng loạt thông tin tên món, mã SAP, đơn giá và hình ảnh theo danh sách mã RK7:
+    1. Quét từ MongoDB GPOS tại nhà hàng (host): DISH_CACHE, CO_MENU_ITEM, ORDER_MENU_CACHE_CATEGORY, SHOW_HIDE_ITEMS, CONFIG_COOKING
+    2. Đối soát tiếp từ CSDL Master RK7 tập trung (get_rk7_engine) cho các món còn thiếu thông tin
+    """
+    seen = set()
+    clean_codes: List[str] = []
+    for c in rk7_codes:
+        sc = str(c).strip()
+        if sc and sc not in seen:
+            seen.add(sc)
+            clean_codes.append(sc)
+
+    if not clean_codes:
+        return {
+            "success": True,
+            "total": 0,
+            "found_count": 0,
+            "items": []
+        }
+
+    dish_map: Dict[str, Dict[str, Any]] = {
+        c: {
+            "found": False,
+            "rk7_code": c,
+            "name": "",
+            "sap_code": "",
+            "price": None,
+            "image_url": "",
+            "source": "",
+            "message": ""
+        }
+        for c in clean_codes
+    }
+
+    # 1. Thử quét từ MongoDB nhà hàng (host)
+    try:
+        client = get_mongo_client(host, port, timeout_ms=4000)
+        db_order = client["G_ORDER"]
+        db_kitchen = client["G_KITCHEN"]
+
+        # A. DISH_CACHE trong G_ORDER (chứa món và giá từ MID)
+        try:
+            for doc in db_order["DISH_CACHE"].find():
+                for d in (doc.get("dishs") or []):
+                    mi = d.get("menuItem") or {}
+                    c = str(mi.get("code") or "").strip()
+                    if c in dish_map:
+                        item = dish_map[c]
+                        if not item["name"]:
+                            item["name"] = mi.get("name") or ""
+                        if not item["sap_code"]:
+                            item["sap_code"] = str(mi.get("sapCode") or "").strip()
+                        if item["price"] is None and d.get("price") is not None:
+                            try:
+                                item["price"] = float(d.get("price"))
+                            except (ValueError, TypeError):
+                                pass
+                        if item["name"]:
+                            item["found"] = True
+                            if not item["source"]:
+                                item["source"] = "MID / GPOS Cache"
+        except Exception as e:
+            logger.warning("Lỗi quét DISH_CACHE batch: %s", e)
+
+        # B. CO_MENU_ITEM trong G_ORDER (chứa nameVn, sapCode, urlImgQr/srcImg)
+        try:
+            for co_doc in db_order["CO_MENU_ITEM"].find({"code": {"$in": clean_codes}}):
+                c = str(co_doc.get("code") or "").strip()
+                if c in dish_map:
+                    item = dish_map[c]
+                    if not item["name"]:
+                        item["name"] = co_doc.get("nameVn") or co_doc.get("name") or ""
+                    if not item["sap_code"]:
+                        item["sap_code"] = str(co_doc.get("sapCode") or "").strip()
+                    url_img_qr = str(co_doc.get("urlImgQr") or "").strip()
+                    src_img = str(co_doc.get("srcImg") or co_doc.get("srcImgThumbnail") or co_doc.get("srcImgSquare") or "").strip()
+                    if not item["image_url"]:
+                        item["image_url"] = url_img_qr if (url_img_qr.startswith("http://") or url_img_qr.startswith("https://")) else (src_img or url_img_qr)
+                    if item["name"]:
+                        item["found"] = True
+                        if not item["source"]:
+                            item["source"] = "CO_MENU_ITEM"
+        except Exception as e:
+            logger.warning("Lỗi quét CO_MENU_ITEM batch: %s", e)
+
+        # C. ORDER_MENU_CACHE_CATEGORY trong G_ORDER (chứa thực đơn hiện hữu)
+        codes_needing_data = [c for c in clean_codes if not dish_map[c]["name"] or dish_map[c]["price"] is None or not dish_map[c]["sap_code"]]
+        if codes_needing_data:
+            try:
+                for omc in db_order["ORDER_MENU_CACHE_CATEGORY"].find():
+                    groups = omc.get("main-menu", {}).get("items", []) or []
+                    for g in groups:
+                        for it, _, _, _, _, _ in _flatten_group_items(g):
+                            mi = it.get("menu-item") or {}
+                            c = str(mi.get("code") or "").strip()
+                            if c in dish_map:
+                                item = dish_map[c]
+                                if not item["name"]:
+                                    item["name"] = mi.get("name") or ""
+                                if not item["sap_code"]:
+                                    item["sap_code"] = str(mi.get("sap-code") or mi.get("sapCode") or "").strip()
+                                if item["price"] is None and it.get("price") is not None:
+                                    try:
+                                        item["price"] = float(it.get("price"))
+                                    except (ValueError, TypeError):
+                                        pass
+                                if item["name"]:
+                                    item["found"] = True
+                                    if not item["source"]:
+                                        item["source"] = "ORDER_MENU_CACHE"
+            except Exception as e:
+                logger.warning("Lỗi quét ORDER_MENU_CACHE_CATEGORY batch: %s", e)
+
+        # D. SHOW_HIDE_ITEMS / OUT_OF_DISH trong G_ORDER
+        codes_still_missing = [c for c in clean_codes if not dish_map[c]["name"] or dish_map[c]["price"] is None]
+        if codes_still_missing:
+            try:
+                for sh_doc in db_order["SHOW_HIDE_ITEMS"].find({"itemCode": {"$in": codes_still_missing}}):
+                    c = str(sh_doc.get("itemCode") or "").strip()
+                    if c in dish_map:
+                        item = dish_map[c]
+                        if not item["name"]:
+                            item["name"] = sh_doc.get("name") or ""
+                        if not item["sap_code"]:
+                            item["sap_code"] = str(sh_doc.get("sapCode") or "").strip()
+                        if item["price"] is None and sh_doc.get("price") is not None:
+                            try:
+                                item["price"] = float(sh_doc.get("price"))
+                            except (ValueError, TypeError):
+                                pass
+                        if item["name"]:
+                            item["found"] = True
+                            if not item["source"]:
+                                item["source"] = "SHOW_HIDE_ITEMS"
+            except Exception as e:
+                logger.warning("Lỗi quét SHOW_HIDE_ITEMS batch: %s", e)
+
+        # E. CONFIG_COOKING trong G_KITCHEN
+        codes_missing_name = [c for c in clean_codes if not dish_map[c]["name"]]
+        if codes_missing_name:
+            try:
+                for cook_doc in db_kitchen["CONFIG_COOKING"].find({"menuItem.code": {"$in": codes_missing_name}}):
+                    mi = cook_doc.get("menuItem") or {}
+                    c = str(mi.get("code") or "").strip()
+                    if c in dish_map and not dish_map[c]["name"]:
+                        dish_map[c]["name"] = mi.get("name") or ""
+                        dish_map[c]["found"] = True
+                        if not dish_map[c]["source"]:
+                            dish_map[c]["source"] = "CONFIG_COOKING"
+            except Exception as e:
+                logger.warning("Lỗi quét CONFIG_COOKING batch: %s", e)
+
+        client.close()
+    except Exception as e:
+        logger.warning("Không thể kết nối hoặc quét MongoDB nhà hàng (%s): %s", host, e)
+
+    # 2. Quét tiếp từ CSDL Master RK7 tập trung cho các món còn thiếu
+    codes_needing_rk7 = [c for c in clean_codes if not dish_map[c]["name"] or dish_map[c]["price"] is None or not dish_map[c]["sap_code"]]
+    if codes_needing_rk7:
+        try:
+            from app.core.database import get_rk7_engine
+            from sqlalchemy import text, bindparam
+            engine = get_rk7_engine()
+            sql = """
+                SELECT
+                    MI.CODE AS RK7_CODE,
+                    MI.NAME AS ITEMNAME,
+                    GPD.PROPERTYVAL AS SAPCODE,
+                    PR.VALUE AS PRICE
+                FROM MENUITEMS MI
+                LEFT JOIN PRICES PR ON PR.OBJECTID = MI.SIFR AND PR.SPECIES = 1 AND PR.VALUE IS NOT NULL
+                LEFT JOIN GENERATEDPROPDATAS GPD ON GPD.RKTYPEIDENT = 1000008 AND GPD.OBJECTREFNO = 10 AND GPD.OBJECTIDENT = MI.SIFR
+                WHERE MI.CODE IN :codes OR CAST(MI.SIFR AS VARCHAR(50)) IN :codes
+                ORDER BY PR.VALUE DESC
+            """
+            stmt = text(sql).bindparams(bindparam("codes", expanding=True))
+            with engine.connect() as conn:
+                rows = conn.execute(stmt, {"codes": tuple(codes_needing_rk7)}).fetchall()
+                for row in rows:
+                    r_rk7 = str(row[0] or "").strip()
+                    r_name = str(row[1] or "")
+                    r_sap = str(row[2] or "").strip()
+                    r_price = float(row[3]) if row[3] is not None else None
+                    if r_rk7 in dish_map:
+                        item = dish_map[r_rk7]
+                        if not item["name"]:
+                            item["name"] = r_name
+                        if not item["sap_code"] and r_sap:
+                            item["sap_code"] = r_sap
+                        if item["price"] is None and r_price is not None:
+                            item["price"] = r_price
+                        if item["name"]:
+                            item["found"] = True
+                            if not item["source"]:
+                                item["source"] = "RK7 Central Master DB"
+        except Exception as e:
+            logger.warning("Lỗi tra cứu CSDL Master RK7 batch: %s", e)
+
+    results = []
+    found_count = 0
+    for c in clean_codes:
+        item = dish_map[c]
+        if item["found"] or item["name"]:
+            item["found"] = True
+            found_count += 1
+            src = item["source"] or "MID / Server"
+            name_val = item["name"]
+            item["message"] = f"Tìm thấy món '{name_val}' từ {src}"
+        else:
+            item["message"] = f"Chưa tìm thấy món với mã RK7 '{c}' trong MID và RK7 Master"
+        results.append(item)
+
+    return {
+        "success": True,
+        "total": len(clean_codes),
+        "found_count": found_count,
+        "items": results
+    }
+
+
 def toggle_group_co(
     host: str,
     port: int = 27017,

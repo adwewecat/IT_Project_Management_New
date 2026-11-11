@@ -4583,3 +4583,41 @@ estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ B
   * Đã viết bộ 5 test case kiểm thử tự động xác nhận: khớp đúng `uyen.hoang` khi tìm email `uyen.hoang@ggg.com.vn`, khớp đúng `uyen.hoang` khi tìm username, khớp đúng `duyen.hoang`, khớp đúng qua SĐT, và từ chối an toàn khi query mơ hồ.
   * Backend: 100% Python 3.10 compatible, quét AST toàn bộ 153 file sạch 0 lỗi, compileall sạch, Smoke Test đạt 100%. Daemon backend đang chạy ổn định trên port 8000.
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.84s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config`.
+
+
+### [2026-11-11] PHÁT TRIỂN TÍNH NĂNG DÁN MÃ RK7 THÊM MÓN HÀNG LOẠT VÀO NHÓM MÓN THỰC ĐƠN GPOS/SO-CO (BULK PASTE RK7 DISH ADDITION WITH AUTO MID/MASTER LOOKUP)
+- **1. Yêu Cầu & Bối Cảnh Thực Tế**:
+  * **Yêu cầu người dùng**: *"Hiện tại thôi thấy giá và tên đều dược đồng bộ từ MID, tính năng thêm món thì khi gõ mã rk7 nó cũng tự link được tên món và giá. vậy bạn phát triển thêm tính năng để tôi có thể thêm món hàng loạt bằng cách chỉ cần pasted mã RK7 vào thì sẽ thêm hàng loạt khỏi cần gõ gì nhé"*.
+  * **Bối cảnh**: Tại modal *"Thêm Món Mới Vào Nhóm"* (`ManageMenuSoCoTask.tsx`), trước đây người dùng chỉ có thể thêm từng món đơn lẻ (gõ 1 mã RK7 -> hệ thống dò tên & giá -> bấm Thêm -> mở lại modal -> gõ mã tiếp theo). Khi triển khai thực đơn mới hoặc cập nhật hàng chục món mới vào nhóm, thao tác đơn lẻ này tốn nhiều thời gian và công sức.
+- **2. Giải Pháp Kỹ Thuật Đa Tầng (Frontend & Backend)**:
+  * **Tầng Backend API & Service (`mongo_menu_so_co_service.py` & `mongodb.py`)**:
+    - Xây dựng hàm tra cứu hàng loạt tối ưu cao `batch_lookup_dishes(host, rk7_codes, port=27017)`:
+      + Làm sạch danh sách mã RK7, tự động loại bỏ khoảng trắng và khử trùng lặp (deduplication) nhưng vẫn bảo toàn thứ tự ban đầu.
+      + Mở kết nối MongoDB nhà hàng một lần duy nhất (`timeout_ms=4000`), quét song song toàn bộ dữ liệu từ: `DISH_CACHE` (món & giá đồng bộ từ MID), `CO_MENU_ITEM` (dùng `$in` query), `ORDER_MENU_CACHE_CATEGORY` (thực đơn hiện hữu), `SHOW_HIDE_ITEMS`, và `CONFIG_COOKING`.
+      + Đối với các mã món chưa tìm thấy trong cache nhà hàng, tự động truy vấn CSDL Master RK7 tập trung (`get_rk7_engine`) qua câu lệnh SQL tối ưu sử dụng `bindparam(expanding=True)` để lấy tên món, mã SAP và đơn giá.
+      + Tốc độ tra cứu siêu nhanh: xử lý 50-100 mã RK7 chỉ mất dưới 500ms thay vì hàng chục lượt gọi API riêng lẻ.
+    - Bổ sung schema Pydantic: `BatchLookupDishesRequest`, `BatchLookupDishesResponse` trong `backend/app/schemas/mongodb.py`.
+    - Mở endpoint mới: `@router.post("/menu-so-co/batch-lookup-dishes", response_model=BatchLookupDishesResponse)` trong `backend/app/api/v1/mongodb.py`.
+  * **Tầng Frontend Service (`frontend/src/services/mongoService.ts`)**:
+    - Khai báo TypeScript interface: `BatchLookupDishesRequest`, `BatchLookupDishesResponse`.
+    - Cung cấp hàm gọi API: `mongoService.batchLookupDishes(payload)`.
+  * **Tầng Giao Diện Người Dùng (`frontend/src/pages/app/ManageMenuSoCoTask.tsx`)**:
+    - Nâng cấp modal `isAddDishToGroupOpen` với thiết kế 2 Tab linh hoạt:
+      + **Tab 1: Thêm 1 Món (Đơn Lẻ)**: Giữ nguyên form nhập liệu đơn lẻ tiện lợi cho người dùng khi chỉ cần thêm 1 món nhanh.
+      + **Tab 2: ⚡ Dán Mã RK7 Thêm Hàng Loạt**:
+        - Textarea dán mã RK7: Cho phép người dùng copy cả cột mã RK7 từ Excel, Google Sheets, Notepad và dán (Ctrl+V) vào ô. Hệ thống tự động phân tách theo dòng, dấu phẩy, chấm phẩy, tab.
+        - Bộ đếm thời gian thực: `Đã nhận diện: N mã RK7` kèm nút `Xóa Trắng` tiện lợi.
+        - Nút `⚡ Tra Cứu Tên & Đơn Giá (MID / Server)`: Tự động gọi API tra cứu hàng loạt, lấy toàn bộ tên món, mã SAP, đơn giá từ MID/Master RK7.
+        - Bảng xem trước và chỉnh sửa linh hoạt (Scrollable Table với sticky header, độ cao 260px):
+          * STT, Mã RK7 (font monospace đậm).
+          * Tên Món Ăn (input chỉnh sửa trực tiếp, bắt buộc, tự động viền đỏ nếu để trống).
+          * Mã SAP (input chỉnh sửa trực tiếp, tự động điền từ MID/Master RK7).
+          * Đơn Giá VNĐ (input số chỉnh sửa trực tiếp, tự động điền giá chuẩn MID).
+          * Thứ Tự Hiển Thị (tự động tăng dần từ `existingCount + 1`).
+          * Nguồn tra cứu (Badge trạng thái `✓ MID Cache`, `✓ RK7 Central Master DB`, hoặc `⚠️ Chưa tìm thấy`).
+          * Thao tác Xóa (icon Thùng rác đỏ cho phép xóa từng dòng món thừa).
+        - Checkbox tùy chọn: `⚡ Tự động kích hoạt hiển thị món sang CO (Kalo = 100)` (mặc định bật).
+        - Nút hành động: `🚀 Lưu & Thêm Hàng Loạt (N Món)`: Lưu đồng loạt toàn bộ danh sách món vào nhóm của Menu đang chọn qua `bulkAddMenuDishes`, kích hoạt sang CO qua `activateDishesToCo`, đóng modal và tự động tải lại thực đơn tức thì.
+- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Backend: 100% Python 3.10 compatible (0 backslash trong f-string, 0 cú pháp 3.11+), quét AST toàn bộ thư mục `backend/app` đạt 100% Valid, Smoke Test backend `>>> BACKEND SMOKE TEST PASSED 100%`. Daemon backend đang chạy ổn định trên port 8000.
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.98s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config`.

@@ -130,6 +130,8 @@ from app.schemas.mongodb import (
     DirectSyncMenuRequest,
     DirectSyncMenuResponse,
     DishLookupResponse,
+    BatchLookupDishesRequest,
+    BatchLookupDishesResponse,
     ToggleGroupCoRequest,
     ToggleGroupCoResponse,
     MenuGroupsCoDetailResponse,
@@ -1931,6 +1933,29 @@ def lookup_dish(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Lỗi khi tra cứu thông tin món ăn: {str(e)}"
+        )
+
+
+@router.post("/menu-so-co/batch-lookup-dishes", response_model=BatchLookupDishesResponse)
+def batch_lookup_dishes_endpoint(
+    payload: BatchLookupDishesRequest,
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Tra cứu hàng loạt thông tin Tên món, Mã SAP, Đơn giá và Hình ảnh theo danh sách Mã RK7:
+    Quét trực tiếp từ MongoDB GPOS nhà hàng và đối soát từ CSDL Master RK7 tập trung.
+    """
+    try:
+        res = mongo_menu_so_co_service.batch_lookup_dishes(
+            host=payload.host,
+            rk7_codes=payload.rk7_codes,
+            port=payload.port
+        )
+        return BatchLookupDishesResponse(**res)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi tra cứu hàng loạt món ăn: {str(e)}"
         )
 
 

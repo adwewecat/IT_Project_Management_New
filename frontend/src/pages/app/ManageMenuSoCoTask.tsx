@@ -784,6 +784,37 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   const [lookingUpDish, setLookingUpDish] = useState<boolean>(false);
   const [lookupFeedback, setLookupFeedback] = useState<{ text: string; type: 'success' | 'warning' } | null>(null);
 
+  // Chế độ thêm món vào nhóm: 'single' (thêm 1 món lẻ) hoặc 'bulk' (dán mã RK7 thêm hàng loạt)
+  const [addDishMode, setAddDishMode] = useState<'single' | 'bulk'>('single');
+  const [bulkRk7Input, setBulkRk7Input] = useState<string>('');
+  const [bulkDishList, setBulkDishList] = useState<Array<{
+    rk7_code: string;
+    name: string;
+    sap_code: string;
+    price: number | '';
+    sort_order: number;
+    image_url?: string;
+    found: boolean;
+    source?: string;
+  }>>([]);
+  const [lookingUpBulkDishes, setLookingUpBulkDishes] = useState<boolean>(false);
+
+  // Phân tách các mã RK7 từ chuỗi paste (hỗ trợ newline, phẩy, chấm phẩy, tab)
+  const parseRk7CodesFromText = (rawText: string): string[] => {
+    if (!rawText) return [];
+    const tokens = rawText.split(/[\r\n,;\t]+/);
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const t of tokens) {
+      const clean = t.trim();
+      if (clean && !seen.has(clean)) {
+        seen.add(clean);
+        result.push(clean);
+      }
+    }
+    return result;
+  };
+
   const openAddDishToGroupModal = (
     menuCode: string,
     groupCode: string,
@@ -792,6 +823,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     existingCount: number = 0
   ) => {
     setTargetGroupForAdd({ menuCode, groupCode, groupName, level });
+    setAddDishMode('single');
     setNewDishRk7('');
     setNewDishName('');
     setNewDishSap('');
@@ -800,7 +832,119 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     setNewDishImg('');
     setNewDishAutoCo(true);
     setLookupFeedback(null);
+    setBulkRk7Input('');
+    setBulkDishList([]);
     setIsAddDishToGroupOpen(true);
+  };
+
+  // Tra cứu tự động hàng loạt từ MID/GPOS và RK7 Master
+  const handleBatchLookupDishes = async (customCodes?: string[]) => {
+    const codes = customCodes || parseRk7CodesFromText(bulkRk7Input);
+    if (!codes.length || !activeHost) {
+      showToast('Vui lòng dán danh sách mã RK7 trước khi tra cứu', 'error');
+      return;
+    }
+    setLookingUpBulkDishes(true);
+    try {
+      const res = await mongoService.batchLookupDishes({
+        host: activeHost,
+        rk7_codes: codes
+      });
+
+      const baseSort = targetGroupForAdd ? newDishSortOrder : 1;
+      const items = (res.items || []).map((it, idx) => ({
+        rk7_code: it.rk7_code,
+        name: it.name || '',
+        sap_code: it.sap_code || '',
+        price: (it.price !== undefined && it.price !== null && Number(it.price) > 0 ? Number(it.price) : '') as number | '',
+        sort_order: baseSort + idx,
+        image_url: it.image_url || '',
+        found: !!it.found,
+        source: it.source || ''
+      }));
+
+      setBulkDishList(items);
+      const msg = `Đã tìm thấy thông tin ${res.found_count}/${res.total} món từ MID / CSDL Master RK7!`;
+      showToast(msg, res.found_count > 0 ? 'success' : 'info');
+    } catch (err: any) {
+      showToast('Lỗi khi tra cứu hàng loạt món: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setLookingUpBulkDishes(false);
+    }
+  };
+
+  // Xóa 1 dòng món khỏi danh sách hàng loạt
+  const handleRemoveBulkDishRow = (index: number) => {
+    setBulkDishList(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  // Cập nhật giá trị một trường của dòng món trong danh sách hàng loạt
+  const handleUpdateBulkDishField = (index: number, field: 'name' | 'sap_code' | 'price' | 'sort_order', value: any) => {
+    setBulkDishList(prev => prev.map((item, idx) => {
+      if (idx === index) {
+        return { ...item, [field]: value };
+      }
+      return item;
+    }));
+  };
+
+  // Lưu và thêm hàng loạt món vào nhóm
+  const handleSaveBulkAddDishes = async () => {
+    if (!activeHost || !targetGroupForAdd || bulkDishList.length === 0) return;
+
+    const missingName = bulkDishList.find(d => !d.name.trim());
+    if (missingName) {
+      showToast(`Món có mã RK7 "${missingName.rk7_code}" chưa có Tên món. Vui lòng nhập tên món hoặc xóa khỏi danh sách.`, 'error');
+      return;
+    }
+
+    setSavingAddDishToGroup(true);
+    try {
+      const itemsToSave = bulkDishList.map(d => ({
+        rk7_code: d.rk7_code.trim(),
+        name: d.name.trim(),
+        sap_code: d.sap_code.trim() || undefined,
+        price: (d.price === '' || isNaN(Number(d.price))) ? 0 : Number(d.price),
+        sort_order: Number(d.sort_order) || 1,
+        image_url: d.image_url?.trim() || undefined,
+        level: targetGroupForAdd.level
+      }));
+
+      const res = await mongoService.bulkAddMenuDishes({
+        host: activeHost,
+        target_menu_codes: [targetGroupForAdd.menuCode],
+        group_mode: 'existing',
+        group_code: targetGroupForAdd.groupCode,
+        group_name: targetGroupForAdd.groupName,
+        level: targetGroupForAdd.level,
+        items: itemsToSave
+      });
+
+      if (newDishAutoCo) {
+        try {
+          await mongoService.activateDishesToCo({
+            host: activeHost,
+            items: itemsToSave.map(it => ({
+              rk7_code: it.rk7_code,
+              name: it.name,
+              sap_code: it.sap_code,
+              price: it.price,
+              image_url: it.image_url
+            }))
+          });
+        } catch {
+          // ignore
+        }
+      }
+
+      showToast(res.message || `Đã thêm thành công ${itemsToSave.length} món vào nhóm "${targetGroupForAdd.groupName}"!`, 'success');
+      setIsAddDishToGroupOpen(false);
+      fetchDishItems();
+    } catch (err: any) {
+      showToast('Lỗi khi thêm hàng loạt món: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setSavingAddDishToGroup(false);
+    }
   };
 
   // Tra cứu tự động tên món, mã SAP, giá bán từ MID/MongoDB nhà hàng hoặc RK7 Central Master DB
@@ -5224,7 +5368,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
           isOpen={true}
           onClose={() => setIsAddDishToGroupOpen(false)}
           title={`Thêm Món Mới Vào Nhóm: ${targetGroupForAdd.groupName}`}
-          maxWidth="560px"
+          maxWidth={addDishMode === 'bulk' ? '860px' : '560px'}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '4px 0' }}>
             {/* Banner tóm tắt Menu & Nhóm */}
@@ -5243,228 +5387,590 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
               </div>
             </div>
 
-            {/* Mã RK7 & Mã SAP */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151' }}>
-                    Mã RK7 <span style={{ color: '#DC2626' }}>*</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => handleLookupDish()}
-                    disabled={lookingUpDish || !newDishRk7.trim()}
-                    style={{
-                      border: 'none',
-                      background: 'none',
-                      color: lookingUpDish || !newDishRk7.trim() ? '#9CA3AF' : '#2563EB',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      cursor: lookingUpDish || !newDishRk7.trim() ? 'not-allowed' : 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '3px'
-                    }}
-                    title="Tra cứu tên, mã SAP và giá từ MID/GPOS hoặc RK7 Master"
-                  >
-                    {lookingUpDish ? (
-                      <>
-                        <RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} />
-                        <span>Đang tìm...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Zap size={11} />
-                        <span>Lấy từ MID / Server</span>
-                      </>
+            {/* Tab chuyển đổi chế độ: Thêm đơn lẻ hoặc Dán hàng loạt */}
+            <div style={{ display: 'flex', gap: '6px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setAddDishMode('single')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: addDishMode === 'single' ? '#059669' : 'transparent',
+                  color: addDishMode === 'single' ? '#FFFFFF' : '#4B5563',
+                  fontWeight: addDishMode === 'single' ? 700 : 500,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Plus size={13} />
+                <span>Thêm 1 Món (Đơn Lẻ)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddDishMode('bulk')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: addDishMode === 'bulk' ? '#2563EB' : 'transparent',
+                  color: addDishMode === 'bulk' ? '#FFFFFF' : '#4B5563',
+                  fontWeight: addDishMode === 'bulk' ? 700 : 500,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Zap size={13} />
+                <span>⚡ Dán Mã RK7 Thêm Hàng Loạt</span>
+                {bulkDishList.length > 0 && (
+                  <span style={{
+                    backgroundColor: addDishMode === 'bulk' ? '#1D4ED8' : '#DBEAFE',
+                    color: addDishMode === 'bulk' ? '#FFFFFF' : '#1E40AF',
+                    fontSize: '10.5px',
+                    padding: '1px 6px',
+                    borderRadius: '999px',
+                    fontWeight: 700
+                  }}>
+                    {bulkDishList.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* ══════════════════════════════════════════════════════════════ */}
+            {/* CHẾ ĐỘ 1: THÊM 1 MÓN (ĐƠN LẺ)                                   */}
+            {/* ══════════════════════════════════════════════════════════════ */}
+            {addDishMode === 'single' && (
+              <>
+                {/* Mã RK7 & Mã SAP */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151' }}>
+                        Mã RK7 <span style={{ color: '#DC2626' }}>*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => handleLookupDish()}
+                        disabled={lookingUpDish || !newDishRk7.trim()}
+                        style={{
+                          border: 'none',
+                          background: 'none',
+                          color: lookingUpDish || !newDishRk7.trim() ? '#9CA3AF' : '#2563EB',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: lookingUpDish || !newDishRk7.trim() ? 'not-allowed' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px'
+                        }}
+                        title="Tra cứu tên, mã SAP và giá từ MID/GPOS hoặc RK7 Master"
+                      >
+                        {lookingUpDish ? (
+                          <>
+                            <RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} />
+                            <span>Đang tìm...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap size={11} />
+                            <span>Lấy từ MID / Server</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      value={newDishRk7}
+                      onChange={(e) => {
+                        setNewDishRk7(e.target.value);
+                        if (lookupFeedback) setLookupFeedback(null);
+                      }}
+                      onBlur={() => {
+                        if (newDishRk7.trim() && !newDishName.trim()) {
+                          handleLookupDish(newDishRk7.trim());
+                        }
+                      }}
+                      placeholder="VD: 33162 (Gõ xong tự dò tên & giá)"
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        fontSize: '13px',
+                        fontFamily: 'Consolas, monospace',
+                        boxSizing: 'border-box'
+                      }}
+                      autoFocus
+                    />
+                    {lookupFeedback && (
+                      <div
+                        style={{
+                          marginTop: '4px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          color: lookupFeedback.type === 'success' ? '#059669' : '#D97706',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        {lookupFeedback.text}
+                      </div>
                     )}
-                  </button>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                      Mã SAP (Không bắt buộc)
+                    </label>
+                    <input
+                      type="text"
+                      value={newDishSap}
+                      onChange={(e) => setNewDishSap(e.target.value)}
+                      placeholder="VD: 65003506"
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        fontSize: '13px',
+                        fontFamily: 'Consolas, monospace',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
                 </div>
-                <input
-                  type="text"
-                  value={newDishRk7}
-                  onChange={(e) => {
-                    setNewDishRk7(e.target.value);
-                    if (lookupFeedback) setLookupFeedback(null);
-                  }}
-                  onBlur={() => {
-                    if (newDishRk7.trim() && !newDishName.trim()) {
-                      handleLookupDish(newDishRk7.trim());
-                    }
-                  }}
-                  placeholder="VD: 33162 (Gõ xong tự dò tên & giá)"
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
-                    fontSize: '13px',
-                    fontFamily: 'Consolas, monospace',
-                    boxSizing: 'border-box'
-                  }}
-                  autoFocus
-                />
-                {lookupFeedback && (
-                  <div
+
+                {/* Tên Món Ăn */}
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                    Tên Món Ăn <span style={{ color: '#DC2626' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newDishName}
+                    onChange={(e) => setNewDishName(e.target.value)}
+                    placeholder="VD: Combo gà nướng phô mai"
                     style={{
-                      marginTop: '4px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      color: lookupFeedback.type === 'success' ? '#059669' : '#D97706',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '13px',
+                      boxSizing: 'border-box'
                     }}
+                  />
+                </div>
+
+                {/* Đơn Giá & Thứ Tự */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                      Đơn Giá (VNĐ) <span style={{ fontSize: '11px', fontWeight: 400, color: '#6B7280' }}>(Bỏ trống để tự đồng bộ từ MID)</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={newDishPrice}
+                      onChange={(e) => setNewDishPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="Bỏ trống (Tự đồng bộ từ MID / Server)"
+                      min={0}
+                      step={1000}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        fontSize: '13px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                      Thứ Tự Hiển Thị
+                    </label>
+                    <input
+                      type="number"
+                      value={newDishSortOrder}
+                      onChange={(e) => setNewDishSortOrder(Number(e.target.value))}
+                      min={1}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        fontSize: '13px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Link Hình Ảnh */}
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                    Link Hình Ảnh (Tùy chọn)
+                  </label>
+                  <input
+                    type="text"
+                    value={newDishImg}
+                    onChange={(e) => setNewDishImg(e.target.value)}
+                    placeholder="VD: https://.../image.jpg"
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '13px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                {/* Tùy chọn Tự kích hoạt CO */}
+                <div style={{ padding: '8px 12px', backgroundColor: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: '6px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: '#92400E' }}>
+                    <input
+                      type="checkbox"
+                      checked={newDishAutoCo}
+                      onChange={(e) => setNewDishAutoCo(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    ⚡ Tự động kích hoạt hiển thị món sang CO (Kalo = 100)
+                  </label>
+                </div>
+
+                {/* Footer Buttons */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsAddDishToGroupOpen(false)}
+                    disabled={savingAddDishToGroup}
                   >
-                    {lookupFeedback.text}
+                    Hủy
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleSaveAddDishToGroup}
+                    isLoading={savingAddDishToGroup}
+                    disabled={savingAddDishToGroup || !newDishRk7.trim() || !newDishName.trim()}
+                    style={{ backgroundColor: '#059669', borderColor: '#047857' }}
+                    leftIcon={<Plus size={14} />}
+                  >
+                    Lưu & Thêm Món
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════════ */}
+            {/* CHẾ ĐỘ 2: DÁN MÃ RK7 THÊM HÀNG LOẠT (BULK PASTE RK7)            */}
+            {/* ══════════════════════════════════════════════════════════════ */}
+            {addDishMode === 'bulk' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* Khu vực Dán Mã RK7 */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#1F2937' }}>
+                      Dán Danh Sách Mã RK7 <span style={{ color: '#DC2626' }}>*</span>
+                    </label>
+                    <span style={{ fontSize: '11px', color: '#6B7280' }}>
+                      (Hỗ trợ dán cột từ Excel, phân tách theo dòng, dấu phẩy hoặc tab)
+                    </span>
+                  </div>
+                  <textarea
+                    value={bulkRk7Input}
+                    onChange={(e) => setBulkRk7Input(e.target.value)}
+                    placeholder={`Dán danh sách mã RK7 vào đây...\nVí dụ:\n33162\n33163\n33164\nHoặc copy cả cột mã RK7 từ Excel dán vào`}
+                    rows={4}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '12.5px',
+                      fontFamily: 'Consolas, monospace',
+                      boxSizing: 'border-box',
+                      resize: 'vertical',
+                      lineHeight: '1.4'
+                    }}
+                    autoFocus
+                  />
+                  {/* Thanh hành động tra cứu */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
+                    <div style={{ fontSize: '12px', color: '#4B5563', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>Đã nhận diện:</span>
+                      <span style={{
+                        fontWeight: 700,
+                        color: parseRk7CodesFromText(bulkRk7Input).length > 0 ? '#1E40AF' : '#9CA3AF',
+                        backgroundColor: parseRk7CodesFromText(bulkRk7Input).length > 0 ? '#DBEAFE' : '#F3F4F6',
+                        padding: '2px 8px',
+                        borderRadius: '4px'
+                      }}>
+                        {parseRk7CodesFromText(bulkRk7Input).length} mã RK7
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {bulkRk7Input.trim() && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setBulkRk7Input('');
+                            setBulkDishList([]);
+                          }}
+                          style={{ fontSize: '11px', padding: '4px 8px' }}
+                        >
+                          Xóa Trắng
+                        </Button>
+                      )}
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => handleBatchLookupDishes()}
+                        isLoading={lookingUpBulkDishes}
+                        disabled={lookingUpBulkDishes || parseRk7CodesFromText(bulkRk7Input).length === 0}
+                        style={{
+                          backgroundColor: '#2563EB',
+                          borderColor: '#1D4ED8',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          padding: '5px 12px'
+                        }}
+                        leftIcon={<Zap size={13} />}
+                      >
+                        ⚡ Tra Cứu Tên & Đơn Giá (MID / Server)
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bảng Xem Trước & Chỉnh Sửa Các Món Ăn */}
+                {bulkDishList.length > 0 && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#1F2937', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>📋 Danh Sách Món Chuẩn Bị Thêm ({bulkDishList.length}):</span>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#059669', backgroundColor: '#D1FAE5', padding: '1px 6px', borderRadius: '4px' }}>
+                          ✓ Đã tìm thấy: {bulkDishList.filter(d => d.found).length}
+                        </span>
+                        {bulkDishList.some(d => !d.name.trim()) && (
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: '#DC2626', backgroundColor: '#FEE2E2', padding: '1px 6px', borderRadius: '4px' }}>
+                            ⚠️ Thiếu tên món: {bulkDishList.filter(d => !d.name.trim()).length}
+                          </span>
+                        )}
+                      </div>
+                      <span style={{ fontSize: '11px', color: '#6B7280' }}>
+                        (Bạn có thể chỉnh sửa trực tiếp Tên món, Mã SAP, Giá nếu cần)
+                      </span>
+                    </div>
+
+                    <div style={{
+                      maxHeight: '260px',
+                      overflowY: 'auto',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '6px',
+                      backgroundColor: '#FFFFFF'
+                    }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                        <thead style={{ position: 'sticky', top: 0, backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', zIndex: 2 }}>
+                          <tr>
+                            <th style={{ padding: '6px 8px', textAlign: 'center', width: '38px', color: '#475569', fontWeight: 700 }}>STT</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'left', width: '85px', color: '#475569', fontWeight: 700 }}>Mã RK7</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'left', color: '#475569', fontWeight: 700 }}>Tên Món Ăn <span style={{ color: '#DC2626' }}>*</span></th>
+                            <th style={{ padding: '6px 8px', textAlign: 'left', width: '95px', color: '#475569', fontWeight: 700 }}>Mã SAP</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'right', width: '105px', color: '#475569', fontWeight: 700 }}>Đơn Giá (đ)</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'center', width: '55px', color: '#475569', fontWeight: 700 }}>Thứ Tự</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'center', width: '120px', color: '#475569', fontWeight: 700 }}>Nguồn</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'center', width: '40px', color: '#475569', fontWeight: 700 }}>Xóa</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bulkDishList.map((dish, idx) => (
+                            <tr key={`${dish.rk7_code}_${idx}`} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FBFCFD' }}>
+                              <td style={{ padding: '6px 8px', textAlign: 'center', color: '#64748B', fontWeight: 600 }}>
+                                {idx + 1}
+                              </td>
+                              <td style={{ padding: '6px 8px', fontFamily: 'Consolas, monospace', fontWeight: 700, color: '#1E293B' }}>
+                                {dish.rk7_code}
+                              </td>
+                              <td style={{ padding: '4px 6px' }}>
+                                <input
+                                  type="text"
+                                  value={dish.name}
+                                  onChange={(e) => handleUpdateBulkDishField(idx, 'name', e.target.value)}
+                                  placeholder="Nhập tên món ăn..."
+                                  style={{
+                                    width: '100%',
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    border: `1px solid ${dish.name.trim() ? '#CBD5E1' : '#EF4444'}`,
+                                    backgroundColor: dish.name.trim() ? '#FFFFFF' : '#FEF2F2',
+                                    fontSize: '12px',
+                                    boxSizing: 'border-box'
+                                  }}
+                                />
+                              </td>
+                              <td style={{ padding: '4px 6px' }}>
+                                <input
+                                  type="text"
+                                  value={dish.sap_code}
+                                  onChange={(e) => handleUpdateBulkDishField(idx, 'sap_code', e.target.value)}
+                                  placeholder="Mã SAP..."
+                                  style={{
+                                    width: '100%',
+                                    padding: '4px 6px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #CBD5E1',
+                                    fontSize: '11.5px',
+                                    fontFamily: 'Consolas, monospace',
+                                    boxSizing: 'border-box'
+                                  }}
+                                />
+                              </td>
+                              <td style={{ padding: '4px 6px' }}>
+                                <input
+                                  type="number"
+                                  value={dish.price}
+                                  onChange={(e) => handleUpdateBulkDishField(idx, 'price', e.target.value === '' ? '' : Number(e.target.value))}
+                                  placeholder="0"
+                                  min={0}
+                                  step={1000}
+                                  style={{
+                                    width: '100%',
+                                    padding: '4px 6px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #CBD5E1',
+                                    fontSize: '12px',
+                                    textAlign: 'right',
+                                    boxSizing: 'border-box'
+                                  }}
+                                />
+                              </td>
+                              <td style={{ padding: '4px 6px' }}>
+                                <input
+                                  type="number"
+                                  value={dish.sort_order}
+                                  onChange={(e) => handleUpdateBulkDishField(idx, 'sort_order', Number(e.target.value))}
+                                  min={1}
+                                  style={{
+                                    width: '100%',
+                                    padding: '4px 6px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #CBD5E1',
+                                    fontSize: '11.5px',
+                                    textAlign: 'center',
+                                    boxSizing: 'border-box'
+                                  }}
+                                />
+                              </td>
+                              <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                                {dish.found ? (
+                                  <span style={{
+                                    fontSize: '10.5px',
+                                    fontWeight: 600,
+                                    color: '#059669',
+                                    backgroundColor: '#ECFDF5',
+                                    border: '1px solid #A7F3D0',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    display: 'inline-block',
+                                    maxWidth: '110px',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                  }} title={dish.source || 'MID'}>
+                                    ✓ {dish.source || 'MID Cache'}
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    fontSize: '10.5px',
+                                    fontWeight: 600,
+                                    color: '#D97706',
+                                    backgroundColor: '#FFFBEB',
+                                    border: '1px solid #FDE68A',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    display: 'inline-block'
+                                  }}>
+                                    ⚠️ Chưa tìm thấy
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveBulkDishRow(idx)}
+                                  style={{
+                                    border: 'none',
+                                    background: 'none',
+                                    color: '#EF4444',
+                                    cursor: 'pointer',
+                                    padding: '2px',
+                                    borderRadius: '4px'
+                                  }}
+                                  title="Xóa món này khỏi danh sách thêm"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
+
+                {/* Tùy chọn Tự kích hoạt CO */}
+                <div style={{ padding: '8px 12px', backgroundColor: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: '6px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: '#92400E' }}>
+                    <input
+                      type="checkbox"
+                      checked={newDishAutoCo}
+                      onChange={(e) => setNewDishAutoCo(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    ⚡ Tự động kích hoạt hiển thị món sang CO (Kalo = 100)
+                  </label>
+                </div>
+
+                {/* Footer Buttons Bulk */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsAddDishToGroupOpen(false)}
+                    disabled={savingAddDishToGroup}
+                  >
+                    Hủy
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleSaveBulkAddDishes}
+                    isLoading={savingAddDishToGroup}
+                    disabled={savingAddDishToGroup || bulkDishList.length === 0 || bulkDishList.some(d => !d.name.trim())}
+                    style={{ backgroundColor: '#059669', borderColor: '#047857' }}
+                    leftIcon={<Plus size={14} />}
+                  >
+                    {`🚀 Lưu & Thêm Hàng Loạt (${bulkDishList.length} Món)`}
+                  </Button>
+                </div>
               </div>
-
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
-                  Mã SAP (Không bắt buộc)
-                </label>
-                <input
-                  type="text"
-                  value={newDishSap}
-                  onChange={(e) => setNewDishSap(e.target.value)}
-                  placeholder="VD: 65003506"
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
-                    fontSize: '13px',
-                    fontFamily: 'Consolas, monospace',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Tên Món Ăn */}
-            <div>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
-                Tên Món Ăn <span style={{ color: '#DC2626' }}>*</span>
-              </label>
-              <input
-                type="text"
-                value={newDishName}
-                onChange={(e) => setNewDishName(e.target.value)}
-                placeholder="VD: Combo gà nướng phô mai"
-                style={{
-                  width: '100%',
-                  padding: '8px 10px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  fontSize: '13px',
-                  boxSizing: 'border-box'
-                }}
-              />
-            </div>
-
-            {/* Đơn Giá & Thứ Tự */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
-                  Đơn Giá (VNĐ) <span style={{ fontSize: '11px', fontWeight: 400, color: '#6B7280' }}>(Bỏ trống để tự đồng bộ từ MID)</span>
-                </label>
-                <input
-                  type="number"
-                  value={newDishPrice}
-                  onChange={(e) => setNewDishPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                  placeholder="Bỏ trống (Tự đồng bộ từ MID / Server)"
-                  min={0}
-                  step={1000}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
-                    fontSize: '13px',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
-                  Thứ Tự Hiển Thị
-                </label>
-                <input
-                  type="number"
-                  value={newDishSortOrder}
-                  onChange={(e) => setNewDishSortOrder(Number(e.target.value))}
-                  min={1}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
-                    fontSize: '13px',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Link Hình Ảnh */}
-            <div>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '4px' }}>
-                Link Hình Ảnh (Tùy chọn)
-              </label>
-              <input
-                type="text"
-                value={newDishImg}
-                onChange={(e) => setNewDishImg(e.target.value)}
-                placeholder="VD: https://.../image.jpg"
-                style={{
-                  width: '100%',
-                  padding: '8px 10px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  fontSize: '13px',
-                  boxSizing: 'border-box'
-                }}
-              />
-            </div>
-
-            {/* Tùy chọn Tự kích hoạt CO */}
-            <div style={{ padding: '8px 12px', backgroundColor: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: '6px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: '#92400E' }}>
-                <input
-                  type="checkbox"
-                  checked={newDishAutoCo}
-                  onChange={(e) => setNewDishAutoCo(e.target.checked)}
-                  style={{ cursor: 'pointer' }}
-                />
-                ⚡ Tự động kích hoạt hiển thị món sang CO (Kalo = 100)
-              </label>
-            </div>
-
-            {/* Footer Buttons */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsAddDishToGroupOpen(false)}
-                disabled={savingAddDishToGroup}
-              >
-                Hủy
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleSaveAddDishToGroup}
-                isLoading={savingAddDishToGroup}
-                disabled={savingAddDishToGroup || !newDishRk7.trim() || !newDishName.trim()}
-                style={{ backgroundColor: '#059669', borderColor: '#047857' }}
-                leftIcon={<Plus size={14} />}
-              >
-                Lưu & Thêm Món
-              </Button>
-            </div>
+            )}
           </div>
         </Modal>
       )}
