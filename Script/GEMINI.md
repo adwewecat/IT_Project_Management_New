@@ -587,3 +587,23 @@
 - **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
   * Backend: 100% Python 3.10 compatible, quét AST toàn bộ thư mục `backend/app` đạt 100% Valid, Smoke Test backend `>>> BACKEND SMOKE TEST PASSED 100%`, daemon backend hoạt động ổn định trên port 8000.
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.72s`), toàn bộ bundle sạch sẽ trong `frontend/dist/`.
+
+
+### [2026-11-11] KHẮC PHỤC TRIỆT ĐỂ LỖI SO KHỚP TÀI KHOẢN KHI KHÓA / ĐỔI MẬT KHẨU HÀNG LOẠT TRÊN SSO/IAM (STRICT IDENTITY MATCHING IN SSO BATCH ACTIONS)
+- **1. Triệu Chứng & Nguyên Nhân Gốc Rễ**:
+  * **Triệu chứng**: Người dùng phản ánh khi dán email `uyen.hoang@ggg.com.vn` vào chức năng *Tính Năng Mở Rộng (2. Khóa Tài Khoản Hàng Loạt)* trên trang Xử Lý SSO, IAM tìm kiếm ra 3 user (`duyen.hoang`, `luyen.hoang`, `uyen.hoang`), nhưng hệ thống lại xử lý và khóa tài khoản đầu tiên là `duyen.hoang@ggg.com.vn` thay vì tài khoản thứ 3 `uyen.hoang`.
+  * **Nguyên nhân**:
+    1. Cơ chế tìm kiếm của cổng IAM Web Portal (`/Identity/Users?search=...`) hoạt động theo kiểu wildcard / substring `LIKE '%query%'`. Khi tìm `uyen.hoang@ggg.com.vn`, IAM trả về cả 3 tài khoản do `duyen.hoang` và `luyen.hoang` đều chứa chuỗi con `uyen.hoang`.
+    2. Trong hàm `process_quick_sso_item` và `find_iam_user_info` (`backend/app/services/sso_management_service.py`), vòng lặp kiểm tra sử dụng toán tử chuỗi con: `clean_query.lower() in u_name.lower()` hoặc `clean_query.lower() in u_mail.lower()`. Vì chuỗi `"duyen.hoang@ggg.com.vn"` chứa `"uyen.hoang@ggg.com.vn"`, điều kiện lập tức đánh giá thành `True` ngay ở dòng đầu tiên (`duyen.hoang`) và thực hiện `break`.
+    3. Hơn nữa, nhánh dự phòng cũ dùng `first_row = rows.first`, dẫn đến việc nếu không khớp tuyệt đối thì tự ý lấy dòng đầu tiên, gây ra rủi ro khóa nhầm hoặc đổi pass nhầm tài khoản của người khác.
+- **2. Giải Pháp Kỹ Thuật Đa Tầng (Strict Identity Matching Algorithm)**:
+  * Xây dựng thuật toán so khớp chính xác danh tính `match_best_iam_user(candidates, query)` với 4 tầng ưu tiên khắt khe:
+    - **Tầng 1 (Khớp Tuyệt Đối 100%)**: So khớp chính xác toàn phần `email.lower() == query_lower` hoặc `username.lower() == query_lower` hoặc `clean_digits == phone_digits`. Nếu có user khớp chính xác (như `uyen.hoang@ggg.com.vn`), lập tức chọn user đó và bỏ qua mọi user tương tự khác.
+    - **Tầng 2 (Khớp Định Danh Chéo Tuyệt Đối)**: Nếu query là Email (`uyen.hoang@ggg.com.vn`), so khớp username trước ký tự `@` (`u_name.lower() == 'uyen.hoang'`); nếu query là UserName (`uyen.hoang`), so khớp phần đầu email `u_mail.split('@')[0] == 'uyen.hoang'`.
+    - **Tầng 3 (Bảo Vệ Kết Quả Duy Nhất)**: Chỉ khi IAM trả về đúng 1 kết quả duy nhất (`len=1`), hệ thống mới kiểm tra mối liên hệ hợp lệ để chấp nhận.
+    - **Tầng 4 (Phòng Vệ Đa Kết Quả Mơ Hồ)**: Nếu IAM trả về từ 2 kết quả trở lên mà không ai khớp chính xác ở Tầng 1 hoặc Tầng 2, **TUYỆT ĐỐI KHÔNG CHỌN BỪA DÒNG ĐẦU TIÊN**. Hệ thống lập tức từ chối và thông báo danh sách các user tương tự để yêu cầu người dùng cung cấp chính xác Email/UserName, triệt tiêu 100% rủi ro thao tác nhầm tài khoản.
+  * Đồng bộ thuật toán cho cả `process_quick_sso_item` (khóa/đổi pass/phân quyền hàng loạt) và `find_iam_user_info` (khóa/mở khóa/đổi pass đơn lẻ).
+- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Đã viết bộ 5 test case kiểm thử tự động xác nhận: khớp đúng `uyen.hoang` khi tìm email `uyen.hoang@ggg.com.vn`, khớp đúng `uyen.hoang` khi tìm username, khớp đúng `duyen.hoang`, khớp đúng qua SĐT, và từ chối an toàn khi query mơ hồ.
+  * Backend: 100% Python 3.10 compatible, quét AST toàn bộ 153 file sạch 0 lỗi, compileall sạch, Smoke Test đạt 100%. Daemon backend đang chạy ổn định trên port 8000.
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 5.18s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config`.

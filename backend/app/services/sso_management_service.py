@@ -742,11 +742,19 @@ async def create_iam_ncc_user(
                 encoded_user = urllib.parse.quote(clean_username)
                 await page.goto(f"https://iam.ggg.com.vn/Identity/Users?search={encoded_user}&UserType=99", wait_until="networkidle", timeout=30000)
                 rows = page.locator("table tbody tr")
-                if await rows.count() > 0:
-                    edit_link = rows.first.locator("td").first.locator("a")
-                    if await edit_link.count() > 0:
-                        href = (await edit_link.get_attribute("href")) or ""
-                        user_id = href.split("/")[-1] if "/" in href else href
+                rc = await rows.count()
+                if rc > 0:
+                    for r_idx in range(rc):
+                        r_row = rows.nth(r_idx)
+                        r_cells = r_row.locator("td")
+                        if await r_cells.count() >= 3:
+                            r_uname = (await r_cells.nth(2).inner_text()).strip()
+                            if r_uname.lower() == clean_username.lower():
+                                edit_link = r_cells.nth(0).locator("a")
+                                if await edit_link.count() > 0:
+                                    href = (await edit_link.get_attribute("href")) or ""
+                                    user_id = href.split("/")[-1] if "/" in href else href
+                                    break
 
             # 6. Vào UserProfile: Kiểm tra và tắt 'User Lockout Enabled' (đánh false để không khóa tài khoản)
             if user_id:
@@ -1105,6 +1113,106 @@ async def set_user_lockout_fields(
             pass
 
 
+def match_best_iam_user(
+    candidates: List[Dict[str, str]],
+    query: str
+) -> Tuple[Optional[Dict[str, str]], Optional[str]]:
+    """
+    Thuật toán so khớp chính xác danh tính tài khoản IAM (Strict Identity Matching).
+    Giải quyết triệt để lỗi IAM search wildcard '%query%' trả về nhiều kết quả tương tự
+    (Ví dụ: tìm 'uyen.hoang@ggg.com.vn' IAM trả về: duyen.hoang, luyen.hoang, uyen.hoang).
+
+    Quy tắc ưu tiên (Priority Tiers):
+    1. Vòng 1: Khớp chính xác 100% Email hoặc UserName hoặc Số điện thoại.
+    2. Vòng 2: Khớp chéo chính xác (Nếu query là email -> UserName khớp phần trước '@'; nếu query là username -> Email khớp 'username@...').
+    3. Vòng 3: Nếu chỉ có duy nhất 1 kết quả (len=1) và có liên quan chặt chẽ với query -> chấp nhận.
+    4. Nếu có từ 2 kết quả trở lên mà KHÔNG có ai khớp chính xác ở Vòng 1 hoặc Vòng 2 -> KHÔNG ĐƯỢC CHỌN BỪA dòng đầu tiên,
+       mà phải từ chối và báo lỗi danh sách user tương tự để bảo vệ tài khoản.
+
+    Trả về: (matched_candidate_dict_or_None, error_message_if_ambiguous)
+    """
+    clean_query = (query or "").strip()
+    if not clean_query or not candidates:
+        return None, "Không có dữ liệu ứng viên để so khớp."
+
+    query_lower = clean_query.lower()
+    is_email = "@" in query_lower
+    query_uname_from_email = query_lower.split("@")[0].strip() if is_email else query_lower
+    query_digits = re.sub(r"\D", "", clean_query)
+
+    # ----------------------------------------------------
+    # VÒNG 1: KHỚP TUYỆT ĐỐI 100% (STRICT EXACT MATCH)
+    # ----------------------------------------------------
+    # 1.1. Khớp chính xác Email đầy đủ
+    if is_email:
+        for c in candidates:
+            c_mail = (c.get("email") or "").strip().lower()
+            if c_mail and c_mail == query_lower:
+                return c, None
+
+    # 1.2. Khớp chính xác UserName
+    for c in candidates:
+        c_uname = (c.get("user_name") or "").strip().lower()
+        if c_uname and c_uname == query_lower:
+            return c, None
+
+    # 1.3. Khớp chính xác Số điện thoại (nếu query là SĐT chuẩn >= 9 số)
+    if query_digits and len(query_digits) >= 9:
+        for c in candidates:
+            c_phone_digits = re.sub(r"\D", "", c.get("phone_number") or "")
+            if c_phone_digits and c_phone_digits == query_digits:
+                return c, None
+
+    # ----------------------------------------------------
+    # VÒNG 2: KHỚP ĐỊNH DANH CHÉO CHÍNH XÁC (EXACT CROSS-FIELD MATCH)
+    # ----------------------------------------------------
+    # 2.1. Nếu query là Email (vd: uyen.hoang@ggg.com.vn) -> tìm user có UserName khớp chính xác 'uyen.hoang'
+    if is_email and query_uname_from_email:
+        for c in candidates:
+            c_uname = (c.get("user_name") or "").strip().lower()
+            if c_uname and c_uname == query_uname_from_email:
+                return c, None
+
+    # 2.2. Nếu query là UserName (vd: uyen.hoang) -> tìm user có Email bắt đầu bằng 'uyen.hoang@'
+    if not is_email:
+        for c in candidates:
+            c_mail = (c.get("email") or "").strip().lower()
+            if c_mail and c_mail.split("@")[0] == query_lower:
+                return c, None
+
+    # ----------------------------------------------------
+    # VÒNG 3: TRƯỜNG HỢP DUY NHẤT 1 KẾT QUẢ TỪ IAM
+    # ----------------------------------------------------
+    if len(candidates) == 1:
+        single = candidates[0]
+        s_uname = (single.get("user_name") or "").strip().lower()
+        s_mail = (single.get("email") or "").strip().lower()
+        s_phone_digits = re.sub(r"\D", "", single.get("phone_number") or "")
+
+        # Chấp nhận nếu có liên hệ rõ ràng với query
+        if (
+            (query_uname_from_email and query_uname_from_email in s_uname) or
+            (query_lower in s_mail) or
+            (query_digits and len(query_digits) >= 9 and query_digits in s_phone_digits)
+        ):
+            return single, None
+
+    # ----------------------------------------------------
+    # VÒNG 4: KHÔNG TÌM THẤY USER KHỚP CHÍNH XÁC (TUYỆT ĐỐI KHÔNG CHỌN BỪA ROW ĐẦU TIÊN)
+    # ----------------------------------------------------
+    similar_preview = ", ".join([
+        f"{c.get('user_name', '')} ({c.get('email') or c.get('phone_number') or 'N/A'})"
+        for c in candidates[:4]
+    ])
+    more_txt = f" và {len(candidates) - 4} tài khoản khác" if len(candidates) > 4 else ""
+    err_msg = (
+        f"Không tìm thấy tài khoản nào khớp chính xác với '{clean_query}'. "
+        f"IAM trả về {len(candidates)} tài khoản tương tự: [{similar_preview}{more_txt}]. "
+        f"Vui lòng nhập chính xác UserName hoặc Email đầy đủ để tránh thao tác nhầm tài khoản!"
+    )
+    return None, err_msg
+
+
 async def find_iam_user_info(
     page: Page,
     email: Optional[str] = None,
@@ -1135,6 +1243,7 @@ async def find_iam_user_info(
         if count == 0:
             continue
 
+        candidates: List[Dict[str, str]] = []
         for i in range(count):
             row = rows.nth(i)
             cells = row.locator("td")
@@ -1142,31 +1251,20 @@ async def find_iam_user_info(
             if cell_count >= 4:
                 uname = (await cells.nth(2).inner_text()).strip()
                 umail = (await cells.nth(3).inner_text()).strip()
-
-                is_match = False
-                if q_type == "email" and (umail.lower() == q_val.lower() or q_val.lower() in umail.lower()):
-                    is_match = True
-                elif q_type == "username" and (uname.lower() == q_val.lower() or q_val.lower() in uname.lower()):
-                    is_match = True
-
-                if is_match:
-                    edit_link = cells.nth(0).locator("a")
-                    if await edit_link.count() > 0:
-                        href = (await edit_link.get_attribute("href")) or ""
-                        uid = href.split("/")[-1] if "/" in href else href
-                        return uid, uname, umail
-
-        # Nếu không có dòng nào khớp chính xác chuỗi nhưng query trả về kết quả
-        first_row = rows.first
-        cells = first_row.locator("td")
-        if await cells.count() >= 4:
-            uname = (await cells.nth(2).inner_text()).strip()
-            umail = (await cells.nth(3).inner_text()).strip()
-            edit_link = cells.nth(0).locator("a")
-            if await edit_link.count() > 0:
-                href = (await edit_link.get_attribute("href")) or ""
+                uphone = (await cells.nth(4).inner_text()).strip() if cell_count > 4 else ""
+                edit_link = cells.nth(0).locator("a")
+                href = (await edit_link.get_attribute("href")) or "" if await edit_link.count() > 0 else ""
                 uid = href.split("/")[-1] if "/" in href else href
-                return uid, uname, umail
+                candidates.append({
+                    "user_id": uid,
+                    "user_name": uname,
+                    "email": umail,
+                    "phone_number": uphone
+                })
+
+        best_cand, _ = match_best_iam_user(candidates, q_val)
+        if best_cand and best_cand.get("user_id"):
+            return best_cand["user_id"], best_cand["user_name"], best_cand["email"]
 
     return None, clean_username, clean_email
 
@@ -1687,14 +1785,8 @@ async def process_quick_sso_item(
                     "message": f"Không tìm thấy tài khoản nào khớp với '{clean_query}' trên IAM."
                 }
 
-            # 3. So khớp tìm dòng phù hợp nhất (theo username, email hoặc số điện thoại)
-            matched_user_id = None
-            matched_username = ""
-            matched_email = ""
-            matched_phone = ""
-
-            clean_digits = re.sub(r"\D", "", clean_query)
-
+            # 3. Thu thập toàn bộ danh sách kết quả trả về từ IAM
+            candidates: List[Dict[str, str]] = []
             for i in range(count):
                 row = rows.nth(i)
                 cells = row.locator("td")
@@ -1702,48 +1794,36 @@ async def process_quick_sso_item(
                     u_name = (await cells.nth(2).inner_text()).strip()
                     u_mail = (await cells.nth(3).inner_text()).strip()
                     u_phone = (await cells.nth(4).inner_text()).strip()
-                    u_phone_digits = re.sub(r"\D", "", u_phone)
-
-                    is_match = False
-                    if u_name.lower() == clean_query.lower() or clean_query.lower() in u_name.lower():
-                        is_match = True
-                    elif u_mail.lower() == clean_query.lower() or clean_query.lower() in u_mail.lower():
-                        is_match = True
-                    elif clean_digits and (clean_digits == u_phone_digits or clean_digits in u_phone_digits):
-                        is_match = True
-
-                    if is_match:
-                        edit_link = cells.nth(0).locator("a")
-                        if await edit_link.count() > 0:
-                            href = (await edit_link.get_attribute("href")) or ""
-                            matched_user_id = href.split("/")[-1] if "/" in href else href
-                            matched_username = u_name
-                            matched_email = u_mail
-                            matched_phone = u_phone
-                            break
-
-            # Nếu không tìm thấy dòng nào khớp chính xác chuỗi nhưng query có trả về kết quả -> lấy dòng đầu tiên
-            if not matched_user_id:
-                first_row = rows.first
-                cells = first_row.locator("td")
-                if await cells.count() >= 5:
-                    matched_username = (await cells.nth(2).inner_text()).strip()
-                    matched_email = (await cells.nth(3).inner_text()).strip()
-                    matched_phone = (await cells.nth(4).inner_text()).strip()
                     edit_link = cells.nth(0).locator("a")
-                    if await edit_link.count() > 0:
-                        href = (await edit_link.get_attribute("href")) or ""
-                        matched_user_id = href.split("/")[-1] if "/" in href else href
+                    href = (await edit_link.get_attribute("href")) or "" if await edit_link.count() > 0 else ""
+                    u_id = href.split("/")[-1] if "/" in href else href
+                    candidates.append({
+                        "user_id": u_id,
+                        "user_name": u_name,
+                        "email": u_mail,
+                        "phone_number": u_phone,
+                    })
 
-            if not matched_user_id:
+            # 4. Áp dụng thuật toán so khớp chính xác tuyệt đối (Strict Identity Matching)
+            best_cand, match_err = match_best_iam_user(candidates, clean_query)
+            if not best_cand or not best_cand.get("user_id"):
                 return {
                     "success": False,
                     "query": clean_query,
                     "action": action,
-                    "message": f"Không trích xuất được thông tin tài khoản cho '{clean_query}'."
+                    "message": match_err or f"Không tìm thấy tài khoản nào khớp chính xác với '{clean_query}' trên IAM."
                 }
 
-            # 4. Thực hiện tác vụ: ĐỔI PASS hoặc KHÓA
+            matched_user_id = best_cand["user_id"]
+            matched_username = best_cand["user_name"]
+            matched_email = best_cand["email"]
+            matched_phone = best_cand["phone_number"]
+            logger.info(
+                f"[SSO Quick Process] Từ khóa: '{clean_query}' -> Khớp chính xác tài khoản: "
+                f"username='{matched_username}', email='{matched_email}', id='{matched_user_id}'"
+            )
+
+            # 5. Thực hiện tác vụ: ĐỔI PASS hoặc KHÓA hoặc PHÂN QUYỀN
             if action == "change_pass":
                 profile_url = f"https://iam.ggg.com.vn/Identity/UserProfile/{matched_user_id}"
                 await page.goto(profile_url, wait_until="networkidle", timeout=30000)
