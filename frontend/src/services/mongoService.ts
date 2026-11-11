@@ -670,10 +670,12 @@ export const mongoService = {
   },
 
   getScheduledParamJobs: async (
-    status?: string
+    status?: string,
+    limit: number = 20
   ): Promise<ScheduledParamJobItem[]> => {
     const params: Record<string, any> = {};
     if (status && status !== 'ALL') params.status = status;
+    if (limit !== undefined && limit !== null) params.limit = limit;
     const res = await api.get<ScheduledParamJobItem[]>('/mongodb/scheduled-param-jobs', { params });
     return res.data;
   },

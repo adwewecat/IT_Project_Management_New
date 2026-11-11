@@ -336,12 +336,12 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
     }
   };
 
-  // Tải danh sách Lịch Hẹn Giờ
+  // Tải danh sách Lịch Hẹn Giờ (giới hạn tối đa 20 phiên gần nhất)
   const loadScheduledJobs = async () => {
     setLoadingScheduledJobs(true);
     try {
-      const data = await mongoService.getScheduledParamJobs();
-      setScheduledJobsList(data);
+      const data = await mongoService.getScheduledParamJobs(undefined, 20);
+      setScheduledJobsList(data.slice(0, 20));
     } catch (err: any) {
       console.warn('Lỗi khi tải Lịch Hẹn Giờ:', err);
     } finally {
@@ -362,8 +362,8 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
     const intervalTime = hasActiveJob ? 8000 : 20000;
 
     const timer = setInterval(() => {
-      mongoService.getScheduledParamJobs().then((data) => {
-        setScheduledJobsList(data);
+      mongoService.getScheduledParamJobs(undefined, 20).then((data) => {
+        setScheduledJobsList(data.slice(0, 20));
       }).catch((err) => {
         console.warn('Lỗi làm mới ngầm lịch hẹn giờ:', err);
       });
@@ -3221,8 +3221,8 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
           maxWidth="950px"
           footer={
             <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-              <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
-                Hệ thống tự động kiểm tra và thực thi đẩy param theo đúng ngày & giờ cố định.
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                💡 Hệ thống tự động kiểm tra và thực thi đẩy param theo ngày & giờ cố định. Hiển thị tối đa 20 phiên gần nhất; toàn bộ lịch sử đẩy param được lưu trữ đầy đủ tại menu <strong>Báo Cáo Logs Tập Trung</strong>.
               </div>
               <Button variant="outline" onClick={() => setShowScheduledJobsModal(false)}>
                 Đóng
@@ -3271,8 +3271,8 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
             {scheduledActiveTab === 'LIST' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                    Các tác vụ hẹn giờ đã cài đặt trên hệ thống:
+                  <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                    Các tác vụ hẹn giờ đã cài đặt trên hệ thống <span style={{ fontWeight: 700, color: '#0284C7' }}>(hiển thị tối đa 20 phiên gần nhất)</span>:
                   </div>
                   <Button
                     variant="outline"

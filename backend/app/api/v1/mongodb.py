@@ -491,14 +491,15 @@ def batch_apply_params(
 @router.get("/scheduled-param-jobs", response_model=List[ScheduledParamJobItem])
 def get_scheduled_param_jobs(
     status: Optional[str] = Query(None, description="Lọc theo trạng thái: PENDING, RUNNING, COMPLETED, FAILED, CANCELLED"),
+    limit: Optional[int] = Query(20, description="Giới hạn số lượng lịch hẹn hiển thị (mặc định 20)"),
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(require_app_or_admin)
 ):
     """
-    Lấy danh sách các tác vụ hẹn giờ đẩy param xuống nhà hàng.
+    Lấy danh sách các tác vụ hẹn giờ đẩy param xuống nhà hàng (mặc định tối đa 20 bản ghi gần nhất).
     """
     try:
-        return MongoDBService.get_scheduled_param_jobs(db=db, status=status)
+        return MongoDBService.get_scheduled_param_jobs(db=db, status=status, limit=limit)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

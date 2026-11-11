@@ -3731,3 +3731,31 @@ estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ B
 - **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
   * Backend: 100% Python 3.10 compatible (0 backslash trong f-string, 0 cú pháp 3.11+), quét AST toàn bộ thư mục `backend/app` đạt 100% Valid, Smoke Test backend `>>> BACKEND SMOKE TEST PASSED 100%`. Daemon backend đang chạy ổn định trên port 8000.
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.98s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config`.
+
+
+### [2026-11-11] GIỚI HẠN HIỂN THỊ TỐI ĐA 20 PHIÊN LỊCH HẸN GIỜ ĐẨY PARAM & ĐỒNG BỘ TOÀN BỘ LOGS SANG BÁO CÁO LOGS TẬP TRUNG (SCHEDULED PARAM JOBS 20 LIMIT & CENTRALIZED AUDIT LOGGING)
+- **1. Yêu Cầu & Bối Cảnh Thực Tế**:
+  * **Yêu cầu người dùng**: *"Quản Lý Lịch Hẹn Giờ Đẩy Param Xuống Nhà Hàng chỉ hiển thị tối đa 20 logs, còn lại thì không cần hiện nhé, nhưng nhớ phải lưu logs lại để có thể tra ở bên báo cáo logs tập chung"*.
+  * **Bối cảnh**: Modal *"Quản Lý Lịch Hẹn Giờ Đẩy Param Xuống Nhà Hàng"* hiển thị toàn bộ lịch hẹn trong bảng điều khiển. Khi số lượng tác vụ hẹn giờ nhiều lên, việc load toàn bộ khiến danh sách dài và khó theo dõi. Đồng thời, toàn bộ nhật ký tạo, xóa và thực thi lịch hẹn (cả bấm Chạy Ngay lẫn background scheduler chạy tự động) cần được lưu trữ đầy đủ vào bảng `LOGS__New` để nhân sự IT có thể tra cứu lịch sử lâu dài bên phân hệ *Báo Cáo Logs Tập Trung*.
+- **2. Giải Pháp Kỹ Thuật Đa Tầng**:
+  * **Backend API & Service (`mongodb_service.py` & `mongodb.py`)**:
+    - Cập nhật hàm `MongoDBService.get_scheduled_param_jobs`:
+      + Bổ sung tham số `limit: Optional[int] = 20`.
+      + Sắp xếp giảm dần theo ngày, giờ và ID (`run_date.desc(), run_time.desc(), id.desc()`), áp dụng `.limit(limit)`.
+      + Mặc định chỉ truy vấn và trả về 20 phiên lịch hẹn gần nhất. Toàn bộ các phiên lịch hẹn cũ hơn vẫn được lưu trữ nguyên vẹn trong CSDL MSSQL (`ScheduledParamPushJob`), không bao giờ bị xóa.
+    - Cập nhật API Endpoint `GET /mongodb/scheduled-param-jobs`:
+      + Bổ sung query parameter: `limit: Optional[int] = Query(20, description="Giới hạn số lượng lịch hẹn hiển thị (mặc định 20)")`.
+    - Tích hợp ghi log tập trung vào `LOGS__New` thông qua `LogService.record_log`:
+      + Khi **Thực thi lịch hẹn** (`execute_scheduled_param_job`): Ghi log chi tiết `nhom_quyen="APP"`, `man_hinh="LỊCH HẸN GIỜ PARAM"`, `hanh_dong="THỰC THI LỊCH HẸN"`, `noi_dung=Thực thi lịch hẹn #{job.id} '{job.job_title}' ({job.run_date} {job.run_time}, Chế độ: {mode}): {success_count}/{len(target_restaurants)} nhà hàng thành công, {failed_count} thất bại (Trigger: {triggered_by})`, `status="SUCCESS"` hoặc `"FAILED"`, `du_lieu_moi=job.result_summary_json`, và đặc biệt bật `force_log=True` để đảm bảo Super Admin / Admin hay tiến trình ngầm Scheduler kích hoạt đều được lưu vết 100% vào `LOGS__New`.
+      + Khi **Tạo mới lịch hẹn** (`create_scheduled_param_job`): Ghi log `nhom_quyen="APP"`, `man_hinh="LỊCH HẸN GIỜ PARAM"`, `hanh_dong="TẠO LỊCH HẸN"`, kèm tiêu đề, ngày giờ hẹn và số lượng nhà hàng mục tiêu.
+      + Khi **Xóa lịch hẹn** (`delete_scheduled_param_job`): Ghi log `nhom_quyen="APP"`, `man_hinh="LỊCH HẸN GIỜ PARAM"`, `hanh_dong="XÓA LỊCH HẸN"`.
+      + Khi **Đẩy param hàng loạt tức thì** (`batch_apply_params_to_restaurants`): Ghi log `nhom_quyen="APP"`, `man_hinh="LỊCH HẸN GIỜ PARAM"`, `hanh_dong="ĐẨY PARAM HÀNG LOẠT"`.
+  * **Frontend Service & Giao Diện (`mongoService.ts` & `MongoDbParamManagementTask.tsx`)**:
+    - `mongoService.getScheduledParamJobs`: Bổ sung tham số `limit: number = 20`.
+    - `loadScheduledJobs` và interval làm mới: Truyền `limit=20` và slice `data.slice(0, 20)`.
+    - Cập nhật tiêu đề bảng và thông báo hướng dẫn:
+      * Tiêu đề: `Các tác vụ hẹn giờ đã cài đặt trên hệ thống (hiển thị tối đa 20 phiên gần nhất):`
+      * Footer modal: `💡 Hệ thống tự động kiểm tra và thực thi đẩy param theo ngày & giờ cố định. Hiển thị tối đa 20 phiên gần nhất; toàn bộ lịch sử đẩy param được lưu trữ đầy đủ tại menu Báo Cáo Logs Tập Trung.`
+- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Backend: 100% Python 3.10 compatible, quét AST toàn bộ thư mục `backend/app` đạt 100% Valid, Smoke Test backend `>>> BACKEND SMOKE TEST PASSED 100%`. Daemon backend đang chạy ổn định trên port 8000.
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.49s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config`.

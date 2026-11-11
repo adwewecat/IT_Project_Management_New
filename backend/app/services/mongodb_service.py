@@ -1386,6 +1386,22 @@ class MongoDBService:
         db.add(audit)
         db.commit()
 
+        # Ghi log tập trung (LOGS__New) để tra cứu bên Báo Cáo Logs Tập Trung
+        try:
+            from app.services.log_service import LogService
+            LogService.record_log(
+                db=db,
+                nhom_quyen="APP",
+                man_hinh="LỊCH HẸN GIỜ PARAM",
+                hanh_dong="ĐẨY PARAM HÀNG LOẠT",
+                noi_dung=f"Đẩy Param hàng loạt xuống {len(payload.target_restaurants)} nhà hàng (Chế độ: {mode}): {success_count} thành công, {failed_count} lỗi",
+                user_thuchien=current_user.username,
+                current_user=current_user,
+                force_log=True
+            )
+        except Exception as e_log:
+            logger.warning("Lỗi ghi log tập trung khi đẩy param hàng loạt: %s", e_log)
+
         return BatchApplyParamsResponse(
             success=True,
             message=f"Đã xử lý áp dụng tham số cho {len(payload.target_restaurants)} nhà hàng ({success_count} thành công, {failed_count} thất bại).",
@@ -1443,6 +1459,24 @@ class MongoDBService:
         db.add(audit)
         db.commit()
 
+        # Ghi log tập trung (LOGS__New) để tra cứu bên Báo Cáo Logs Tập Trung
+        try:
+            from app.services.log_service import LogService
+            st_text = "SUCCESS" if success_count > 0 else "FAILED"
+            LogService.record_log(
+                db=db,
+                nhom_quyen="APP",
+                man_hinh="LỊCH HẸN GIỜ PARAM",
+                hanh_dong="THỰC THI LỊCH HẸN",
+                noi_dung=f"Thực thi lịch hẹn #{job.id} '{job.job_title}' (Ngày hẹn: {job.run_date} {job.run_time}, Chế độ: {mode}): {success_count}/{len(target_restaurants)} nhà hàng thành công, {failed_count} thất bại. Người kích hoạt: {triggered_by}",
+                user_thuchien=triggered_by or "SYSTEM",
+                status=st_text,
+                du_lieu_moi=job.result_summary_json,
+                force_log=True
+            )
+        except Exception as e_log:
+            logger.warning("Lỗi ghi log tập trung khi thực thi lịch hẹn: %s", e_log)
+
         return job
 
     @staticmethod
@@ -1462,15 +1496,18 @@ class MongoDBService:
             return MongoDBService.execute_scheduled_param_job(db=db, job=job, triggered_by=triggered_by)
 
     @staticmethod
-    def get_scheduled_param_jobs(db: Session, status: Optional[str] = None) -> List[ScheduledParamJobItem]:
+    def get_scheduled_param_jobs(db: Session, status: Optional[str] = None, limit: Optional[int] = 20) -> List[ScheduledParamJobItem]:
         query = db.query(ScheduledParamPushJob)
         if status:
             query = query.filter(ScheduledParamPushJob.status == status.strip().upper())
-        records = query.order_by(
+        query = query.order_by(
             ScheduledParamPushJob.run_date.desc(),
             ScheduledParamPushJob.run_time.desc(),
             ScheduledParamPushJob.id.desc()
-        ).all()
+        )
+        if limit and limit > 0:
+            query = query.limit(limit)
+        records = query.all()
 
         results: List[ScheduledParamJobItem] = []
         for r in records:
@@ -1600,6 +1637,22 @@ class MongoDBService:
         db.add(audit)
         db.commit()
 
+        # Ghi log tập trung (LOGS__New) để tra cứu bên Báo Cáo Logs Tập Trung
+        try:
+            from app.services.log_service import LogService
+            LogService.record_log(
+                db=db,
+                nhom_quyen="APP",
+                man_hinh="LỊCH HẸN GIỜ PARAM",
+                hanh_dong="TẠO LỊCH HẸN",
+                noi_dung=f"Tạo lịch hẹn đẩy Param #{job.id} '{job.job_title}' (Ngày chạy: {job.run_date} lúc {job.run_time}, {job.total_restaurants} nhà hàng, Chế độ: {job.mode})",
+                user_thuchien=current_user.username,
+                current_user=current_user,
+                force_log=True
+            )
+        except Exception as e_log:
+            logger.warning("Lỗi ghi log tập trung khi tạo lịch hẹn: %s", e_log)
+
         return ScheduledParamJobItem(
             id=job.id,
             job_title=job.job_title,
@@ -1639,6 +1692,22 @@ class MongoDBService:
         )
         db.add(audit)
         db.commit()
+
+        # Ghi log tập trung (LOGS__New) để tra cứu bên Báo Cáo Logs Tập Trung
+        try:
+            from app.services.log_service import LogService
+            LogService.record_log(
+                db=db,
+                nhom_quyen="APP",
+                man_hinh="LỊCH HẸN GIỜ PARAM",
+                hanh_dong="XÓA LỊCH HẸN",
+                noi_dung=f"Xóa lịch hẹn đẩy Param #{job_id}: '{title}'",
+                user_thuchien=current_user.username,
+                current_user=current_user,
+                force_log=True
+            )
+        except Exception as e_log:
+            logger.warning("Lỗi ghi log tập trung khi xóa lịch hẹn: %s", e_log)
 
         return {"success": True, "message": f"Đã xóa lịch hẹn giờ '{title}' thành công!"}
 
