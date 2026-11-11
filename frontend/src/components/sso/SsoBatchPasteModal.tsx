@@ -12,6 +12,7 @@ import {
   XCircle,
   FileText,
   Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -38,6 +39,7 @@ export const SsoBatchPasteModal: React.FC<SsoBatchPasteModalProps> = ({
   const [action, setAction] = useState<'change_pass' | 'lock'>(initialAction);
   const [rawText, setRawText] = useState<string>('');
   const [rows, setRows] = useState<SSOQuickRowProgress[]>([]);
+  const [filterStatus, setFilterStatus] = useState<'all' | 'success' | 'error'>('all');
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [copiedPassId, setCopiedPassId] = useState<string | null>(null);
   const [copiedAll, setCopiedAll] = useState<boolean>(false);
@@ -118,6 +120,7 @@ export const SsoBatchPasteModal: React.FC<SsoBatchPasteModalProps> = ({
       setExportingExcel(true);
       const exportItems: SSOBatchExportItem[] = rows.map((r) => ({
         query: r.query,
+        match_type: r.match_type || '',
         user_name: r.user_name || '',
         email: r.email || '',
         phone_number: r.phone_number || '',
@@ -184,6 +187,7 @@ export const SsoBatchPasteModal: React.FC<SsoBatchPasteModalProps> = ({
                   user_name: res.user_name || r.user_name,
                   email: res.email || r.email,
                   phone_number: res.phone_number || r.phone_number,
+                  match_type: res.match_type || r.match_type,
                   new_password: res.new_password,
                   status: res.success ? 'success' : 'error',
                   message: res.message || (res.success ? 'Thành công' : 'Lỗi không xác định'),
@@ -414,9 +418,62 @@ export const SsoBatchPasteModal: React.FC<SsoBatchPasteModalProps> = ({
         {/* Bảng Dữ Liệu Kết Quả */}
         {rows.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                KẾT QUẢ XỬ LÝ CHI TIẾT ({rows.length} tài khoản):
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  KẾT QUẢ XỬ LÝ CHI TIẾT:
+                </div>
+                {/* Bộ lọc trạng thái nhanh */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatus('all')}
+                    style={{
+                      padding: '3px 9px',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: '11.5px',
+                      fontWeight: filterStatus === 'all' ? 700 : 500,
+                      border: filterStatus === 'all' ? '1px solid var(--color-primary)' : '1px solid var(--border-color)',
+                      backgroundColor: filterStatus === 'all' ? 'var(--color-primary)' : 'transparent',
+                      color: filterStatus === 'all' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Tất cả ({totalCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatus('success')}
+                    style={{
+                      padding: '3px 9px',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: '11.5px',
+                      fontWeight: filterStatus === 'success' ? 700 : 500,
+                      border: filterStatus === 'success' ? '1px solid var(--color-success)' : '1px solid var(--border-color)',
+                      backgroundColor: filterStatus === 'success' ? 'var(--color-success-bg)' : 'transparent',
+                      color: filterStatus === 'success' ? 'var(--color-success)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ✓ Thành công ({successCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatus('error')}
+                    style={{
+                      padding: '3px 9px',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: '11.5px',
+                      fontWeight: filterStatus === 'error' ? 700 : 500,
+                      border: filterStatus === 'error' ? '1px solid var(--color-error)' : '1px solid var(--border-color)',
+                      backgroundColor: filterStatus === 'error' ? 'var(--color-error-bg)' : 'transparent',
+                      color: filterStatus === 'error' ? 'var(--color-error)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ✕ Cần kiểm tra ({errorCount})
+                  </button>
+                </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {action === 'change_pass' && successCount > 0 && (
@@ -446,124 +503,159 @@ export const SsoBatchPasteModal: React.FC<SsoBatchPasteModalProps> = ({
             </div>
 
             <TopScrollTable maxHeight="340px">
-              <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+              <table style={{ width: '100%', minWidth: '980px', borderCollapse: 'collapse', fontSize: '12.5px' }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-secondary)' }}>
                   <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                     <th style={{ width: '45px', padding: '8px 10px', textAlign: 'center' }}>STT</th>
-                    <th style={{ width: '100px', padding: '8px 10px', textAlign: 'center' }}>Trạng Thái</th>
-                    <th style={{ width: '150px', padding: '8px 10px' }}>Từ Khóa Nhập</th>
-                    <th style={{ width: '140px', padding: '8px 10px' }}>UserName IAM</th>
-                    <th style={{ width: '170px', padding: '8px 10px' }}>Email IAM</th>
+                    <th style={{ width: '95px', padding: '8px 10px', textAlign: 'center' }}>Trạng Thái</th>
+                    <th style={{ width: '140px', padding: '8px 10px' }}>Từ Khóa Nhập</th>
+                    <th style={{ width: '135px', padding: '8px 10px' }}>Kiểu So Khớp</th>
+                    <th style={{ width: '130px', padding: '8px 10px' }}>UserName IAM</th>
+                    <th style={{ width: '160px', padding: '8px 10px' }}>Email IAM</th>
                     {action === 'change_pass' && (
-                      <th style={{ width: '160px', padding: '8px 10px' }}>Mật Khẩu Mới</th>
+                      <th style={{ width: '150px', padding: '8px 10px' }}>Mật Khẩu Mới</th>
                     )}
                     <th style={{ padding: '8px 10px' }}>Chi Tiết / Phản Hồi</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row, idx) => {
-                    const isProcessing = row.status === 'processing';
-                    const isSuccess = row.status === 'success';
-                    const isError = row.status === 'error';
+                  {rows
+                    .filter((r) => {
+                      if (filterStatus === 'success') return r.status === 'success';
+                      if (filterStatus === 'error') return r.status === 'error';
+                      return true;
+                    })
+                    .map((row, idx) => {
+                      const isProcessing = row.status === 'processing';
+                      const isSuccess = row.status === 'success';
+                      const isError = row.status === 'error';
 
-                    const rowBg = isProcessing
-                      ? 'var(--bg-hover)'
-                      : isSuccess
-                      ? 'var(--color-success-bg)'
-                      : isError
-                      ? 'var(--color-error-bg)'
-                      : 'transparent';
+                      const rowBg = isProcessing
+                        ? 'var(--bg-hover)'
+                        : isSuccess
+                        ? 'var(--color-success-bg)'
+                        : isError
+                        ? 'var(--color-error-bg)'
+                        : 'transparent';
 
-                    return (
-                      <tr
-                        key={row.id}
-                        style={{
-                          backgroundColor: rowBg,
-                          borderBottom: '1px solid var(--border-color)',
-                          transition: 'background-color 0.2s',
-                        }}
-                      >
-                        <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                          {idx + 1}
-                        </td>
-                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                          {isProcessing && (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                              <RefreshCw size={13} className="spin" /> Đang chạy
-                            </span>
-                          )}
-                          {isSuccess && (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--color-success)', fontWeight: 700 }}>
-                              <CheckCircle2 size={14} /> Xong
-                            </span>
-                          )}
-                          {isError && (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--color-error)', fontWeight: 700 }}>
-                              <XCircle size={14} /> Lỗi
-                            </span>
-                          )}
-                          {row.status === 'idle' && (
-                            <span style={{ color: 'var(--text-muted)' }}>Chờ chạy</span>
-                          )}
-                        </td>
-                        <td style={{ padding: '8px 10px', fontFamily: 'monospace', fontWeight: 600 }}>
-                          {row.query}
-                        </td>
-                        <td style={{ padding: '8px 10px', fontFamily: 'monospace' }}>
-                          {row.user_name || '—'}
-                        </td>
-                        <td style={{ padding: '8px 10px' }}>
-                          {row.email || '—'}
-                        </td>
-                        {action === 'change_pass' && (
-                          <td style={{ padding: '8px 10px' }}>
-                            {row.new_password ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <code
-                                  style={{
-                                    fontSize: '12px',
-                                    fontWeight: 700,
-                                    fontFamily: 'monospace',
-                                    padding: '2px 6px',
-                                    borderRadius: '4px',
-                                    backgroundColor: 'var(--bg-primary)',
-                                    border: '1px solid var(--border-color)',
-                                    color: 'var(--text-primary)',
-                                  }}
-                                >
-                                  {row.new_password}
-                                </code>
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopySinglePass(row.id, row.new_password!)}
-                                  style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    color: copiedPassId === row.id ? 'var(--color-success)' : 'var(--text-muted)',
-                                    padding: '2px',
-                                  }}
-                                  title="Sao chép mật khẩu"
-                                >
-                                  {copiedPassId === row.id ? <Check size={14} /> : <Copy size={14} />}
-                                </button>
-                              </div>
-                            ) : (
-                              '—'
-                            )}
-                          </td>
-                        )}
-                        <td
+                      const isAmbiguousError = row.message?.includes('tài khoản tương tự') || row.message?.includes('Không tìm thấy tài khoản nào khớp chính xác');
+
+                      return (
+                        <tr
+                          key={row.id}
                           style={{
-                            padding: '8px 10px',
-                            color: isError ? 'var(--color-error)' : isSuccess ? 'var(--color-success-text)' : 'var(--text-secondary)',
+                            backgroundColor: rowBg,
+                            borderBottom: '1px solid var(--border-color)',
+                            transition: 'background-color 0.2s',
                           }}
                         >
-                          {row.message || '—'}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            {idx + 1}
+                          </td>
+                          <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                            {isProcessing && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                <RefreshCw size={13} className="spin" /> Đang chạy
+                              </span>
+                            )}
+                            {isSuccess && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--color-success)', fontWeight: 700 }}>
+                                <CheckCircle2 size={14} /> Xong
+                              </span>
+                            )}
+                            {isError && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--color-error)', fontWeight: 700 }}>
+                                <XCircle size={14} /> Lỗi
+                              </span>
+                            )}
+                            {row.status === 'idle' && (
+                              <span style={{ color: 'var(--text-muted)' }}>Chờ chạy</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '8px 10px', fontFamily: 'monospace', fontWeight: 600 }}>
+                            {row.query}
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            {row.match_type ? (
+                              <span
+                                style={{
+                                  display: 'inline-block',
+                                  fontSize: '11px',
+                                  padding: '2px 7px',
+                                  borderRadius: '4px',
+                                  backgroundColor: isSuccess ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                                  color: isSuccess ? 'var(--color-success)' : 'var(--color-error)',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {row.match_type}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)' }}>—</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '8px 10px', fontFamily: 'monospace', fontWeight: 600 }}>
+                            {row.user_name || '—'}
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            {row.email || '—'}
+                          </td>
+                          {action === 'change_pass' && (
+                            <td style={{ padding: '8px 10px' }}>
+                              {row.new_password ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <code
+                                    style={{
+                                      fontSize: '12px',
+                                      fontWeight: 700,
+                                      fontFamily: 'monospace',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      backgroundColor: 'var(--bg-primary)',
+                                      border: '1px solid var(--border-color)',
+                                      color: 'var(--text-primary)',
+                                    }}
+                                  >
+                                    {row.new_password}
+                                  </code>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopySinglePass(row.id, row.new_password!)}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      color: copiedPassId === row.id ? 'var(--color-success)' : 'var(--text-muted)',
+                                      padding: '2px',
+                                    }}
+                                    title="Sao chép mật khẩu"
+                                  >
+                                    {copiedPassId === row.id ? <Check size={14} /> : <Copy size={14} />}
+                                  </button>
+                                </div>
+                              ) : (
+                                '—'
+                              )}
+                            </td>
+                          )}
+                          <td
+                            style={{
+                              padding: '8px 10px',
+                              color: isError ? 'var(--color-error)' : isSuccess ? 'var(--color-success-text)' : 'var(--text-secondary)',
+                            }}
+                          >
+                            {isAmbiguousError ? (
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                                <AlertTriangle size={15} style={{ color: 'var(--color-error)', flexShrink: 0, marginTop: '2px' }} />
+                                <span style={{ fontWeight: 600, color: 'var(--color-error)' }}>{row.message}</span>
+                              </div>
+                            ) : (
+                              row.message || '—'
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </TopScrollTable>

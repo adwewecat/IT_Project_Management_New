@@ -58,6 +58,27 @@ def _normalize_text(val: str) -> str:
     return re.sub(r"\s+", " ", val).strip().lower()
 
 
+def normalize_vn_phone(phone_str: str) -> str:
+    """
+    Chuẩn hóa số điện thoại Việt Nam về định dạng thống nhất 10 chữ số bắt đầu bằng 0.
+    Hỗ trợ xử lý:
+    - Tiền tố quốc tế: '+84989635884' -> '0989635884', '84989635884' -> '0989635884'
+    - Dấu chấm / gạch ngang / khoảng trắng: '098.963.5884' -> '0989635884', '098 963 5884' -> '0989635884'
+    - Thiếu số 0 ở đầu (9 số): '989635884' -> '0989635884'
+    - Số 11 số cũ (0169...): giữ nguyên 11 số chuẩn hóa.
+    """
+    if not phone_str:
+        return ""
+    digits = re.sub(r"\D", "", str(phone_str).strip())
+    if not digits:
+        return ""
+    if digits.startswith("84") and len(digits) >= 11:
+        digits = "0" + digits[2:]
+    elif not digits.startswith("0") and len(digits) == 9:
+        digits = "0" + digits
+    return digits
+
+
 def generate_compliant_password(length: int = 10) -> str:
     """
     Tạo mật khẩu ngẫu nhiên đạt chuẩn:
@@ -363,6 +384,26 @@ async def search_iam_users(
             has_pagination = (await pagination_loc.count()) > 0
             has_more = has_pagination or (len(results) >= 10)
 
+            # Sắp xếp ưu tiên hiển thị kết quả khớp chính xác nhất lên đầu danh sách
+            clean_sq = search_query.strip().lower()
+            if clean_sq and len(results) > 1:
+                clean_phone_sq = normalize_vn_phone(clean_sq)
+
+                def _sort_key(item: IAMUserItem) -> int:
+                    u_email = (item.email or "").strip().lower()
+                    u_name = (item.user_name or "").strip().lower()
+                    u_phone = normalize_vn_phone(item.phone_number or "")
+                    # Khớp 100% email, username hoặc phone
+                    if u_email == clean_sq or u_name == clean_sq or (clean_phone_sq and u_phone == clean_phone_sq):
+                        return 0
+                    if "@" in clean_sq and u_name == clean_sq.split("@")[0].strip():
+                        return 1
+                    if "@" not in clean_sq and u_email.split("@")[0].strip() == clean_sq:
+                        return 2
+                    return 3
+
+                results.sort(key=_sort_key)
+
             return results, has_more
         finally:
             await browser.close()
@@ -579,8 +620,8 @@ def increment_phone_number(phone: str, step: int = 2) -> str:
 
 
 async def check_iam_phone_exists(page: Page, phone_number: str) -> bool:
-    """Kiểm tra số điện thoại đã tồn tại trên hệ thống IAM chưa."""
-    clean_input_phone = re.sub(r"[^\d]", "", phone_number.strip())
+    """Kiểm tra số điện thoại đã tồn tại trên hệ thống IAM chưa (chuẩn hóa đầy đủ các đầu số VN)."""
+    clean_input_phone = normalize_vn_phone(phone_number)
     if not clean_input_phone:
         return False
 
@@ -599,10 +640,8 @@ async def check_iam_phone_exists(page: Page, phone_number: str) -> bool:
         if await cells.count() >= 5:
             # Cột 4 là Phone Number (0: Edit, 1: Send, 2: UserName, 3: Email, 4: Phone)
             tbl_phone = (await cells.nth(4).inner_text()).strip()
-            clean_tbl_phone = re.sub(r"[^\d]", "", tbl_phone)
-            if clean_tbl_phone and clean_tbl_phone == clean_input_phone:
-                return True
-            if clean_input_phone in clean_tbl_phone:
+            norm_tbl_phone = normalize_vn_phone(tbl_phone)
+            if norm_tbl_phone and norm_tbl_phone == clean_input_phone:
                 return True
     return False
 
@@ -1116,89 +1155,93 @@ async def set_user_lockout_fields(
 def match_best_iam_user(
     candidates: List[Dict[str, str]],
     query: str
-) -> Tuple[Optional[Dict[str, str]], Optional[str]]:
+) -> Tuple[Optional[Dict[str, str]], Optional[str], Optional[str]]:
     """
     Thuật toán so khớp chính xác danh tính tài khoản IAM (Strict Identity Matching).
     Giải quyết triệt để lỗi IAM search wildcard '%query%' trả về nhiều kết quả tương tự
     (Ví dụ: tìm 'uyen.hoang@ggg.com.vn' IAM trả về: duyen.hoang, luyen.hoang, uyen.hoang).
 
     Quy tắc ưu tiên (Priority Tiers):
-    1. Vòng 1: Khớp chính xác 100% Email hoặc UserName hoặc Số điện thoại.
-    2. Vòng 2: Khớp chéo chính xác (Nếu query là email -> UserName khớp phần trước '@'; nếu query là username -> Email khớp 'username@...').
-    3. Vòng 3: Nếu chỉ có duy nhất 1 kết quả (len=1) và có liên quan chặt chẽ với query -> chấp nhận.
-    4. Nếu có từ 2 kết quả trở lên mà KHÔNG có ai khớp chính xác ở Vòng 1 hoặc Vòng 2 -> KHÔNG ĐƯỢC CHỌN BỪA dòng đầu tiên,
-       mà phải từ chối và báo lỗi danh sách user tương tự để bảo vệ tài khoản.
+    1. Tầng 1: Khớp chính xác 100% Email hoặc UserName hoặc Số điện thoại.
+    2. Tầng 2: Khớp định danh chéo chính xác:
+       - Query là Email -> UserName IAM khớp phần trước '@' (u_name == query_uname)
+       - Query là UserName -> Email IAM có phần trước '@' khớp query (email_uname == query_uname)
+    3. Tầng 3: Nếu chỉ có duy nhất 1 kết quả (len=1) và có liên hệ chặt chẽ với query -> chấp nhận.
+    4. Tầng 4: Nếu có từ 2 kết quả trở lên mà KHÔNG có ai khớp chính xác ở Tầng 1 hoặc Tầng 2 -> TUYỆT ĐỐI KHÔNG CHỌN BỪA dòng đầu tiên,
+       mà phải từ chối và thông báo danh sách user tương tự để bảo vệ tài khoản.
 
-    Trả về: (matched_candidate_dict_or_None, error_message_if_ambiguous)
+    Trả về: (matched_candidate_dict_or_None, match_type, error_message_if_ambiguous)
     """
     clean_query = (query or "").strip()
     if not clean_query or not candidates:
-        return None, "Không có dữ liệu ứng viên để so khớp."
+        return None, None, "Không có dữ liệu ứng viên để so khớp."
 
     query_lower = clean_query.lower()
     is_email = "@" in query_lower
     query_uname_from_email = query_lower.split("@")[0].strip() if is_email else query_lower
-    query_digits = re.sub(r"\D", "", clean_query)
+    query_norm_phone = normalize_vn_phone(clean_query)
 
     # ----------------------------------------------------
-    # VÒNG 1: KHỚP TUYỆT ĐỐI 100% (STRICT EXACT MATCH)
+    # TẦNG 1: KHỚP TUYỆT ĐỐI 100% (STRICT EXACT MATCH)
     # ----------------------------------------------------
-    # 1.1. Khớp chính xác Email đầy đủ
+    # 1.1. Khớp chính xác Email đầy đủ (kể cả case-insensitive & bỏ khoảng trắng)
     if is_email:
         for c in candidates:
             c_mail = (c.get("email") or "").strip().lower()
             if c_mail and c_mail == query_lower:
-                return c, None
+                return c, "Khớp 100% Email", None
 
     # 1.2. Khớp chính xác UserName
     for c in candidates:
         c_uname = (c.get("user_name") or "").strip().lower()
         if c_uname and c_uname == query_lower:
-            return c, None
+            return c, "Khớp 100% UserName", None
 
-    # 1.3. Khớp chính xác Số điện thoại (nếu query là SĐT chuẩn >= 9 số)
-    if query_digits and len(query_digits) >= 9:
+    # 1.3. Khớp chính xác Số điện thoại (chuẩn hóa qua normalize_vn_phone)
+    if query_norm_phone and len(query_norm_phone) >= 9:
         for c in candidates:
-            c_phone_digits = re.sub(r"\D", "", c.get("phone_number") or "")
-            if c_phone_digits and c_phone_digits == query_digits:
-                return c, None
+            c_phone_norm = normalize_vn_phone(c.get("phone_number") or "")
+            if c_phone_norm and c_phone_norm == query_norm_phone:
+                return c, "Khớp 100% SĐT", None
 
     # ----------------------------------------------------
-    # VÒNG 2: KHỚP ĐỊNH DANH CHÉO CHÍNH XÁC (EXACT CROSS-FIELD MATCH)
+    # TẦNG 2: KHỚP ĐỊNH DANH CHÉO CHÍNH XÁC (EXACT CROSS-FIELD MATCH)
     # ----------------------------------------------------
     # 2.1. Nếu query là Email (vd: uyen.hoang@ggg.com.vn) -> tìm user có UserName khớp chính xác 'uyen.hoang'
     if is_email and query_uname_from_email:
         for c in candidates:
             c_uname = (c.get("user_name") or "").strip().lower()
             if c_uname and c_uname == query_uname_from_email:
-                return c, None
+                return c, "Khớp UserName theo Email", None
 
     # 2.2. Nếu query là UserName (vd: uyen.hoang) -> tìm user có Email bắt đầu bằng 'uyen.hoang@'
     if not is_email:
         for c in candidates:
             c_mail = (c.get("email") or "").strip().lower()
-            if c_mail and c_mail.split("@")[0] == query_lower:
-                return c, None
+            if c_mail and c_mail.split("@")[0].strip() == query_lower:
+                return c, "Khớp Email theo UserName", None
 
     # ----------------------------------------------------
-    # VÒNG 3: TRƯỜNG HỢP DUY NHẤT 1 KẾT QUẢ TỪ IAM
+    # TẦNG 3: TRƯỜNG HỢP DUY NHẤT 1 KẾT QUẢ TỪ IAM
     # ----------------------------------------------------
     if len(candidates) == 1:
         single = candidates[0]
         s_uname = (single.get("user_name") or "").strip().lower()
         s_mail = (single.get("email") or "").strip().lower()
-        s_phone_digits = re.sub(r"\D", "", single.get("phone_number") or "")
+        s_phone_norm = normalize_vn_phone(single.get("phone_number") or "")
 
         # Chấp nhận nếu có liên hệ rõ ràng với query
         if (
+            (query_uname_from_email and query_uname_from_email == s_uname) or
+            (query_lower and query_lower == s_mail) or
+            (query_norm_phone and len(query_norm_phone) >= 9 and query_norm_phone == s_phone_norm) or
             (query_uname_from_email and query_uname_from_email in s_uname) or
-            (query_lower in s_mail) or
-            (query_digits and len(query_digits) >= 9 and query_digits in s_phone_digits)
+            (query_lower in s_mail)
         ):
-            return single, None
+            return single, "Duy nhất 1 tài khoản", None
 
     # ----------------------------------------------------
-    # VÒNG 4: KHÔNG TÌM THẤY USER KHỚP CHÍNH XÁC (TUYỆT ĐỐI KHÔNG CHỌN BỪA ROW ĐẦU TIÊN)
+    # TẦNG 4: KHÔNG TÌM THẤY USER KHỚP CHÍNH XÁC (TUYỆT ĐỐI KHÔNG CHỌN BỪA ROW ĐẦU TIÊN)
     # ----------------------------------------------------
     similar_preview = ", ".join([
         f"{c.get('user_name', '')} ({c.get('email') or c.get('phone_number') or 'N/A'})"
@@ -1207,10 +1250,10 @@ def match_best_iam_user(
     more_txt = f" và {len(candidates) - 4} tài khoản khác" if len(candidates) > 4 else ""
     err_msg = (
         f"Không tìm thấy tài khoản nào khớp chính xác với '{clean_query}'. "
-        f"IAM trả về {len(candidates)} tài khoản tương tự: [{similar_preview}{more_txt}]. "
-        f"Vui lòng nhập chính xác UserName hoặc Email đầy đủ để tránh thao tác nhầm tài khoản!"
+        f"IAM có {len(candidates)} tài khoản tương tự: [{similar_preview}{more_txt}]. "
+        f"Đã dừng để tránh thao tác nhầm tài khoản! Vui lòng nhập đầy đủ UserName hoặc Email chính xác."
     )
-    return None, err_msg
+    return None, None, err_msg
 
 
 async def find_iam_user_info(
@@ -1262,7 +1305,7 @@ async def find_iam_user_info(
                     "phone_number": uphone
                 })
 
-        best_cand, _ = match_best_iam_user(candidates, q_val)
+        best_cand, _, _ = match_best_iam_user(candidates, q_val)
         if best_cand and best_cand.get("user_id"):
             return best_cand["user_id"], best_cand["user_name"], best_cand["email"]
 
@@ -1805,12 +1848,13 @@ async def process_quick_sso_item(
                     })
 
             # 4. Áp dụng thuật toán so khớp chính xác tuyệt đối (Strict Identity Matching)
-            best_cand, match_err = match_best_iam_user(candidates, clean_query)
+            best_cand, match_type, match_err = match_best_iam_user(candidates, clean_query)
             if not best_cand or not best_cand.get("user_id"):
                 return {
                     "success": False,
                     "query": clean_query,
                     "action": action,
+                    "match_type": "Không khớp / Trùng lặp",
                     "message": match_err or f"Không tìm thấy tài khoản nào khớp chính xác với '{clean_query}' trên IAM."
                 }
 
@@ -1818,8 +1862,9 @@ async def process_quick_sso_item(
             matched_username = best_cand["user_name"]
             matched_email = best_cand["email"]
             matched_phone = best_cand["phone_number"]
+            display_match_type = match_type or "Khớp chính xác"
             logger.info(
-                f"[SSO Quick Process] Từ khóa: '{clean_query}' -> Khớp chính xác tài khoản: "
+                f"[SSO Quick Process] Từ khóa: '{clean_query}' -> {display_match_type}: "
                 f"username='{matched_username}', email='{matched_email}', id='{matched_user_id}'"
             )
 
@@ -1837,6 +1882,7 @@ async def process_quick_sso_item(
                             "success": False,
                             "query": clean_query,
                             "action": action,
+                            "match_type": display_match_type,
                             "user_id": matched_user_id,
                             "user_name": matched_username,
                             "email": matched_email,
@@ -1874,6 +1920,7 @@ async def process_quick_sso_item(
                             "success": False,
                             "query": clean_query,
                             "action": action,
+                            "match_type": display_match_type,
                             "user_id": matched_user_id,
                             "user_name": matched_username,
                             "email": matched_email,
@@ -1885,12 +1932,13 @@ async def process_quick_sso_item(
                     "success": True,
                     "query": clean_query,
                     "action": action,
+                    "match_type": display_match_type,
                     "user_id": matched_user_id,
                     "user_name": matched_username,
                     "email": matched_email,
                     "phone_number": matched_phone,
                     "new_password": new_pwd,
-                    "message": f"Đã mở khóa và đổi mật khẩu thành công: {new_pwd}"
+                    "message": f"Đã mở khóa và đổi mật khẩu thành công: {new_pwd} [{display_match_type}]"
                 }
 
             elif action == "lock":
@@ -1910,12 +1958,13 @@ async def process_quick_sso_item(
                     "success": True,
                     "query": clean_query,
                     "action": action,
+                    "match_type": display_match_type,
                     "user_id": matched_user_id,
                     "user_name": matched_username,
                     "email": matched_email,
                     "phone_number": matched_phone,
                     "detail": f"Lockout Enabled = TRUE, Access Failed Count = 4, Lockout End = {now_str}",
-                    "message": f"Đã khóa tài khoản '{matched_username}' thành công!"
+                    "message": f"Đã khóa tài khoản '{matched_username}' thành công! [{display_match_type}]"
                 }
 
             elif action in ("assign_permissions", "assign"):
@@ -1925,6 +1974,7 @@ async def process_quick_sso_item(
                         "success": False,
                         "query": clean_query,
                         "action": action,
+                        "match_type": display_match_type,
                         "user_id": matched_user_id,
                         "user_name": matched_username,
                         "email": matched_email,
@@ -1938,6 +1988,7 @@ async def process_quick_sso_item(
                         "success": False,
                         "query": clean_query,
                         "action": action,
+                        "match_type": display_match_type,
                         "user_id": matched_user_id,
                         "user_name": matched_username,
                         "email": matched_email,
@@ -1949,13 +2000,14 @@ async def process_quick_sso_item(
                     "success": True,
                     "query": clean_query,
                     "action": action,
+                    "match_type": display_match_type,
                     "user_id": matched_user_id,
                     "user_name": matched_username,
                     "email": matched_email,
                     "phone_number": matched_phone,
                     "assigned_clients": assigned_clients,
                     "detail": f"Đã bật {len(assigned_clients)} quyền: {', '.join(assigned_clients[:3])}{'...' if len(assigned_clients) > 3 else ''}",
-                    "message": f"Đã phân quyền thành công {len(assigned_clients)} client cho tài khoản '{matched_username}'!"
+                    "message": f"Đã phân quyền thành công {len(assigned_clients)} client cho tài khoản '{matched_username}'! [{display_match_type}]"
                 }
 
             else:
@@ -1983,6 +2035,7 @@ def generate_batch_export_excel(action: str, items: List[Dict[str, Any]]) -> byt
     headers = [
         "STT",
         "Từ Khóa Nhập",
+        "Kiểu So Khớp",
         "User Name IAM",
         "Email IAM",
         "SĐT IAM",
@@ -2016,6 +2069,7 @@ def generate_batch_export_excel(action: str, items: List[Dict[str, Any]]) -> byt
         row_vals = [
             idx,
             str(item.get("query") or ""),
+            str(item.get("match_type") or "Khớp chính xác"),
             str(item.get("user_name") or ""),
             str(item.get("email") or ""),
             str(item.get("phone_number") or ""),
@@ -2037,10 +2091,10 @@ def generate_batch_export_excel(action: str, items: List[Dict[str, Any]]) -> byt
             cell.border = thin_border
             if col_idx == 1:
                 cell.alignment = Alignment(horizontal="center")
-            if action == "change_pass" and col_idx == 6:
+            if action == "change_pass" and col_idx == 7:
                 cell.font = Font(name="Consolas", size=11, bold=True, color="0070C0")
 
-    widths = [8, 24, 22, 32, 18]
+    widths = [8, 24, 22, 22, 32, 18]
     if action == "change_pass":
         widths.append(20)
     elif action in ("assign_permissions", "assign"):

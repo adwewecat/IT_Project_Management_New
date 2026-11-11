@@ -3681,7 +3681,15 @@ estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ B
     - **Tầng 3 (Bảo Vệ Kết Quả Duy Nhất)**: Chỉ khi IAM trả về đúng 1 kết quả duy nhất (`len=1`), hệ thống mới kiểm tra mối liên hệ hợp lệ để chấp nhận.
     - **Tầng 4 (Phòng Vệ Đa Kết Quả Mơ Hồ)**: Nếu IAM trả về từ 2 kết quả trở lên mà không ai khớp chính xác ở Tầng 1 hoặc Tầng 2, **TUYỆT ĐỐI KHÔNG CHỌN BỪA DÒNG ĐẦU TIÊN**. Hệ thống lập tức từ chối và thông báo danh sách các user tương tự để yêu cầu người dùng cung cấp chính xác Email/UserName, triệt tiêu 100% rủi ro thao tác nhầm tài khoản.
   * Đồng bộ thuật toán cho cả `process_quick_sso_item` (khóa/đổi pass/phân quyền hàng loạt) và `find_iam_user_info` (khóa/mở khóa/đổi pass đơn lẻ).
-- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+- **3. Rà Soát Toàn Diện Mọi Rule SSO & Nâng Cấp Bộ Lọc Nhận Biết Trên Frontend**:
+  * **Chuẩn hóa SĐT VN (`normalize_vn_phone`)**: Hỗ trợ mọi định dạng (`+84`, `84`, `0`, dấu chấm, gạch ngang, khoảng trắng, 9/10/11 số).
+  * **Rà soát `check_iam_phone_exists`**: Chuyển từ toán tử `in` sang so khớp chính xác sau chuẩn hóa `norm_tbl_phone == clean_input_phone`.
+  * **Sắp xếp kết quả tìm kiếm IAM (`search_iam_users`)**: Tự động đưa tài khoản khớp chính xác 100% (email, username, phone) lên vị trí đầu tiên (index 0).
+  * **Bổ sung cột & trường `match_type` (Kiểu So Khớp)**: Trả về chi tiết kiểu khớp (`Khớp 100% Email`, `Khớp 100% UserName`, `Khớp 100% SĐT`...) trên cả Backend response, Frontend UI và file Excel xuất ra.
+  * **Bộ lọc nhanh kết quả (Quick Filter Tabs)** trên cả 2 modal `SsoBatchPasteModal` và `SsoBatchAssignModal`:
+    - Tab `Tất cả (N)`, `✓ Thành công (X)`, `✕ Cần kiểm tra / Lỗi (Y)` giúp người dùng xử lý danh sách 50-100 tài khoản lọc ngay các dòng nghi ngờ hoặc có cảnh báo.
+    - Cảnh báo trực quan `⚠️` với chữ đỏ nổi bật khi hệ thống dừng lại do phát hiện nhiều tài khoản IAM tương tự mà không khớp chính xác.
+- **4. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
   * Đã viết bộ 5 test case kiểm thử tự động xác nhận: khớp đúng `uyen.hoang` khi tìm email `uyen.hoang@ggg.com.vn`, khớp đúng `uyen.hoang` khi tìm username, khớp đúng `duyen.hoang`, khớp đúng qua SĐT, và từ chối an toàn khi query mơ hồ.
   * Backend: 100% Python 3.10 compatible, quét AST toàn bộ 153 file sạch 0 lỗi, compileall sạch, Smoke Test đạt 100%. Daemon backend đang chạy ổn định trên port 8000.
-  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 5.18s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config`.
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.84s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config`.

@@ -150,6 +150,7 @@ export interface SSOQuickProcessItemResponse {
   success: boolean;
   query: string;
   action: string;
+  match_type?: string;
   user_id?: string;
   user_name?: string;
   email?: string;
@@ -163,6 +164,7 @@ export interface SSOQuickProcessItemResponse {
 
 export interface SSOBatchExportItem {
   query: string;
+  match_type?: string;
   user_name?: string;
   email?: string;
   phone_number?: string;
@@ -175,6 +177,7 @@ export interface SSOBatchExportItem {
 export interface SSOQuickRowProgress {
   id: string;
   query: string;
+  match_type?: string;
   user_name?: string;
   email?: string;
   phone_number?: string;

@@ -581,6 +581,7 @@ async def process_single_quick_item(
             success=res.get("success", False),
             query=req.query,
             action=req.action,
+            match_type=res.get("match_type"),
             user_id=res.get("user_id"),
             user_name=res.get("user_name"),
             email=res.get("email"),
@@ -597,6 +598,7 @@ async def process_single_quick_item(
             success=False,
             query=req.query,
             action=req.action,
+            match_type="Lỗi ngoại lệ",
             message=f"Lỗi thực thi: {str(e)}",
         )
 

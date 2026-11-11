@@ -149,6 +149,7 @@ class SSOQuickProcessItemResponse(BaseModel):
     success: bool
     query: str
     action: str
+    match_type: Optional[str] = None
     user_id: Optional[str] = None
     user_name: Optional[str] = None
     email: Optional[str] = None
@@ -162,6 +163,7 @@ class SSOQuickProcessItemResponse(BaseModel):
 
 class SSOBatchExportItem(BaseModel):
     query: str = ""
+    match_type: Optional[str] = ""
     user_name: Optional[str] = ""
     email: Optional[str] = ""
     phone_number: Optional[str] = ""
