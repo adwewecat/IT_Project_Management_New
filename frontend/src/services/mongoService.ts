@@ -2304,7 +2304,8 @@ export interface ReadFile2Response {
 
 export interface DishLookupResponse {
   found: boolean;
-  rk7_code: string;
+  rk7_code?: string;
+  input_code?: string;
   name?: string | null;
   sap_code?: string | null;
   price?: number | null;
@@ -2316,13 +2317,16 @@ export interface DishLookupResponse {
 export interface BatchLookupDishesRequest {
   host: string;
   port?: number;
-  rk7_codes: string[];
+  codes?: string[];
+  rk7_codes?: string[];
+  code_type?: 'rk7' | 'sap';
 }
 
 export interface BatchLookupDishesResponse {
   success: boolean;
   total: number;
   found_count: number;
+  code_type?: string;
   items: DishLookupResponse[];
 }
 

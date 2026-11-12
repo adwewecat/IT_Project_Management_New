@@ -1943,13 +1943,15 @@ def batch_lookup_dishes_endpoint(
     current_user: UserInfo = Depends(require_app_or_admin)
 ):
     """
-    Tra cứu hàng loạt thông tin Tên món, Mã SAP, Đơn giá và Hình ảnh theo danh sách Mã RK7:
+    Tra cứu hàng loạt thông tin Tên món, Mã RK7/SAP, Đơn giá và Hình ảnh theo danh sách Mã RK7 hoặc Mã SAP:
     Quét trực tiếp từ MongoDB GPOS nhà hàng và đối soát từ CSDL Master RK7 tập trung.
     """
     try:
+        codes = payload.codes if payload.codes is not None else (payload.rk7_codes or [])
         res = mongo_menu_so_co_service.batch_lookup_dishes(
             host=payload.host,
-            rk7_codes=payload.rk7_codes,
+            codes=codes,
+            code_type=payload.code_type or "rk7",
             port=payload.port
         )
         return BatchLookupDishesResponse(**res)

@@ -784,10 +784,12 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   const [lookingUpDish, setLookingUpDish] = useState<boolean>(false);
   const [lookupFeedback, setLookupFeedback] = useState<{ text: string; type: 'success' | 'warning' } | null>(null);
 
-  // Chế độ thêm món vào nhóm: 'single' (thêm 1 món lẻ) hoặc 'bulk' (dán mã RK7 thêm hàng loạt)
+  // Chế độ thêm món vào nhóm: 'single' (thêm 1 món lẻ) hoặc 'bulk' (dán mã RK7/SAP thêm hàng loạt)
   const [addDishMode, setAddDishMode] = useState<'single' | 'bulk'>('single');
+  const [bulkCodeType, setBulkCodeType] = useState<'rk7' | 'sap'>('rk7');
   const [bulkRk7Input, setBulkRk7Input] = useState<string>('');
   const [bulkDishList, setBulkDishList] = useState<Array<{
+    input_code?: string;
     rk7_code: string;
     name: string;
     sap_code: string;
@@ -799,19 +801,56 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   }>>([]);
   const [lookingUpBulkDishes, setLookingUpBulkDishes] = useState<boolean>(false);
 
-  // Phân tách các mã RK7 từ chuỗi paste (hỗ trợ newline, phẩy, chấm phẩy, tab)
-  const parseRk7CodesFromText = (rawText: string): string[] => {
+  // Phân tách các mã từ chuỗi paste (hỗ trợ newline, phẩy, chấm phẩy, tab, Excel copy 1 hoặc nhiều cột)
+  const parseCodesFromText = (rawText: string, preferSapColumn: boolean = false): string[] => {
     if (!rawText) return [];
-    const tokens = rawText.split(/[\r\n,;\t]+/);
+    const lines = rawText.split(/\r?\n/);
     const seen = new Set<string>();
     const result: string[] = [];
-    for (const t of tokens) {
-      const clean = t.trim();
-      if (clean && !seen.has(clean)) {
-        seen.add(clean);
-        result.push(clean);
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const cols = trimmed.split(/[\t,;]/).map(c => c.trim()).filter(Boolean);
+      if (cols.length === 0) continue;
+
+      // Bỏ qua nếu dòng là tiêu đề bảng tính
+      const firstLower = cols[0].toLowerCase();
+      if (firstLower.includes('mã món') || firstLower.includes('tên món') || firstLower.includes('mã rk7') || firstLower.includes('mã sap') || firstLower === 'stt' || firstLower === 'code') {
+        continue;
+      }
+
+      let codeToUse = cols[0];
+      if (cols.length >= 3 && preferSapColumn) {
+        // Nếu user dán 3 cột (RK7, Name, SAP), cột thứ 3 là SAP
+        codeToUse = cols[2];
+      } else if (cols.length > 1 && !cols[0].includes(' ') && !preferSapColumn) {
+        codeToUse = cols[0];
+      }
+
+      if (codeToUse && !seen.has(codeToUse)) {
+        seen.add(codeToUse);
+        result.push(codeToUse);
       }
     }
+
+    // Dự phòng: Nếu chỉ có 1 dòng và ngăn cách bởi dấu cách
+    if (result.length <= 1 && rawText.includes(' ')) {
+      const spaceTokens = rawText.split(/\s+/).map(t => t.trim()).filter(Boolean);
+      if (spaceTokens.length > 1) {
+        const spaceSeen = new Set<string>();
+        const spaceRes: string[] = [];
+        for (const st of spaceTokens) {
+          const l = st.toLowerCase();
+          if (!l.includes('mã') && !l.includes('code') && !spaceSeen.has(st)) {
+            spaceSeen.add(st);
+            spaceRes.push(st);
+          }
+        }
+        if (spaceRes.length > 1) return spaceRes;
+      }
+    }
+
     return result;
   };
 
@@ -824,6 +863,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   ) => {
     setTargetGroupForAdd({ menuCode, groupCode, groupName, level });
     setAddDishMode('single');
+    setBulkCodeType('rk7');
     setNewDishRk7('');
     setNewDishName('');
     setNewDishSap('');
@@ -837,25 +877,28 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     setIsAddDishToGroupOpen(true);
   };
 
-  // Tra cứu tự động hàng loạt từ MID/GPOS và RK7 Master
+  // Tra cứu tự động hàng loạt từ MID/GPOS và RK7 Master theo Mã RK7 hoặc Mã SAP
   const handleBatchLookupDishes = async (customCodes?: string[]) => {
-    const codes = customCodes || parseRk7CodesFromText(bulkRk7Input);
+    const codes = customCodes || parseCodesFromText(bulkRk7Input, bulkCodeType === 'sap');
     if (!codes.length || !activeHost) {
-      showToast('Vui lòng dán danh sách mã RK7 trước khi tra cứu', 'error');
+      showToast(`Vui lòng dán danh sách mã ${bulkCodeType === 'sap' ? 'SAP' : 'RK7'} trước khi tra cứu`, 'error');
       return;
     }
     setLookingUpBulkDishes(true);
     try {
       const res = await mongoService.batchLookupDishes({
         host: activeHost,
-        rk7_codes: codes
+        codes: codes,
+        rk7_codes: codes,
+        code_type: bulkCodeType
       });
 
       const baseSort = targetGroupForAdd ? newDishSortOrder : 1;
       const items = (res.items || []).map((it, idx) => ({
-        rk7_code: it.rk7_code,
+        input_code: it.input_code || codes[idx] || '',
+        rk7_code: it.rk7_code || (bulkCodeType === 'rk7' ? (it.input_code || codes[idx] || '') : ''),
         name: it.name || '',
-        sap_code: it.sap_code || '',
+        sap_code: it.sap_code || (bulkCodeType === 'sap' ? (it.input_code || codes[idx] || '') : ''),
         price: (it.price !== undefined && it.price !== null && Number(it.price) > 0 ? Number(it.price) : '') as number | '',
         sort_order: baseSort + idx,
         image_url: it.image_url || '',
@@ -864,7 +907,8 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
       }));
 
       setBulkDishList(items);
-      const msg = `Đã tìm thấy thông tin ${res.found_count}/${res.total} món từ MID / CSDL Master RK7!`;
+      const typeLabel = bulkCodeType === 'sap' ? 'SAP' : 'RK7';
+      const msg = `Đã tìm thấy thông tin ${res.found_count}/${res.total} món theo mã ${typeLabel} từ MID / CSDL Master RK7!`;
       showToast(msg, res.found_count > 0 ? 'success' : 'info');
     } catch (err: any) {
       showToast('Lỗi khi tra cứu hàng loạt món: ' + (err.response?.data?.detail || err.message), 'error');
@@ -879,7 +923,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   };
 
   // Cập nhật giá trị một trường của dòng món trong danh sách hàng loạt
-  const handleUpdateBulkDishField = (index: number, field: 'name' | 'sap_code' | 'price' | 'sort_order', value: any) => {
+  const handleUpdateBulkDishField = (index: number, field: 'rk7_code' | 'name' | 'sap_code' | 'price' | 'sort_order', value: any) => {
     setBulkDishList(prev => prev.map((item, idx) => {
       if (idx === index) {
         return { ...item, [field]: value };
@@ -891,6 +935,12 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   // Lưu và thêm hàng loạt món vào nhóm
   const handleSaveBulkAddDishes = async () => {
     if (!activeHost || !targetGroupForAdd || bulkDishList.length === 0) return;
+
+    const missingRk7 = bulkDishList.find(d => !d.rk7_code.trim());
+    if (missingRk7) {
+      showToast(`Món "${missingRk7.name || missingRk7.sap_code || 'Chưa đặt tên'}" chưa có Mã RK7. Vui lòng nhập Mã RK7 để lưu vào Menu GPOS.`, 'error');
+      return;
+    }
 
     const missingName = bulkDishList.find(d => !d.name.trim());
     if (missingName) {
@@ -1095,6 +1145,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   // 6. MODAL: THÊM MÓN HÀNG LOẠT (GOOGLE SHEETS MATRIX STYLE)
   // ══════════════════════════════════════════════════════════════════════════
   const [isBulkAddOpen, setIsBulkAddOpen] = useState<boolean>(false);
+  const [bulkAddCodeType, setBulkAddCodeType] = useState<'rk7' | 'sap'>('rk7');
   const [bulkAddTargetMenus, setBulkAddTargetMenus] = useState<string[]>([]);
   const [bulkAddGroupMode, setBulkAddGroupMode] = useState<'existing' | 'new'>('existing');
   const [bulkAddSelectedGroup, setBulkAddSelectedGroup] = useState<string>('');
@@ -1102,6 +1153,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
   const [bulkAddNewGroupLevel, setBulkAddNewGroupLevel] = useState<number>(-1);
   const [bulkAddPasteText, setBulkAddPasteText] = useState<string>('');
   const [bulkAddRows, setBulkAddRows] = useState<BulkAddDishRow[]>([]);
+  const [lookingUpBulkAdd, setLookingUpBulkAdd] = useState<boolean>(false);
   const [savingBulkAdd, setSavingBulkAdd] = useState<boolean>(false);
 
   // Danh sách các nhóm theo từng Menu cụ thể
@@ -1374,6 +1426,58 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     }
   };
 
+  // Cập nhật giá trị một trường của dòng món trong modal Thêm món hàng loạt vào Menu
+  const handleUpdateBulkAddRow = (index: number, field: keyof BulkAddDishRow, value: any) => {
+    setBulkAddRows(prev => prev.map((item, idx) => {
+      if (idx === index) {
+        return { ...item, [field]: value };
+      }
+      return item;
+    }));
+  };
+
+  // Xóa một dòng món khỏi danh sách chuẩn bị thêm hàng loạt vào Menu
+  const handleRemoveBulkAddRow = (index: number) => {
+    setBulkAddRows(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  // Tra cứu tự động tên món, mã SAP/RK7, đơn giá từ MID / Server cho modal Thêm món hàng loạt
+  const handleLookupBulkAddDishes = async () => {
+    const codes = parseCodesFromText(bulkAddPasteText, bulkAddCodeType === 'sap');
+    if (!codes.length || !activeHost) {
+      showToast(`Vui lòng dán danh sách mã ${bulkAddCodeType === 'sap' ? 'SAP' : 'RK7'} trước khi tra cứu`, 'error');
+      return;
+    }
+    setLookingUpBulkAdd(true);
+    try {
+      const res = await mongoService.batchLookupDishes({
+        host: activeHost,
+        codes: codes,
+        rk7_codes: codes,
+        code_type: bulkAddCodeType
+      });
+
+      const items: BulkAddDishRow[] = (res.items || []).map((it, idx) => ({
+        rk7_code: it.rk7_code || (bulkAddCodeType === 'rk7' ? (it.input_code || codes[idx] || '') : ''),
+        name: it.name || '',
+        sap_code: it.sap_code || (bulkAddCodeType === 'sap' ? (it.input_code || codes[idx] || '') : ''),
+        sort_order: idx + 1,
+        price: (it.price !== undefined && it.price !== null && Number(it.price) > 0 ? Number(it.price) : 0),
+        image_url: it.image_url || '',
+        level: currentGroupLevel
+      }));
+
+      setBulkAddRows(items);
+      const typeLabel = bulkAddCodeType === 'sap' ? 'SAP' : 'RK7';
+      const msg = `Đã tìm thấy thông tin ${res.found_count}/${res.total} món theo mã ${typeLabel} từ MID / CSDL Master RK7!`;
+      showToast(msg, res.found_count > 0 ? 'success' : 'info');
+    } catch (err: any) {
+      showToast('Lỗi khi tra cứu hàng loạt món: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setLookingUpBulkAdd(false);
+    }
+  };
+
   // Tự động đồng bộ Level của các món trong bảng preview khi người dùng đổi Nhóm món hoặc đổi Level nhóm
   useEffect(() => {
     if (bulkAddPasteText.trim()) {
@@ -1405,6 +1509,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     setBulkAddSelectedGroup(existingGroupsInMenus[0]?.code || '');
     setBulkAddNewGroupName('');
     setBulkAddNewGroupLevel(-1);
+    setBulkAddCodeType('rk7');
     setBulkAddPasteText('');
     setBulkAddRows([]);
     setGlobalGroupSearch('');
@@ -1436,7 +1541,19 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
     }
 
     if (bulkAddRows.length === 0) {
-      showToast('Danh sách món trống! Vui lòng copy paste dữ liệu vào ô bảng tính', 'error');
+      showToast('Danh sách món trống! Vui lòng dán mã món và bấm Tra Cứu Tên & Đơn Giá', 'error');
+      return;
+    }
+
+    const missingRk7 = bulkAddRows.find(d => !d.rk7_code.trim());
+    if (missingRk7) {
+      showToast(`Món "${missingRk7.name || missingRk7.sap_code || 'Chưa đặt tên'}" chưa có Mã RK7. Vui lòng nhập Mã RK7 để lưu vào Menu GPOS.`, 'error');
+      return;
+    }
+
+    const missingName = bulkAddRows.find(d => !d.name.trim());
+    if (missingName) {
+      showToast(`Món có mã RK7 "${missingName.rk7_code}" chưa có Tên món. Vui lòng nhập tên món hoặc xóa khỏi danh sách.`, 'error');
       return;
     }
 
@@ -3750,11 +3867,9 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '78vh', overflowY: 'auto' }}>
             {/* Hướng dẫn copy paste */}
             <div style={{ padding: '10px 14px', borderRadius: '6px', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', fontSize: '12px', color: '#1E40AF' }}>
-              <strong>📋 Hướng dẫn nhập liệu nhanh:</strong> Chỉ cần copy 3 cột từ Excel / Google Sheets và dán (Ctrl+V) vào ô bên dưới:
-              <br />
-              <code style={{ fontWeight: 700, fontSize: '12.5px' }}>Mã RK7 [Tab] Tên Món [Tab] Mã SAP</code>
+              <strong>📋 Hướng dẫn nhập liệu siêu tốc:</strong> Chỉ cần chọn dán cột <strong>Mã RK7</strong> hoặc <strong>Mã SAP</strong> từ Excel / Google Sheets vào ô bên dưới, sau đó bấm <strong>"Tra Cứu Tên & Đơn Giá"</strong>. Hệ thống sẽ tự động liên kết tên món, đơn giá và mã tương ứng từ MID / GPOS / CSDL Master RK7!
               <div style={{ marginTop: '4px', fontSize: '11.5px', color: '#1D4ED8' }}>
-                💡 <em>Hệ thống tự động nhận diện Level theo Nhóm món đã chọn ở Bước 2 (Nhóm đồ uống / nước = <strong>Level 0</strong>, Nhóm món ăn = <strong>Level -1</strong> mặc định).</em>
+                💡 <em>Hệ thống tự động nhận diện Level theo Nhóm món đã chọn (Nhóm đồ uống / nước = <strong>Level 0</strong>, Nhóm món ăn = <strong>Level -1</strong> mặc định).</em>
               </div>
             </div>
 
@@ -4106,63 +4221,289 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
               </div>
             </div>
 
-            {/* Ô Paste Dữ Liệu Kiểu Google Sheets */}
+            {/* Ô Paste Dữ Liệu Kiểu Tùy Chọn Mã RK7 hoặc Mã SAP */}
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  3. Dán (Paste) dữ liệu từ Excel / Google Sheets vào đây:
-                </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    3. Dán Danh Sách Mã Món:
+                  </label>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setBulkAddCodeType('rk7')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '3px 10px',
+                        borderRadius: '5px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        border: bulkAddCodeType === 'rk7' ? '1.5px solid #2563EB' : '1px solid #CBD5E1',
+                        backgroundColor: bulkAddCodeType === 'rk7' ? '#EFF6FF' : '#FFFFFF',
+                        color: bulkAddCodeType === 'rk7' ? '#1D4ED8' : '#64748B'
+                      }}
+                    >
+                      🏷️ Dán theo Mã RK7
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBulkAddCodeType('sap')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '3px 10px',
+                        borderRadius: '5px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        border: bulkAddCodeType === 'sap' ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                        backgroundColor: bulkAddCodeType === 'sap' ? '#ECFDF5' : '#FFFFFF',
+                        color: bulkAddCodeType === 'sap' ? '#047857' : '#64748B'
+                      }}
+                    >
+                      📦 Dán theo Mã SAP
+                    </button>
+                  </div>
+                </div>
                 <span style={{ fontSize: '11px', color: '#059669', fontWeight: 600 }}>
-                  Đã nhận diện: {bulkAddRows.length} món
+                  Đã nhận diện: {parseCodesFromText(bulkAddPasteText, bulkAddCodeType === 'sap').length} mã {bulkAddCodeType.toUpperCase()}
                 </span>
               </div>
+
               <textarea
                 value={bulkAddPasteText}
-                onChange={(e) => handleParsePasteText(e.target.value)}
-                placeholder="Ví dụ dán 3 cột từ Excel:&#10;33162	Combo gà cơm onigiri	65003506&#10;33166	Cơm cà ri trứng	65003651"
-                rows={5}
+                onChange={(e) => {
+                  setBulkAddPasteText(e.target.value);
+                  const lines = e.target.value.split(/\r?\n/).filter(l => l.trim().length > 0);
+                  if (lines.length > 0 && lines.some(l => l.includes('\t') || (l.split(',').length >= 3))) {
+                    handleParsePasteText(e.target.value);
+                  }
+                }}
+                placeholder={
+                  bulkAddCodeType === 'rk7'
+                    ? `Dán danh sách mã RK7 vào đây...\nVí dụ:\n33162\n33163\n33164\nHoặc copy cả cột mã RK7 từ Excel dán vào`
+                    : `Dán danh sách mã SAP vào đây...\nVí dụ:\n65003506\n65003507\n65003508\nHoặc copy cả cột mã SAP từ Excel dán vào`
+                }
+                rows={4}
                 style={{
                   width: '100%',
                   padding: '8px',
-                  fontSize: '11px',
+                  fontSize: '11.5px',
                   fontFamily: 'Consolas, monospace',
                   borderRadius: '6px',
                   border: '1px solid var(--border-color)',
                   outline: 'none',
-                  backgroundColor: '#F9FAFB'
+                  backgroundColor: '#F9FAFB',
+                  boxSizing: 'border-box'
                 }}
               />
+
+              {/* Thanh hành động Tra Cứu Tên & Đơn Giá */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ fontSize: '11px', color: '#64748B' }}>
+                  {bulkAddCodeType === 'sap'
+                    ? '💡 Dán mã SAP -> Bấm Tra cứu để hệ thống tự động tìm Mã RK7, Tên món và Đơn giá từ CSDL Master / MID'
+                    : '💡 Dán mã RK7 -> Bấm Tra cứu để hệ thống tự động liên kết Tên món, Mã SAP và Đơn giá từ MID / Server'}
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  {bulkAddPasteText.trim() && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setBulkAddPasteText('');
+                        setBulkAddRows([]);
+                      }}
+                      style={{ fontSize: '11px', padding: '4px 8px' }}
+                    >
+                      Xóa Trắng
+                    </Button>
+                  )}
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleLookupBulkAddDishes}
+                    isLoading={lookingUpBulkAdd}
+                    disabled={lookingUpBulkAdd || parseCodesFromText(bulkAddPasteText, bulkAddCodeType === 'sap').length === 0}
+                    style={{
+                      backgroundColor: '#2563EB',
+                      borderColor: '#1D4ED8',
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      padding: '5px 12px'
+                    }}
+                    leftIcon={<Zap size={13} />}
+                  >
+                    ⚡ Tra Cứu Tên & Đơn Giá (MID / Server)
+                  </Button>
+                </div>
+              </div>
             </div>
 
             {/* Preview Bảng Danh Sách Món Sẽ Thêm */}
             {bulkAddRows.length > 0 && (
               <div>
-                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '6px' }}>
-                  Xem trước dữ liệu sẽ thêm ({bulkAddRows.length} món):
-                </span>
-                <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Xem trước dữ liệu sẽ thêm ({bulkAddRows.length} món):
+                    </span>
+                    {bulkAddRows.some(d => !d.name.trim() || !d.rk7_code.trim()) && (
+                      <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#DC2626', backgroundColor: '#FEE2E2', padding: '1px 6px', borderRadius: '4px' }}>
+                        ⚠️ Cần kiểm tra món chưa đủ Mã RK7 hoặc Tên
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#6B7280' }}>
+                    (Có thể chỉnh sửa trực tiếp thông tin các ô bên dưới nếu cần)
+                  </span>
+                </div>
+                <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: '#FFFFFF' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px' }}>
                     <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#F3F4F6' }}>
                       <tr style={{ backgroundColor: '#F3F4F6', borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
-                        <th style={{ padding: '4px 8px', width: '30px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 2 }}>#</th>
-                        <th style={{ padding: '4px 8px', width: '70px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 2 }}>Mã RK7</th>
-                        <th style={{ padding: '4px 8px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 2 }}>Tên Món</th>
-                        <th style={{ padding: '4px 8px', width: '80px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 2 }}>Mã SAP</th>
-                        <th style={{ padding: '4px 8px', width: '50px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 2 }}>STT</th>
-                        <th style={{ padding: '4px 8px', width: '70px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 2 }}>Giá</th>
-                        <th style={{ padding: '4px 8px', width: '60px', position: 'sticky', top: 0, backgroundColor: '#F3F4F6', zIndex: 2 }}>Level</th>
+                        <th style={{ padding: '6px 8px', width: '32px', textAlign: 'center' }}>#</th>
+                        <th style={{ padding: '6px 8px', width: '90px' }}>Mã RK7 <span style={{ color: '#DC2626' }}>*</span></th>
+                        <th style={{ padding: '6px 8px' }}>Tên Món Ăn <span style={{ color: '#DC2626' }}>*</span></th>
+                        <th style={{ padding: '6px 8px', width: '95px' }}>Mã SAP</th>
+                        <th style={{ padding: '6px 8px', width: '55px', textAlign: 'center' }}>STT</th>
+                        <th style={{ padding: '6px 8px', width: '85px', textAlign: 'right' }}>Giá (đ)</th>
+                        <th style={{ padding: '6px 8px', width: '95px' }}>Loại Menu</th>
+                        <th style={{ padding: '6px 8px', width: '36px', textAlign: 'center' }}>Xóa</th>
                       </tr>
                     </thead>
                     <tbody>
                       {bulkAddRows.map((r, i) => (
-                        <tr key={i} style={{ borderBottom: '1px solid #E5E7EB' }}>
-                          <td style={{ padding: '4px 8px', color: '#6B7280' }}>{i + 1}</td>
-                          <td style={{ padding: '4px 8px', fontWeight: 700, fontFamily: 'Consolas, monospace' }}>{r.rk7_code}</td>
-                          <td style={{ padding: '4px 8px', fontWeight: 600 }}>{r.name}</td>
-                          <td style={{ padding: '4px 8px', color: '#4B5563' }}>{r.sap_code || '—'}</td>
-                          <td style={{ padding: '4px 8px' }}>{r.sort_order}</td>
-                          <td style={{ padding: '4px 8px' }}>{r.price?.toLocaleString('vi-VN')} đ</td>
-                          <td style={{ padding: '4px 8px' }}>{r.level === 0 ? 'Nước (0)' : 'Ăn (-1)'}</td>
+                        <tr key={i} style={{ borderBottom: '1px solid #E5E7EB', backgroundColor: i % 2 === 0 ? '#FFFFFF' : '#F9FAFB' }}>
+                          <td style={{ padding: '4px 6px', textAlign: 'center', color: '#6B7280', fontSize: '11px' }}>{i + 1}</td>
+                          <td style={{ padding: '3px 4px' }}>
+                            <input
+                              type="text"
+                              value={r.rk7_code}
+                              onChange={(e) => handleUpdateBulkAddRow(i, 'rk7_code', e.target.value)}
+                              placeholder="Mã RK7..."
+                              style={{
+                                width: '100%',
+                                padding: '3px 6px',
+                                fontSize: '11.5px',
+                                fontFamily: 'Consolas, monospace',
+                                fontWeight: 700,
+                                borderRadius: '4px',
+                                border: `1px solid ${r.rk7_code.trim() ? '#CBD5E1' : '#EF4444'}`,
+                                backgroundColor: r.rk7_code.trim() ? '#FFFFFF' : '#FEF2F2',
+                                boxSizing: 'border-box'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '3px 4px' }}>
+                            <input
+                              type="text"
+                              value={r.name}
+                              onChange={(e) => handleUpdateBulkAddRow(i, 'name', e.target.value)}
+                              placeholder="Nhập tên món ăn..."
+                              style={{
+                                width: '100%',
+                                padding: '3px 6px',
+                                fontSize: '11.5px',
+                                fontWeight: 600,
+                                borderRadius: '4px',
+                                border: `1px solid ${r.name.trim() ? '#CBD5E1' : '#EF4444'}`,
+                                backgroundColor: r.name.trim() ? '#FFFFFF' : '#FEF2F2',
+                                boxSizing: 'border-box'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '3px 4px' }}>
+                            <input
+                              type="text"
+                              value={r.sap_code || ''}
+                              onChange={(e) => handleUpdateBulkAddRow(i, 'sap_code', e.target.value)}
+                              placeholder="Mã SAP..."
+                              style={{
+                                width: '100%',
+                                padding: '3px 6px',
+                                fontSize: '11px',
+                                fontFamily: 'Consolas, monospace',
+                                borderRadius: '4px',
+                                border: '1px solid #CBD5E1',
+                                boxSizing: 'border-box'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '3px 4px' }}>
+                            <input
+                              type="number"
+                              value={r.sort_order ?? (i + 1)}
+                              onChange={(e) => handleUpdateBulkAddRow(i, 'sort_order', Number(e.target.value))}
+                              min={1}
+                              style={{
+                                width: '100%',
+                                padding: '3px 4px',
+                                fontSize: '11px',
+                                textAlign: 'center',
+                                borderRadius: '4px',
+                                border: '1px solid #CBD5E1',
+                                boxSizing: 'border-box'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '3px 4px' }}>
+                            <input
+                              type="number"
+                              value={r.price ?? 0}
+                              onChange={(e) => handleUpdateBulkAddRow(i, 'price', e.target.value === '' ? 0 : Number(e.target.value))}
+                              min={0}
+                              step={1000}
+                              style={{
+                                width: '100%',
+                                padding: '3px 6px',
+                                fontSize: '11.5px',
+                                textAlign: 'right',
+                                borderRadius: '4px',
+                                border: '1px solid #CBD5E1',
+                                boxSizing: 'border-box'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '3px 4px' }}>
+                            <select
+                              value={r.level ?? currentGroupLevel}
+                              onChange={(e) => handleUpdateBulkAddRow(i, 'level', Number(e.target.value))}
+                              style={{
+                                width: '100%',
+                                padding: '3px 4px',
+                                fontSize: '11px',
+                                borderRadius: '4px',
+                                border: '1px solid #CBD5E1',
+                                backgroundColor: '#FFFFFF',
+                                boxSizing: 'border-box'
+                              }}
+                            >
+                              <option value={-1}>Món ăn (-1)</option>
+                              <option value={0}>Đồ uống (0)</option>
+                            </select>
+                          </td>
+                          <td style={{ padding: '3px 4px', textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveBulkAddRow(i)}
+                              style={{
+                                border: 'none',
+                                background: 'none',
+                                color: '#EF4444',
+                                cursor: 'pointer',
+                                padding: '2px',
+                                borderRadius: '4px'
+                              }}
+                              title="Xóa dòng này"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -5429,7 +5770,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                 }}
               >
                 <Zap size={13} />
-                <span>⚡ Dán Mã RK7 Thêm Hàng Loạt</span>
+                <span>⚡ Dán Mã Thêm Hàng Loạt (RK7 / SAP)</span>
                 {bulkDishList.length > 0 && (
                   <span style={{
                     backgroundColor: addDishMode === 'bulk' ? '#1D4ED8' : '#DBEAFE',
@@ -5676,24 +6017,76 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
             )}
 
             {/* ══════════════════════════════════════════════════════════════ */}
-            {/* CHẾ ĐỘ 2: DÁN MÃ RK7 THÊM HÀNG LOẠT (BULK PASTE RK7)            */}
+            {/* CHẾ ĐỘ 2: DÁN MÃ RK7 / SAP THÊM HÀNG LOẠT                      */}
             {/* ══════════════════════════════════════════════════════════════ */}
             {addDishMode === 'bulk' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {/* Khu vực Dán Mã RK7 */}
+                {/* Tùy chọn Loại Mã Dán Vào */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', backgroundColor: '#F1F5F9', borderRadius: '6px', border: '1px solid #CBD5E1', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>Loại mã dán vào:</span>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setBulkCodeType('rk7')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '4px 12px',
+                        borderRadius: '5px',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        border: bulkCodeType === 'rk7' ? '1.5px solid #2563EB' : '1px solid #CBD5E1',
+                        backgroundColor: bulkCodeType === 'rk7' ? '#EFF6FF' : '#FFFFFF',
+                        color: bulkCodeType === 'rk7' ? '#1D4ED8' : '#64748B'
+                      }}
+                    >
+                      🏷️ Dán theo Mã RK7
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBulkCodeType('sap')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '4px 12px',
+                        borderRadius: '5px',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        border: bulkCodeType === 'sap' ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                        backgroundColor: bulkCodeType === 'sap' ? '#ECFDF5' : '#FFFFFF',
+                        color: bulkCodeType === 'sap' ? '#047857' : '#64748B'
+                      }}
+                    >
+                      📦 Dán theo Mã SAP
+                    </button>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#64748B', marginLeft: 'auto' }}>
+                    {bulkCodeType === 'sap' ? '💡 Tự động tìm Mã RK7, Tên món & Giá từ CSDL Master / MID' : '💡 Tra cứu Tên món, Mã SAP & Giá từ MID / Server'}
+                  </span>
+                </div>
+
+                {/* Khu vực Dán Mã */}
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                     <label style={{ fontSize: '12px', fontWeight: 700, color: '#1F2937' }}>
-                      Dán Danh Sách Mã RK7 <span style={{ color: '#DC2626' }}>*</span>
+                      Dán Danh Sách Mã {bulkCodeType.toUpperCase()} <span style={{ color: '#DC2626' }}>*</span>
                     </label>
                     <span style={{ fontSize: '11px', color: '#6B7280' }}>
-                      (Hỗ trợ dán cột từ Excel, phân tách theo dòng, dấu phẩy hoặc tab)
+                      (Hỗ trợ copy cả cột mã từ Excel dán vào, phân tách theo dòng hoặc tab)
                     </span>
                   </div>
                   <textarea
                     value={bulkRk7Input}
                     onChange={(e) => setBulkRk7Input(e.target.value)}
-                    placeholder={`Dán danh sách mã RK7 vào đây...\nVí dụ:\n33162\n33163\n33164\nHoặc copy cả cột mã RK7 từ Excel dán vào`}
+                    placeholder={
+                      bulkCodeType === 'rk7'
+                        ? `Dán danh sách mã RK7 vào đây...\nVí dụ:\n33162\n33163\n33164\nHoặc copy cả cột mã RK7 từ Excel dán vào`
+                        : `Dán danh sách mã SAP vào đây...\nVí dụ:\n65003506\n65003507\n65003508\nHoặc copy cả cột mã SAP từ Excel dán vào`
+                    }
                     rows={4}
                     style={{
                       width: '100%',
@@ -5709,17 +6102,17 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                     autoFocus
                   />
                   {/* Thanh hành động tra cứu */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px', flexWrap: 'wrap', gap: '8px' }}>
                     <div style={{ fontSize: '12px', color: '#4B5563', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span>Đã nhận diện:</span>
                       <span style={{
                         fontWeight: 700,
-                        color: parseRk7CodesFromText(bulkRk7Input).length > 0 ? '#1E40AF' : '#9CA3AF',
-                        backgroundColor: parseRk7CodesFromText(bulkRk7Input).length > 0 ? '#DBEAFE' : '#F3F4F6',
+                        color: parseCodesFromText(bulkRk7Input, bulkCodeType === 'sap').length > 0 ? '#1E40AF' : '#9CA3AF',
+                        backgroundColor: parseCodesFromText(bulkRk7Input, bulkCodeType === 'sap').length > 0 ? '#DBEAFE' : '#F3F4F6',
                         padding: '2px 8px',
                         borderRadius: '4px'
                       }}>
-                        {parseRk7CodesFromText(bulkRk7Input).length} mã RK7
+                        {parseCodesFromText(bulkRk7Input, bulkCodeType === 'sap').length} mã {bulkCodeType.toUpperCase()}
                       </span>
                     </div>
                     <div style={{ display: 'flex', gap: '6px' }}>
@@ -5741,7 +6134,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                         size="sm"
                         onClick={() => handleBatchLookupDishes()}
                         isLoading={lookingUpBulkDishes}
-                        disabled={lookingUpBulkDishes || parseRk7CodesFromText(bulkRk7Input).length === 0}
+                        disabled={lookingUpBulkDishes || parseCodesFromText(bulkRk7Input, bulkCodeType === 'sap').length === 0}
                         style={{
                           backgroundColor: '#2563EB',
                           borderColor: '#1D4ED8',
@@ -5766,14 +6159,14 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                         <span style={{ fontSize: '11px', fontWeight: 600, color: '#059669', backgroundColor: '#D1FAE5', padding: '1px 6px', borderRadius: '4px' }}>
                           ✓ Đã tìm thấy: {bulkDishList.filter(d => d.found).length}
                         </span>
-                        {bulkDishList.some(d => !d.name.trim()) && (
+                        {bulkDishList.some(d => !d.name.trim() || !d.rk7_code.trim()) && (
                           <span style={{ fontSize: '11px', fontWeight: 600, color: '#DC2626', backgroundColor: '#FEE2E2', padding: '1px 6px', borderRadius: '4px' }}>
-                            ⚠️ Thiếu tên món: {bulkDishList.filter(d => !d.name.trim()).length}
+                            ⚠️ Chưa đủ Mã RK7/Tên: {bulkDishList.filter(d => !d.name.trim() || !d.rk7_code.trim()).length}
                           </span>
                         )}
                       </div>
                       <span style={{ fontSize: '11px', color: '#6B7280' }}>
-                        (Bạn có thể chỉnh sửa trực tiếp Tên món, Mã SAP, Giá nếu cần)
+                        (Bạn có thể chỉnh sửa trực tiếp Mã RK7, Tên món, Mã SAP, Giá nếu cần)
                       </span>
                     </div>
 
@@ -5788,7 +6181,7 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                         <thead style={{ position: 'sticky', top: 0, backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', zIndex: 2 }}>
                           <tr>
                             <th style={{ padding: '6px 8px', textAlign: 'center', width: '38px', color: '#475569', fontWeight: 700 }}>STT</th>
-                            <th style={{ padding: '6px 8px', textAlign: 'left', width: '85px', color: '#475569', fontWeight: 700 }}>Mã RK7</th>
+                            <th style={{ padding: '6px 8px', textAlign: 'left', width: '95px', color: '#475569', fontWeight: 700 }}>Mã RK7 <span style={{ color: '#DC2626' }}>*</span></th>
                             <th style={{ padding: '6px 8px', textAlign: 'left', color: '#475569', fontWeight: 700 }}>Tên Món Ăn <span style={{ color: '#DC2626' }}>*</span></th>
                             <th style={{ padding: '6px 8px', textAlign: 'left', width: '95px', color: '#475569', fontWeight: 700 }}>Mã SAP</th>
                             <th style={{ padding: '6px 8px', textAlign: 'right', width: '105px', color: '#475569', fontWeight: 700 }}>Đơn Giá (đ)</th>
@@ -5799,12 +6192,28 @@ export const ManageMenuSoCoTask: React.FC<ManageMenuSoCoTaskProps> = ({
                         </thead>
                         <tbody>
                           {bulkDishList.map((dish, idx) => (
-                            <tr key={`${dish.rk7_code}_${idx}`} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FBFCFD' }}>
+                            <tr key={`${dish.rk7_code || dish.input_code}_${idx}`} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FBFCFD' }}>
                               <td style={{ padding: '6px 8px', textAlign: 'center', color: '#64748B', fontWeight: 600 }}>
                                 {idx + 1}
                               </td>
-                              <td style={{ padding: '6px 8px', fontFamily: 'Consolas, monospace', fontWeight: 700, color: '#1E293B' }}>
-                                {dish.rk7_code}
+                              <td style={{ padding: '4px 6px' }}>
+                                <input
+                                  type="text"
+                                  value={dish.rk7_code}
+                                  onChange={(e) => handleUpdateBulkDishField(idx, 'rk7_code', e.target.value)}
+                                  placeholder="Mã RK7..."
+                                  style={{
+                                    width: '100%',
+                                    padding: '4px 6px',
+                                    borderRadius: '4px',
+                                    border: `1px solid ${dish.rk7_code.trim() ? '#CBD5E1' : '#EF4444'}`,
+                                    backgroundColor: dish.rk7_code.trim() ? '#FFFFFF' : '#FEF2F2',
+                                    fontSize: '11.5px',
+                                    fontFamily: 'Consolas, monospace',
+                                    fontWeight: 700,
+                                    boxSizing: 'border-box'
+                                  }}
+                                />
                               </td>
                               <td style={{ padding: '4px 6px' }}>
                                 <input

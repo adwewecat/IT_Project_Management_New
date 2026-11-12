@@ -415,6 +415,26 @@ class RestaurantAuditService:
             </tr>
             """
 
+        if need_count > 0:
+            table_content = f"""
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 45px;">STT</th>
+                        <th style="min-width: 180px; text-align: left; padding-left: 12px;">TÊN NHÀ HÀNG</th>
+                        <th style="width: 120px; text-align: center;">IP ROUTER</th>
+                        <th style="min-width: 250px; text-align: left; padding-left: 12px;">MỤC CÒN THIẾU</th>
+                        <th style="width: 130px; text-align: center;">YÊU CẦU</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {table_rows}
+                </tbody>
+            </table>
+            """
+        else:
+            table_content = '<p style="color: #16A34A; font-weight: bold;">Tuyệt vời! Toàn bộ các nhà hàng đang hoạt động đều đã được cập nhật đầy đủ thông tin chuẩn.</p>'
+
         html_content = f"""
         <html>
         <head>
@@ -442,22 +462,7 @@ class RestaurantAuditService:
                 </div>
             </div>
 
-            {f'''
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 45px;">STT</th>
-                        <th style="min-width: 180px; text-align: left; padding-left: 12px;">TÊN NHÀ HÀNG</th>
-                        <th style="width: 120px; text-align: center;">IP ROUTER</th>
-                        <th style="min-width: 250px; text-align: left; padding-left: 12px;">MỤC CÒN THIẾU</th>
-                        <th style="width: 130px; text-align: center;">YÊU CẦU</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {table_rows}
-                </tbody>
-            </table>
-            ''' if need_count > 0 else '<p style="color: #16A34A; font-weight: bold;">Tuyệt vời! Toàn bộ các nhà hàng đang hoạt động đều đã được cập nhật đầy đủ thông tin chuẩn.</p>'}
+            {table_content}
 
             <p style="margin-top: 24px; font-style: italic; color: #6B7280; font-size: 12px;">
                 * Đây là email tự động từ tác vụ ngầm IT Daily Operations. Vui lòng không reply trực tiếp email này.

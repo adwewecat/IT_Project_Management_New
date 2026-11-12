@@ -1673,7 +1673,8 @@ class DirectSyncMenuResponse(BaseModel):
 
 class DishLookupResponse(BaseModel):
     found: bool
-    rk7_code: str
+    rk7_code: Optional[str] = ""
+    input_code: Optional[str] = None
     name: Optional[str] = None
     sap_code: Optional[str] = None
     price: Optional[float] = None
@@ -1684,13 +1685,16 @@ class DishLookupResponse(BaseModel):
 class BatchLookupDishesRequest(BaseModel):
     host: str
     port: int = 27017
-    rk7_codes: List[str]
+    codes: Optional[List[str]] = None
+    rk7_codes: Optional[List[str]] = None
+    code_type: Optional[str] = "rk7"  # "rk7" | "sap"
 
 
 class BatchLookupDishesResponse(BaseModel):
     success: bool
     total: int
     found_count: int
+    code_type: Optional[str] = "rk7"
     items: List[DishLookupResponse]
 
 

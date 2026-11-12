@@ -3759,3 +3759,41 @@ estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ B
 - **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
   * Backend: 100% Python 3.10 compatible, quét AST toàn bộ thư mục `backend/app` đạt 100% Valid, Smoke Test backend `>>> BACKEND SMOKE TEST PASSED 100%`. Daemon backend đang chạy ổn định trên port 8000.
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.49s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config`.
+
+
+### [2026-11-12] HỖ TRỢ TÙY CHỌN DÁN MÃ RK7 HOẶC MÃ SAP THÊM MÓN HÀNG LOẠT VÀ TỰ ĐỘNG TRA CỨU TÊN & ĐƠN GIÁ TỪ MID / SERVER (MANAGE MENU SO-CO TASK BULK ADD WITH RK7 OR SAP TOGGLE)
+- **1. Yêu Cầu & Bối Cảnh Thực Tế**:
+  * **Yêu cầu người dùng**:
+    - *"có thể chọn dán mã RK7 hoặc mã SAP nhé. để có option chọn"*
+    - *"Cả thêm món hàng loạt cũng chỉnh sửa lại để dán RK7 hoặc SAP thôi nhé. không phải điền như hình nữa"*
+  * **Bối cảnh**:
+    - Trong modal *"Thêm Món Mới Vào Nhóm"* (`isAddDishToGroupOpen`), người dùng muốn có tùy chọn dán cột Mã RK7 hoặc Mã SAP từ Excel thay vì chỉ dán mỗi mã RK7.
+    - Trong modal *"Thêm Món Ăn Hàng Loạt Vào Menu (Dạng Bảng Tính Sheets)"* (`isBulkAddOpen`), trước đây hệ thống bắt người dùng phải chuẩn bị sẵn 3 cột từ Excel (`Mã RK7 [Tab] Tên Món [Tab] Mã SAP`). Điều này gây mất thời gian vì người dùng thường chỉ có danh sách Mã SAP hoặc Mã RK7 từ phòng ban kinh doanh. Người dùng muốn chỉ cần dán 1 cột mã (RK7 hoặc SAP), hệ thống sẽ tự động liên kết tên món, đơn giá và mã tương ứng từ MID / Server.
+- **2. Giải Pháp Kỹ Thuật Đa Tầng**:
+  * **Backend Schema & Service (`schemas/mongodb.py`, `mongo_menu_so_co_service.py`, `api/v1/mongodb.py`)**:
+    - `BatchLookupDishesRequest`: Bổ sung `codes: Optional[List[str]] = None`, `code_type: Optional[str] = 'rk7'` (hỗ trợ `'rk7'` hoặc `'sap'`).
+    - `DishLookupResponse`: Bổ sung `input_code: Optional[str] = None`, đặt `rk7_code: Optional[str] = ''` để không crash validate khi chưa có mã RK7.
+    - `batch_lookup_dishes`:
+      + Khi `code_type == 'rk7'`: Quét `DISH_CACHE`, `CO_MENU_ITEM`, `ORDER_MENU_CACHE_CATEGORY`, `SHOW_HIDE_ITEMS`, `CONFIG_COOKING` trong MongoDB GPOS theo mã RK7 để lấy Tên món, Mã SAP, Đơn giá. Nếu còn thiếu, đối soát tiếp từ CSDL Master RK7 tập trung (`WHERE MI.CODE IN :codes OR CAST(MI.SIFR AS VARCHAR(50)) IN :codes`).
+      + Khi `code_type == 'sap'`: Quét các collection MongoDB GPOS theo trường `sapCode` để tìm ngược ra Mã RK7 (`code`), Tên món và Đơn giá. Nếu còn thiếu, đối soát tiếp từ CSDL Master RK7 tập trung thông qua bảng thuộc tính mở rộng (`FROM GENERATEDPROPDATAS GPD JOIN MENUITEMS MI ON GPD.OBJECTIDENT = MI.SIFR WHERE GPD.PROPERTYVAL IN :codes`).
+      + Chuẩn hóa thông điệp: `Tìm thấy món '{name}' (Mã RK7: {rk7_val}) từ {source}`.
+    - `restaurant_audit_service.py`: Tách biến `table_content` ra ngoài khối f-string nhiều dòng để đảm bảo 100% tương thích tuyệt đối với Python 3.10 trên server Production.
+  * **Frontend Service & Giao Diện (`mongoService.ts`, `ManageMenuSoCoTask.tsx`)**:
+    - `mongoService.ts`: Cập nhật interface `BatchLookupDishesRequest` và `BatchLookupDishesResponse` hỗ trợ `codes?: string[]`, `code_type?: 'rk7' | 'sap'`.
+    - `ManageMenuSoCoTask.tsx`:
+      + Hàm phân tách mã `parseCodesFromText`: Hỗ trợ dán 1 cột từ Excel (ngắt dòng `\r\n`), tách theo dấu phẩy, chấm phẩy, tab hoặc dấu cách; tự động bỏ qua dòng tiêu đề; thông minh bóc tách đúng cột RK7 hoặc SAP nếu dán dạng bảng nhiều cột.
+      + **Modal "Thêm Món Mới Vào Nhóm" (`isAddDishToGroupOpen`)**:
+        * Tab tiêu đề: `⚡ Dán Mã Thêm Hàng Loạt (RK7 / SAP)`.
+        * Bộ chọn option: `🏷️ Dán theo Mã RK7` vs `📦 Dán theo Mã SAP`.
+        * Tự động cập nhật nhãn, placeholder và số lượng mã nhận diện theo loại mã đã chọn.
+        * Bảng xem trước: Cho phép chỉnh sửa cả `Mã RK7`, `Tên Món Ăn`, `Mã SAP`, `Đơn Giá`, `Thứ Tự`.
+        * Kiểm tra bắt buộc có `Mã RK7` và `Tên Món` trước khi lưu vào CSDL GPOS.
+      + **Modal "Thêm Món Ăn Hàng Loạt Vào Menu" (`isBulkAddOpen`)**:
+        * Banner hướng dẫn siêu tốc mới: Chỉ cần dán 1 cột mã RK7 hoặc SAP từ Excel.
+        * Bộ chọn option: `🏷️ Dán theo Mã RK7` vs `📦 Dán theo Mã SAP`.
+        * Nút `⚡ Tra Cứu Tên & Đơn Giá (MID / Server)`: Tự động liên kết dữ liệu đầy đủ từ MID / GPOS / CSDL Master RK7.
+        * Bảng xem trước Google Sheets: Hiển thị đầy đủ Mã RK7 (cho phép sửa), Tên món (cho phép sửa), Mã SAP (cho phép sửa), STT (cho phép sửa), Giá (cho phép sửa), Level (cho phép chọn Đồ uống / Món ăn), và nút Xóa từng dòng.
+        * Kiểm tra chặt chẽ tính hợp lệ trước khi lưu.
+- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * Backend: 100% Python 3.10 compatible (0 backslash trong f-string, 0 cú pháp 3.11+), quét AST toàn bộ thư mục `backend/app` đạt 100% Valid, Smoke Test backend `>>> BACKEND SMOKE TEST PASSED 100%`. Daemon backend đang chạy ổn định trên port 8000.
+  * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.48s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config`.

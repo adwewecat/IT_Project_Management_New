@@ -2181,15 +2181,28 @@ def lookup_dish_info(host: str, rk7_code: str, port: int = 27017) -> Dict[str, A
     }
 
 
-def batch_lookup_dishes(host: str, rk7_codes: List[str], port: int = 27017) -> Dict[str, Any]:
+def batch_lookup_dishes(
+    host: str,
+    codes: Optional[List[str]] = None,
+    rk7_codes: Optional[List[str]] = None,
+    code_type: str = "rk7",
+    port: int = 27017
+) -> Dict[str, Any]:
     """
-    Tra cứu hàng loạt thông tin tên món, mã SAP, đơn giá và hình ảnh theo danh sách mã RK7:
+    Tra cứu hàng loạt thông tin tên món, mã RK7/SAP, đơn giá và hình ảnh theo danh sách mã RK7 hoặc mã SAP:
+    - code_type == 'rk7': Dán mã RK7 -> Tìm Tên món, Mã SAP, Đơn giá
+    - code_type == 'sap': Dán mã SAP -> Tìm Mã RK7, Tên món, Đơn giá
     1. Quét từ MongoDB GPOS tại nhà hàng (host): DISH_CACHE, CO_MENU_ITEM, ORDER_MENU_CACHE_CATEGORY, SHOW_HIDE_ITEMS, CONFIG_COOKING
     2. Đối soát tiếp từ CSDL Master RK7 tập trung (get_rk7_engine) cho các món còn thiếu thông tin
     """
+    raw_codes = codes if codes is not None else (rk7_codes or [])
+    clean_type = (code_type or "rk7").strip().lower()
+    if clean_type not in ("rk7", "sap"):
+        clean_type = "rk7"
+
     seen = set()
     clean_codes: List[str] = []
-    for c in rk7_codes:
+    for c in raw_codes:
         sc = str(c).strip()
         if sc and sc not in seen:
             seen.add(sc)
@@ -2200,15 +2213,17 @@ def batch_lookup_dishes(host: str, rk7_codes: List[str], port: int = 27017) -> D
             "success": True,
             "total": 0,
             "found_count": 0,
+            "code_type": clean_type,
             "items": []
         }
 
     dish_map: Dict[str, Dict[str, Any]] = {
         c: {
             "found": False,
-            "rk7_code": c,
+            "input_code": c,
+            "rk7_code": c if clean_type == "rk7" else "",
             "name": "",
-            "sap_code": "",
+            "sap_code": c if clean_type == "sap" else "",
             "price": None,
             "image_url": "",
             "source": "",
@@ -2228,13 +2243,17 @@ def batch_lookup_dishes(host: str, rk7_codes: List[str], port: int = 27017) -> D
             for doc in db_order["DISH_CACHE"].find():
                 for d in (doc.get("dishs") or []):
                     mi = d.get("menuItem") or {}
-                    c = str(mi.get("code") or "").strip()
-                    if c in dish_map:
-                        item = dish_map[c]
+                    c_rk7 = str(mi.get("code") or "").strip()
+                    c_sap = str(mi.get("sapCode") or "").strip()
+                    key = c_rk7 if clean_type == "rk7" else c_sap
+                    if key and key in dish_map:
+                        item = dish_map[key]
+                        if not item["rk7_code"] and c_rk7:
+                            item["rk7_code"] = c_rk7
                         if not item["name"]:
                             item["name"] = mi.get("name") or ""
-                        if not item["sap_code"]:
-                            item["sap_code"] = str(mi.get("sapCode") or "").strip()
+                        if not item["sap_code"] and c_sap:
+                            item["sap_code"] = c_sap
                         if item["price"] is None and d.get("price") is not None:
                             try:
                                 item["price"] = float(d.get("price"))
@@ -2249,14 +2268,19 @@ def batch_lookup_dishes(host: str, rk7_codes: List[str], port: int = 27017) -> D
 
         # B. CO_MENU_ITEM trong G_ORDER (chứa nameVn, sapCode, urlImgQr/srcImg)
         try:
-            for co_doc in db_order["CO_MENU_ITEM"].find({"code": {"$in": clean_codes}}):
-                c = str(co_doc.get("code") or "").strip()
-                if c in dish_map:
-                    item = dish_map[c]
+            co_query = {"code": {"$in": clean_codes}} if clean_type == "rk7" else {"sapCode": {"$in": clean_codes}}
+            for co_doc in db_order["CO_MENU_ITEM"].find(co_query):
+                c_rk7 = str(co_doc.get("code") or "").strip()
+                c_sap = str(co_doc.get("sapCode") or "").strip()
+                key = c_rk7 if clean_type == "rk7" else c_sap
+                if key and key in dish_map:
+                    item = dish_map[key]
+                    if not item["rk7_code"] and c_rk7:
+                        item["rk7_code"] = c_rk7
                     if not item["name"]:
                         item["name"] = co_doc.get("nameVn") or co_doc.get("name") or ""
-                    if not item["sap_code"]:
-                        item["sap_code"] = str(co_doc.get("sapCode") or "").strip()
+                    if not item["sap_code"] and c_sap:
+                        item["sap_code"] = c_sap
                     url_img_qr = str(co_doc.get("urlImgQr") or "").strip()
                     src_img = str(co_doc.get("srcImg") or co_doc.get("srcImgThumbnail") or co_doc.get("srcImgSquare") or "").strip()
                     if not item["image_url"]:
@@ -2269,7 +2293,10 @@ def batch_lookup_dishes(host: str, rk7_codes: List[str], port: int = 27017) -> D
             logger.warning("Lỗi quét CO_MENU_ITEM batch: %s", e)
 
         # C. ORDER_MENU_CACHE_CATEGORY trong G_ORDER (chứa thực đơn hiện hữu)
-        codes_needing_data = [c for c in clean_codes if not dish_map[c]["name"] or dish_map[c]["price"] is None or not dish_map[c]["sap_code"]]
+        codes_needing_data = [
+            c for c in clean_codes
+            if not dish_map[c]["name"] or dish_map[c]["price"] is None or not dish_map[c]["rk7_code"] or not dish_map[c]["sap_code"]
+        ]
         if codes_needing_data:
             try:
                 for omc in db_order["ORDER_MENU_CACHE_CATEGORY"].find():
@@ -2277,13 +2304,17 @@ def batch_lookup_dishes(host: str, rk7_codes: List[str], port: int = 27017) -> D
                     for g in groups:
                         for it, _, _, _, _, _ in _flatten_group_items(g):
                             mi = it.get("menu-item") or {}
-                            c = str(mi.get("code") or "").strip()
-                            if c in dish_map:
-                                item = dish_map[c]
+                            c_rk7 = str(mi.get("code") or "").strip()
+                            c_sap = str(mi.get("sap-code") or mi.get("sapCode") or "").strip()
+                            key = c_rk7 if clean_type == "rk7" else c_sap
+                            if key and key in dish_map:
+                                item = dish_map[key]
+                                if not item["rk7_code"] and c_rk7:
+                                    item["rk7_code"] = c_rk7
                                 if not item["name"]:
                                     item["name"] = mi.get("name") or ""
-                                if not item["sap_code"]:
-                                    item["sap_code"] = str(mi.get("sap-code") or mi.get("sapCode") or "").strip()
+                                if not item["sap_code"] and c_sap:
+                                    item["sap_code"] = c_sap
                                 if item["price"] is None and it.get("price") is not None:
                                     try:
                                         item["price"] = float(it.get("price"))
@@ -2297,17 +2328,25 @@ def batch_lookup_dishes(host: str, rk7_codes: List[str], port: int = 27017) -> D
                 logger.warning("Lỗi quét ORDER_MENU_CACHE_CATEGORY batch: %s", e)
 
         # D. SHOW_HIDE_ITEMS / OUT_OF_DISH trong G_ORDER
-        codes_still_missing = [c for c in clean_codes if not dish_map[c]["name"] or dish_map[c]["price"] is None]
+        codes_still_missing = [
+            c for c in clean_codes
+            if not dish_map[c]["name"] or dish_map[c]["price"] is None or not dish_map[c]["rk7_code"]
+        ]
         if codes_still_missing:
             try:
-                for sh_doc in db_order["SHOW_HIDE_ITEMS"].find({"itemCode": {"$in": codes_still_missing}}):
-                    c = str(sh_doc.get("itemCode") or "").strip()
-                    if c in dish_map:
-                        item = dish_map[c]
+                sh_query = {"itemCode": {"$in": codes_still_missing}} if clean_type == "rk7" else {"sapCode": {"$in": codes_still_missing}}
+                for sh_doc in db_order["SHOW_HIDE_ITEMS"].find(sh_query):
+                    c_rk7 = str(sh_doc.get("itemCode") or "").strip()
+                    c_sap = str(sh_doc.get("sapCode") or "").strip()
+                    key = c_rk7 if clean_type == "rk7" else c_sap
+                    if key and key in dish_map:
+                        item = dish_map[key]
+                        if not item["rk7_code"] and c_rk7:
+                            item["rk7_code"] = c_rk7
                         if not item["name"]:
                             item["name"] = sh_doc.get("name") or ""
-                        if not item["sap_code"]:
-                            item["sap_code"] = str(sh_doc.get("sapCode") or "").strip()
+                        if not item["sap_code"] and c_sap:
+                            item["sap_code"] = c_sap
                         if item["price"] is None and sh_doc.get("price") is not None:
                             try:
                                 item["price"] = float(sh_doc.get("price"))
@@ -2321,17 +2360,21 @@ def batch_lookup_dishes(host: str, rk7_codes: List[str], port: int = 27017) -> D
                 logger.warning("Lỗi quét SHOW_HIDE_ITEMS batch: %s", e)
 
         # E. CONFIG_COOKING trong G_KITCHEN
-        codes_missing_name = [c for c in clean_codes if not dish_map[c]["name"]]
+        codes_missing_name = [
+            dish_map[c]["rk7_code"] for c in clean_codes
+            if not dish_map[c]["name"] and dish_map[c]["rk7_code"]
+        ]
         if codes_missing_name:
             try:
                 for cook_doc in db_kitchen["CONFIG_COOKING"].find({"menuItem.code": {"$in": codes_missing_name}}):
                     mi = cook_doc.get("menuItem") or {}
-                    c = str(mi.get("code") or "").strip()
-                    if c in dish_map and not dish_map[c]["name"]:
-                        dish_map[c]["name"] = mi.get("name") or ""
-                        dish_map[c]["found"] = True
-                        if not dish_map[c]["source"]:
-                            dish_map[c]["source"] = "CONFIG_COOKING"
+                    c_rk7 = str(mi.get("code") or "").strip()
+                    for item in dish_map.values():
+                        if item["rk7_code"] == c_rk7 and not item["name"]:
+                            dish_map[item["input_code"]]["name"] = mi.get("name") or ""
+                            dish_map[item["input_code"]]["found"] = True
+                            if not dish_map[item["input_code"]]["source"]:
+                                dish_map[item["input_code"]]["source"] = "CONFIG_COOKING"
             except Exception as e:
                 logger.warning("Lỗi quét CONFIG_COOKING batch: %s", e)
 
@@ -2340,24 +2383,41 @@ def batch_lookup_dishes(host: str, rk7_codes: List[str], port: int = 27017) -> D
         logger.warning("Không thể kết nối hoặc quét MongoDB nhà hàng (%s): %s", host, e)
 
     # 2. Quét tiếp từ CSDL Master RK7 tập trung cho các món còn thiếu
-    codes_needing_rk7 = [c for c in clean_codes if not dish_map[c]["name"] or dish_map[c]["price"] is None or not dish_map[c]["sap_code"]]
+    codes_needing_rk7 = [
+        c for c in clean_codes
+        if not dish_map[c]["name"] or dish_map[c]["price"] is None or not dish_map[c]["rk7_code"] or not dish_map[c]["sap_code"]
+    ]
     if codes_needing_rk7:
         try:
             from app.core.database import get_rk7_engine
             from sqlalchemy import text, bindparam
             engine = get_rk7_engine()
-            sql = """
-                SELECT
-                    MI.CODE AS RK7_CODE,
-                    MI.NAME AS ITEMNAME,
-                    GPD.PROPERTYVAL AS SAPCODE,
-                    PR.VALUE AS PRICE
-                FROM MENUITEMS MI
-                LEFT JOIN PRICES PR ON PR.OBJECTID = MI.SIFR AND PR.SPECIES = 1 AND PR.VALUE IS NOT NULL
-                LEFT JOIN GENERATEDPROPDATAS GPD ON GPD.RKTYPEIDENT = 1000008 AND GPD.OBJECTREFNO = 10 AND GPD.OBJECTIDENT = MI.SIFR
-                WHERE MI.CODE IN :codes OR CAST(MI.SIFR AS VARCHAR(50)) IN :codes
-                ORDER BY PR.VALUE DESC
-            """
+            if clean_type == "sap":
+                sql = """
+                    SELECT
+                        MI.CODE AS RK7_CODE,
+                        MI.NAME AS ITEMNAME,
+                        GPD.PROPERTYVAL AS SAPCODE,
+                        PR.VALUE AS PRICE
+                    FROM GENERATEDPROPDATAS GPD
+                    JOIN MENUITEMS MI ON GPD.OBJECTIDENT = MI.SIFR AND GPD.RKTYPEIDENT = 1000008 AND GPD.OBJECTREFNO = 10
+                    LEFT JOIN PRICES PR ON PR.OBJECTID = MI.SIFR AND PR.SPECIES = 1 AND PR.VALUE IS NOT NULL
+                    WHERE GPD.PROPERTYVAL IN :codes
+                    ORDER BY PR.VALUE DESC
+                """
+            else:
+                sql = """
+                    SELECT
+                        MI.CODE AS RK7_CODE,
+                        MI.NAME AS ITEMNAME,
+                        GPD.PROPERTYVAL AS SAPCODE,
+                        PR.VALUE AS PRICE
+                    FROM MENUITEMS MI
+                    LEFT JOIN PRICES PR ON PR.OBJECTID = MI.SIFR AND PR.SPECIES = 1 AND PR.VALUE IS NOT NULL
+                    LEFT JOIN GENERATEDPROPDATAS GPD ON GPD.RKTYPEIDENT = 1000008 AND GPD.OBJECTREFNO = 10 AND GPD.OBJECTIDENT = MI.SIFR
+                    WHERE MI.CODE IN :codes OR CAST(MI.SIFR AS VARCHAR(50)) IN :codes
+                    ORDER BY PR.VALUE DESC
+                """
             stmt = text(sql).bindparams(bindparam("codes", expanding=True))
             with engine.connect() as conn:
                 rows = conn.execute(stmt, {"codes": tuple(codes_needing_rk7)}).fetchall()
@@ -2366,8 +2426,11 @@ def batch_lookup_dishes(host: str, rk7_codes: List[str], port: int = 27017) -> D
                     r_name = str(row[1] or "")
                     r_sap = str(row[2] or "").strip()
                     r_price = float(row[3]) if row[3] is not None else None
-                    if r_rk7 in dish_map:
-                        item = dish_map[r_rk7]
+                    key = r_sap if clean_type == "sap" else r_rk7
+                    if key in dish_map:
+                        item = dish_map[key]
+                        if not item["rk7_code"] and r_rk7:
+                            item["rk7_code"] = r_rk7
                         if not item["name"]:
                             item["name"] = r_name
                         if not item["sap_code"] and r_sap:
@@ -2390,15 +2453,23 @@ def batch_lookup_dishes(host: str, rk7_codes: List[str], port: int = 27017) -> D
             found_count += 1
             src = item["source"] or "MID / Server"
             name_val = item["name"]
-            item["message"] = f"Tìm thấy món '{name_val}' từ {src}"
+            if clean_type == "sap":
+                rk7_val = item["rk7_code"] or "Chưa có"
+                item["message"] = f"Tìm thấy món '{name_val}' (Mã RK7: {rk7_val}) từ {src}"
+            else:
+                item["message"] = f"Tìm thấy món '{name_val}' từ {src}"
         else:
-            item["message"] = f"Chưa tìm thấy món với mã RK7 '{c}' trong MID và RK7 Master"
+            if clean_type == "sap":
+                item["message"] = f"Chưa tìm thấy món với mã SAP '{c}' trong MID và RK7 Master"
+            else:
+                item["message"] = f"Chưa tìm thấy món với mã RK7 '{c}' trong MID và RK7 Master"
         results.append(item)
 
     return {
         "success": True,
         "total": len(clean_codes),
         "found_count": found_count,
+        "code_type": clean_type,
         "items": results
     }
 
