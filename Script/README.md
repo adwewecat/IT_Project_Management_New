@@ -4712,3 +4712,30 @@ estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ B
   * **Kiểm thử thực tế**: `preview_tickets()` vượt qua cả hai kịch bản Warm Session và Cold Login (`clear_session()`), thu về `18` ticket 3CX khớp điều kiện và `13` ngày timesheet tháng 11 đúng thực tế (`2026-11-01: 4.0`, `2026-11-03: 0.0`, ...).
   * **Backend**: Tương thích 100% Python 3.10 (`ast.parse(..., feature_version=(3, 10))` + `compileall` toàn bộ `backend/app`), Smoke Test `from app.main import app` đạt `>>> BACKEND SMOKE TEST PASSED 100% 8`.
   * **Frontend**: `cmd /c "npm --prefix frontend run build"` đạt exit code 0 (`✓ built in 4.64s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config`.
+
+
+### [2026-11-13] SỬA TRIỆT ĐỂ LỖI ĐÓNG TICKET 3CX TREO 110S & THẤT BẠI DO POPUP TIMESHEET 422 / TOAST REACT-HOT-TOAST / RADIO #basic_typeTicket
+- **1. Nguyên nhân gốc rễ (Root Causes)**:
+  * **Popup Timesheet `#container-portal` bị HTTP 422 & kẹt che màn hình (~76s timeout)**:
+    - Giao diện Timesheet khi chuyển trạng thái `Đã hoàn thành` mặc định chỉ hiển thị 5 ngày gần nhất (vd `09/11`–`13/11`). Khi `_pick_best_day` chọn ngày đầu tháng còn trống (vd `01/11`, `02/11`), mã cũ không tìm thấy trong 5 dòng nên tự động rơi về `rows[0]` (`13/11` đã đủ 24h), dẫn tới `POST https://worklog-gpms.ggg.com.vn/api/worklog` trả về `422`.
+    - Trên React GPMS, mã `422` không đóng modal `#container-portal`, khiến các bước chọn radio, danh mục và nút Lưu phía sau bị lớp phủ modal chặn suốt ~76s rồi click nhầm nền khi `force=True`.
+  * **Không bắt được xác nhận lưu thành công của GPMS (`RuntimeError` sau 15s)**:
+    - GPMS sử dụng thư viện **`react-hot-toast`** (`[role="status"][aria-live="polite"]`, tự ẩn sau đúng `2000ms`), không dùng `.ant-message-success` hay `.ant-notification-notice-success`, nên bộ dò toast cũ luôn thất bại sau 15s.
+  * **Selector trạng thái, phân loại `req_type` và modal cuối tuần bị lệch**:
+    - Nhãn `"Trạng thái *"` nằm trong `<div class="DetailTicket_title_field__A7EWZ">` thay vì `<label>`.
+    - Nút radio `'Yêu cầu'` (`value='2'`) bị trùng giá trị với nhóm `CategoryField_radio` (`"Tất cả"` đang `checked=true`) và chứa `<label for="">` lồng bên trong `<label.ant-radio-wrapper>` khiến click vào wrapper bị nuốt sự kiện, dẫn đến payload gửi đi có `"req_type": null`.
+- **2. Giải pháp đã triển khai (`backend/app/services/ticket_batch_service.py`)**:
+  * **Xử lý thông minh popup Timesheet (`_close_ticket`)**:
+    - Bổ sung kiểm tra `_recover_sso_if_redirected` khi mở trang chi tiết ticket.
+    - Nếu `candidate_display` chưa có trong 5 dòng mặc định của modal, tự động tìm dòng trống (`actual_time == 0`) và điền ngày trực tiếp vào `react-datepicker` (`input[placeholder='dd/mm/yyyy']` + `Enter`).
+    - Lắng nghe trực tiếp phản hồi HTTP `POST /api/worklog`; nếu gặp `422`, tự động xóa dòng vừa thử, đánh dấu `remaining_hours[candidate_day] = 0.0` và xoay vòng sang ngày trống kế tiếp (tối đa 4 lần) thay vì giữ nguyên modal bị lỗi; cập nhật `remaining_hours[used_day]` theo đúng ngày đã lưu thành công.
+  * **Chuẩn hóa selector `#basic_typeTicket` & modal xác nhận**:
+    - Tìm dropdown trạng thái theo `div[class*='title_field']:has-text('Trạng thái')` (fallback sang `label`).
+    - Kiểm tra và click trực tiếp vào `#basic_typeTicket input[type='radio'][value='2']` (đảm bảo payload luôn có `"req_type": 2`).
+    - Xử lý linh hoạt mọi popup xác nhận sau nút Lưu (bao gồm cảnh báo ngày YCHT rơi vào cuối tuần).
+  * **Xác nhận lưu chuẩn xác bằng API + `react-hot-toast` (`_close_ticket` & `_close_gprocess_mission`)**:
+    - Lắng nghe trực tiếp HTTP `PUT /api/tasks/{ticket_id}` (`code == "200"` / `status == "success"`), kết hợp kiểm tra `[role="status"]` (`react-hot-toast`) và `.ant-message-*` / `.ant-notification-*` với chu kỳ quét `0.3s` (`_close_gprocess_mission` dùng `0.35s`) để không bao giờ bỏ lỡ toast `2000ms`; luôn gỡ listener trong khối `finally`.
+- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * **Kiểm thử dry-run thực tế trên ticket `#2015237`** (chặn ghi thực qua Playwright route cho `POST /api/worklog` giả lập `422 -> 200` và `PUT /api/tasks/2015237`): Tự động chuyển từ `2026-11-01` (`422`) sang `2026-11-02` (`200`), payload `PUT` gửi đủ `"status": "completed"`, `"category_id": 170636`, `"req_type": 2`, tổng thời gian xử lý còn **`11.02s`** (thay vì `110.7s` lỗi).
+  * **Backend**: Tương thích 100% Python 3.10 (`ast.parse(..., feature_version=(3, 10))` không BOM, `python -m compileall app`), Smoke Test `from app.main import app` đạt `>>> PASSED 100%`. Khởi động lại daemon backend mới trên cổng `8000`.
+  * **Frontend**: Bản build sẵn tại `frontend/dist/` (`index.html` + `web.config`) đầy đủ, sạch sẽ.

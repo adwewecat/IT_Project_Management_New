@@ -1397,23 +1397,32 @@ async def _close_ticket(
     page,
     ticket: Dict[str, Any],
     ticket_index: int,
-    remaining_hours: Dict[str, float]
+    remaining_hours: Dict[str, float],
+    username: str = "",
+    password: str = ""
 ) -> Dict[str, Any]:
     """
     Đóng 1 ticket:
     - Chuyển trạng thái sang Hoàn thành
-    - Khai báo timesheet 1h
-    - Xoay vòng danh mục
+    - Khai báo timesheet 1h (tự kiểm tra HTTP POST /api/worklog & tự chuyển ngày nếu bị 422)
+    - Chọn phân loại 'Yêu cầu' trong #basic_typeTicket & xoay vòng danh mục
+    - Lưu ticket và xác nhận qua PUT /api/tasks/{id} hoặc toast react-hot-toast/AntD
     """
     ticket_id = str(ticket.get("ticket_id", "")).strip()
     url = ticket.get("url") or f"https://gpms.ggg.com.vn/gticket/work-list/detail?id={ticket_id}"
+    if not username or not password:
+        u_cfg, p_cfg = get_sso_credentials()
+        username = username or u_cfg
+        password = password or p_cfg
 
+    put_listener = None
     try:
         if page.is_closed():
             raise RuntimeError("Trang trình duyệt đã bị đóng bất ngờ")
 
         await page.goto(url, timeout=180000)
         await _safe_wait_network_idle(page, 20000)
+        await _recover_sso_if_redirected(page, url, username, password)
         await asyncio.sleep(0.5)
 
         # Chọn ngày tốt nhất còn trống
@@ -1434,38 +1443,47 @@ async def _close_ticket(
 
         best_day_dt = datetime.strptime(best_day, "%Y-%m-%d")
         best_day_display = best_day_dt.strftime("%d/%m/%Y")
+        used_day = best_day
+        used_day_display = best_day_display
 
         # Chọn danh mục xoay vòng theo index
         category = CATEGORY_ROTATION[ticket_index % len(CATEGORY_ROTATION)]
 
-        # 1. Chuyển trạng thái sang 'Đã hoàn thành' (react-select)
-        status_container = page.locator("label:has-text('Trạng thái')").locator("xpath=../..").locator("[class*='control'], .css-l2aqk6").first
+        # 1. Chuyển trạng thái sang 'Đã hoàn thành' (react-select; GPMS dùng div[class*='title_field'] chứ không phải <label>)
+        status_container = page.locator("div[class*='title_field']:has-text('Trạng thái')").locator("xpath=..").locator("[class*='control'], .css-l2aqk6").first
+        if await status_container.count() == 0:
+            status_container = page.locator("label:has-text('Trạng thái')").locator("xpath=../..").locator("[class*='control'], .css-l2aqk6").first
+
         status_text = await status_container.inner_text() if await status_container.count() > 0 else ""
         if "Đã hoàn thành" not in status_text:
             if await status_container.count() > 0:
                 await status_container.click()
                 await asyncio.sleep(0.3)
-                sel_inp = status_container.locator("input").first
-                if await sel_inp.count() > 0:
-                    await sel_inp.fill("Đã hoàn thành")
-                    await asyncio.sleep(0.2)
-                    await page.keyboard.press("Enter")
-                    await asyncio.sleep(0.8)
+                opt = page.locator("[class*='option']:has-text('Đã hoàn thành'), [id*='-option-']:has-text('Đã hoàn thành')").first
+                if await opt.count() > 0 and await opt.is_visible():
+                    await opt.click()
+                    await asyncio.sleep(0.6)
                 else:
-                    opt = page.locator("[class*='option']:has-text('Đã hoàn thành'), :text('Đã hoàn thành')").first
-                    if await opt.count() > 0:
-                        await opt.click()
-                        await asyncio.sleep(0.8)
+                    sel_inp = status_container.locator("input").first
+                    if await sel_inp.count() > 0:
+                        await sel_inp.fill("Đã hoàn thành")
+                        await asyncio.sleep(0.25)
+                        opt_after = page.locator("[class*='option']:has-text('Đã hoàn thành'), [id*='-option-']:has-text('Đã hoàn thành')").first
+                        if await opt_after.count() > 0 and await opt_after.is_visible():
+                            await opt_after.click()
+                        else:
+                            await page.keyboard.press("Enter")
+                        await asyncio.sleep(0.6)
             else:
                 # Fallback nếu container không tìm thấy
-                status_box = page.locator(".css-1dimb5e-singleValue, [class*='singleValue']:has-text('Mới mở'), [class*='singleValue']:has-text('Đang triển khai')").first
+                status_box = page.locator(".css-1dimb5e-singleValue, [class*='singleValue']:has-text('Mới mở'), [class*='singleValue']:has-text('Đang triển khai'), [class*='singleValue']:has-text('Mở lại')").first
                 if await status_box.count() > 0:
                     await status_box.click()
                     await asyncio.sleep(0.3)
-                    opt = page.locator("[class*='option']:has-text('Đã hoàn thành'), :text('Đã hoàn thành')").first
+                    opt = page.locator("[class*='option']:has-text('Đã hoàn thành'), [id*='-option-']:has-text('Đã hoàn thành')").first
                     if await opt.count() > 0:
                         await opt.click()
-                        await asyncio.sleep(0.8)
+                        await asyncio.sleep(0.6)
 
         # 2. Xử lý popup Khai báo Timesheet (#container-portal hoặc .ant-modal)
         # Khi chuyển trạng thái sang 'Đã hoàn thành', GPMS mở modal để khai báo giờ và ghi chú
@@ -1473,7 +1491,7 @@ async def _close_ticket(
         modal_in_portal = portal.locator("div[id*='container-modal'], div[class*='container-modal'], div[id*='style_container-modal'], div[class*='style_container-modal'], table").first
 
         try:
-            await modal_in_portal.wait_for(state="visible", timeout=14000)
+            await modal_in_portal.wait_for(state="visible", timeout=10000)
         except Exception:
             pass
 
@@ -1485,121 +1503,231 @@ async def _close_ticket(
             active_container = portal if is_portal_open else antd_timesheet
             logger.info(f"[TICKET_BATCH] #{ticket_id}: Phát hiện popup Timesheet trong {'#container-portal' if is_portal_open else '.ant-modal'}")
 
-            # Tìm các dòng trong bảng
-            rows = await active_container.locator("tbody tr").all()
-            target_row = None
+            # Thử tối đa 4 ngày khác nhau nếu GPMS trả về HTTP 422 (ví dụ ngày đó thực tế đã đủ 24h)
+            ts_saved = False
+            last_ts_error = ""
+            prev_row_idx: Optional[int] = None
 
-            if rows:
-                for r in rows:
-                    r_text = await r.inner_text()
-                    r_inputs = await r.locator("input").all()
-                    r_vals = [await inp.input_value() for inp in r_inputs]
-                    if best_day_display in r_text or any(best_day_display in v for v in r_vals):
-                        target_row = r
-                        break
-                if not target_row:
-                    target_row = rows[0]
+            for ts_attempt in range(4):
+                candidate_day = _pick_best_day(remaining_hours)
+                if not candidate_day:
+                    last_ts_error = "Không còn ngày nào trống >= 1h trong tháng để khai báo Timesheet"
+                    break
 
-            scope = target_row if target_row else active_container
+                candidate_display = datetime.strptime(candidate_day, "%Y-%m-%d").strftime("%d/%m/%Y")
+                rows = await active_container.locator("tbody tr").all()
 
-            # 2.1. Điền Thời gian (1 giờ)
-            time_filled = False
-            time_inps = scope.locator("input[name*='time'], input[name*='actual'], input[name*='hour'], input[type='number']")
-            if await time_inps.count() > 0:
-                await time_inps.first.fill("1")
-                time_filled = True
+                # Nếu lần thử trước bị lỗi 422, xóa sạch dữ liệu đã điền ở dòng trước để tránh gửi trùng/cộng dồn 2h
+                if prev_row_idx is not None and rows and prev_row_idx < len(rows):
+                    try:
+                        prev_row = rows[prev_row_idx]
+                        prev_time = prev_row.locator("input[name*='time'], input[name*='actual'], input[name*='hour'], input[type='number']").first
+                        if await prev_time.count() > 0:
+                            await prev_time.fill("0")
+                        prev_note = prev_row.locator("input[name*='note'], textarea[name*='note'], input[placeholder*='note'], input[placeholder*='Ghi chú']").first
+                        if await prev_note.count() > 0:
+                            await prev_note.fill("")
+                    except Exception:
+                        pass
 
-            # 2.2. Điền Ghi chú (Note) - BẮT BUỘC để form Timesheet hợp lệ
-            note_inps = scope.locator("input[name*='note'], textarea[name*='note'], input[placeholder*='note'], input[placeholder*='Ghi chú']")
-            if await note_inps.count() > 0:
-                await note_inps.first.fill("Hỗ trợ hoàn thành nhiệm vụ")
+                target_row = None
+                target_row_idx = None
+                unused_row = None
+                unused_row_idx = None
 
-            # 2.3. Quét kiểm tra tất cả input để không sót ô rỗng
-            all_inps = await scope.locator("input:not([type='hidden']), textarea").all()
-            for inp in all_inps:
-                inp_name = (await inp.get_attribute("name") or "").lower()
-                inp_val = await inp.input_value()
-                if not inp_val or inp_val in ["-", ""]:
-                    if "note" in inp_name:
-                        await inp.fill("Hỗ trợ hoàn thành nhiệm vụ")
-                    elif ("time" in inp_name or "hour" in inp_name or "actual" in inp_name) and not time_filled:
-                        await inp.fill("1")
-                        time_filled = True
+                if rows:
+                    for r_idx, r in enumerate(rows):
+                        r_text = await r.inner_text()
+                        r_inputs = await r.locator("input").all()
+                        r_vals = [await inp.input_value() for inp in r_inputs]
+                        # Kiểm tra dòng có khớp ngày cần điền không
+                        if candidate_display in r_text or any(candidate_display in v for v in r_vals):
+                            target_row = r
+                            target_row_idx = r_idx
+                            break
 
-            if not time_filled:
+                        # Ghi nhận dòng trống đầu tiên chưa điền giờ (ưu tiên từ dưới lên hoặc dòng trống cuối để tránh trùng ngày khác)
+                        time_val_str = ""
+                        try:
+                            t_inp = r.locator("input[name*='time'], input[name*='actual'], input[name*='hour'], input[type='number']").first
+                            if await t_inp.count() > 0:
+                                time_val_str = (await t_inp.input_value() or "").strip()
+                        except Exception:
+                            pass
+                        is_row_empty = time_val_str in ("", "0", "0.0", "-")
+                        if is_row_empty:
+                            unused_row = r
+                            unused_row_idx = r_idx
+
+                    # Nếu ngày mục tiêu không nằm trong 5 dòng mặc định của modal, đổi ngày trên 1 dòng trống (react-datepicker)
+                    if not target_row:
+                        target_row = unused_row if unused_row else rows[0]
+                        target_row_idx = unused_row_idx if unused_row_idx is not None else 0
+                        date_inp = target_row.locator("input[placeholder='dd/mm/yyyy'], input[name*='date']").first
+                        if await date_inp.count() > 0:
+                            try:
+                                await date_inp.click()
+                                await date_inp.fill(candidate_display)
+                                await date_inp.press("Enter")
+                                await asyncio.sleep(0.25)
+                                logger.info(f"[TICKET_BATCH] #{ticket_id}: Đã chuyển ngày Timesheet dòng {target_row_idx} sang {candidate_display}")
+                            except Exception as date_err:
+                                logger.warning(f"[TICKET_BATCH] #{ticket_id}: Không thể đổi ngày datepicker sang {candidate_display}: {date_err}")
+
+                scope = target_row if target_row else active_container
+                prev_row_idx = target_row_idx
+
+                # 2.1. Điền Thời gian (1 giờ) — click trước để đóng popover datepicker nếu còn mở
+                time_filled = False
+                time_inps = scope.locator("input[name*='time'], input[name*='actual'], input[name*='hour'], input[type='number']")
+                if await time_inps.count() > 0:
+                    await time_inps.first.click()
+                    await time_inps.first.fill("1")
+                    time_filled = True
+
+                # 2.2. Điền Ghi chú (Note) - BẮT BUỘC để form Timesheet hợp lệ
+                note_inps = scope.locator("input[name*='note'], textarea[name*='note'], input[placeholder*='note'], input[placeholder*='Ghi chú']")
+                if await note_inps.count() > 0:
+                    await note_inps.first.fill("Hỗ trợ hoàn thành nhiệm vụ")
+
+                # 2.3. Quét kiểm tra tất cả input để không sót ô rỗng
+                all_inps = await scope.locator("input:not([type='hidden']), textarea").all()
                 for inp in all_inps:
                     inp_name = (await inp.get_attribute("name") or "").lower()
-                    if "note" not in inp_name:
+                    inp_ph = (await inp.get_attribute("placeholder") or "").lower()
+                    inp_val = await inp.input_value()
+                    if not inp_val or inp_val in ["-", ""]:
+                        if "note" in inp_name:
+                            await inp.fill("Hỗ trợ hoàn thành nhiệm vụ")
+                        elif ("time" in inp_name or "hour" in inp_name or "actual" in inp_name) and not time_filled:
+                            await inp.fill("1")
+                            time_filled = True
+                    elif ("time" in inp_name or "hour" in inp_name or "actual" in inp_name) and inp_val == "0" and not time_filled and "dd/mm" not in inp_ph:
                         await inp.fill("1")
                         time_filled = True
-                        break
+
+                if not time_filled:
+                    for inp in all_inps:
+                        inp_name = (await inp.get_attribute("name") or "").lower()
+                        inp_ph = (await inp.get_attribute("placeholder") or "").lower()
+                        if "note" not in inp_name and "date" not in inp_name and "dd/mm" not in inp_ph:
+                            await inp.fill("1")
+                            time_filled = True
+                            break
+
+                await asyncio.sleep(0.25)
+
+                # 2.4. Bấm nút Lưu trong popup Timesheet và lắng nghe trực tiếp API POST /api/worklog
+                worklog_resp_holder: Dict[str, Any] = {}
+                worklog_event = asyncio.Event()
+
+                async def _on_worklog_resp(resp):
+                    try:
+                        if "/api/worklog" in resp.url and resp.request.method == "POST":
+                            body_txt = ""
+                            try:
+                                body_txt = await resp.text()
+                            except Exception:
+                                pass
+                            worklog_resp_holder["status"] = resp.status
+                            worklog_resp_holder["body"] = body_txt
+                            worklog_event.set()
+                    except Exception:
+                        pass
+
+                page.on("response", _on_worklog_resp)
+                try:
+                    save_ts = active_container.locator("button:has-text('Lưu'), button:has-text('Xác nhận'), button:has-text('Đồng ý'), div[class*='container-bottom-modal'] button:not(:has-text('Hủy')):not(:has-text('Đóng'))").first
+                    if await save_ts.count() > 0:
+                        try:
+                            await save_ts.click(timeout=10000)
+                        except Exception:
+                            await save_ts.click(force=True)
+                    else:
+                        bottom_btns = await active_container.locator("div[class*='container-bottom-modal'] button, .ant-modal-footer button").all()
+                        if bottom_btns:
+                            await bottom_btns[-1].click(force=True)
+
+                    try:
+                        await asyncio.wait_for(worklog_event.wait(), timeout=10.0)
+                    except asyncio.TimeoutError:
+                        pass
+                finally:
+                    try:
+                        page.remove_listener("response", _on_worklog_resp)
+                    except Exception:
+                        pass
+
+                wl_status = worklog_resp_holder.get("status")
+                if wl_status in (200, 201):
+                    try:
+                        await modal_in_portal.wait_for(state="hidden", timeout=6000)
+                    except Exception:
+                        pass
+                    used_day = candidate_day
+                    used_day_display = candidate_display
+                    ts_saved = True
+                    logger.info(f"[TICKET_BATCH] #{ticket_id}: Lưu Timesheet thành công (ngày {candidate_display}, HTTP {wl_status}).")
+                    break
+
+                # Kiểm tra nếu không bắt được event HTTP nhưng modal đã tự đóng
+                await asyncio.sleep(0.4)
+                still_open = (await modal_in_portal.count() > 0 and await modal_in_portal.is_visible()) or (await antd_timesheet.count() > 0 and await antd_timesheet.is_visible())
+                if wl_status is None and not still_open:
+                    used_day = candidate_day
+                    used_day_display = candidate_display
+                    ts_saved = True
+                    break
+
+                # GPMS trả về 422 / 4xx hoặc từ chối lưu -> loại ngày này khỏi pool tạm và thử ngày khác
+                err_body = (worklog_resp_holder.get("body") or "").strip()
+                last_ts_error = f"HTTP {wl_status} ({err_body[:180]})" if wl_status else "Popup Timesheet không đóng sau khi bấm Lưu"
+                logger.warning(f"[TICKET_BATCH] #{ticket_id}: Lần thử {ts_attempt + 1} ngày {candidate_display} thất bại: {last_ts_error}")
+                remaining_hours[candidate_day] = 0.0
+                await asyncio.sleep(0.3)
+
+            if not ts_saved:
+                # Đóng popup trước khi ném lỗi để tránh kẹt trạng thái
+                try:
+                    cancel_ts = active_container.locator("button:has-text('Hủy'), button:has-text('Đóng')").first
+                    if await cancel_ts.count() > 0 and await cancel_ts.is_visible():
+                        await cancel_ts.click(force=True)
+                except Exception:
+                    pass
+                raise RuntimeError(f"Không thể lưu Timesheet cho ticket #{ticket_id}: {last_ts_error}")
 
             await asyncio.sleep(0.3)
 
-            # 2.4. Bấm nút Lưu / Xác nhận trong popup Timesheet
-            save_ts = active_container.locator("button:has-text('Lưu'), button:has-text('Xác nhận'), button:has-text('Đồng ý'), div[class*='container-bottom-modal'] button:not(:has-text('Hủy')):not(:has-text('Đóng'))").first
-            if await save_ts.count() > 0:
-                try:
-                    await save_ts.click(timeout=12000)
-                except Exception:
-                    await save_ts.click(force=True)
-            else:
-                bottom_btns = await active_container.locator("div[class*='container-bottom-modal'] button, .ant-modal-footer button").all()
-                if bottom_btns:
-                    await bottom_btns[-1].click(force=True)
-
-            # Chờ popup Timesheet biến mất (tối đa 16s)
-            try:
-                await modal_in_portal.wait_for(state="hidden", timeout=16000)
-            except Exception:
-                pass
-            await asyncio.sleep(0.5)
-
-            # Thử lại nếu popup chưa đóng
-            if await modal_in_portal.count() > 0 and await modal_in_portal.is_visible():
-                logger.warning(f"[TICKET_BATCH] #{ticket_id}: Popup Timesheet chưa biến mất, thử force click Lưu.")
-                try:
-                    retry_btn = active_container.locator("button:has-text('Lưu'), button:has-text('Xác nhận')").first
-                    if await retry_btn.count() > 0:
-                        await retry_btn.click(force=True)
-                        await asyncio.sleep(1.0)
-                except Exception:
-                    pass
-
-        # 3. Phân loại: chọn 'Yêu cầu' (radio value='2')
+        # 3. Phân loại: chọn 'Yêu cầu' (radio value='2' trong #basic_typeTicket, tránh nhầm với CategoryField_radio)
         try:
-            # Kiểm tra xem radio 'Yêu cầu' đã được chọn sẵn chưa (tránh click thừa hoặc lỗi Ant Design)
-            is_checked = False
-            radio2 = page.locator("input[type='radio'][value='2']").first
-            if await radio2.count() > 0:
-                try:
-                    is_checked = await page.evaluate("""() => {
-                        const r = document.querySelector("input[type='radio'][value='2']");
-                        if (!r) return false;
-                        if (r.checked) return true;
-                        const w = r.closest('.ant-radio-wrapper') || r.closest('.ant-radio');
-                        return !!(w && (w.classList.contains('ant-radio-wrapper-checked') || w.classList.contains('ant-radio-checked')));
-                    }""")
-                except Exception:
-                    pass
+            is_checked = await page.evaluate("""() => {
+                const scoped = document.querySelector("#basic_typeTicket input[type='radio'][value='2']");
+                if (scoped) {
+                    if (scoped.checked) return true;
+                    const w = scoped.closest('.ant-radio-wrapper') || scoped.closest('.ant-radio');
+                    return !!(w && (w.classList.contains('ant-radio-wrapper-checked') || w.classList.contains('ant-radio-checked')));
+                }
+                const labels = Array.from(document.querySelectorAll('label.ant-radio-wrapper'));
+                const yc = labels.find(l => (l.textContent || '').trim() === 'Yêu cầu');
+                return !!(yc && yc.classList.contains('ant-radio-wrapper-checked'));
+            }""")
 
             if not is_checked:
-                # Với Ant Design, click vào label bao ngoài (label.ant-radio-wrapper) là chuẩn nhất
-                radio_label = page.locator("label.ant-radio-wrapper:has(input[value='2']), label:has(input[value='2'])").first
-                if await radio_label.count() > 0:
+                # Lưu ý: GPMS lồng <label for=""> bên trong label.ant-radio-wrapper nên click wrapper bị nuốt click;
+                # bắt buộc click trực tiếp vào input[type='radio'][value='2'] hoặc span.ant-radio bên trong #basic_typeTicket
+                radio_input = page.locator("#basic_typeTicket input[type='radio'][value='2']").first
+                if await radio_input.count() > 0:
                     try:
-                        await radio_label.click(timeout=12000)
+                        await radio_input.click(timeout=10000)
                     except Exception:
-                        await radio_label.click(force=True)
+                        await radio_input.click(force=True)
                 else:
-                    yc_radio = page.locator("label.ant-radio-wrapper:has-text('Yêu cầu'), label:has-text('Yêu cầu')").first
-                    if await yc_radio.count() > 0:
+                    yc_span = page.locator("label.ant-radio-wrapper:has-text('Yêu cầu') input[type='radio'], label.ant-radio-wrapper:has-text('Yêu cầu') span.ant-radio").first
+                    if await yc_span.count() > 0:
                         try:
-                            await yc_radio.click(timeout=12000)
+                            await yc_span.click(timeout=10000)
                         except Exception:
-                            await yc_radio.click(force=True)
-                    elif await radio2.count() > 0:
-                        await radio2.click(force=True)
+                            await yc_span.click(force=True)
                 await asyncio.sleep(0.3)
         except Exception as err_radio:
             logger.warning(f"[TICKET_BATCH] Lỗi chọn radio 'Yêu cầu' ticket {ticket_id} (tiếp tục quy trình): {err_radio}")
@@ -1609,11 +1737,11 @@ async def _close_ticket(
         cat_card = page.locator(f".ItemCategoryUpdate_itemCategoryJob__QRmlI:has-text('{cat_kw}'), div[class*='ItemCategoryUpdate']:has-text('{cat_kw}')").first
         if await cat_card.count() > 0:
             try:
-                await cat_card.scroll_into_view_if_needed(timeout=12000)
-                await cat_card.click(timeout=16000)
+                await cat_card.scroll_into_view_if_needed(timeout=10000)
+                await cat_card.click(timeout=12000)
             except Exception:
                 try:
-                    await cat_card.click(force=True, timeout=12000)
+                    await cat_card.click(force=True, timeout=10000)
                 except Exception:
                     await cat_card.evaluate("el => el.click()")
             await asyncio.sleep(0.5)
@@ -1624,69 +1752,119 @@ async def _close_ticket(
                 btn_ok = confirm_modal.locator("button:has-text('Xác nhận'), button:has-text('OK')").first
                 if await btn_ok.count() > 0:
                     try:
-                        await btn_ok.click(timeout=12000)
+                        await btn_ok.click(timeout=10000)
                     except Exception:
                         await btn_ok.click(force=True)
                     await asyncio.sleep(0.5)
 
-        # 5. Kéo xuống dưới cùng và bấm Lưu ticket (Lưu ý: nút Lưu trên GPMS là thẻ DIV .DetailTicket_btnSave)
+        # 5. Lắng nghe trực tiếp API PUT /api/tasks/{ticket_id} + kéo xuống dưới cùng bấm Lưu ticket
+        task_put_result: Dict[str, Any] = {"done": False, "ok": False, "error": ""}
+        api_task_marker = f"/api/tasks/{ticket_id}"
+
+        async def _on_task_put_resp(resp):
+            try:
+                if resp.request.method == "PUT" and api_task_marker in resp.url:
+                    body_json: Dict[str, Any] = {}
+                    body_txt = ""
+                    try:
+                        body_txt = await resp.text()
+                        if body_txt:
+                            body_json = json.loads(body_txt)
+                    except Exception:
+                        pass
+
+                    code_val = str(body_json.get("code", "")) if isinstance(body_json, dict) else ""
+                    status_str = str(body_json.get("status", "")).lower() if isinstance(body_json, dict) else ""
+                    if resp.status in (200, 201) and (code_val in ("", "200") or status_str == "success"):
+                        task_put_result["ok"] = True
+                    else:
+                        msg = ""
+                        if isinstance(body_json, dict):
+                            msg = str(body_json.get("message") or body_json.get("detail") or body_json.get("error") or "")
+                        task_put_result["error"] = msg or body_txt[:200] or f"HTTP {resp.status}"
+                    task_put_result["done"] = True
+            except Exception:
+                pass
+
+        put_listener = _on_task_put_resp
+        page.on("response", put_listener)
+
         await page.keyboard.press("End")
         await asyncio.sleep(0.3)
         save_btn = page.locator(".DetailTicket_btnSave__36RtV, div[class*='DetailTicket_btnSave']").first
         if await save_btn.count() > 0:
             try:
                 await save_btn.scroll_into_view_if_needed(timeout=8000)
-                await save_btn.click(timeout=20000)
+                await save_btn.click(timeout=15000)
             except Exception:
-                await save_btn.click(force=True, timeout=12000)
-            await asyncio.sleep(1.0)
+                await save_btn.click(force=True, timeout=10000)
+            await asyncio.sleep(0.6)
 
-        # Xử lý nếu có popup xác nhận sau khi Lưu (VD: Modal hỏi 'Bạn có chắc chắn?')
+        # Xử lý nếu có popup xác nhận sau khi Lưu (VD: Modal hỏi 'Bạn có chắc chắn?' hoặc cảnh báo ngày YCHT rơi vào cuối tuần)
         try:
-            post_modal = page.locator(".ant-modal:has-text('Xác nhận'), .ant-modal:has-text('Bạn có chắc'), .ant-modal:has-text('thành công')").first
+            post_modal = page.locator(".ant-modal:visible, .ant-modal-confirm:visible").first
             if await post_modal.count() > 0 and await post_modal.is_visible():
-                post_btn = post_modal.locator("button:has-text('Xác nhận'), button:has-text('OK'), button:has-text('Đồng ý'), button.ant-btn-primary").first
+                post_btn = post_modal.locator("button:has-text('Xác nhận'), button:has-text('Tiếp tục'), button:has-text('Đồng ý'), button:has-text('OK'), button.ant-btn-primary").first
                 if await post_btn.count() > 0:
                     await post_btn.click(force=True)
-                    await asyncio.sleep(1.0)
+                    await asyncio.sleep(0.5)
         except Exception:
             pass
 
-        # 6. Kiểm tra kết quả phản hồi thực tế từ GPMS (Toast Thành công / Lỗi)
-        success_toast = page.locator('.ant-message-success, .ant-notification-notice-success, div[class*="ant-message"]:has-text("thành công"), div[class*="ant-notification"]:has-text("thành công")').first
-        error_toast = page.locator('.ant-message-error, .ant-notification-notice-error, div[class*="ant-message-error"]').first
+        # 6. Kiểm tra xác nhận lưu qua HTTP PUT /api/tasks/{id} hoặc toast (react-hot-toast [role='status'] + AntD)
+        success_toast = page.locator(
+            '[role="status"]:has-text("thành công"), '
+            '.ant-message-success, .ant-notification-notice-success, '
+            'div[class*="ant-message"]:has-text("thành công"), '
+            'div[class*="ant-notification"]:has-text("thành công")'
+        ).first
+        error_toast = page.locator(
+            '[role="status"]:has-text("lỗi"), [role="status"]:has-text("thất bại"), [role="status"]:has-text("không thể"), '
+            '.ant-message-error, .ant-notification-notice-error, div[class*="ant-message-error"]'
+        ).first
 
         ticket_saved = False
-        for _ in range(15):
+        for _ in range(45):  # 45 * 0.3s ~= 13.5s
+            if task_put_result["done"]:
+                if task_put_result["ok"]:
+                    logger.info(f"[TICKET_BATCH] #{ticket_id}: API PUT {api_task_marker} xác nhận lưu thành công.")
+                    ticket_saved = True
+                    break
+                err_api = task_put_result["error"]
+                logger.error(f"[TICKET_BATCH] #{ticket_id}: API PUT báo lỗi khi lưu: {err_api}")
+                raise RuntimeError(f"GPMS báo lỗi khi lưu: {err_api}")
+
             if await error_toast.count() > 0 and await error_toast.is_visible():
-                err_msg = await error_toast.inner_text()
-                logger.error(f"[TICKET_BATCH] #{ticket_id}: GPMS báo lỗi khi lưu: {err_msg}")
-                raise RuntimeError(f"GPMS báo lỗi: {err_msg}")
+                err_msg = (await error_toast.inner_text() or "").strip()
+                if err_msg:
+                    logger.error(f"[TICKET_BATCH] #{ticket_id}: GPMS báo lỗi khi lưu: {err_msg}")
+                    raise RuntimeError(f"GPMS báo lỗi: {err_msg}")
 
             if await success_toast.count() > 0 and await success_toast.is_visible():
-                succ_msg = await success_toast.inner_text()
-                logger.info(f"[TICKET_BATCH] #{ticket_id}: GPMS xác nhận lưu thành công: {succ_msg}")
+                succ_msg = (await success_toast.inner_text() or "").strip()
+                logger.info(f"[TICKET_BATCH] #{ticket_id}: GPMS xác nhận lưu thành công (toast): {succ_msg}")
                 ticket_saved = True
                 break
-            await asyncio.sleep(1.0)
+
+            await asyncio.sleep(0.3)
 
         if not ticket_saved:
             raise RuntimeError(f"GPMS không trả về xác nhận lưu thành công cho ticket #{ticket_id}")
 
-        # Chờ 3.0s an toàn để API ngầm của GPMS commit dữ liệu vào database trước khi đóng/chuyển tiếp
-        await asyncio.sleep(3.0)
+        # Chờ ngắn 1.0s để transaction commit ổn định trước khi chuyển ticket kế tiếp
+        await asyncio.sleep(1.0)
 
-        # Cập nhật remaining_hours
-        remaining_hours[best_day] = max(0.0, remaining_hours[best_day] - 1.0)
+        # Cập nhật remaining_hours theo đúng ngày thực tế đã gửi lên GPMS
+        remaining_hours[used_day] = max(0.0, remaining_hours[used_day] - 1.0)
 
         return {
             "ticket_id": ticket_id,
             "ticket_name": ticket.get("ticket_name", f"Ticket #{ticket_id}"),
             "status": "success",
-            "message": f"Đã hoàn thành (Ngày {best_day_display}, {category[:35]}...)",
-            "day_used": best_day_display,
+            "message": f"Đã hoàn thành (Ngày {used_day_display}, {category[:35]}...)",
+            "day_used": used_day_display,
             "category_used": category,
-            "remaining_after": remaining_hours[best_day],
+            "remaining_after": remaining_hours[used_day],
             "created_by": ticket.get("created_by", "—"),
             "assignee": ticket.get("assignee", "—"),
             "due_date": ticket.get("due_date", "—"),
@@ -1710,6 +1888,12 @@ async def _close_ticket(
             "url": url,
             "source_type": "TICKET"
         }
+    finally:
+        if put_listener is not None:
+            try:
+                page.remove_listener("response", put_listener)
+            except Exception:
+                pass
 
 
 async def preview_tickets() -> Dict[str, Any]:
@@ -2166,19 +2350,28 @@ async def _close_gprocess_mission(page, context, mission: Dict[str, Any]) -> Dic
                 await asyncio.sleep(1.2)
                 continue
 
-        # 7. Kiểm tra kết quả phản hồi thực tế từ GPMS (Toast Thành công / Lỗi hoặc Chuyển trang) - CHỐNG BÁO THÀNH CÔNG ẢO
-        success_toast = detail_page.locator('.ant-message-success, .ant-notification-notice-success, div[class*="ant-message"]:has-text("thành công"), div[class*="ant-notification"]:has-text("thành công")').first
-        error_toast = detail_page.locator('.ant-message-error, .ant-notification-notice-error, div[class*="ant-message-error"]').first
+        # 7. Kiểm tra kết quả phản hồi thực tế từ GPMS (Toast Thành công / Lỗi hoặc Chuyển trang) - hỗ trợ cả react-hot-toast [role='status'] & AntD
+        success_toast = detail_page.locator(
+            '[role="status"]:has-text("thành công"), '
+            '.ant-message-success, .ant-notification-notice-success, '
+            'div[class*="ant-message"]:has-text("thành công"), '
+            'div[class*="ant-notification"]:has-text("thành công")'
+        ).first
+        error_toast = detail_page.locator(
+            '[role="status"]:has-text("lỗi"), [role="status"]:has-text("thất bại"), [role="status"]:has-text("không thể"), '
+            '.ant-message-error, .ant-notification-notice-error, div[class*="ant-message-error"]'
+        ).first
 
         is_success = False
-        for _ in range(15):
+        for _ in range(42):  # 42 * 0.35s ~= 14.7s (đủ bắt toast 2000ms của react-hot-toast)
             if await error_toast.count() > 0 and await error_toast.is_visible():
-                err_msg = await error_toast.inner_text()
-                logger.error(f"[GPROCESS] #{mission_id}: GPMS trả về thông báo lỗi: {err_msg}")
-                raise RuntimeError(f"GPMS báo lỗi: {err_msg}")
+                err_msg = (await error_toast.inner_text() or "").strip()
+                if err_msg:
+                    logger.error(f"[GPROCESS] #{mission_id}: GPMS trả về thông báo lỗi: {err_msg}")
+                    raise RuntimeError(f"GPMS báo lỗi: {err_msg}")
 
             if await success_toast.count() > 0 and await success_toast.is_visible():
-                succ_msg = await success_toast.inner_text()
+                succ_msg = (await success_toast.inner_text() or "").strip()
                 logger.info(f"[GPROCESS] #{mission_id}: GPMS xác nhận thành công: {succ_msg}")
                 is_success = True
                 break
@@ -2190,7 +2383,7 @@ async def _close_gprocess_mission(page, context, mission: Dict[str, Any]) -> Dic
                 is_success = True
                 break
 
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(0.35)
 
         if not is_success:
             # KIỂM TRA PHÒNG VỆ: Nếu không thấy toast và không redirect, kiểm tra xem nút 'Xác nhận' còn tồn tại không
@@ -2313,7 +2506,7 @@ async def run_batch_close(
                             result = await _close_gprocess_mission(page, context, item)
                         else:
                             logger.info(f"[TICKET_BATCH] Xử lý ticket 3CX ({idx+1}/{len(tickets_to_close)}): #{item_id}")
-                            result = await _close_ticket(page, item, idx, remaining_hours)
+                            result = await _close_ticket(page, item, idx, remaining_hours, username, password)
 
                     except Exception as item_err:
                         logger.error(f"[TICKET_BATCH] Lỗi ngoại lệ khi xử lý mục #{item_id}: {item_err}", exc_info=True)
@@ -2519,7 +2712,7 @@ async def run_full_batch_pipeline() -> Dict[str, Any]:
                 if tickets:
                     for idx, ticket in enumerate(tickets):
                         logger.info(f"[TICKET_BATCH] Xử lý ticket {idx+1}/{len(tickets)}: #{ticket['ticket_id']}")
-                        result = await _close_ticket(page, ticket, idx, remaining_hours)
+                        result = await _close_ticket(page, ticket, idx, remaining_hours, username, password)
                         results.append(result)
                         await asyncio.sleep(1)
                 else:
