@@ -4739,3 +4739,21 @@ estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ B
   * **Kiểm thử dry-run thực tế trên ticket `#2015237`** (chặn ghi thực qua Playwright route cho `POST /api/worklog` giả lập `422 -> 200` và `PUT /api/tasks/2015237`): Tự động chuyển từ `2026-11-01` (`422`) sang `2026-11-02` (`200`), payload `PUT` gửi đủ `"status": "completed"`, `"category_id": 170636`, `"req_type": 2`, tổng thời gian xử lý còn **`11.02s`** (thay vì `110.7s` lỗi).
   * **Backend**: Tương thích 100% Python 3.10 (`ast.parse(..., feature_version=(3, 10))` không BOM, `python -m compileall app`), Smoke Test `from app.main import app` đạt `>>> PASSED 100%`. Khởi động lại daemon backend mới trên cổng `8000`.
   * **Frontend**: Bản build sẵn tại `frontend/dist/` (`index.html` + `web.config`) đầy đủ, sạch sẽ.
+
+
+### [2026-11-13] CHUẨN HÓA TOÀN DIỆN ĐỊNH DẠNG NGÀY / THÁNG / GIỜ CHUẨN VIỆT NAM (`dd-mm` / `dd-mm-yyyy` / `mm-yyyy` / `dd-mm-yyyy HH:mm`)
+- **1. Vấn đề xử lý**:
+  * Nhiều ô nhập `<input type="date">`, `<input type="datetime-local">`, `<input type="month">` bị trình duyệt Windows/Chrome locale `en-US` hiển thị theo kiểu Mỹ `mm/dd/yyyy`, đồng thời nhiều bảng/nhãn thời gian hiển thị thô dạng `YYYY-MM-DD` hoặc `day.slice(5)` (`11-01` thay vì `01-11`), dễ gây nhầm ngày với tháng.
+- **2. Thành phần & Chuẩn mới đã triển khai**:
+  * **Bộ tiện ích dùng chung (`frontend/src/utils/dateFormat.ts`)**:
+    + Bổ sung `parseDateToIso`, `formatDateDDMMYYYY`, `formatDateDDMM`, `formatDateTimeDDMMYYYY`, `formatTimeDateDDMMYYYY`, `formatMonthMMYYYY`, `parseMonthToIso`, `formatTime24hVN`, `formatDateVN`, `formatIsoDatesInText`, `isValidCalendarDate`.
+    + Luôn nhận `YYYY-MM-DD` / `YYYY-MM` nội bộ & API SQL Server, nhưng hiển thị và parse nhập liệu theo `dd-mm-yyyy` / `dd-mm` / `mm-yyyy` / 24h; chặn nhập nhầm kiểu Mỹ `mm-dd-yyyy` (như `11-25-2026`).
+  * **Component nhập liệu thống nhất (`frontend/src/components/ui/`)**:
+    + Nâng cấp `DateInput.tsx` hiển thị `dd-mm-yyyy` kèm lịch ẩn (`showPicker()`), hỗ trợ `compact`, `hideClear`, `onBlurValue`, giữ guard `prevPropValueRef` cho ô sửa inline trong bảng.
+    + Tạo mới `DateTimeInput.tsx` (`dd-mm-yyyy` + select 24h `HH:mm`, emit `YYYY-MM-DDTHH:mm`) và `MonthInput.tsx` (`mm-yyyy`, emit `YYYY-MM`).
+  * **Áp dụng đồng bộ 100% màn hình & modal toàn hệ thống**:
+    + Thay thế toàn bộ `<input type="date">`, `<input type="datetime-local">`, `<input type="month">` và chuẩn hóa hiển thị ngày tại các trang/modal: `JobManagementPage.tsx` (sửa pill Timesheet `formatDateDDMM(day)` -> `01-11: 4h`, thời gian quét & log), `MemoPage.tsx`, `SetupRestaurantPage.tsx`, `CreateIncidentModal.tsx`, `CreateSystemOutageModal.tsx`, `SystemOutageListTab.tsx`, `SystemOutageStats.tsx`, `PmSoftwareModal.tsx`, `SoftwareVersionModal.tsx`, `RestaurantFormModal.tsx`, `RestaurantDetailModal.tsx`, `RestaurantAuditLogsModal.tsx`, `RestaurantAuditLogsPage.tsx`, `CoSoKdsTwoStepSyncModal.tsx`, `PersonalTaskManager.tsx`, `CoSoKdsRadarModal.tsx`, `RestaurantSoftwareVersionsModal.tsx`, `KdsKitchenIntakeModal.tsx`, `AgentMultitaskV2Page.tsx`, `ViolationAndLeavePage.tsx`, `IncidentListPage.tsx`, `MongoDbParamManagementTask.tsx`, `PmBoManagementPage.tsx`, `ProjectManagementPage.tsx`, `RestaurantMongoPage.tsx`, `WorkChecklistPage.tsx`, `TheodoiPrPoDoPage.tsx`, `PimPage.tsx`, `CentralizedLogsPage.tsx`, `RestaurantMongoAnalysisPage.tsx`.
+- **3. Kiểm Thử & Đóng Gói (`frontend/dist`)**:
+  * **Kiểm tra tĩnh**: Không còn `<input type="date" | "datetime-local" | "month">` hiển thị trực tiếp ở bất kỳ trang/modal nào ngoài nút lịch ẩn trong `DateInput.tsx` và `MonthInput.tsx`.
+  * **Frontend Build**: `cmd /c "npm run build"` tại `frontend/` chạy `tsc -b && vite build` đạt exit code `0` (`✓ built in 5.54s`, `1803 modules transformed`), sẵn `frontend/dist/` kèm `web.config`.
+  * **Unit Test & Headless Edge Playwright (`locale="en-US"`)**: Pass 100% kiểm tra `parseDateToIso`, `formatDateDDMM`, `formatMonthMMYYYY`, `DateInput`, `DateTimeInput`, `MonthInput`, từ chối `11-25-2026`, giữ `01-11: 4h`, không lỗi console/pageerror trên bản `vite preview` (`/login` HTTP 200).

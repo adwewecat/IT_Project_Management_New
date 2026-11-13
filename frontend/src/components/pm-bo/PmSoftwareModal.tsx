@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { DateInput } from '../ui/DateInput';
 import { PMSoftwareItem } from '../../types/pmBo';
 import { pmBoService } from '../../services/pmBoService';
 
@@ -248,18 +249,10 @@ export const PmSoftwareModal: React.FC<PmSoftwareModalProps> = ({
             <Calendar size={15} style={{ color: 'var(--text-secondary)' }} />
             <span>Ngày Bắt Đầu Triển Khai / Áp Dụng</span>
           </label>
-          <input
-            type="date"
+          <DateInput
             value={ngayTrienKhai}
-            onChange={(e) => setNgayTrienKhai(e.target.value)}
-            style={{
-              padding: '8px 10px',
-              borderRadius: 'var(--radius-md, 6px)',
-              border: '1px solid var(--border-color, #CBD5E1)',
-              backgroundColor: 'var(--bg-primary, #FFFFFF)',
-              color: 'var(--text-primary)',
-              fontSize: '13px',
-            }}
+            onChange={setNgayTrienKhai}
+            style={{ height: '38px', fontSize: '13px' }}
           />
         </div>
 

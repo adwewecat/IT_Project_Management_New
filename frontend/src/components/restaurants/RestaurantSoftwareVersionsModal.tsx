@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { DateInput } from '../ui/DateInput';
 import { SoftwareVersionItem } from '../../types/pmBo';
 import { pmBoService } from '../../services/pmBoService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -664,19 +665,11 @@ export const RestaurantSoftwareVersionsModal: React.FC<RestaurantSoftwareVersion
                       <span>Ngày Update</span>
                       <span style={{ color: '#DC2626' }}>*</span>
                     </label>
-                    <input
-                      type="date"
+                    <DateInput
                       value={formDate}
-                      onChange={(e) => setFormDate(e.target.value)}
-                      style={{
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        border: '1px solid #CBD5E1',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        backgroundColor: '#FFFFFF',
-                      }}
+                      onChange={setFormDate}
                       required
+                      style={{ height: '38px', fontSize: '13px', fontWeight: 600, backgroundColor: '#FFFFFF' }}
                     />
                     <label
                       style={{
@@ -1362,20 +1355,18 @@ export const RestaurantSoftwareVersionsModal: React.FC<RestaurantSoftwareVersion
                 <span>Ngày Update Sẽ Áp Dụng:</span>
                 <span style={{ color: '#DC2626' }}>*</span>
               </label>
-              <input
-                type="date"
+              <DateInput
                 value={syncModal.sourceDate}
-                onChange={(e) => setSyncModal({ ...syncModal, sourceDate: e.target.value })}
+                onChange={(val) => setSyncModal({ ...syncModal, sourceDate: val })}
+                required
                 style={{
-                  padding: '9px 12px',
-                  borderRadius: '6px',
+                  height: '40px',
                   border: '1.5px solid #0284C7',
                   fontSize: '14px',
                   fontWeight: 700,
                   backgroundColor: '#FFFFFF',
                   color: '#0F172A',
                 }}
-                required
               />
             </div>
 

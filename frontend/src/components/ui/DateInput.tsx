@@ -1,373 +1,444 @@
-import React, { useRef, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Calendar, Lock, X } from 'lucide-react';
+import { formatDateDDMMYYYY, parseDateToIso } from '../../utils/dateFormat';
 
 export interface DateValidationResult {
   isValid: boolean;
-  normalized?: string; // YYYY-MM-DD
+  /** Giá trị chuẩn ISO `YYYY-MM-DD` (dùng cho state / backend API) */
+  normalized?: string;
+  /** Giá trị hiển thị chuẩn Việt Nam `DD-MM-YYYY` */
+  display?: string;
   error?: string;
 }
 
 /**
- * Kiểm tra và chuẩn hóa chuỗi ngày tháng
- * Hỗ trợ các định dạng:
- * - YYYY-MM-DD hoặc YYYY/MM/DD
- * - DD/MM/YYYY hoặc DD-MM-YYYY
+ * Kiểm tra & phân tích chuỗi ngày (DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY, DDMMYYYY, YYYY-MM-DD).
+ * Tuyệt đối không diễn giải theo kiểu Mỹ MM-DD-YYYY để tránh nhập nhầm ngày tháng.
  */
 export function parseAndValidateDate(val: string): DateValidationResult {
-  const trimmed = val ? String(val).trim() : '';
-  if (!trimmed) {
-    return { isValid: true, normalized: '' };
-  }
-
-  // Bỏ phần giờ nếu có (ví dụ "2026-09-14 00:00:00")
-  const dateOnly = trimmed.split(' ')[0];
-
-  // Regex patterns
-  const ymdRegex = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/;
-  const dmyRegex = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/;
-
-  let year: number;
-  let month: number;
-  let day: number;
-
-  const ymdMatch = dateOnly.match(ymdRegex);
-  const dmyMatch = dateOnly.match(dmyRegex);
-
-  if (ymdMatch) {
-    year = parseInt(ymdMatch[1], 10);
-    month = parseInt(ymdMatch[2], 10);
-    day = parseInt(ymdMatch[3], 10);
-  } else if (dmyMatch) {
-    day = parseInt(dmyMatch[1], 10);
-    month = parseInt(dmyMatch[2], 10);
-    year = parseInt(dmyMatch[3], 10);
-  } else {
-    return {
-      isValid: false,
-      error: 'Sai định dạng ngày. Vui lòng nhập YYYY-MM-DD hoặc DD/MM/YYYY (ví dụ: 2026-09-14 hoặc 14/09/2026)',
-    };
-  }
-
-  // Kiểm tra phạm vi năm
-  if (year < 1900 || year > 2100) {
-    return {
-      isValid: false,
-      error: `Năm ${year} không hợp lệ (hỗ trợ từ năm 1900 đến 2100)`,
-    };
-  }
-
-  // Kiểm tra phạm vi tháng
-  if (month < 1 || month > 12) {
-    return {
-      isValid: false,
-      error: `Tháng ${month} không hợp lệ (phải từ 1 đến 12)`,
-    };
-  }
-
-  // Kiểm tra ngày tối đa của tháng (có tính năm nhuận)
-  const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
-  const daysInMonth = [31, isLeapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  const maxDays = daysInMonth[month - 1];
-
-  if (day < 1 || day > maxDays) {
-    return {
-      isValid: false,
-      error: `Ngày ${day} không hợp lệ trong tháng ${month}/${year} (tối đa ${maxDays} ngày)`,
-    };
-  }
-
-  const mm = String(month).padStart(2, '0');
-  const dd = String(day).padStart(2, '0');
+  const res = parseDateToIso(val);
   return {
-    isValid: true,
-    normalized: `${year}-${mm}-${dd}`,
+    isValid: res.isValid,
+    normalized: res.iso,
+    display: res.display,
+    error: res.error,
   };
 }
 
 export interface DateInputProps {
   label?: React.ReactNode;
+  /** Giá trị truyền vào thường là ISO YYYY-MM-DD (hoặc YYYY-MM-DDTHH:mm:ss) */
   value?: string;
+  /** Callback phát ra giá trị chuẩn ISO `YYYY-MM-DD` hoặc `''` để tương thích SQL/API */
   onChange: (value: string) => void;
+  /** Callback khi người dùng hoàn tất (blur / chọn lịch / xóa) với giá trị ISO `YYYY-MM-DD` hoặc `''` */
+  onBlurValue?: (isoValue: string) => void;
   error?: string;
   helperText?: string;
   placeholder?: string;
   disabled?: boolean;
   required?: boolean;
   id?: string;
+  name?: string;
+  min?: string;
+  max?: string;
+  /** Chế độ thu gọn cho thanh công cụ filter hoặc ô bảng inline */
+  compact?: boolean;
+  /** Ẩn nút X xóa nhanh (hữu ích cho ô bảng siêu hẹp) */
+  hideClear?: boolean;
+  /** Style cho container bọc ngoài (VD: width: '145px' trong toolbar flex) */
+  containerStyle?: React.CSSProperties;
+  /** Style tùy biến cho phần thẻ input */
   style?: React.CSSProperties;
+  className?: string;
+  title?: string;
 }
 
+/**
+ * Ô nhập ngày thống nhất toàn hệ thống:
+ * - Giao diện LUÔN hiển thị & cho phép nhập theo chuẩn Việt Nam `dd-mm-yyyy` (VD: `13-11-2026`).
+ * - Hỗ trợ gõ nhanh `13-11-2026`, `13/11/2026`, `13.11.2026`, `13112026` hoặc chọn từ Popup Lịch.
+ * - Nội bộ và API vẫn nhận `YYYY-MM-DD` để giữ nguyên 100% logic lọc & lưu Database.
+ */
 export const DateInput: React.FC<DateInputProps> = ({
   label,
   value = '',
   onChange,
+  onBlurValue,
   error: externalError,
   helperText,
-  placeholder = 'YYYY-MM-DD hoặc DD/MM/YYYY',
+  placeholder = 'dd-mm-yyyy',
   disabled = false,
   required = false,
   id,
+  name,
+  min,
+  max,
+  compact = false,
+  hideClear = false,
+  containerStyle,
   style,
+  className,
+  title,
 }) => {
-  const [internalError, setInternalError] = useState<string>('');
-  const [isFocused, setIsFocused] = useState<boolean>(false);
-  const hiddenPickerRef = useRef<HTMLInputElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const [internalError, setInternalError] = useState<string | null>(null);
+  const [displayText, setDisplayText] = useState<string>(() => formatDateDDMMYYYY(value, ''));
+  const textInputRef = useRef<HTMLInputElement>(null);
+  const hiddenDateRef = useRef<HTMLInputElement>(null);
+  // Ghi nhớ giá trị ISO cuối cùng component tự emit & prop value trước đó
+  // (giúp ô bảng onBlurValue lưu async không bị giật về giá trị cũ khi blur)
+  const lastEmittedIsoRef = useRef<string | null>(null);
+  const prevPropValueRef = useRef<string>(value);
 
-  // Error hiển thị ưu tiên lỗi từ bên ngoài, sau đó là lỗi tự validate
-  const displayError = externalError || internalError;
+  const inputId =
+    id ||
+    (typeof label === 'string' && label.trim()
+      ? `date-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+      : undefined);
 
-  // Lấy giá trị ISO YYYY-MM-DD cho date picker native
-  const getPickerIsoValue = (val: string): string => {
-    const res = parseAndValidateDate(val);
-    return res.isValid && res.normalized ? res.normalized : '';
-  };
+  // Đồng bộ prop `value` từ bên ngoài -> text hiển thị `dd-mm-yyyy`
+  useEffect(() => {
+    const propChanged = value !== prevPropValueRef.current;
+    prevPropValueRef.current = value;
+    if (!propChanged) return;
 
-  const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVal = e.target.value;
-    onChange(newVal);
+    const incoming = (value || '').trim();
+    const parsedIncoming = parseDateToIso(incoming);
+    const normalizedIncoming = parsedIncoming.isValid ? parsedIncoming.iso || '' : '';
 
-    // Nếu người dùng xóa trống thì xóa lỗi
-    if (!newVal.trim()) {
-      setInternalError('');
+    if (
+      isFocused &&
+      lastEmittedIsoRef.current !== null &&
+      normalizedIncoming === lastEmittedIsoRef.current
+    ) {
+      return;
+    }
+    lastEmittedIsoRef.current = null;
+
+    if (!incoming) {
+      setDisplayText('');
+      setInternalError(null);
+      textInputRef.current?.setCustomValidity('');
       return;
     }
 
-    // Nếu đã gõ đủ độ dài của một ngày (ít nhất 8 ký tự ví dụ 2026-1-1), thực hiện validate tạm
-    if (newVal.trim().length >= 8) {
-      const check = parseAndValidateDate(newVal);
-      if (!check.isValid) {
-        setInternalError(check.error || 'Sai định dạng ngày');
-      } else {
-        setInternalError('');
-      }
+    if (parsedIncoming.isValid && parsedIncoming.display) {
+      setDisplayText(parsedIncoming.display);
+      setInternalError(null);
+      textInputRef.current?.setCustomValidity('');
     } else {
-      setInternalError('');
+      // Nếu parent giữ chuỗi chưa chuẩn, hiển thị nguyên chuỗi để người dùng sửa
+      setDisplayText(incoming);
+    }
+  }, [value, isFocused]);
+
+  const validateRange = (iso: string): string | null => {
+    if (!iso) return null;
+    if (min) {
+      const minRes = parseDateToIso(min);
+      if (minRes.isValid && minRes.iso && iso < minRes.iso) {
+        return `Ngày tối thiểu là ${minRes.display || formatDateDDMMYYYY(minRes.iso)}`;
+      }
+    }
+    if (max) {
+      const maxRes = parseDateToIso(max);
+      if (maxRes.isValid && maxRes.iso && iso > maxRes.iso) {
+        return `Ngày tối đa là ${maxRes.display || formatDateDDMMYYYY(maxRes.iso)}`;
+      }
+    }
+    return null;
+  };
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    setDisplayText(raw);
+
+    if (!raw.trim()) {
+      setInternalError(null);
+      textInputRef.current?.setCustomValidity('');
+      lastEmittedIsoRef.current = '';
+      onChange('');
+      return;
+    }
+
+    const res = parseDateToIso(raw);
+    if (res.isValid && res.iso) {
+      const rangeErr = validateRange(res.iso);
+      if (rangeErr) {
+        setInternalError(rangeErr);
+        textInputRef.current?.setCustomValidity(rangeErr);
+        return;
+      }
+      setInternalError(null);
+      textInputRef.current?.setCustomValidity('');
+      lastEmittedIsoRef.current = res.iso;
+      onChange(res.iso);
+    } else {
+      // Chỉ gắn customValidity để ngăn submit form khi nhập dở/sai; chưa bắn onChange rác lên filter API
+      textInputRef.current?.setCustomValidity(res.error || 'Sai định dạng dd-mm-yyyy');
     }
   };
 
   const handleBlur = () => {
     setIsFocused(false);
-    if (!value || !value.trim()) {
-      setInternalError('');
+    const trimmed = displayText.trim();
+    if (!trimmed) {
+      setDisplayText('');
+      setInternalError(null);
+      textInputRef.current?.setCustomValidity('');
+      lastEmittedIsoRef.current = '';
+      onBlurValue?.('');
       return;
     }
 
-    const check = parseAndValidateDate(value);
-    if (!check.isValid) {
-      setInternalError(check.error || 'Sai định dạng ngày');
-    } else {
-      setInternalError('');
-      // Tự động chuẩn hóa về YYYY-MM-DD nếu hợp lệ
-      if (check.normalized && check.normalized !== value) {
-        onChange(check.normalized);
+    const res = parseDateToIso(trimmed);
+    if (res.isValid && res.iso) {
+      const rangeErr = validateRange(res.iso);
+      if (rangeErr) {
+        setInternalError(rangeErr);
+        textInputRef.current?.setCustomValidity(rangeErr);
+        return;
       }
+      setInternalError(null);
+      textInputRef.current?.setCustomValidity('');
+      if (res.display && res.display !== displayText) {
+        setDisplayText(res.display);
+      }
+      lastEmittedIsoRef.current = res.iso;
+      onChange(res.iso);
+      onBlurValue?.(res.iso);
+    } else {
+      const msg = res.error || 'Định dạng không hợp lệ (nhập dd-mm-yyyy).';
+      setInternalError(msg);
+      textInputRef.current?.setCustomValidity(msg);
     }
   };
 
   const handlePickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const pickedVal = e.target.value; // YYYY-MM-DD từ native picker
-    if (pickedVal) {
-      onChange(pickedVal);
-      setInternalError('');
+    const pickedIso = e.target.value; // Chrome/Firefox date picker luôn phát ra YYYY-MM-DD
+    if (!pickedIso) {
+      setDisplayText('');
+      setInternalError(null);
+      textInputRef.current?.setCustomValidity('');
+      lastEmittedIsoRef.current = '';
+      onChange('');
+      onBlurValue?.('');
+      return;
     }
+
+    const rangeErr = validateRange(pickedIso);
+    if (rangeErr) {
+      setInternalError(rangeErr);
+      textInputRef.current?.setCustomValidity(rangeErr);
+      return;
+    }
+
+    const formattedDisplay = formatDateDDMMYYYY(pickedIso, pickedIso);
+    setDisplayText(formattedDisplay);
+    setInternalError(null);
+    textInputRef.current?.setCustomValidity('');
+    lastEmittedIsoRef.current = pickedIso;
+    onChange(pickedIso);
+    onBlurValue?.(pickedIso);
   };
 
-  const handleClear = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onChange('');
-    setInternalError('');
-    if (hiddenPickerRef.current) {
-      hiddenPickerRef.current.value = '';
-    }
-  };
-
-  const openDatePicker = () => {
-    if (disabled || !hiddenPickerRef.current) return;
-    const picker = hiddenPickerRef.current as any;
+  const openNativePicker = () => {
+    if (disabled || !hiddenDateRef.current) return;
     try {
-      if (typeof picker.showPicker === 'function') {
-        picker.showPicker();
+      if (typeof hiddenDateRef.current.showPicker === 'function') {
+        hiddenDateRef.current.showPicker();
       } else {
-        picker.click();
+        hiddenDateRef.current.focus();
+        hiddenDateRef.current.click();
       }
     } catch {
-      try {
-        picker.click();
-      } catch {
-        // Fallback
-      }
+      hiddenDateRef.current.focus();
+      hiddenDateRef.current.click();
     }
   };
 
-  const inputId = id || (typeof label === 'string' ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
+  const handleClear = () => {
+    if (disabled) return;
+    setDisplayText('');
+    setInternalError(null);
+    textInputRef.current?.setCustomValidity('');
+    lastEmittedIsoRef.current = '';
+    onChange('');
+    onBlurValue?.('');
+  };
+
+  const activeError = externalError || internalError;
+
+  // Chuẩn hóa giá trị YYYY-MM-DD nạp cho input type="date" ẩn của trình duyệt
+  const parsedCurrent = parseDateToIso(displayText || value);
+  const pickerIsoValue = parsedCurrent.isValid && parsedCurrent.iso ? parsedCurrent.iso : '';
+
+  const showClearBtn = Boolean(displayText && !disabled && !hideClear);
+  const rightPad = disabled ? (compact ? '26px' : '34px') : showClearBtn ? (compact ? '46px' : '58px') : (compact ? '28px' : '38px');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%', ...style }}>
+    <div
+      className={className}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: compact ? '4px' : '6px',
+        width: compact ? 'auto' : '100%',
+        ...containerStyle,
+      }}
+    >
       {label && (
         <label
           htmlFor={inputId}
-          style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}
+          style={{
+            fontSize: compact ? '12px' : '13px',
+            fontWeight: 600,
+            color: 'var(--text-primary)',
+          }}
         >
           {label}
+          {required && <span style={{ color: '#EF4444', marginLeft: '3px' }}>*</span>}
         </label>
       )}
 
-      <div
-        style={{
-          position: 'relative',
-          display: 'flex',
-          alignItems: 'center',
-          width: '100%',
-        }}
-      >
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
         <input
+          ref={textInputRef}
           id={inputId}
+          name={name}
           type="text"
-          value={value}
+          inputMode="numeric"
+          value={displayText}
           onChange={handleTextChange}
           onFocus={() => setIsFocused(true)}
           onBlur={handleBlur}
           placeholder={placeholder}
           disabled={disabled}
           required={required}
+          title={title || 'Nhập theo định dạng Ngày-Tháng-Năm (dd-mm-yyyy), VD: 13-11-2026'}
           style={{
             width: '100%',
-            height: '40px',
-            padding: disabled ? '0 34px 0 12px' : value ? '0 62px 0 12px' : '0 38px 0 12px',
+            height: compact ? '34px' : '40px',
+            padding: `0 ${rightPad} 0 ${compact ? '10px' : '12px'}`,
             backgroundColor: disabled ? 'var(--bg-secondary, #f8fafc)' : 'var(--bg-primary)',
             color: disabled ? 'var(--text-secondary, #64748b)' : 'var(--text-primary)',
             border: disabled
               ? '1px dashed var(--border-color, #cbd5e1)'
-              : `1px solid ${displayError ? 'var(--color-error, #dc2626)' : isFocused ? 'var(--border-focus, #3b82f6)' : 'var(--border-color)'}`,
+              : `1px solid ${activeError ? 'var(--color-error, #DC2626)' : isFocused ? 'var(--border-focus, #F59E0B)' : 'var(--border-color, #cbd5e1)'}`,
             borderRadius: 'var(--radius-md, 6px)',
             outline: 'none',
-            fontSize: '14px',
+            fontSize: compact ? '12.5px' : '14px',
             cursor: disabled ? 'not-allowed' : 'text',
             boxShadow: isFocused
-              ? `0 0 0 3px ${displayError ? 'rgba(220, 38, 38, 0.15)' : 'var(--border-focus-shadow, rgba(59, 130, 246, 0.15))'}`
+              ? `0 0 0 3px ${activeError ? 'rgba(220, 38, 38, 0.15)' : 'var(--border-focus-shadow, rgba(245, 158, 11, 0.15))'}`
               : 'none',
             transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
             opacity: disabled ? 0.8 : 1,
+            boxSizing: 'border-box',
+            ...style,
           }}
         />
 
-        {/* Nút Clear nhanh (khi có giá trị và không bị disable) */}
-        {!disabled && value && (
-          <button
-            type="button"
-            onClick={handleClear}
-            title="Xóa ngày"
+        {/* Input calendar ẩn giữ vai trò mở popup chọn ngày theo lịch */}
+        {!disabled && (
+          <input
+            ref={hiddenDateRef}
+            type="date"
+            value={pickerIsoValue}
+            min={min}
+            max={max}
+            onChange={handlePickerChange}
+            tabIndex={-1}
+            aria-hidden="true"
             style={{
               position: 'absolute',
-              right: '34px',
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-muted, #94a3b8)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '4px',
-              borderRadius: '50%',
-            }}
-          >
-            <X size={14} />
-          </button>
-        )}
-
-        {/* Icon Ổ Khóa khi disabled */}
-        {disabled && (
-          <span
-            style={{
-              position: 'absolute',
-              right: '10px',
-              color: 'var(--text-muted, #94a3b8)',
-              display: 'flex',
-              alignItems: 'center',
+              right: compact ? '6px' : '10px',
+              width: '1px',
+              height: '1px',
+              opacity: 0,
               pointerEvents: 'none',
             }}
-            title="Trường này chỉ đọc, không có quyền sửa"
-          >
-            <Lock size={15} />
-          </span>
+          />
         )}
 
-        {/* Nút Lịch & Date picker native ẩn */}
-        {!disabled && (
-          <div
-            style={{
-              position: 'absolute',
-              right: '6px',
-              display: 'flex',
-              alignItems: 'center',
-            }}
-          >
+        {/* Các nút thao tác bên phải */}
+        <div
+          style={{
+            position: 'absolute',
+            right: compact ? '6px' : '8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '2px',
+          }}
+        >
+          {showClearBtn && (
             <button
               type="button"
-              onClick={openDatePicker}
-              title="Bấm để chọn ngày từ lịch"
+              onClick={handleClear}
+              title="Xóa ngày"
+              aria-label="Xóa ngày"
+              tabIndex={-1}
               style={{
                 background: 'none',
                 border: 'none',
-                color: isFocused ? 'var(--color-primary, #2563eb)' : 'var(--text-muted, #64748b)',
+                color: 'var(--text-muted, #94a3b8)',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: '6px',
+                padding: '3px',
                 borderRadius: '4px',
-                transition: 'color 0.15s ease, background-color 0.15s ease',
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-secondary, #f1f5f9)')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
             >
-              <Calendar size={17} />
+              <X size={compact ? 12 : 14} />
             </button>
+          )}
 
-            {/* Hidden native input date */}
-            <input
-              ref={hiddenPickerRef}
-              type="date"
-              tabIndex={-1}
-              value={getPickerIsoValue(value)}
-              onChange={handlePickerChange}
+          {disabled ? (
+            <span
+              title="Trường bị khóa"
               style={{
-                position: 'absolute',
-                right: 0,
-                top: 0,
-                width: '32px',
-                height: '32px',
-                opacity: 0,
-                pointerEvents: 'none',
+                color: 'var(--text-muted, #94a3b8)',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '2px',
               }}
-            />
-          </div>
-        )}
+            >
+              <Lock size={compact ? 12 : 14} />
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={openNativePicker}
+              title="Chọn ngày từ lịch (hiển thị dd-mm-yyyy)"
+              aria-label="Mở lịch chọn ngày"
+              tabIndex={-1}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: isFocused ? 'var(--color-primary, #F59E0B)' : 'var(--text-muted, #64748b)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '3px',
+                borderRadius: '4px',
+              }}
+            >
+              <Calendar size={compact ? 14 : 16} />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Thông báo lỗi định dạng */}
-      {displayError && (
-        <span
-          style={{
-            fontSize: '12px',
-            color: 'var(--color-error, #dc2626)',
-            marginTop: '2px',
-            lineHeight: 1.3,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-          }}
-        >
-          ⚠️ {displayError}
+      {activeError ? (
+        <span style={{ fontSize: '12px', color: 'var(--color-error, #DC2626)', fontWeight: 500 }}>
+          {activeError}
         </span>
-      )}
-
-      {/* Helper text khi không có lỗi */}
-      {!displayError && helperText && (
-        <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-          {helperText}
-        </span>
-      )}
+      ) : helperText ? (
+        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{helperText}</span>
+      ) : null}
     </div>
   );
 };

@@ -26,6 +26,7 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { TopScrollTable } from '../../components/ui/TopScrollTable';
+import { DateInput } from '../../components/ui/DateInput';
 import { getRestaurants } from '../../services/restaurantService';
 import {
   mongoService,
@@ -2950,36 +2951,24 @@ export const RestaurantMongoPage: React.FC = () => {
                     {/* From Date */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Từ ngày:</span>
-                      <input
-                        type="date"
+                      <DateInput
                         value={syncFromDate}
-                        onChange={(e) => setSyncFromDate(e.target.value)}
-                        style={{
-                          padding: '7px 10px',
-                          borderRadius: 'var(--radius-md)',
-                          border: '1px solid var(--border-color)',
-                          backgroundColor: 'var(--bg-primary)',
-                          color: 'var(--text-primary)',
-                          fontSize: '13px',
-                        }}
+                        onChange={setSyncFromDate}
+                        compact
+                        containerStyle={{ width: '142px' }}
+                        style={{ height: '34px', fontSize: '13px' }}
                       />
                     </div>
 
                     {/* To Date */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Đến ngày:</span>
-                      <input
-                        type="date"
+                      <DateInput
                         value={syncToDate}
-                        onChange={(e) => setSyncToDate(e.target.value)}
-                        style={{
-                          padding: '7px 10px',
-                          borderRadius: 'var(--radius-md)',
-                          border: '1px solid var(--border-color)',
-                          backgroundColor: 'var(--bg-primary)',
-                          color: 'var(--text-primary)',
-                          fontSize: '13px',
-                        }}
+                        onChange={setSyncToDate}
+                        compact
+                        containerStyle={{ width: '142px' }}
+                        style={{ height: '34px', fontSize: '13px' }}
                       />
                     </div>
 

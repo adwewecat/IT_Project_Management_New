@@ -11,6 +11,8 @@ import {
   Edit3,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { DateInput } from '../ui/DateInput';
+import { formatDateDDMMYYYY } from '../../utils/dateFormat';
 import { SystemIncidentItem, SystemIncidentStats as StatsType } from '../../types/systemIncident';
 import { systemIncidentService } from '../../services/systemIncidentService';
 import { SystemOutageStats } from './SystemOutageStats';
@@ -353,16 +355,12 @@ export const SystemOutageListTab: React.FC = () => {
             <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>
               TỪ NGÀY
             </label>
-            <input
-              type="date"
+            <DateInput
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              style={{
-                padding: '6px 8px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color, #CBD5E1)',
-                fontSize: '12px',
-              }}
+              onChange={setFromDate}
+              compact
+              containerStyle={{ width: '142px' }}
+              style={{ height: '32px', fontSize: '12px' }}
             />
           </div>
 
@@ -371,16 +369,12 @@ export const SystemOutageListTab: React.FC = () => {
             <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>
               ĐẾN NGÀY
             </label>
-            <input
-              type="date"
+            <DateInput
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              style={{
-                padding: '6px 8px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color, #CBD5E1)',
-                fontSize: '12px',
-              }}
+              onChange={setToDate}
+              compact
+              containerStyle={{ width: '142px' }}
+              style={{ height: '32px', fontSize: '12px' }}
             />
           </div>
 
@@ -517,7 +511,7 @@ export const SystemOutageListTab: React.FC = () => {
                         {item.thoi_gian_bat_dau ? item.thoi_gian_bat_dau.slice(11, 16) : ''}
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        {item.thoi_gian_bat_dau ? item.thoi_gian_bat_dau.slice(0, 10) : '—'}
+                        {formatDateDDMMYYYY(item.thoi_gian_bat_dau, '—')}
                       </div>
                     </td>
 

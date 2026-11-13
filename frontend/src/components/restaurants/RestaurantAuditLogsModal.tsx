@@ -15,6 +15,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { DateInput, parseAndValidateDate } from '../ui/DateInput';
+import { formatDateTimeDDMMYYYY } from '../../utils/dateFormat';
 import { Badge } from '../ui/Badge';
 import { RestaurantAuditLogItem } from '../../types/restaurant';
 import { getRestaurantLogs, exportRestaurantLogsExcel } from '../../services/restaurantService';
@@ -235,7 +236,7 @@ export const RestaurantAuditLogsModal: React.FC<RestaurantAuditLogsModalProps> =
               label="Từ Ngày"
               value={fromDate}
               onChange={setFromDate}
-              placeholder="YYYY-MM-DD"
+              placeholder="dd-mm-yyyy"
             />
 
             {/* Đến ngày */}
@@ -243,7 +244,7 @@ export const RestaurantAuditLogsModal: React.FC<RestaurantAuditLogsModalProps> =
               label="Đến Ngày"
               value={toDate}
               onChange={setToDate}
-              placeholder="YYYY-MM-DD"
+              placeholder="dd-mm-yyyy"
             />
 
             {/* Loại thao tác */}
@@ -384,7 +385,7 @@ export const RestaurantAuditLogsModal: React.FC<RestaurantAuditLogsModalProps> =
                     <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                         <Clock size={13} color="#94a3b8" />
-                        <span>{log.ngay_insert || 'N/A'}</span>
+                        <span>{formatDateTimeDDMMYYYY(log.ngay_insert, { includeSeconds: true, fallback: 'N/A' })}</span>
                       </div>
                     </td>
                     <td style={{ padding: '10px 12px', color: 'var(--text-primary)', fontWeight: 500 }}>

@@ -23,6 +23,7 @@ import { CreateIncidentModal } from '../incidents/CreateIncidentModal';
 import { IncidentDetailModal } from '../incidents/IncidentDetailModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { copyToClipboard } from '../../utils/clipboard';
+import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../../utils/dateFormat';
 
 interface RestaurantDetailModalProps {
   isOpen: boolean;
@@ -107,11 +108,9 @@ export const RestaurantDetailModal: React.FC<RestaurantDetailModalProps> = ({
     const clean = d.trim();
     if (!clean || clean === '—') return '—';
     const [datePart, timePart] = clean.includes('T') ? clean.split('T') : clean.split(' ');
-    let formattedDate = datePart;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
-      const [y, m, day] = datePart.split('-');
-      formattedDate = `${day}/${m}/${y}`;
-    }
+    const formattedDate = /^\d{4}-\d{2}-\d{2}$/.test(datePart)
+      ? formatDateDDMMYYYY(datePart, datePart)
+      : formatDateDDMMYYYY(datePart, datePart);
     if (timePart && !timePart.startsWith('00:00:00')) {
       return `${formattedDate} ${timePart.slice(0, 5)}`;
     }
@@ -740,7 +739,7 @@ export const RestaurantDetailModal: React.FC<RestaurantDetailModalProps> = ({
                 )}
               </div>
               <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
-                {inc.date_insert ? new Date(inc.date_insert).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                {inc.date_insert ? formatDateTimeDDMMYYYY(inc.date_insert, { fallback: '—' }) : '—'}
               </span>
             </div>
 

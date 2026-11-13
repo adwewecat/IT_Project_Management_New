@@ -631,7 +631,7 @@ export const RestaurantFormModal: React.FC<RestaurantFormModalProps> = ({
                 label={renderFieldLabel('Ngày Khai Trương', 'ngay_khaitruong')}
                 value={formData.ngay_khaitruong || ''}
                 onChange={(val) => handleChange('ngay_khaitruong', val)}
-                placeholder="YYYY-MM-DD hoặc DD/MM/YYYY"
+                placeholder="dd-mm-yyyy"
                 error={errors.ngay_khaitruong}
                 disabled={!canEditField('ngay_khaitruong')}
               />
@@ -719,7 +719,7 @@ export const RestaurantFormModal: React.FC<RestaurantFormModalProps> = ({
                 label={renderFieldLabel('Ngày Online FTTH', 'ngay_online_ftth')}
                 value={formData.ngay_online_ftth || ''}
                 onChange={(val) => handleChange('ngay_online_ftth', val)}
-                placeholder="YYYY-MM-DD hoặc DD/MM/YYYY"
+                placeholder="dd-mm-yyyy"
                 error={errors.ngay_online_ftth}
                 disabled={!canEditField('ngay_online_ftth')}
               />

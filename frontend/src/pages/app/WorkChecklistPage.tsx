@@ -27,6 +27,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
+import { DateInput } from '../../components/ui/DateInput';
 import {
   ChecklistRun,
   ChecklistTemplate,
@@ -583,30 +584,20 @@ export const WorkChecklistPage: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Calendar size={15} style={{ color: '#6B7280' }} />
               <span style={{ fontSize: '12.5px', color: '#4B5563', fontWeight: 500 }}>Từ:</span>
-              <input
-                type="date"
+              <DateInput
                 value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                style={{
-                  padding: '7px 8px',
-                  borderRadius: '6px',
-                  border: '1px solid #D1D5DB',
-                  fontSize: '12.5px',
-                  outline: 'none',
-                }}
+                onChange={setFromDate}
+                compact
+                containerStyle={{ width: '136px' }}
+                style={{ height: '32px', fontSize: '12.5px' }}
               />
               <span style={{ fontSize: '12.5px', color: '#4B5563', fontWeight: 500 }}>Đến:</span>
-              <input
-                type="date"
+              <DateInput
                 value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                style={{
-                  padding: '7px 8px',
-                  borderRadius: '6px',
-                  border: '1px solid #D1D5DB',
-                  fontSize: '12.5px',
-                  outline: 'none',
-                }}
+                onChange={setToDate}
+                compact
+                containerStyle={{ width: '136px' }}
+                style={{ height: '32px', fontSize: '12.5px' }}
               />
               {(fromDate || toDate) && (
                 <button

@@ -29,6 +29,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Alert } from '../../components/ui/Alert';
+import { DateInput } from '../../components/ui/DateInput';
 import {
   checkIsAdmin,
   checkIsInventoryRole,
@@ -974,18 +975,18 @@ export const TheodoiPrPoDoPage: React.FC = () => {
                     />
                   </td>
                   <td style={{ padding: '6px 8px', textAlign: 'center', verticalAlign: 'middle' }}>
-                    <input
-                      type="date"
+                    <DateInput
+                      compact
+                      hideClear
                       value={newRowData.ngay_them || ''}
-                      onChange={(e) => setNewRowData((prev) => ({ ...prev, ngay_them: e.target.value }))}
+                      onChange={(val) => setNewRowData((prev) => ({ ...prev, ngay_them: val }))}
+                      containerStyle={{ width: '134px', margin: '0 auto' }}
                       style={{
-                        padding: '6px 8px',
-                        borderRadius: '4px',
-                        border: '1px solid #facc15',
-                        backgroundColor: '#ffffff',
+                        height: '36px',
                         fontSize: '12px',
-                        minHeight: '36px',
-                        boxSizing: 'border-box',
+                        textAlign: 'center',
+                        borderColor: '#facc15',
+                        backgroundColor: '#ffffff',
                       }}
                     />
                   </td>
@@ -1247,28 +1248,20 @@ export const TheodoiPrPoDoPage: React.FC = () => {
 
                       {/* NGÀY TẠO */}
                       <td style={{ textAlign: 'center', padding: '6px 8px', verticalAlign: 'middle' }}>
-                        <input
-                          type="date"
-                          defaultValue={r.ngay_them || ''}
-                          onBlur={(e) => handleCellBlur(r, 'ngay_them', e.target.value)}
+                        <DateInput
+                          compact
+                          hideClear
+                          value={r.ngay_them || ''}
+                          onChange={() => {}}
+                          onBlurValue={(isoVal) => handleCellBlur(r, 'ngay_them', isoVal)}
                           disabled={!canEdit || isDeleted}
+                          containerStyle={{ width: '126px', margin: '0 auto' }}
                           style={{
-                            padding: '6px 8px',
-                            minHeight: '36px',
-                            borderRadius: '4px',
-                            border: '1px solid transparent',
-                            backgroundColor: 'transparent',
-                            color: 'var(--text-primary)',
+                            height: '34px',
                             fontSize: '12px',
-                            outline: 'none',
                             textAlign: 'center',
-                            boxSizing: 'border-box',
-                          }}
-                          onFocus={(e) => {
-                            if (!isDeleted) {
-                              e.target.style.borderColor = 'var(--color-primary)';
-                              e.target.style.backgroundColor = 'var(--bg-card)';
-                            }
+                            borderColor: 'transparent',
+                            backgroundColor: 'transparent',
                           }}
                         />
                       </td>

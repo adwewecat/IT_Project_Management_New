@@ -39,6 +39,8 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Alert } from '../../components/ui/Alert';
+import { DateInput } from '../../components/ui/DateInput';
+import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../../utils/dateFormat';
 import { ProjectDescriptionModal } from '../../components/projects/ProjectDescriptionModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { checkIsAdmin } from '../../utils/authUtils';
@@ -885,26 +887,11 @@ export const ProjectManagementPage: React.FC = () => {
     });
   };
 
-  // Helper date format
-  const formatDate = (dateStr: string | null | undefined) => {
-    if (!dateStr) return '';
-    try {
-      const d = new Date(dateStr);
-      return isNaN(d.getTime()) ? dateStr : d.toLocaleDateString('vi-VN');
-    } catch {
-      return dateStr;
-    }
-  };
+  // Helper date format chuẩn dd-mm-yyyy
+  const formatDate = (dateStr: string | null | undefined) => formatDateDDMMYYYY(dateStr, '');
 
-  const formatDateTime = (dateStr: string | null | undefined) => {
-    if (!dateStr) return '';
-    try {
-      const d = new Date(dateStr);
-      return isNaN(d.getTime()) ? dateStr : `${d.toLocaleDateString('vi-VN')} ${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
-    } catch {
-      return dateStr;
-    }
-  };
+  const formatDateTime = (dateStr: string | null | undefined) =>
+    formatDateTimeDDMMYYYY(dateStr, { fallback: '' });
 
   const isOverdue = (deadlineStr: string | null, status: string) => {
     if (!deadlineStr || status === 'completed') return false;
@@ -2769,21 +2756,11 @@ export const ProjectManagementPage: React.FC = () => {
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: '6px', color: 'var(--text-primary)' }}>
               4. Hạn chót hoàn thành (tùy chọn)
             </label>
-            <input
-              type="date"
+            <DateInput
               min={todayStr}
               value={qaDeadline}
-              onChange={e => setQaDeadline(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                fontSize: '13px',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-                boxSizing: 'border-box'
-              }}
+              onChange={setQaDeadline}
+              style={{ height: '38px', fontSize: '13px' }}
             />
           </div>
 
@@ -2906,20 +2883,10 @@ export const ProjectManagementPage: React.FC = () => {
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
               Hạn chót hoàn thành (Deadline)
             </label>
-            <input
-              type="date"
+            <DateInput
               value={projectDeadlineInput}
-              onChange={e => setProjectDeadlineInput(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                fontSize: '13px',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-                boxSizing: 'border-box'
-              }}
+              onChange={setProjectDeadlineInput}
+              style={{ height: '38px', fontSize: '13px' }}
             />
           </div>
 
@@ -2967,20 +2934,10 @@ export const ProjectManagementPage: React.FC = () => {
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
               Hạn chót hoàn thành
             </label>
-            <input
-              type="date"
+            <DateInput
               value={projectDeadlineInput}
-              onChange={e => setProjectDeadlineInput(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                fontSize: '13px',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-                boxSizing: 'border-box'
-              }}
+              onChange={setProjectDeadlineInput}
+              style={{ height: '38px', fontSize: '13px' }}
             />
           </div>
 
@@ -4228,20 +4185,12 @@ export const ProjectManagementPage: React.FC = () => {
               <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
                 Từ ngày
               </label>
-              <input
-                type="date"
+              <DateInput
                 value={logsFilterStartDate}
-                onChange={e => setLogsFilterStartDate(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '5px 8px',
-                  fontSize: '12px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-primary)',
-                  color: 'var(--text-primary)',
-                  boxSizing: 'border-box'
-                }}
+                onChange={setLogsFilterStartDate}
+                compact
+                containerStyle={{ width: '100%' }}
+                style={{ height: '30px', fontSize: '12px' }}
               />
             </div>
 
@@ -4250,20 +4199,12 @@ export const ProjectManagementPage: React.FC = () => {
               <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
                 Đến ngày
               </label>
-              <input
-                type="date"
+              <DateInput
                 value={logsFilterEndDate}
-                onChange={e => setLogsFilterEndDate(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '5px 8px',
-                  fontSize: '12px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-primary)',
-                  color: 'var(--text-primary)',
-                  boxSizing: 'border-box'
-                }}
+                onChange={setLogsFilterEndDate}
+                compact
+                containerStyle={{ width: '100%' }}
+                style={{ height: '30px', fontSize: '12px' }}
               />
             </div>
           </div>

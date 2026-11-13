@@ -38,6 +38,8 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Alert } from '../../components/ui/Alert';
+import { DateInput } from '../../components/ui/DateInput';
+import { formatDateDDMMYYYY } from '../../utils/dateFormat';
 import { useAuth } from '../../contexts/AuthContext';
 import { checkIsAdmin } from '../../utils/authUtils';
 
@@ -1235,7 +1237,7 @@ export const SetupRestaurantPage: React.FC = () => {
                         {rawNgayKt ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <Calendar size={14} style={{ color: 'var(--text-muted)' }} />
-                            <span>{rawNgayKt.split(' ')[0]}</span>
+                            <span>{formatDateDDMMYYYY(rawNgayKt)}</span>
                           </div>
                         ) : (
                           <span style={{ color: 'var(--text-muted)' }}>-</span>
@@ -3029,19 +3031,10 @@ export const SetupRestaurantPage: React.FC = () => {
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: 'var(--text-primary)' }}>
                 Ngày Dự Kiến Khai Trương
               </label>
-              <input
-                type="date"
+              <DateInput
                 value={formNgayKhaiTruong}
-                onChange={(e) => setFormNgayKhaiTruong(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--input-bg, #fff)',
-                  color: 'var(--text-primary)',
-                  fontSize: '13px'
-                }}
+                onChange={setFormNgayKhaiTruong}
+                style={{ height: '38px', fontSize: '13px', backgroundColor: 'var(--input-bg, #fff)' }}
               />
             </div>
 
@@ -3232,19 +3225,10 @@ export const SetupRestaurantPage: React.FC = () => {
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: 'var(--text-primary)' }}>
                 Ngày Dự Kiến Khai Trương
               </label>
-              <input
-                type="date"
+              <DateInput
                 value={formNgayKhaiTruong}
-                onChange={(e) => setFormNgayKhaiTruong(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--input-bg, #fff)',
-                  color: 'var(--text-primary)',
-                  fontSize: '13px'
-                }}
+                onChange={setFormNgayKhaiTruong}
+                style={{ height: '38px', fontSize: '13px', backgroundColor: 'var(--input-bg, #fff)' }}
               />
             </div>
 

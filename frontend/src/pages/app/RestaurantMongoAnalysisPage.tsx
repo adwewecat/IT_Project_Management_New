@@ -125,6 +125,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 
 import { TopScrollTable } from '../../components/ui/TopScrollTable';
+import { DateInput } from '../../components/ui/DateInput';
 
 import { getRestaurants } from '../../services/restaurantService';
 
@@ -6838,34 +6839,18 @@ export const RestaurantMongoAnalysisPage: React.FC = () => {
 
                           </label>
 
-                          <input
-
-                            type="date"
-
+                          <DateInput
                             value={actionLogDate}
-
-                            onChange={(e) => setActionLogDate(e.target.value)}
-
+                            onChange={setActionLogDate}
+                            compact
+                            containerStyle={{ width: '146px' }}
                             style={{
-
-                              padding: '6px 10px',
-
+                              height: '32px',
                               fontSize: '12px',
-
                               fontWeight: 600,
-
-                              borderRadius: '6px',
-
-                              border: '1px solid var(--border-color)',
-
                               backgroundColor: '#fff',
-
-                              outline: 'none',
-
-                              color: '#111827'
-
+                              color: '#111827',
                             }}
-
                           />
 
                         </div>

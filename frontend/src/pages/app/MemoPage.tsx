@@ -43,6 +43,8 @@ import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Alert } from '../../components/ui/Alert';
 import { TopScrollTable } from '../../components/ui/TopScrollTable';
+import { DateInput } from '../../components/ui/DateInput';
+import { formatDateDDMMYYYY } from '../../utils/dateFormat';
 import { MemoTemplateManager } from '../../components/memo/MemoTemplateManager';
 import { checkIsAdmin, checkIsAppRole } from '../../utils/authUtils';
 
@@ -303,7 +305,7 @@ export const MemoPage: React.FC = () => {
               subject_mail: res.subject_mail,
               ngay_tiepnhan: res.ngay_tiepnhan,
             },
-            errorMessage: `Mã Memo '${res.ma_memo}' đã tồn tại trong hệ thống (Được phụ trách bởi: ${res.it_setup || 'Chưa rõ'}${res.ngay_tiepnhan ? ` - Ngày: ${res.ngay_tiepnhan}` : ''}). Vui lòng kiểm tra lại!`,
+            errorMessage: `Mã Memo '${res.ma_memo}' đã tồn tại trong hệ thống (Được phụ trách bởi: ${res.it_setup || 'Chưa rõ'}${res.ngay_tiepnhan ? ` - Ngày: ${formatDateDDMMYYYY(res.ngay_tiepnhan)}` : ''}). Vui lòng kiểm tra lại!`,
           });
         } else {
           setDuplicateCheck({
@@ -1537,44 +1539,30 @@ export const MemoPage: React.FC = () => {
           {/* Date range from */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Từ ngày:</span>
-            <input
-              type="date"
+            <DateInput
               value={tungayFilter}
-              onChange={e => {
-                setTungayFilter(e.target.value);
+              onChange={(val) => {
+                setTungayFilter(val);
                 setPage(1);
               }}
-              style={{
-                width: '100%',
-                padding: '7px 10px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-                fontSize: '12px',
-              }}
+              compact
+              containerStyle={{ width: '142px' }}
+              style={{ height: '32px', fontSize: '12px' }}
             />
           </div>
 
           {/* Date range to */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Đến ngày:</span>
-            <input
-              type="date"
+            <DateInput
               value={denngayFilter}
-              onChange={e => {
-                setDenngayFilter(e.target.value);
+              onChange={(val) => {
+                setDenngayFilter(val);
                 setPage(1);
               }}
-              style={{
-                width: '100%',
-                padding: '7px 10px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-                fontSize: '12px',
-              }}
+              compact
+              containerStyle={{ width: '142px' }}
+              style={{ height: '32px', fontSize: '12px' }}
             />
           </div>
         </div>
@@ -1771,15 +1759,15 @@ export const MemoPage: React.FC = () => {
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
                           <Calendar size={13} color="var(--text-secondary)" />
-                          <span>{item.ngay_batdau || '...'}</span>
+                          <span>{formatDateDDMMYYYY(item.ngay_batdau, '...')}</span>
                           <ArrowRight size={12} color="var(--text-secondary)" />
-                          <span>{item.ngay_ketthuc || '...'}</span>
+                          <span>{formatDateDDMMYYYY(item.ngay_ketthuc, '...')}</span>
                         </div>
                       </td>
 
                       {/* Tiếp nhận */}
                       <td style={{ padding: '12px 16px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                        <div>{item.ngay_tiepnhan ? item.ngay_tiepnhan.substring(0, 10) : '---'}</div>
+                        <div>{formatDateDDMMYYYY(item.ngay_tiepnhan, '---')}</div>
                         {item.nguoi_gui && (
                           <div style={{ fontSize: '11px', opacity: 0.8 }}>Gửi: {item.nguoi_gui}</div>
                         )}
@@ -2399,19 +2387,10 @@ export const MemoPage: React.FC = () => {
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
                   Ngày Bắt Đầu Áp Dụng
                 </label>
-                <input
-                  type="date"
-                  value={formData.ngay_batdau}
-                  onChange={e => setFormData({ ...formData, ngay_batdau: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--bg-primary)',
-                    color: 'var(--text-primary)',
-                    fontSize: '13px',
-                  }}
+                <DateInput
+                  value={formData.ngay_batdau || ''}
+                  onChange={(val) => setFormData({ ...formData, ngay_batdau: val })}
+                  style={{ height: '38px', fontSize: '13px' }}
                 />
               </div>
 
@@ -2420,19 +2399,10 @@ export const MemoPage: React.FC = () => {
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
                   Ngày Kết Thúc Áp Dụng
                 </label>
-                <input
-                  type="date"
-                  value={formData.ngay_ketthuc}
-                  onChange={e => setFormData({ ...formData, ngay_ketthuc: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--bg-primary)',
-                    color: 'var(--text-primary)',
-                    fontSize: '13px',
-                  }}
+                <DateInput
+                  value={formData.ngay_ketthuc || ''}
+                  onChange={(val) => setFormData({ ...formData, ngay_ketthuc: val })}
+                  style={{ height: '38px', fontSize: '13px' }}
                 />
               </div>
 
@@ -2865,7 +2835,7 @@ export const MemoPage: React.FC = () => {
                   )}
                   {(detailModal.item.ngay_batdau || detailModal.item.ngay_ketthuc) && (
                     <span>
-                      Hiệu lực: <strong style={{ color: 'var(--text-primary)' }}>{detailModal.item.ngay_batdau || '...'} → {detailModal.item.ngay_ketthuc || '...'}</strong>
+                      Hiệu lực: <strong style={{ color: 'var(--text-primary)' }}>{formatDateDDMMYYYY(detailModal.item.ngay_batdau, '...')} → {formatDateDDMMYYYY(detailModal.item.ngay_ketthuc, '...')}</strong>
                     </span>
                   )}
                 </div>

@@ -8,6 +8,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { SystemIncidentStats } from '../../types/systemIncident';
+import { MonthInput } from '../ui/MonthInput';
 
 interface SystemOutageStatsProps {
   stats: SystemIncidentStats;
@@ -82,19 +83,11 @@ export const SystemOutageStats: React.FC<SystemOutageStatsProps> = ({
             <Calendar size={14} />
             <span>Kỳ Thống Kê:</span>
           </label>
-          <input
-            type="month"
+          <MonthInput
             value={selectedMonth}
-            onChange={(e) => onMonthChange(e.target.value)}
-            style={{
-              padding: '6px 10px',
-              borderRadius: 'var(--radius-md, 6px)',
-              border: '1px solid var(--border-color, #CBD5E1)',
-              backgroundColor: 'var(--bg-primary, #FFFFFF)',
-              fontSize: '13px',
-              fontWeight: 600,
-              color: 'var(--text-primary)',
-            }}
+            onChange={onMonthChange}
+            compact
+            style={{ height: '34px', fontSize: '13px', fontWeight: 600 }}
           />
           {selectedMonth && (
             <button

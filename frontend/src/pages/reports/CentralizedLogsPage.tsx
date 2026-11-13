@@ -19,6 +19,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { useAuth } from '../../contexts/AuthContext';
 import { TopScrollTable } from '../../components/ui/TopScrollTable';
+import { DateInput } from '../../components/ui/DateInput';
 import {
   logService,
   LogItem,
@@ -470,33 +471,23 @@ export const CentralizedLogsPage: React.FC = () => {
 
             {/* Từ ngày */}
             <div style={{ flex: '1 1 130px' }}>
-              <input
-                type="date"
+              <DateInput
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '6px 10px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  fontSize: '13px'
-                }}
+                onChange={setStartDate}
+                compact
+                containerStyle={{ width: '100%' }}
+                style={{ height: '32px', fontSize: '13px' }}
               />
             </div>
 
             {/* Đến ngày */}
             <div style={{ flex: '1 1 130px' }}>
-              <input
-                type="date"
+              <DateInput
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '6px 10px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  fontSize: '13px'
-                }}
+                onChange={setEndDate}
+                compact
+                containerStyle={{ width: '100%' }}
+                style={{ height: '32px', fontSize: '13px' }}
               />
             </div>
 

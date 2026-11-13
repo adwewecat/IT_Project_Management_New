@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
+import { DateInput } from '../../components/ui/DateInput';
 import { IncidentItem, IncidentAssignee } from '../../types/incident';
 import { incidentService } from '../../services/incidentService';
 import { IncidentDetailModal } from '../../components/incidents/IncidentDetailModal';
@@ -336,32 +337,20 @@ export const IncidentListPage: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Calendar size={14} style={{ color: 'var(--text-muted)' }} />
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Từ ngày:</span>
-            <input
-              type="date"
+            <DateInput
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              style={{
-                padding: '5px 8px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-secondary)',
-                color: 'var(--text-primary)',
-                fontSize: '12px',
-              }}
+              onChange={setFromDate}
+              compact
+              containerStyle={{ width: '136px' }}
+              style={{ height: '30px', fontSize: '12px', backgroundColor: 'var(--bg-secondary)' }}
             />
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Đến:</span>
-            <input
-              type="date"
+            <DateInput
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              style={{
-                padding: '5px 8px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-secondary)',
-                color: 'var(--text-primary)',
-                fontSize: '12px',
-              }}
+              onChange={setToDate}
+              compact
+              containerStyle={{ width: '136px' }}
+              style={{ height: '30px', fontSize: '12px', backgroundColor: 'var(--bg-secondary)' }}
             />
           </div>
 

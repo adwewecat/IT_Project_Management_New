@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { DateInput } from '../ui/DateInput';
 import { SoftwareVersionItem } from '../../types/pmBo';
 import { pmBoService } from '../../services/pmBoService';
 
@@ -253,20 +254,11 @@ export const SoftwareVersionModal: React.FC<SoftwareVersionModalProps> = ({
               <span>Ngày Update</span>
               <span style={{ color: 'var(--color-error)' }}>*</span>
             </label>
-            <input
-              type="date"
+            <DateInput
               value={ngayUpdate}
-              onChange={(e) => setNgayUpdate(e.target.value)}
-              style={{
-                padding: '8px 10px',
-                borderRadius: 'var(--radius-md, 6px)',
-                border: '1px solid var(--border-color, #CBD5E1)',
-                backgroundColor: 'var(--bg-primary, #FFFFFF)',
-                color: 'var(--text-primary)',
-                fontSize: '13px',
-                fontWeight: 600,
-              }}
+              onChange={setNgayUpdate}
               required
+              style={{ height: '38px', fontSize: '13px', fontWeight: 600 }}
             />
           </div>
         </div>

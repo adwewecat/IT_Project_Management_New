@@ -22,6 +22,9 @@ import {
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
+import { DateInput } from '../../components/ui/DateInput';
+import { DateTimeInput } from '../../components/ui/DateTimeInput';
+import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../../utils/dateFormat';
 import { useAuth } from '../../contexts/AuthContext';
 import { checkIsDungOrSuperAdmin } from '../../utils/authUtils';
 import { violationService } from '../../services/violationService';
@@ -725,31 +728,10 @@ export const ViolationAndLeavePage: React.FC = () => {
     }
   };
 
-  const formatDate = (val?: string | null) => {
-    if (!val) return '—';
-    try {
-      const d = new Date(val);
-      return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    } catch {
-      return val;
-    }
-  };
+  const formatDate = (val?: string | null) => formatDateDDMMYYYY(val, '—');
 
-  const formatDateTime = (val?: string | null) => {
-    if (!val) return '—';
-    try {
-      const d = new Date(val);
-      return d.toLocaleString('vi-VN', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return val;
-    }
-  };
+  const formatDateTime = (val?: string | null) =>
+    formatDateTimeDDMMYYYY(val, { fallback: '—' });
 
   return (
     <div className="page-container-fullheight" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px', height: '100%', overflow: 'hidden' }}>
@@ -1895,17 +1877,13 @@ export const ViolationAndLeavePage: React.FC = () => {
               <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
                 Ngày Vi Phạm (Mặc định hôm nay)
               </label>
-              <input
-                type="date"
+              <DateInput
                 value={vDate}
-                onChange={(e) => setVDate(e.target.value)}
+                onChange={setVDate}
                 style={{
-                  padding: '8px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-secondary)',
-                  color: 'var(--text-primary)',
+                  height: '38px',
                   fontSize: '13px',
+                  backgroundColor: 'var(--bg-secondary)',
                 }}
               />
             </div>
@@ -2386,41 +2364,19 @@ export const ViolationAndLeavePage: React.FC = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                Thời Gian Bắt Đầu <span style={{ color: '#EF4444' }}>*</span>
-              </label>
-              <input
-                type="datetime-local"
+              <DateTimeInput
+                label="Thời Gian Bắt Đầu"
                 value={lStartTime}
-                onChange={(e) => handleStartTimeChange(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-secondary)',
-                  color: 'var(--text-primary)',
-                  fontSize: '13px',
-                }}
+                onChange={handleStartTimeChange}
                 required
               />
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                Thời Gian Kết Thúc
-              </label>
-              <input
-                type="datetime-local"
+              <DateTimeInput
+                label="Thời Gian Kết Thúc"
                 value={lEndTime}
-                onChange={(e) => setLEndTime(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-secondary)',
-                  color: 'var(--text-primary)',
-                  fontSize: '13px',
-                }}
+                onChange={setLEndTime}
               />
             </div>
           </div>

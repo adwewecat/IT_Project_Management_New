@@ -13,6 +13,8 @@ import {
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { TopScrollTable } from '../../components/ui/TopScrollTable';
+import { DateInput } from '../../components/ui/DateInput';
+import { formatDateDDMMYYYY } from '../../utils/dateFormat';
 import {
   mongoService,
   KdsKitchenIntakeAnalysisResponse
@@ -142,7 +144,7 @@ export const KdsKitchenIntakeModal: React.FC<KdsKitchenIntakeModalProps> = ({
     t += `--------------------------------------------------------\n`;
     t += `PHÂN BỔ THEO NGÀY:\n`;
     analysisData.by_dates.forEach((d) => {
-      t += `- Ngày ${d.date}: ${d.total_dishes.toLocaleString()} món | ${d.total_batches.toLocaleString()} lượt (TB ${d.avg_dishes_per_batch} món/lượt)\n`;
+      t += `- Ngày ${formatDateDDMMYYYY(d.date, d.date)}: ${d.total_dishes.toLocaleString()} món | ${d.total_batches.toLocaleString()} lượt (TB ${d.avg_dishes_per_batch} món/lượt)\n`;
     });
     t += `\n(Xuất lúc: ${new Date().toLocaleString('vi-VN')} từ Hệ Thống IT GG Management)`;
 
@@ -234,39 +236,23 @@ export const KdsKitchenIntakeModal: React.FC<KdsKitchenIntakeModalProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Từ Ngày:</span>
-                <input
-                  type="date"
+                <DateInput
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--bg-primary, #fff)',
-                    color: 'var(--text-primary)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    outline: 'none'
-                  }}
+                  onChange={setStartDate}
+                  compact
+                  containerStyle={{ width: '140px' }}
+                  style={{ height: '32px', fontSize: '12px', fontWeight: 600 }}
                 />
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Đến Ngày:</span>
-                <input
-                  type="date"
+                <DateInput
                   value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--bg-primary, #fff)',
-                    color: 'var(--text-primary)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    outline: 'none'
-                  }}
+                  onChange={setEndDate}
+                  compact
+                  containerStyle={{ width: '140px' }}
+                  style={{ height: '32px', fontSize: '12px', fontWeight: 600 }}
                 />
               </div>
 
@@ -693,7 +679,7 @@ export const KdsKitchenIntakeModal: React.FC<KdsKitchenIntakeModalProps> = ({
                           {idx + 1}
                         </td>
                         <td style={{ padding: '9px 14px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          📅 {d.date}
+                          📅 {formatDateDDMMYYYY(d.date, d.date)}
                         </td>
                         {(displayMode === 'both' || displayMode === 'dishes') && (
                           <td style={{ padding: '9px 14px', textAlign: 'right', fontWeight: 800, color: '#D97706', fontSize: '13px' }}>

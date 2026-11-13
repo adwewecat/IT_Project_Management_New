@@ -22,6 +22,7 @@ import { pmBoService } from '../../services/pmBoService';
 import { PmSoftwareModal } from '../../components/pm-bo/PmSoftwareModal';
 import { SoftwareVersionModal } from '../../components/pm-bo/SoftwareVersionModal';
 import { BrandPrintStandardModal } from '../../components/pm-bo/BrandPrintStandardModal';
+import { formatDateDDMMYYYY } from '../../utils/dateFormat';
 
 export const PmBoManagementPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'softwares' | 'versions' | 'print'>('softwares');
@@ -602,7 +603,7 @@ export const PmBoManagementPage: React.FC = () => {
                           {item.ngay_trienkhai ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <Calendar size={13} style={{ color: 'var(--text-muted)' }} />
-                              <span>{item.ngay_trienkhai.slice(0, 10)}</span>
+                              <span>{formatDateDDMMYYYY(item.ngay_trienkhai, '—')}</span>
                             </div>
                           ) : (
                             '—'
@@ -728,7 +729,7 @@ export const PmBoManagementPage: React.FC = () => {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
                       <Calendar size={12} />
-                      <span>Ngày update: <strong>{item?.ngay_update ? item.ngay_update.slice(0, 10) : '—'}</strong></span>
+                      <span>Ngày update: <strong>{formatDateDDMMYYYY(item?.ngay_update, '—')}</strong></span>
                     </div>
                   </div>
                 );
@@ -891,7 +892,7 @@ export const PmBoManagementPage: React.FC = () => {
                           {item.ngay_update ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-primary)', fontWeight: 600, fontSize: '13px' }}>
                               <Calendar size={14} style={{ color: 'var(--text-muted)' }} />
-                              <span>{item.ngay_update.slice(0, 10)}</span>
+                              <span>{formatDateDDMMYYYY(item.ngay_update, '—')}</span>
                             </div>
                           ) : (
                             <span style={{ color: 'var(--text-muted)' }}>—</span>

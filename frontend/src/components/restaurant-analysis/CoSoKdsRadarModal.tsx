@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { TopScrollTable } from '../ui/TopScrollTable';
+import { DateInput } from '../ui/DateInput';
 import {
   mongoService,
   CoSoKdsOrderFlowResponse,
@@ -360,22 +361,15 @@ export const CoSoKdsRadarModal: React.FC<CoSoKdsRadarModalProps> = ({
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
               Ngày Kiểm Tra:
             </label>
-            <input
-              type="date"
+            <DateInput
               value={filterDate}
-              onChange={(e) => {
-                setFilterDate(e.target.value);
-                fetchOrderFlow(tableInput, queryInput, e.target.value, sourceFilter, fromTime, toTime);
+              onChange={(val) => {
+                setFilterDate(val);
+                fetchOrderFlow(tableInput, queryInput, val, sourceFilter, fromTime, toTime);
               }}
-              style={{
-                width: '100%',
-                padding: '6px 8px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--border-color)',
-                fontSize: '12px',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)'
-              }}
+              compact
+              containerStyle={{ width: '100%' }}
+              style={{ height: '32px', fontSize: '12px' }}
             />
           </div>
 

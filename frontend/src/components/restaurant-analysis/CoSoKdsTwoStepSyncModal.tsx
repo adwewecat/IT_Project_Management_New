@@ -6,6 +6,7 @@ import {
 import { 
   mongoService
 } from '../../services/mongoService';
+import { formatTime24hVN } from '../../utils/dateFormat';
 
 interface CoSoKdsTwoStepSyncModalProps {
   isOpen: boolean;
@@ -52,8 +53,8 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
     setStepState('IDLE');
     setErrorMsg(null);
     setLogMessages([
-      `[${new Date().toLocaleTimeString()}] Bắt đầu quy trình đồng bộ TUẦN TỰ Menu & Giá tại ${restaurantName}...`,
-      `[${new Date().toLocaleTimeString()}] Máy chủ mục tiêu: ${mongoHost}:${mongoPort}`
+      `[${formatTime24hVN()}] Bắt đầu quy trình đồng bộ TUẦN TỰ Menu & Giá tại ${restaurantName}...`,
+      `[${formatTime24hVN()}] Máy chủ mục tiêu: ${mongoHost}:${mongoPort}`
     ]);
 
     try {
@@ -64,7 +65,7 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
         setStepState('STEP1_RUNNING');
         setLogMessages((prev) => [
           ...prev,
-          `[${new Date().toLocaleTimeString()}] ⏳ [TUẦN TỰ - BƯỚC 1/2] Đang kích hoạt lệnh syncRK kéo dữ liệu thực đơn & giá từ POS RK7 vào máy chủ SO...`
+          `[${formatTime24hVN()}] ⏳ [TUẦN TỰ - BƯỚC 1/2] Đang kích hoạt lệnh syncRK kéo dữ liệu thực đơn & giá từ POS RK7 vào máy chủ SO...`
         ]);
 
         // Thực thi riêng Bước 1
@@ -81,8 +82,8 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
           setErrorMsg(resStep1.step1_so_message || 'Bước 1 thất bại khi đồng bộ SO từ POS');
           setLogMessages((prev) => [
             ...prev,
-            `[${new Date().toLocaleTimeString()}] ❌ BƯỚC 1 THẤT BẠI: ${resStep1.step1_so_message}`,
-            `[${new Date().toLocaleTimeString()}] ⛔ ĐÃ DỪNG TOÀN BỘ TIẾN TRÌNH: Do Bước 1 chưa thành công, hệ thống TUYỆT ĐỐI KHÔNG chạy Bước 2 để tránh sai lệch dữ liệu giá trên Tablet CO!`
+            `[${formatTime24hVN()}] ❌ BƯỚC 1 THẤT BẠI: ${resStep1.step1_so_message}`,
+            `[${formatTime24hVN()}] ⛔ ĐÃ DỪNG TOÀN BỘ TIẾN TRÌNH: Do Bước 1 chưa thành công, hệ thống TUYỆT ĐỐI KHÔNG chạy Bước 2 để tránh sai lệch dữ liệu giá trên Tablet CO!`
           ]);
           return;
         }
@@ -91,8 +92,8 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
         setStepState('STEP1_DONE');
         setLogMessages((prev) => [
           ...prev,
-          `[${new Date().toLocaleTimeString()}] ✅ BƯỚC 1 HOÀN TẤT 100%: ${resStep1.step1_so_message}`,
-          `[${new Date().toLocaleTimeString()}] ⏩ Chờ 0.8 giây kiểm tra toàn vẹn trước khi chuyển sang Bước 2...`
+          `[${formatTime24hVN()}] ✅ BƯỚC 1 HOÀN TẤT 100%: ${resStep1.step1_so_message}`,
+          `[${formatTime24hVN()}] ⏩ Chờ 0.8 giây kiểm tra toàn vẹn trước khi chuyển sang Bước 2...`
         ]);
 
         if (syncMode === 'SO_ONLY') {
@@ -111,7 +112,7 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
         setStepState('STEP2_RUNNING');
         setLogMessages((prev) => [
           ...prev,
-          `[${new Date().toLocaleTimeString()}] ⏳ [TUẦN TỰ - BƯỚC 2/2] Bắt đầu phát sóng MQTT broadcast tới các Tablet CO yêu cầu xóa cache SQLite...`
+          `[${formatTime24hVN()}] ⏳ [TUẦN TỰ - BƯỚC 2/2] Bắt đầu phát sóng MQTT broadcast tới các Tablet CO yêu cầu xóa cache SQLite...`
         ]);
 
         // Thực thi riêng Bước 2
@@ -127,7 +128,7 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
           setErrorMsg(resStep2.step2_co_message || 'Lỗi khi phát sóng MQTT tới Tablet CO');
           setLogMessages((prev) => [
             ...prev,
-            `[${new Date().toLocaleTimeString()}] ⚠️ BƯỚC 2 GẶP SỰ CỐ: ${resStep2.step2_co_message}`
+            `[${formatTime24hVN()}] ⚠️ BƯỚC 2 GẶP SỰ CỐ: ${resStep2.step2_co_message}`
           ]);
           return;
         }
@@ -135,8 +136,8 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
         setStepState('COMPLETED');
         setLogMessages((prev) => [
           ...prev,
-          `[${new Date().toLocaleTimeString()}] ✅ BƯỚC 2 HOÀN TẤT: Đã phát sóng thông báo tới ${resStep2.total_co_notified} Tablet CO!`,
-          `[${new Date().toLocaleTimeString()}] 🎉 QUY TRÌNH ĐỒNG BỘ TUẦN TỰ 2 LỚP ĐÃ HOÀN TẤT THÀNH CÔNG!`
+          `[${formatTime24hVN()}] ✅ BƯỚC 2 HOÀN TẤT: Đã phát sóng thông báo tới ${resStep2.total_co_notified} Tablet CO!`,
+          `[${formatTime24hVN()}] 🎉 QUY TRÌNH ĐỒNG BỘ TUẦN TỰ 2 LỚP ĐÃ HOÀN TẤT THÀNH CÔNG!`
         ]);
       }
     } catch (err: unknown) {
@@ -145,7 +146,7 @@ export const CoSoKdsTwoStepSyncModal: React.FC<CoSoKdsTwoStepSyncModalProps> = (
       setErrorMsg(error.message || 'Lỗi ngoại lệ khi thực thi đồng bộ');
       setLogMessages((prev) => [
         ...prev,
-        `[${new Date().toLocaleTimeString()}] ❌ Lỗi hệ thống: ${error.message || 'Không xác định'}`
+        `[${formatTime24hVN()}] ❌ Lỗi hệ thống: ${error.message || 'Không xác định'}`
       ]);
     }
   };

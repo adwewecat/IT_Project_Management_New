@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { DateInput } from '../ui/DateInput';
 import { RestaurantItem } from '../../types/restaurant';
 import { incidentService } from '../../services/incidentService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -303,19 +304,11 @@ export const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({
             <Calendar size={15} />
             <span>Thời Gian Phát Sinh Lỗi</span>
           </label>
-          <input
-            type="date"
+          <DateInput
             value={dateLoi}
-            onChange={(e) => setDateLoi(e.target.value)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--border-color)',
-              backgroundColor: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
-              fontSize: '13px',
-              maxWidth: '220px',
-            }}
+            onChange={setDateLoi}
+            containerStyle={{ maxWidth: '220px' }}
+            style={{ height: '38px', fontSize: '13px' }}
           />
         </div>
 

@@ -43,6 +43,13 @@ import { getRestaurants } from '../../services/restaurantService';
 import { ApiManagementSection } from '../../components/admin/ApiManagementSection';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
+import { DateInput } from '../../components/ui/DateInput';
+import {
+  formatDateDDMM,
+  formatDateDDMMYYYY,
+  formatDateTimeDDMMYYYY,
+  formatIsoDatesInText,
+} from '../../utils/dateFormat';
 import { useAuth } from '../../contexts/AuthContext';
 import { checkIsSuperAdmin, checkIsDungOrSuperAdmin } from '../../utils/authUtils';
 
@@ -2745,12 +2752,12 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
                       </span>
                       {job.next_run_at && (
                         <span>
-                          Chạy tiếp theo: <strong style={{ color: 'var(--text-primary)' }}>{job.next_run_at}</strong>
+                          Chạy tiếp theo: <strong style={{ color: 'var(--text-primary)' }}>{formatDateTimeDDMMYYYY(job.next_run_at, { includeSeconds: true })}</strong>
                         </span>
                       )}
                       {job.last_run_at && (
                         <span>
-                          Lần chạy cuối: {job.last_run_at}
+                          Lần chạy cuối: {formatDateTimeDDMMYYYY(job.last_run_at, { includeSeconds: true })}
                           {job.last_duration ? ` (${job.last_duration}s)` : ''}
                         </span>
                       )}
@@ -3835,7 +3842,7 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
                         <span style={{ color: '#fff', fontWeight: 600 }}>{log.job_name}</span>
                       </div>
                       <span style={{ fontSize: '11px' }}>
-                        {log.started_at} {log.duration_seconds ? `(${log.duration_seconds}s)` : ''}
+                        {formatDateTimeDDMMYYYY(log.started_at, { includeSeconds: true })} {log.duration_seconds ? `(${log.duration_seconds}s)` : ''}
                       </span>
                     </div>
 
@@ -3916,28 +3923,46 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Calendar size={15} style={{ color: 'var(--text-muted)' }} />
                   <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>Ngày:</span>
-                  <input
-                    type="date"
+                  <DateInput
                     value={overnightDate}
-                    onChange={(e) => {
-                      setOvernightDate(e.target.value);
-                      fetchOvernightData(e.target.value);
+                    onChange={(val) => {
+                      setOvernightDate(val);
+                      fetchOvernightData(val);
                     }}
+                    compact
+                    containerStyle={{ width: '142px' }}
                     style={{
-                      padding: '6px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border-color)',
+                      height: '32px',
                       backgroundColor: 'var(--input-bg, #fff)',
-                      color: 'var(--text-primary)',
-                      fontSize: '13px'
+                      fontSize: '13px',
                     }}
                   />
                   {availableDates.length > 0 && (
-                    <datalist id="scan-dates-list">
-                      {availableDates.map(d => (
-                        <option key={d} value={d} />
+                    <select
+                      value={availableDates.includes(overnightDate) ? overnightDate : ''}
+                      onChange={(e) => {
+                        const dVal = e.target.value;
+                        setOvernightDate(dVal);
+                        fetchOvernightData(dVal);
+                      }}
+                      title="Chọn nhanh từ danh sách ngày đã quét"
+                      style={{
+                        height: '32px',
+                        padding: '0 8px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        backgroundColor: 'var(--input-bg, #fff)',
+                        color: 'var(--text-primary)',
+                        fontSize: '12.5px',
+                      }}
+                    >
+                      <option value="">-- Ngày đã quét --</option>
+                      {availableDates.map((d) => (
+                        <option key={d} value={d}>
+                          {formatDateDDMMYYYY(d)}
+                        </option>
                       ))}
-                    </datalist>
+                    </select>
                   )}
                 </div>
 
@@ -4326,7 +4351,7 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
             {/* Last run info */}
             {ssoConfigData?.last_run_at && (
               <div style={{ padding: '8px 12px', backgroundColor: '#F9FAFB', borderRadius: '6px', border: '1px solid #E5E7EB', fontSize: '11px', color: '#6B7280' }}>
-                Lần chạy cuối: <strong>{ssoConfigData.last_run_at}</strong> —
+                Lần chạy cuối: <strong>{formatDateTimeDDMMYYYY(ssoConfigData.last_run_at, { includeSeconds: true })}</strong> —
                 Trạng thái: <span style={{ color: ssoConfigData.last_run_status === 'success' ? '#16A34A' : '#DC2626', fontWeight: 600 }}>
                   {ssoConfigData.last_run_status}
                 </span>
@@ -4385,14 +4410,14 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
                 <span style={{ color: '#475569' }}>
-                  🕒 Quét gần nhất: <strong>{ticketHistory?.last_scanned_at || 'Chưa có lịch sử quét'}</strong>
+                  🕒 Quét gần nhất: <strong>{ticketHistory?.last_scanned_at ? formatDateTimeDDMMYYYY(ticketHistory.last_scanned_at, { includeSeconds: true }) : 'Chưa có lịch sử quét'}</strong>
                 </span>
                 <span style={{ color: '#475569' }}>
-                  ⚡ Xử lý gần nhất: <strong>{ticketHistory?.last_run_at || 'Chưa xử lý'}</strong>
+                  ⚡ Xử lý gần nhất: <strong>{ticketHistory?.last_run_at ? formatDateTimeDDMMYYYY(ticketHistory.last_run_at, { includeSeconds: true }) : 'Chưa xử lý'}</strong>
                 </span>
                 {ticketHistory?.summary?.message && (
                   <span style={{ color: '#0F766E', backgroundColor: '#CCFBF1', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 500 }}>
-                    {ticketHistory.summary.message}
+                    {formatIsoDatesInText(ticketHistory.summary.message)}
                   </span>
                 )}
               </div>
@@ -4666,7 +4691,7 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
                             color: isFull ? '#991B1B' : (isLow ? '#A16207' : '#166534'),
                             border: `1px solid ${isFull ? '#FCA5A5' : (isLow ? '#FDE047' : '#86EFAC')}`
                           }}>
-                            {day.slice(5)}: {hours}h
+                            {formatDateDDMM(day)}: {hours}h
                           </span>
                         );
                       })}
@@ -5888,7 +5913,7 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
                 }}
               >
                 <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '6px' }}>
-                  ✅ Kết Quả Xử Lý Hàng Loạt ({batchApplyResult.scan_time}):
+                  ✅ Kết Quả Xử Lý Hàng Loạt ({formatDateTimeDDMMYYYY(batchApplyResult.scan_time, { includeSeconds: true })}):
                 </div>
                 <div>• Tổng số nhà hàng đã xử lý: <strong>{batchApplyResult.total_processed}</strong></div>
                 <div>• SQL Server (.41): <strong>{batchApplyResult.sql_fixed}</strong> vừa giới hạn {targetSqlGb}GB, <strong>{batchApplyResult.sql_already_ok}</strong> đã đạt sẵn.</div>
@@ -7415,7 +7440,7 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
                 <div><strong>Cơ chế:</strong> Agent chạy trên máy tính cá nhân của bạn sẽ đọc ứng dụng Outlook Desktop và tự động đẩy dữ liệu lên Server, <strong>không cần mật khẩu & không vướng 2FA</strong>.</div>
                 {mailMemoStatus?.last_scan_at && (
                   <div style={{ color: '#4B5563', fontSize: '11px', marginTop: '4px' }}>
-                    Lần quét gần nhất trên Server: {mailMemoStatus.last_scan_at}
+                    Lần quét gần nhất trên Server: {formatDateTimeDDMMYYYY(mailMemoStatus.last_scan_at, { includeSeconds: true })}
                   </div>
                 )}
                 <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #BFDBFE', fontSize: '12px' }}>
@@ -7745,7 +7770,7 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
                 <div><strong>Quy tắc gửi Email:</strong> Chỉ gửi email cảnh báo khi có ít nhất 1 nhà hàng bị lỗi. Nếu 100% NH đạt chuẩn thì hệ thống sẽ <strong>tự động bỏ qua không gửi email</strong>.</div>
                 {mongoMosquittoData?.scan_time && (
                   <div style={{ marginTop: '4px', fontSize: '11px', color: '#065F46' }}>
-                    🕒 Quét gần nhất: <strong>{mongoMosquittoData.scan_time}</strong> (Thời gian quét: {mongoMosquittoData.duration_seconds}s) | 📧 {mongoMosquittoData.email_status}
+                    🕒 Quét gần nhất: <strong>{formatDateTimeDDMMYYYY(mongoMosquittoData.scan_time, { includeSeconds: true })}</strong> (Thời gian quét: {mongoMosquittoData.duration_seconds}s) | 📧 {mongoMosquittoData.email_status}
                   </div>
                 )}
               </div>

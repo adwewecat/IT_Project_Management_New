@@ -17,6 +17,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { DateInput, parseAndValidateDate } from '../../components/ui/DateInput';
+import { formatDateTimeDDMMYYYY } from '../../utils/dateFormat';
 import { Badge } from '../../components/ui/Badge';
 import { TopScrollTable } from '../../components/ui/TopScrollTable';
 import { RestaurantAuditLogItem } from '../../types/restaurant';
@@ -224,14 +225,14 @@ export const RestaurantAuditLogsPage: React.FC = () => {
             label="Từ Ngày"
             value={fromDate}
             onChange={setFromDate}
-            placeholder="YYYY-MM-DD"
+            placeholder="dd-mm-yyyy"
           />
 
           <DateInput
             label="Đến Ngày"
             value={toDate}
             onChange={setToDate}
-            placeholder="YYYY-MM-DD"
+            placeholder="dd-mm-yyyy"
           />
 
           <Select
@@ -353,7 +354,7 @@ export const RestaurantAuditLogsPage: React.FC = () => {
                   <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <Clock size={13} color="#94a3b8" />
-                      <span>{log.ngay_insert || 'N/A'}</span>
+                      <span>{formatDateTimeDDMMYYYY(log.ngay_insert, { includeSeconds: true, fallback: 'N/A' })}</span>
                     </div>
                   </td>
                   <td style={{ padding: '10px 12px', color: 'var(--text-primary)', fontWeight: 500 }}>

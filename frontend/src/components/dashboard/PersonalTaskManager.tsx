@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
+import { DateInput } from '../ui/DateInput';
+import { formatDateTimeDDMMYYYY, formatTimeDateDDMMYYYY } from '../../utils/dateFormat';
 import { PersonalTaskItem, TaskFileAttachment } from '../../types/personalTask';
 import { personalTaskService } from '../../services/personalTaskService';
 
@@ -769,31 +771,23 @@ export const PersonalTaskManager: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Calendar size={14} style={{ color: 'var(--text-muted)' }} />
             <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Từ ngày xong:</span>
-            <input
-              type="date"
+            <DateInput
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              style={{
-                padding: '5px 8px',
-                borderRadius: '4px',
-                border: '1px solid var(--border-color, #CBD5E1)',
-                fontSize: '12px',
-              }}
+              onChange={setFromDate}
+              compact
+              containerStyle={{ width: '136px' }}
+              style={{ height: '30px', fontSize: '12px' }}
             />
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Đến ngày xong:</span>
-            <input
-              type="date"
+            <DateInput
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              style={{
-                padding: '5px 8px',
-                borderRadius: '4px',
-                border: '1px solid var(--border-color, #CBD5E1)',
-                fontSize: '12px',
-              }}
+              onChange={setToDate}
+              compact
+              containerStyle={{ width: '136px' }}
+              style={{ height: '30px', fontSize: '12px' }}
             />
           </div>
 
@@ -1007,10 +1001,10 @@ export const PersonalTaskManager: React.FC = () => {
 
                     {/* Timestamps */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                      {task.ngay_tao && <span>Tạo lúc: {task.ngay_tao.slice(0, 16)}</span>}
+                      {task.ngay_tao && <span>Tạo lúc: {formatDateTimeDDMMYYYY(task.ngay_tao)}</span>}
                       {task.ngay_hoan_thanh && (
                         <span style={{ color: 'var(--color-success, #16A34A)', fontWeight: 600 }}>
-                          ✓ Hoàn thành: {task.ngay_hoan_thanh.slice(11, 16)} {task.ngay_hoan_thanh.slice(0, 10)}
+                          ✓ Hoàn thành: {formatTimeDateDDMMYYYY(task.ngay_hoan_thanh)}
                         </span>
                       )}
                     </div>

@@ -35,6 +35,7 @@ import { Select } from '../../components/ui/Select';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Alert } from '../../components/ui/Alert';
+import { DateInput } from '../../components/ui/DateInput';
 import { checkIsSuperAdmin, checkIsAdmin } from '../../utils/authUtils';
 
 export const PimPage: React.FC = () => {
@@ -1097,17 +1098,15 @@ export const PimPage: React.FC = () => {
               gap: '12px',
               alignItems: 'end'
             }}>
-              <Input
+              <DateInput
                 label="Từ ngày yêu cầu"
-                type="date"
                 value={pendingFilters.from_date || ''}
-                onChange={(e) => setPendingFilters(prev => ({ ...prev, from_date: e.target.value }))}
+                onChange={(val) => setPendingFilters(prev => ({ ...prev, from_date: val }))}
               />
-              <Input
+              <DateInput
                 label="Đến ngày yêu cầu"
-                type="date"
                 value={pendingFilters.to_date || ''}
-                onChange={(e) => setPendingFilters(prev => ({ ...prev, to_date: e.target.value }))}
+                onChange={(val) => setPendingFilters(prev => ({ ...prev, to_date: val }))}
               />
               <Select
                 label="Người thực hiện"
@@ -1403,17 +1402,15 @@ export const PimPage: React.FC = () => {
               gap: '12px',
               alignItems: 'end'
             }}>
-              <Input
+              <DateInput
                 label="Từ ngày yêu cầu"
-                type="date"
                 value={completedFilters.from_date || ''}
-                onChange={(e) => setCompletedFilters(prev => ({ ...prev, from_date: e.target.value }))}
+                onChange={(val) => setCompletedFilters(prev => ({ ...prev, from_date: val }))}
               />
-              <Input
+              <DateInput
                 label="Đến ngày yêu cầu"
-                type="date"
                 value={completedFilters.to_date || ''}
-                onChange={(e) => setCompletedFilters(prev => ({ ...prev, to_date: e.target.value }))}
+                onChange={(val) => setCompletedFilters(prev => ({ ...prev, to_date: val }))}
               />
               <Select
                 label="Người thực hiện"
@@ -1689,17 +1686,15 @@ export const PimPage: React.FC = () => {
               gap: '12px',
               alignItems: 'end'
             }}>
-              <Input
+              <DateInput
                 label="Từ ngày thao tác"
-                type="date"
                 value={logFilters.from_date || ''}
-                onChange={(e) => setLogFilters(prev => ({ ...prev, from_date: e.target.value }))}
+                onChange={(val) => setLogFilters(prev => ({ ...prev, from_date: val }))}
               />
-              <Input
+              <DateInput
                 label="Đến ngày thao tác"
-                type="date"
                 value={logFilters.to_date || ''}
-                onChange={(e) => setLogFilters(prev => ({ ...prev, to_date: e.target.value }))}
+                onChange={(val) => setLogFilters(prev => ({ ...prev, to_date: val }))}
               />
               <Input
                 label="Người thực hiện"

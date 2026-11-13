@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { DateInput } from '../ui/DateInput';
 import { SystemIncidentItem } from '../../types/systemIncident';
 import { systemIncidentService } from '../../services/systemIncidentService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -1100,20 +1101,13 @@ export const CreateSystemOutageModal: React.FC<CreateSystemOutageModalProps> = (
               </span>
             </label>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <input
-                type="date"
+              <DateInput
                 value={startDateStr}
-                onChange={(e) => setStartDateStr(e.target.value)}
-                style={{
-                  padding: '8px 10px',
-                  borderRadius: 'var(--radius-sm, 4px)',
-                  border: '1px solid var(--border-color, #CBD5E1)',
-                  backgroundColor: 'var(--bg-primary, #FFFFFF)',
-                  color: 'var(--text-primary)',
-                  fontSize: '13px',
-                  flex: 1,
-                }}
+                onChange={setStartDateStr}
                 required
+                compact
+                containerStyle={{ flex: 1 }}
+                style={{ height: '38px', fontSize: '13px' }}
               />
               <input
                 type="time"
@@ -1216,20 +1210,18 @@ export const CreateSystemOutageModal: React.FC<CreateSystemOutageModalProps> = (
                 <span>Thời Gian Khắc Phục Xong / Kết Thúc <span style={{ color: '#EF4444' }}>*</span></span>
               </label>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="date"
+                <DateInput
                   value={endDateStr}
-                  onChange={(e) => setEndDateStr(e.target.value)}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-sm, 4px)',
-                    border: '1px solid #86EFAC',
-                    backgroundColor: '#FFFFFF',
-                    color: 'var(--text-primary)',
-                    fontSize: '13px',
-                    flex: 1,
-                  }}
+                  onChange={setEndDateStr}
                   required={trangThai === 'DA_KHAC_PHUC'}
+                  compact
+                  containerStyle={{ flex: 1 }}
+                  style={{
+                    height: '38px',
+                    fontSize: '13px',
+                    borderColor: '#86EFAC',
+                    backgroundColor: '#FFFFFF',
+                  }}
                 />
                 <input
                   type="time"

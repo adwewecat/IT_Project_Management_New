@@ -19,6 +19,8 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { TopScrollTable } from '../../components/ui/TopScrollTable';
+import { DateInput } from '../../components/ui/DateInput';
+import { formatDateDDMMYYYY } from '../../utils/dateFormat';
 import { RestaurantItem } from '../../types/restaurant';
 import { UserInfo } from '../../types/auth';
 import {
@@ -3325,7 +3327,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                                   {job.run_time}
                                 </div>
                                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                                  {job.run_date}
+                                  {formatDateDDMMYYYY(job.run_date)}
                                 </div>
                               </td>
                               <td style={{ padding: '8px 10px', textAlign: 'center' }}>
@@ -3528,21 +3530,13 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
 
                   <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                      Ngày Chạy (YYYY-MM-DD) <span style={{ color: '#EF4444' }}>*</span>
+                      Ngày Chạy (dd-mm-yyyy) <span style={{ color: '#EF4444' }}>*</span>
                     </label>
-                    <input
-                      type="date"
+                    <DateInput
                       value={newJobDate}
-                      onChange={(e) => setNewJobDate(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        border: '1px solid var(--border-color)',
-                        backgroundColor: 'var(--bg-primary)',
-                        color: 'var(--text-primary)',
-                        fontSize: '13px'
-                      }}
+                      onChange={setNewJobDate}
+                      required
+                      style={{ height: '38px', fontSize: '13px' }}
                     />
                   </div>
 

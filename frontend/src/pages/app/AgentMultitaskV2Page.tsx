@@ -27,6 +27,7 @@ import { checkIsDungOrSuperAdmin } from '../../utils/authUtils';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { BatchPushModal } from '../../components/agent-multitask/BatchPushModal';
+import { formatTime24hVN } from '../../utils/dateFormat';
 import {
   agentMultitaskV2Service,
   SftpFileItem,
@@ -143,7 +144,7 @@ export const AgentMultitaskV2Page: React.FC = () => {
   const [consoleLogs, setConsoleLogs] = useState<ConsoleLogEntry[]>([
     {
       id: 'init-1',
-      timestamp: new Date().toLocaleTimeString(),
+      timestamp: formatTime24hVN(),
       type: 'info',
       title: 'Khởi tạo hệ thống Agent Multitask 2',
       details: 'Sẵn sàng kết nối SFTP 10.28.1.150:22 và điều khiển trạm nhà hàng từ xa.'
@@ -156,7 +157,7 @@ export const AgentMultitaskV2Page: React.FC = () => {
   const addLog = (type: 'info' | 'success' | 'error' | 'warn' | 'cmd', title: string, details?: string) => {
     const entry: ConsoleLogEntry = {
       id: Math.random().toString(36).substring(2, 9),
-      timestamp: new Date().toLocaleTimeString(),
+      timestamp: formatTime24hVN(),
       type,
       title,
       details
