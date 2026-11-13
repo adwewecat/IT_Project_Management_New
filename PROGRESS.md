@@ -1,4 +1,4 @@
-﻿# Project Progress
+# Project Progress
 
 > **Rotation Rule:** Prepend new entries to the top of **Recent Milestones**. Keep at most **10 entries** here; move older entries (#11+) to `ARCHIVE.md`.
 

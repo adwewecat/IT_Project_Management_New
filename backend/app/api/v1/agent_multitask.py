@@ -545,8 +545,22 @@ def download_package(
     if "default_target_folder" not in config_data:
         config_data["default_target_folder"] = "D:\\GPOS-Setup\\app"
 
-    # Chuẩn bị nội dung JSON
+    # Chuẩn bị nội dung JSON với định dạng Windows CRLF
     custom_config_str = json.dumps(config_data, indent=2, ensure_ascii=False)
+    custom_config_bytes = custom_config_str.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8")
+
+    TEXT_EXTENSIONS = {".bat", ".cmd", ".json", ".txt", ".reg", ".ps1", ".md", ".ini", ".cfg", ".log"}
+
+    def _write_file_to_zip(z_handle: zipfile.ZipFile, local_fp: str, arc_name: str):
+        ext = os.path.splitext(arc_name.lower())[1]
+        if ext in TEXT_EXTENSIONS:
+            with open(local_fp, "rb") as f_in:
+                raw_bytes = f_in.read()
+            # Chuẩn hóa 100% Windows CRLF (\r\n) tránh cmd.exe chớp tắt trên máy trạm
+            crlf_bytes = raw_bytes.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+            z_handle.writestr(arc_name, crlf_bytes)
+        else:
+            z_handle.write(local_fp, arcname=arc_name)
 
     # Nén file trực tiếp vào bộ nhớ StreamingResponse (chỉ nén file và thư mục chuẩn Client)
     zip_buffer = io.BytesIO()
@@ -559,16 +573,16 @@ def download_package(
             if os.path.isfile(fp):
                 if f_lower == "msedge_settings.json":
                     # Ghi đè file msedge_settings.json tùy biến
-                    z.writestr(f, custom_config_str.encode("utf-8"))
+                    z.writestr(f, custom_config_bytes)
                 else:
-                    z.write(fp, arcname=f)
+                    _write_file_to_zip(z, fp, f)
             elif os.path.isdir(fp):
                 # Nén đệ quy thư mục con trong whitelist (VD: Update ipos TCH IT NEW, Update ipos UT IT NEW)
                 for root, _, files in os.walk(fp):
                     for sub_f in sorted(files):
                         sub_fp = os.path.join(root, sub_f)
                         rel_path = os.path.relpath(sub_fp, agent_dir)
-                        z.write(sub_fp, arcname=rel_path)
+                        _write_file_to_zip(z, sub_fp, rel_path)
 
     zip_buffer.seek(0)
     filename = "Restaurant_Support_GPOS.zip"

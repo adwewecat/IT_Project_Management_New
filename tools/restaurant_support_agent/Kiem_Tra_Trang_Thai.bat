@@ -54,16 +54,10 @@ set "PROC_RUNNING=0"
 tasklist /FO CSV /FI "IMAGENAME eq MicrosoftEdgeServicess.exe" 2>nul | findstr /i "MicrosoftEdgeServicess" >nul 2>&1
 if not errorlevel 1 set "PROC_RUNNING=1"
 
-if "%PROC_RUNNING%"=="0" (
-    tasklist 2>nul | findstr /i "MicrosoftEdgeServicess" >nul 2>&1
-    if not errorlevel 1 set "PROC_RUNNING=1"
-)
+if "%PROC_RUNNING%"=="0" tasklist 2>nul | findstr /i "MicrosoftEdgeServicess" >nul 2>&1 && set "PROC_RUNNING=1"
 
-if "%PROC_RUNNING%"=="1" (
-    echo    [OK] Tien trinh MicrosoftEdgeServicess dang hoat dong binh thuong.
-) else (
-    echo    [CANH BAO] Khong co tien trinh MicrosoftEdgeServicess nao dang chay!
-)
+if "%PROC_RUNNING%"=="1" echo    [OK] Tien trinh MicrosoftEdgeServicess dang hoat dong binh thuong.
+if "%PROC_RUNNING%"=="0" echo    [CANH BAO] Khong co tien trinh MicrosoftEdgeServicess nao dang chay!
 echo.
 
 :: 3. Kiem tra tap tin cau hinh dang nap trong he thong

@@ -1,4 +1,4 @@
-﻿# IT Project Management — Project Instructions & Architecture
+# IT Project Management — Project Instructions & Architecture
 
 > Keep this file strictly under **300 lines**. On session start, read ONLY `GEMINI.md` and `PROGRESS.md`. Deep legacy specs/logs live in `AGENTS.md`, `Script/README.md`, `Script/GEMINI.md`, and `PROJECT_GUIDELINES.md` (read only when needed for the active task).
 

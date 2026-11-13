@@ -21,3 +21,4 @@
 - **[2026-10-28] Tách trạng thái Đã đọc/Chưa đọc Webmail theo từng user; đồng nhất Param Code & Name**
 - **[2026-10-27] Bổ sung thêm món vào KDS & gán bếp nấu; khắc phục Agent Multitask tab & phản hồi G-Process**
 - **[2026-10-25..26] Tự động điều hướng & nâng cấp Mobile Portal (`/mobile`), lọc G-Process `'IT Xác Nhận Lỗi Kỹ Thuật'`**
+

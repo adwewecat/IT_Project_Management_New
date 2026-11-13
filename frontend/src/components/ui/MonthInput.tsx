@@ -176,3 +176,4 @@ export const MonthInput: React.FC<MonthInputProps> = ({
     </div>
   );
 };
+

