@@ -3797,3 +3797,28 @@ estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ B
 - **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
   * Backend: 100% Python 3.10 compatible (0 backslash trong f-string, 0 cú pháp 3.11+), quét AST toàn bộ thư mục `backend/app` đạt 100% Valid, Smoke Test backend `>>> BACKEND SMOKE TEST PASSED 100%`. Daemon backend đang chạy ổn định trên port 8000.
   * Frontend: `cmd /c "npm run build"` đạt exit code 0 (`✓ built in 4.48s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config`.
+
+---
+
+## 📝 NHẬT KÝ CẬP NHẬT [2026-11-13]: SỬA TRIỆT ĐỂ LỖI QUÉT TICKET 3CX (0 MỤC) & TIMESHEET HIỂN THỊ SAI 24H/NGÀY TRONG TÁC VỤ NGẦM
+
+- **1. Nguyên nhân gốc rễ (Root Causes)**:
+  * **Quét Ticket 3CX trả về 0 kết quả (`_fetch_ticket_list` & `_ensure_logged_in`)**:
+    + API `POST https://ticket-gpms.ggg.com.vn/api/tasks/paging` trả về người xử lý và người tạo dưới dạng object lồng nhau `assignees` (`{"id": 442, "user_name": "dung.nguyenanh", ...}`) và `creators` (`{"user_name": "..."}`) thay vì chuỗi phẳng `assignee_name` / `creator_name`, khiến `t_assignee` luôn rỗng và bộ lọc bỏ sót toàn bộ ticket.
+    + Selector click tab `div:has-text('Công việc nhận về')` khớp nhầm phần tử gốc `<div id="root">`, khiến `.first.click()` bấm vào giữa màn hình và mở popup Date Range Picker đè lên bảng danh sách.
+    + `_ensure_logged_in` trước đây chỉ kiểm tra URL không chứa `sso.ggg.com.vn` khi nạp lại `ticket_batch_session.json`, chưa kiểm tra hạn token JWT `accessToken` trong `localStorage` hoặc trạng thái UI sẵn sàng, chưa xử lý redirect SSO giữa phiên và chưa lấy các trang tiếp theo (`total_page > 1`) của API `tasks/paging`.
+  * **Timesheet Tháng Này luôn hiển thị 24h trống/ngày (`_fetch_timesheet_data`)**:
+    + Bộ lọc ngày trên `/timesheet-management` là Ant Design RangePicker có `input[placeholder='dd/mm/yyyy']` (`readonly`), nên selector `input[type="text"]` không tìm thấy phần tử (`0`) và bảng giữ nguyên tuần hiện tại thay vì từ đầu tháng.
+    + GPMS đặt cả nhãn tổng giờ lẫn từng cột ngày (`'01/11\n20h'`) trong `<thead><tr><th>`. Selector cũ `tr:has-text("Tổng thời gian")` khớp chính hàng tiêu đề `<thead>`, dẫn đến `float('09/11\n23')` ném `ValueError` và rơi vào fallback `24.0h`, đồng thời `thead tr th` lấy nhầm cột tiêu đề của lịch popup `.ant-picker-content` (`T2..CN`).
+- **2. Giải pháp đã triển khai**:
+  * **Backend (`backend/app/services/ticket_batch_service.py`)**:
+    + Thống nhất timeout ngữ cảnh Playwright (`120000ms` / `180000ms`), bổ sung `_is_gpms_session_alive` (kiểm tra URL, JWT `accessToken` còn hạn, UI GPMS sẵn sàng) và `_recover_sso_if_redirected` tự động xóa session hết hạn và đăng nhập lại SSO khi gặp redirect.
+    + Bổ sung helper `_extract_person_display_and_blob` phân tích chính xác `assignees` / `creators` (dict/list/string) từ `tasks/paging`, hỗ trợ phân trang `page=2..total_page`, bỏ selector `div:has-text(...)` tránh click nhầm `#root`, dọn listener trong `finally` và giữ fallback DOM đọc `text_content()` + `title`; đồng thời bổ sung kiểm tra SSO và dọn listener cho `_fetch_gprocess_mission_list`.
+    + Viết lại `_fetch_timesheet_data`: chọn trực tiếp ngày trên Ant Design RangePicker (`td.ant-picker-cell-in-view[title="{from_iso}"]` & `[title="{to_iso}"]`), đọc tiêu đề trong `table:not(.ant-picker-content) thead tr th`, tách dòng giờ (`20h`) tính `round(max(0.0, 24.0 - total_hours), 2)`, kết hợp intercept API `ticket-gpms.ggg.com.vn/api/timesheet` và `process-gpms.ggg.com.vn/api/v1/timesheet-management` quy đổi GMT+7 làm fallback.
+    + Cập nhật `_pick_best_day` ưu tiên khoảng `1.0 <= r < 8.0` trước khi fallback sang `r >= 1.0`.
+  * **Frontend (`frontend/src/pages/admin/JobManagementPage.tsx`)**:
+    + Nâng cấp badge hiển thị `timesheet_summary` phân biệt rõ `<= 0h` (đỏ `#FEE2E2` / `#991B1B`), `0 < giờ < 8` (vàng), và `>= 8h` (xanh lá).
+- **3. Kiểm Thử Nghiêm Ngặt & Đóng Gói (Tuân thủ Immutable Rule 4, 6, 7, 13)**:
+  * **Kiểm thử thực tế**: `preview_tickets()` vượt qua cả hai kịch bản Warm Session và Cold Login (`clear_session()`), thu về `18` ticket 3CX khớp điều kiện và `13` ngày timesheet tháng 11 đúng thực tế (`2026-11-01: 4.0`, `2026-11-03: 0.0`, ...).
+  * **Backend**: Tương thích 100% Python 3.10 (`ast.parse(..., feature_version=(3, 10))` + `compileall` toàn bộ `backend/app`), Smoke Test `from app.main import app` đạt `>>> BACKEND SMOKE TEST PASSED 100% 8`.
+  * **Frontend**: `cmd /c "npm --prefix frontend run build"` đạt exit code 0 (`✓ built in 4.64s`), thư mục `frontend/dist/` sạch sẽ kèm `web.config`.

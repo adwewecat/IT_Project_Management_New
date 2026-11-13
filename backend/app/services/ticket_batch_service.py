@@ -7,7 +7,7 @@ import re
 import base64
 import logging
 import asyncio
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -273,8 +273,8 @@ async def _create_browser_context(playwright_instance):
                 storage_state=SESSION_FILE,
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             )
-            context.set_default_timeout(30000)
-            context.set_default_navigation_timeout(45000)
+            context.set_default_timeout(120000)
+            context.set_default_navigation_timeout(180000)
             return browser, context
         except Exception as e:
             logger.warning(f"[TICKET_BATCH] Không đọc được session cache: {e}, tạo context mới")
@@ -288,23 +288,79 @@ async def _create_browser_context(playwright_instance):
     return browser, context
 
 
+async def _is_gpms_session_alive(page, timeout_sec: float = 12.0) -> bool:
+    """
+    Kiểm tra thực tế xem phiên GPMS trên page có đang đăng nhập hợp lệ hay không:
+    - Không bị chuyển hướng về sso.ggg.com.vn hoặc /login
+    - Có JWT accessToken hợp lệ (chưa hết hạn) trong localStorage HOẶC API GPMS trả 200 (không bị 401)
+    - Giao diện GPMS thực sự render (không đứng ở màn hình trắng / callback chưa xong)
+    """
+    loops = max(1, int(timeout_sec / 0.5))
+    for _ in range(loops):
+        curr_url = (page.url or "").lower()
+        if "sso.ggg.com.vn" in curr_url or "/login" in curr_url:
+            return False
+
+        if "gpms.ggg.com.vn" in curr_url:
+            try:
+                auth_state = await page.evaluate("""() => {
+                    const tok = localStorage.getItem('accessToken') || '';
+                    let exp = 0;
+                    let hasValidJwt = false;
+                    if (tok && tok.split('.').length === 3) {
+                        try {
+                            const b64 = tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+                            const payload = JSON.parse(atob(b64));
+                            exp = Number(payload.exp || 0);
+                            hasValidJwt = exp > (Date.now() / 1000 + 30);
+                        } catch (e) {}
+                    }
+                    const txt = (document.body && document.body.innerText) ? document.body.innerText : '';
+                    const uiReady = (
+                        txt.includes('Danh sách công việc') ||
+                        txt.includes('G-Ticket') ||
+                        txt.includes('G-Process') ||
+                        txt.includes('Timesheet')
+                    );
+                    return { hasValidJwt, exp, uiReady };
+                }""")
+                if auth_state and auth_state.get("hasValidJwt") and auth_state.get("uiReady"):
+                    return True
+            except Exception:
+                pass
+        await asyncio.sleep(0.5)
+    return False
+
+
 async def _ensure_logged_in(page, context, username: str, password: str) -> None:
     """
     Đảm bảo đã đăng nhập vào hệ thống GPMS:
-    1. Kiểm tra session hiện có bằng cách truy cập GPMS work-list.
-       Nếu URL ở GPMS và không bị chuyển hướng sang sso.ggg.com.vn -> Session còn sống, KHÔNG LOGIN LẠI!
-    2. Nếu chưa login hoặc session hết hạn -> Truy cập sso.ggg.com.vn, login 1 lần duy nhất và lưu storage_state.
+    1. Kiểm tra session hiện có bằng cách truy cập GPMS work-list và xác minh token + giao diện thực sự sống.
+       Nếu còn sống -> làm mới lưu lại storage_state và KHÔNG login lại.
+    2. Nếu chưa login hoặc session/token hết hạn -> xóa cookie/session cũ, đăng nhập SSO 1 lần duy nhất và lưu storage_state.
     """
     # 1. Thử kiểm tra session đã có
     if os.path.exists(SESSION_FILE):
         try:
             await page.goto("https://gpms.ggg.com.vn/gticket/work-list", timeout=600000)
-            await _safe_wait_network_idle(page, 20000)
-            if "gpms.ggg.com.vn" in page.url and "sso.ggg.com.vn" not in page.url and "login" not in page.url.lower():
-                logger.info(f"[TICKET_BATCH] Tái sử dụng phiên SSO đã lưu thành công. Không cần gửi request login SSO!")
+            await _safe_wait_network_idle(page, 25000)
+            if await _is_gpms_session_alive(page, timeout_sec=10.0):
+                logger.info("[TICKET_BATCH] Tái sử dụng phiên SSO đã lưu thành công. Đang cập nhật cache phiên mới nhất.")
+                try:
+                    await context.storage_state(path=SESSION_FILE)
+                except Exception:
+                    pass
                 return
+            logger.info(f"[TICKET_BATCH] Phiên SSO cũ không còn hiệu lực (URL: {page.url}), sẽ đăng nhập lại từ đầu...")
         except Exception as e:
-            logger.debug(f"[TICKET_BATCH] Kiểm tra session cũ: {e}")
+            logger.debug(f"[TICKET_BATCH] Kiểm tra session cũ lỗi: {e}")
+
+    # Xóa sạch phiên cũ (cả file và cookies trong context) trước khi login mới
+    clear_session()
+    try:
+        await context.clear_cookies()
+    except Exception:
+        pass
 
     # 2. Thực hiện login SSO 1 lần duy nhất
     logger.info(f"[TICKET_BATCH] Đang thực hiện đăng nhập SSO cho user '{username}'...")
@@ -331,11 +387,12 @@ async def _ensure_logged_in(page, context, username: str, password: str) -> None
         raise ValueError(f"Đăng nhập SSO thất bại. URL hiện tại: {page.url}. Kiểm tra lại username/password.")
     logger.info(f"[TICKET_BATCH] SSO login thành công. URL: {page.url}")
 
-    # Chuyển tiếp sang GPMS để hoàn tất OAuth callback và nạp localStorage
+    # Chuyển tiếp sang GPMS để hoàn tất OAuth callback và nạp localStorage / token các phân hệ
     try:
         await page.goto("https://gpms.ggg.com.vn/gticket/work-list", timeout=240000)
         await _safe_wait_network_idle(page, 32000)
-        await asyncio.sleep(2)
+        await _is_gpms_session_alive(page, timeout_sec=12.0)
+        await asyncio.sleep(1.5)
     except Exception as gpms_e:
         logger.debug(f"[TICKET_BATCH] GPMS callback init: {gpms_e}")
 
@@ -346,6 +403,22 @@ async def _ensure_logged_in(page, context, username: str, password: str) -> None
         logger.info(f"[TICKET_BATCH] Đã lưu session vào {SESSION_FILE}")
     except Exception as se:
         logger.warning(f"[TICKET_BATCH] Không thể lưu session: {se}")
+
+
+async def _recover_sso_if_redirected(page, target_url: str, username: str, password: str) -> None:
+    """
+    Hàm phòng vệ: Nếu đang ở giữa luồng quét mà bị GPMS đẩy về trang đăng nhập SSO,
+    tự động đăng nhập lại và quay về đúng URL mục tiêu thay vì âm thầm quét ra 0 dòng.
+    """
+    curr_url = (page.url or "").lower()
+    if "sso.ggg.com.vn" in curr_url or "/login" in curr_url:
+        logger.warning(f"[TICKET_BATCH] Phát hiện bị chuyển về SSO giữa chừng ({page.url}), đang tự động đăng nhập lại...")
+        clear_session()
+        await _sso_login(page, username, password)
+        await page.goto(target_url, timeout=240000)
+        await _safe_wait_network_idle(page, 30000)
+        await _is_gpms_session_alive(page, timeout_sec=10.0)
+        await asyncio.sleep(1.5)
 
 
 async def _sso_login(page, username: str, password: str) -> None:
@@ -371,149 +444,334 @@ async def _sso_login(page, username: str, password: str) -> None:
 
 async def _fetch_timesheet_data(page) -> Dict[str, float]:
     """
-    Lấy dữ liệu timesheet từ GPMS.
-    Return: dict {"2026-09-01": remaining_hours, ...}
-    Remaining = 24 - tổng_giờ_ngày_đó (min 0)
+    Lấy dữ liệu timesheet từ GPMS (https://gpms.ggg.com.vn/timesheet-management) từ đầu tháng đến hôm nay.
+    Cơ chế Dual-Source:
+    1. Mở bộ lọc Ant Design RangePicker (input[placeholder='dd/mm/yyyy'] readonly), click chọn trực tiếp ngày
+       đầu tháng (YYYY-MM-01) và ngày hôm nay (YYYY-MM-DD) để bảng GPMS tải trọn vẹn dữ liệu tháng.
+    2. Đọc hàng tiêu đề bảng chính `table:not(.ant-picker-content) thead tr th` (tránh nhầm bảng lịch popup),
+       nơi GPMS hiển thị từng cột dạng `"01/11\\n20h"` (tổng giờ đã khai báo trong ngày).
+    3. Song song lắng nghe API `ticket-gpms.ggg.com.vn/api/timesheet` và `process-gpms.ggg.com.vn/api/v1/timesheet-management`
+       ứng đúng `from_date`..`to_date` làm lớp dự phòng nếu DOM thay đổi.
+    Return: dict {"2026-11-01": remaining_hours, ...} với Remaining = max(0.0, 24.0 - logged_hours).
     """
     today = date.today()
     first_of_month = today.replace(day=1)
-    
-    from_str = first_of_month.strftime("%d/%m/%Y")
-    to_str = today.strftime("%d/%m/%Y")
-    
-    await page.goto("https://gpms.ggg.com.vn/timesheet-management", timeout=600000)
-    await _safe_wait_network_idle(page, 60000)
-    await asyncio.sleep(2)
-    
-    # Lọc thời gian
-    # Tìm input từ ngày
-    date_inputs = await page.locator('input[type="text"]').all()
-    if len(date_inputs) >= 2:
-        # Nhập ngày bắt đầu
-        await date_inputs[0].fill(from_str)
-        await page.keyboard.press("Enter")
-        await asyncio.sleep(0.5)
-        # Nhập ngày kết thúc
-        await date_inputs[1].fill(to_str)
-        await page.keyboard.press("Enter")
-        await asyncio.sleep(0.5)
-    
-    # Click nút tìm kiếm/lọc nếu có
-    search_btn = page.locator('button:has-text("Tìm kiếm"), button:has-text("Lọc"), button:has-text("Áp dụng"), button:has-text("Search")')
-    if await search_btn.count() > 0:
-        await search_btn.first.click()
-        await _safe_wait_network_idle(page, 10000)
-    await asyncio.sleep(3)
-    
-    # Đọc hàng "Tổng thời gian" từ bảng
-    # Hàng này nằm ở đầu bảng với label "Tổng thời gian"
+    from_iso = first_of_month.strftime("%Y-%m-%d")
+    to_iso = today.strftime("%Y-%m-%d")
+    first_dd_mm = first_of_month.strftime("%d/%m")
+
+    # Chuẩn bị danh sách tất cả các ngày từ đầu tháng đến hôm nay để đối chiếu & bổ sung đủ
+    all_month_days: List[str] = []
+    cur_d = first_of_month
+    while cur_d <= today:
+        all_month_days.append(cur_d.strftime("%Y-%m-%d"))
+        cur_d = cur_d + timedelta(days=1)
+
+    # Bộ lắng nghe API timesheet từ backend GPMS (chỉ bắt đúng khoảng from_iso .. to_iso hoặc tải lần đầu)
+    api_bucket: Dict[str, Dict[str, float]] = {}  # source_key -> { "YYYY-MM-DD": total_hours }
+    target_api_seen = False
+
+    async def _on_ts_response(response):
+        nonlocal target_api_seen
+        url = response.url or ""
+        is_ticket_ts = "ticket-gpms.ggg.com.vn/api/timesheet" in url
+        is_proc_ts = "process-gpms.ggg.com.vn/api/v1/timesheet-management" in url
+        if not (is_ticket_ts or is_proc_ts):
+            return
+        if response.status != 200:
+            return
+        try:
+            # Ưu tiên response ứng với khoảng ngày from_iso..to_iso (hoặc tuần chứa ngày đó)
+            is_exact_range = (f"from_date={from_iso}" in url and f"to_date={to_iso}" in url)
+            if is_exact_range:
+                target_api_seen = True
+            source_key = url.split("?")[0]
+            if is_ticket_ts:
+                m_t = re.search(r"[?&]type=([^&]+)", url)
+                if m_t:
+                    source_key = f"{source_key}#type={m_t.group(1)}"
+
+            res_json = await response.json()
+            tasks = res_json.get("data") or []
+            if not isinstance(tasks, list):
+                return
+
+            # Tính tổng giờ từng ngày từ response này (nếu có exact range sẽ ghi đè dữ liệu cũ cùng source)
+            per_day: Dict[str, float] = {}
+            for task in tasks:
+                if not isinstance(task, dict):
+                    continue
+                for ts_entry in (task.get("timesheet") or []):
+                    if not isinstance(ts_entry, dict):
+                        continue
+                    try:
+                        h_val = float(ts_entry.get("hour") or 0)
+                    except (TypeError, ValueError):
+                        h_val = 0.0
+                    raw_d = str(ts_entry.get("date") or "").strip()
+                    if h_val <= 0 or not raw_d:
+                        continue
+                    if "T" in raw_d and raw_d.endswith("Z"):
+                        # API trả về UTC (VD: 2026-11-08T17:00:00.000000Z = 00:00 ngày 2026-11-09 GMT+7)
+                        dt_local = datetime.fromisoformat(raw_d.replace("Z", "+00:00")) + timedelta(hours=7)
+                        d_key = dt_local.strftime("%Y-%m-%d")
+                    else:
+                        d_key = raw_d[:10]
+                    per_day[d_key] = per_day.get(d_key, 0.0) + h_val
+
+            # Lưu lại theo từng API (exact_range được gắn cờ ưu tiên tuyệt đối)
+            if is_exact_range or f"exact|{source_key}" not in api_bucket:
+                store_key = f"exact|{source_key}" if is_exact_range else f"init|{source_key}"
+                api_bucket[store_key] = per_day
+        except Exception as ts_api_err:
+            logger.debug(f"[TICKET_BATCH] Lỗi parse API timesheet: {ts_api_err}")
+
+    page.on("response", _on_ts_response)
     remaining_hours: Dict[str, float] = {}
-    
+
     try:
-        # Tìm row chứa "Tổng thời gian"
-        total_row = page.locator('tr:has-text("Tổng thời gian")').first
-        cells = await total_row.locator('td, th').all()
-        
-        # Parse header để biết ngày nào ứng cột nào
-        headers = await page.locator('thead tr th').all()
-        header_texts = []
-        for h in headers:
-            txt = (await h.inner_text()).strip()
-            header_texts.append(txt)
-        
-        # header_texts[0] = "Công việc", sau đó là ngày 01/09, 02/09, ...
-        # cells[0] = "Tổng thời gian", cells[1] = giờ ngày 01, ...
-        
-        for i, cell in enumerate(cells):
-            if i == 0:
-                continue  # skip label
-            cell_text = (await cell.inner_text()).strip()
-            # Tìm header tương ứng (offset 1)
-            header_idx = i  # header_texts[i] tương ứng với cells[i]
-            if header_idx < len(header_texts):
-                day_str = header_texts[header_idx].strip()
-                # day_str dạng "01/09" hoặc "01\n09"
-                day_str = day_str.replace("\n", "/").strip("/")
-                # Parse ngày
-                try:
-                    parts = day_str.split("/")
-                    if len(parts) >= 2:
-                        day_num = int(parts[0])
-                        month_num = int(parts[1])
-                        year_num = today.year
-                        key = f"{year_num:04d}-{month_num:02d}-{day_num:02d}"
-                        
-                        # Parse số giờ từ cell (VD: "16h" -> 16, "16" -> 16)
-                        hours_str = cell_text.replace("h", "").replace("H", "").strip()
-                        if hours_str == "-" or hours_str == "":
+        ts_url = "https://gpms.ggg.com.vn/timesheet-management"
+        await page.goto(ts_url, timeout=600000)
+        await _safe_wait_network_idle(page, 60000)
+
+        # Kiểm tra nếu bị đá về SSO thì tự động đăng nhập lại
+        try:
+            u_cfg, p_cfg = get_sso_credentials()
+            await _recover_sso_if_redirected(page, ts_url, u_cfg, p_cfg)
+        except Exception:
+            pass
+
+        await asyncio.sleep(1.5)
+
+        # Bước 1: Thao tác Ant Design RangePicker (readonly input placeholder="dd/mm/yyyy")
+        date_inps = page.locator("input[placeholder='dd/mm/yyyy']")
+        if await date_inps.count() >= 2:
+            try:
+                await date_inps.nth(0).click()
+                await asyncio.sleep(0.5)
+
+                # Nếu ô ngày đầu tháng chưa nằm trong panel đang mở, lùi tối đa 2 tháng để tìm
+                cell_start_sel = f'.ant-picker-dropdown td.ant-picker-cell-in-view[title="{from_iso}"]'
+                cell_end_sel = f'.ant-picker-dropdown td.ant-picker-cell-in-view[title="{to_iso}"]'
+
+                for _ in range(2):
+                    if await page.locator(cell_start_sel).count() > 0:
+                        break
+                    prev_btn = page.locator(".ant-picker-dropdown .ant-picker-header-prev-btn").first
+                    if await prev_btn.count() > 0:
+                        await prev_btn.click()
+                        await asyncio.sleep(0.3)
+
+                cell_start = page.locator(cell_start_sel).first
+                if await cell_start.count() > 0:
+                    await cell_start.click()
+                    await asyncio.sleep(0.35)
+
+                    cell_end = page.locator(cell_end_sel).first
+                    if await cell_end.count() > 0:
+                        await cell_end.click()
+                        await asyncio.sleep(0.4)
+                    else:
+                        # Đề phòng panel chuyển tháng sau click start -> tiến tới 1 tháng tìm end
+                        next_btn = page.locator(".ant-picker-dropdown .ant-picker-header-next-btn").first
+                        if await next_btn.count() > 0:
+                            await next_btn.click()
+                            await asyncio.sleep(0.3)
+                        cell_end = page.locator(cell_end_sel).first
+                        if await cell_end.count() > 0:
+                            await cell_end.click()
+                            await asyncio.sleep(0.4)
+            except Exception as picker_err:
+                logger.warning(f"[TICKET_BATCH] Lỗi thao tác RangePicker timesheet: {picker_err}")
+        else:
+            # Fallback cho layout có input[type="text"] thông thường không phải readonly
+            from_str = first_of_month.strftime("%d/%m/%Y")
+            to_str = today.strftime("%d/%m/%Y")
+            text_inputs = await page.locator('input[type="text"]:not([readonly])').all()
+            if len(text_inputs) >= 2:
+                await text_inputs[0].fill(from_str)
+                await page.keyboard.press("Enter")
+                await asyncio.sleep(0.4)
+                await text_inputs[1].fill(to_str)
+                await page.keyboard.press("Enter")
+                await asyncio.sleep(0.4)
+                search_btn = page.locator('button:has-text("Tìm kiếm"), button:has-text("Lọc"), button:has-text("Áp dụng"), button:has-text("Search")')
+                if await search_btn.count() > 0:
+                    await search_btn.first.click()
+
+        # Đợi bảng chính cập nhật cột đầu tháng (VD: "01/11") và API hoàn tất
+        await _safe_wait_network_idle(page, 15000)
+        for _ in range(20):
+            try:
+                th_locs = await page.locator("table:not(.ant-picker-content) thead tr th, table:not(.ant-picker-content) thead tr td").all()
+                th_texts = [(await h.inner_text()).strip() for h in th_locs]
+                if any(first_dd_mm in t for t in th_texts):
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
+        await asyncio.sleep(0.8)
+
+        # Bước 2: Đọc dữ liệu từ tiêu đề bảng Timesheet (VD: "01/11\n20h" hoặc "01/11 20h")
+        # Quan trọng: loại trừ .ant-picker-content để không đọc nhầm bảng lịch dropdown (T2..CN)
+        try:
+            headers = await page.locator(
+                "table:not(.ant-picker-content) thead tr th, table:not(.ant-picker-content) thead tr td"
+            ).all()
+            for h in headers:
+                raw_txt = (await h.inner_text()).strip()
+                if not raw_txt or "Tổng thời gian" in raw_txt or raw_txt.lower().startswith("tổng"):
+                    continue
+
+                lines = [ln.strip() for ln in raw_txt.splitlines() if ln.strip()]
+                date_key = None
+                total_hours = 0.0
+
+                for ln in lines:
+                    m_date = re.search(r"\b(\d{1,2})/(\d{1,2})\b", ln)
+                    if m_date and date_key is None:
+                        d_num = int(m_date.group(1))
+                        m_num = int(m_date.group(2))
+                        if 1 <= d_num <= 31 and 1 <= m_num <= 12:
+                            # Xử lý năm chính xác kể cả trường hợp đầu năm
+                            y_num = today.year
+                            date_key = f"{y_num:04d}-{m_num:02d}-{d_num:02d}"
+                        # Nếu cùng 1 dòng vừa có ngày vừa có số giờ phía sau (VD: "01/11 20h")
+                        tail_part = ln[m_date.end():].strip()
+                        if tail_part:
+                            m_h_inline = re.search(r"(\d+(?:[.,]\d+)?)\s*h?\b", tail_part, re.IGNORECASE)
+                            if m_h_inline:
+                                total_hours = float(m_h_inline.group(1).replace(",", "."))
+                        continue
+
+                    if date_key is not None:
+                        if ln in ("-", "—", ""):
                             total_hours = 0.0
                         else:
-                            total_hours = float(hours_str)
-                        
-                        remaining = max(0.0, 24.0 - total_hours)
-                        remaining_hours[key] = remaining
-                except (ValueError, IndexError):
-                    pass
-    except Exception as e:
-        logger.warning(f"[TICKET_BATCH] Không parse được timesheet: {e}")
-    
+                            m_h = re.search(r"(\d+(?:[.,]\d+)?)\s*h?\b", ln, re.IGNORECASE)
+                            if m_h:
+                                total_hours = float(m_h.group(1).replace(",", "."))
+
+                if date_key and date_key in all_month_days:
+                    rem = round(max(0.0, 24.0 - total_hours), 2)
+                    remaining_hours[date_key] = rem
+        except Exception as e:
+            logger.warning(f"[TICKET_BATCH] Lỗi parse DOM bảng timesheet: {e}")
+
+        # Bước 3: Fallback bằng dữ liệu API timesheet nếu DOM đọc thiếu hoặc thất bại
+        exact_keys = [k for k in api_bucket.keys() if k.startswith("exact|")]
+        if (not remaining_hours or len(remaining_hours) < len(all_month_days)) and (exact_keys or api_bucket):
+            use_keys = exact_keys if exact_keys else list(api_bucket.keys())
+            api_logged_totals: Dict[str, float] = {}
+            for sk in use_keys:
+                for d_k, h_v in api_bucket[sk].items():
+                    api_logged_totals[d_k] = api_logged_totals.get(d_k, 0.0) + h_v
+
+            if target_api_seen or api_logged_totals:
+                for d_k in all_month_days:
+                    if d_k not in remaining_hours:
+                        logged = api_logged_totals.get(d_k, 0.0)
+                        remaining_hours[d_k] = round(max(0.0, 24.0 - logged), 2)
+                logger.info(f"[TICKET_BATCH] Đã bổ sung/đối chiếu timesheet từ API ({len(use_keys)} nguồn)")
+    finally:
+        try:
+            page.remove_listener("response", _on_ts_response)
+        except Exception:
+            pass
+
     if not remaining_hours:
-        # Fallback: khởi tạo tất cả các ngày trong tháng có 24h trống
-        logger.warning("[TICKET_BATCH] Không đọc được timesheet, fallback: tất cả ngày có 24h")
-        d = first_of_month
-        while d <= today:
-            remaining_hours[d.strftime("%Y-%m-%d")] = 24.0
-            d = d.replace(day=d.day + 1) if d.day < 28 else (
-                d.replace(month=d.month + 1, day=1) if d.month < 12 else d.replace(year=d.year + 1, month=1, day=1)
-            )
-    
-    logger.info(f"[TICKET_BATCH] Timesheet loaded: {len(remaining_hours)} ngày")
+        # Fallback cuối cùng: khởi tạo tất cả các ngày trong tháng có 24h trống
+        logger.warning("[TICKET_BATCH] Không đọc được timesheet cả DOM lẫn API, fallback: tất cả ngày có 24h")
+        for d_k in all_month_days:
+            remaining_hours[d_k] = 24.0
+    else:
+        # Đảm bảo đủ mọi ngày từ đầu tháng đến hôm nay (nếu ngày nào thiếu cột trên UI -> coi như 24h trống)
+        for d_k in all_month_days:
+            if d_k not in remaining_hours:
+                remaining_hours[d_k] = 24.0
+
+    logger.info(f"[TICKET_BATCH] Timesheet loaded ({len(remaining_hours)} ngày): {remaining_hours}")
     return remaining_hours
 
 
 def _pick_best_day(remaining_hours: Dict[str, float]) -> Optional[str]:
     """
     Chọn ngày tốt nhất để khai báo 1 giờ:
-    1. Ưu tiên ngày có remaining < 8h (nhưng > 0)
+    1. Ưu tiên ngày có remaining >= 1h và < 8h (lấp đầy các ngày sắp đủ 24h trước)
     2. Nếu không có, lấy ngày đầu tiên có remaining >= 1h
-    Return: key dạng "2026-09-01" hoặc None nếu không có
+    Return: key dạng "2026-11-01" hoặc None nếu không còn ngày nào trống >= 1h
     """
-    # Sắp xếp theo ngày (tăng dần = ưu tiên ngày đầu tháng)
     sorted_days = sorted(remaining_hours.keys())
     
-    # Ưu tiên 1: remaining > 0 và < 8
+    # Ưu tiên 1: còn ít nhất 1h và < 8h
     for day_key in sorted_days:
         r = remaining_hours[day_key]
-        if 0 < r < 8:
+        if 1.0 <= r < 8.0:
             return day_key
     
-    # Ưu tiên 2: remaining >= 1
+    # Ưu tiên 2: remaining >= 1h
     for day_key in sorted_days:
         r = remaining_hours[day_key]
-        if r >= 1:
+        if r >= 1.0:
             return day_key
     
     return None
 
 
+def _extract_person_display_and_blob(val: Any) -> tuple[str, str]:
+    """
+    Chuẩn hóa trường người dùng từ API GPMS (`assignees` / `creators` / `assignee_name` / `assignee`).
+    GPMS trả về `assignees` dạng dict (`{"user_name": "dung.nguyenanh", "full_name": "...", "name": "..."}`)
+    hoặc danh sách dict / chuỗi đơn. Trả về `(tên_hiển_thị, chuỗi_gộp_để_so_khớp)`.
+    """
+    if isinstance(val, dict):
+        uname = str(val.get("user_name") or val.get("username") or "").strip()
+        fname = str(val.get("full_name") or "").strip()
+        name = str(val.get("name") or "").strip()
+        email = str(val.get("email") or "").strip()
+        display = uname or name or fname or email
+        blob = " ".join(x for x in [uname, fname, name, email] if x)
+        return display, blob
+
+    if isinstance(val, list):
+        displays: List[str] = []
+        blobs: List[str] = []
+        for entry in val:
+            d, b = _extract_person_display_and_blob(entry)
+            if d:
+                displays.append(d)
+            if b:
+                blobs.append(b)
+        return ", ".join(displays), " ".join(blobs)
+
+    if val is not None:
+        s = str(val).strip()
+        return s, s
+
+    return "", ""
+
+
 async def _fetch_ticket_list(page, username: str) -> List[Dict[str, Any]]:
     """
-    Lấy danh sách ticket từ work-list.
-    Áp dụng Dual-Engine:
-    1. Bắt trực tiếp response JSON từ API https://ticket-gpms.ggg.com.vn/api/tasks/paging.
-    2. Duyệt DOM bảng kết hợp cuộn sâu (infinite scroll & mouse wheel) để bắt trọn mọi ticket.
+    Lấy danh sách ticket từ work-list (https://gpms.ggg.com.vn/gticket/work-list).
+    Áp dụng Dual-Engine chuẩn xác:
+    1. Bắt trực tiếp JSON từ API `https://ticket-gpms.ggg.com.vn/api/tasks/paging` (đã sửa đúng key `assignees` & `creators`),
+       đồng thời chủ động tải các trang tiếp theo nếu `total_page > 1`.
+    2. Duyệt DOM bảng `tbody tr` kết hợp cuộn sâu làm lớp đối chiếu/dự phòng.
+       (Đã loại bỏ selector `div:has-text('Công việc nhận về')` gây click nhầm `<div id="root">` mở DatePicker!).
     Quy tắc lọc theo người dùng chỉ định:
-    - Tên nhiệm vụ chứa: 'Nhiệm vụ hỗ trợ tiếp nhận từ' hoặc 'từ tổng đài 3CX' (hoặc '3CX')
-    - Người xử lý được gán cho: dung.nguyenanh (hoặc username SSO)
+    - Tên nhiệm vụ chứa: '...hỗ trợ tiếp nhận từ tổng đài 3CX...' (hoặc '3CX', 'tổng đài')
+    - Người xử lý là: dung.nguyenanh (hoặc username SSO)
     """
     seen_tickets_dict: Dict[str, Dict[str, Any]] = {}
-    user_clean = (username or "").strip().lower().split('@')[0]
+    user_clean = (username or "").strip().lower().split("@")[0]
 
-    def _is_ticket_match(name: str, assignee: str) -> bool:
+    def _is_ticket_match(name: str, assignee_blob: str) -> bool:
         combined_name = (name or "").lower()
-        assignee_clean = (assignee or "").strip().lower()
-        
+        assignee_clean = (assignee_blob or "").strip().lower()
+
         is_3cx = any(kw in combined_name for kw in [
+            "hỗ trợ tiếp nhận từ tổng đài 3cx",
             "nhiệm vụ hỗ trợ tiếp nhận từ",
             "từ tổng đài 3cx",
             "hỗ trợ tiếp nhận từ",
@@ -524,85 +782,204 @@ async def _fetch_ticket_list(page, username: str) -> List[Dict[str, Any]]:
         ])
         is_user_match = (
             ("dung.nguyenanh" in assignee_clean) or
+            ("nguyễn anh dũng" in assignee_clean) or
+            ("nguyen anh dung" in assignee_clean) or
             (user_clean and user_clean in assignee_clean) or
             (assignee_clean and assignee_clean in user_clean)
         )
         return is_3cx and is_user_match
 
-    # Lắng nghe response từ API tasks/paging của GPMS
+    status_vi_map = {
+        "open": "Mới mở",
+        "inprogress": "Đang triển khai",
+        "in_progress": "Đang triển khai",
+        "reopen": "Mở lại",
+    }
+    closed_statuses = {"done", "closed", "completed", "cancelled", "cancel", "reject", "rejected"}
+
+    def _ingest_api_items(items: List[Any]) -> None:
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            t_id = str(it.get("id") or it.get("code") or "").strip()
+            t_title = str(it.get("title") or it.get("name") or "").strip()
+            raw_status = str(it.get("status") or "").strip().lower()
+            if raw_status in closed_statuses:
+                continue
+
+            creator_disp, _ = _extract_person_display_and_blob(
+                it.get("creators") or it.get("creator_name") or it.get("creator")
+            )
+            if not creator_disp:
+                creator_disp = "Anonymous"
+
+            assignee_disp, assignee_blob = _extract_person_display_and_blob(
+                it.get("assignees") or it.get("assignee_name") or it.get("assignee")
+            )
+            due_date_part = str(it.get("due_date") or "").strip()
+            due_hour_part = str(it.get("due_hour") or "").strip()
+            t_due = f"{due_date_part} {due_hour_part}".strip() if (due_date_part or due_hour_part) else ""
+            t_status = status_vi_map.get(raw_status, str(it.get("status") or "Mới mở"))
+
+            if t_id and t_id not in seen_tickets_dict:
+                if _is_ticket_match(t_title, assignee_blob or assignee_disp):
+                    seen_tickets_dict[t_id] = {
+                        "ticket_id": t_id,
+                        "ticket_name": t_title,
+                        "created_by": creator_disp,
+                        "assignee": assignee_disp or username,
+                        "due_date": t_due,
+                        "url": f"https://gpms.ggg.com.vn/gticket/work-list/detail?id={t_id}",
+                        "source_type": "TICKET",
+                        "status": t_status,
+                    }
+
+    paging_api_received = False
+    api_total_page = 1
+    captured_ticket_auth: Optional[str] = None
+    captured_paging_payload: Optional[Dict[str, Any]] = None
+
+    async def _on_ticket_request(request):
+        nonlocal captured_ticket_auth, captured_paging_payload
+        req_url = request.url or ""
+        if "ticket-gpms.ggg.com.vn/api/" in req_url:
+            auth_val = request.headers.get("authorization") or request.headers.get("Authorization")
+            if auth_val:
+                captured_ticket_auth = auth_val
+        if "tasks/paging" in req_url and request.method.upper() == "POST":
+            try:
+                if request.post_data:
+                    captured_paging_payload = json.loads(request.post_data)
+            except Exception:
+                pass
+
     async def _on_ticket_response(response):
-        if "tasks/paging" in response.url:
+        nonlocal paging_api_received, api_total_page
+        if "tasks/paging" in (response.url or "") and response.status == 200:
             try:
                 res_json = await response.json()
-                items = res_json.get("data", {}).get("items", [])
-                for it in items:
-                    t_id = str(it.get("id", "")).strip()
-                    t_title = (it.get("title") or it.get("name") or "").strip()
-                    t_creator = (it.get("creator_name") or it.get("creator") or "Anonymous").strip()
-                    t_assignee = (it.get("assignee_name") or it.get("assignee") or "").strip()
-                    t_due = (it.get("due_date") or "").strip()
-                    
-                    if t_id and t_id not in seen_tickets_dict:
-                        if _is_ticket_match(t_title, t_assignee):
-                            seen_tickets_dict[t_id] = {
-                                "ticket_id": t_id,
-                                "ticket_name": t_title,
-                                "created_by": t_creator,
-                                "assignee": t_assignee,
-                                "due_date": t_due,
-                                "url": f"https://gpms.ggg.com.vn/gticket/work-list/detail?id={t_id}",
-                                "source_type": "TICKET",
-                                "status": "Mới mở",
-                            }
+                data_obj = res_json.get("data") or {}
+                paging_api_received = True
+                try:
+                    tp = int(data_obj.get("total_page") or 1)
+                    if tp > api_total_page:
+                        api_total_page = tp
+                except (TypeError, ValueError):
+                    pass
+                items = data_obj.get("items") or []
+                if isinstance(items, list):
+                    _ingest_api_items(items)
             except Exception as api_err:
                 logger.debug(f"[TICKET_BATCH] Lỗi parse tasks/paging: {api_err}")
 
+    page.on("request", _on_ticket_request)
     page.on("response", _on_ticket_response)
 
     try:
-        await page.goto("https://gpms.ggg.com.vn/gticket/work-list", timeout=600000)
+        worklist_url = "https://gpms.ggg.com.vn/gticket/work-list"
+        await page.goto(worklist_url, timeout=600000)
         await _safe_wait_network_idle(page, 60000)
-        await asyncio.sleep(2)
 
-        # Đảm bảo chọn tab "Công việc nhận về" nếu có trên giao diện GPMS
+        # Kiểm tra nếu bị đẩy về SSO thì tự động đăng nhập lại ngay
         try:
-            nhan_ve_btn = page.locator("button:has-text('Công việc nhận về'), div:has-text('Công việc nhận về'), span:has-text('Công việc nhận về'), a:has-text('Công việc nhận về')").first
+            u_cfg, p_cfg = get_sso_credentials()
+            await _recover_sso_if_redirected(page, worklist_url, u_cfg, p_cfg)
+        except Exception:
+            pass
+
+        # Chờ tối đa 20s để API tasks/paging trả dữ liệu hoặc bảng DOM render dòng thật
+        for _ in range(40):
+            if paging_api_received:
+                break
+            try:
+                real_rows = await page.locator("tbody tr:not([aria-hidden='true'])").all()
+                if real_rows:
+                    for rr in real_rows[:5]:
+                        first_td = (await rr.locator("td").first.inner_text()).strip() if await rr.locator("td").count() > 0 else ""
+                        if first_td:
+                            paging_api_received = True
+                            break
+                if paging_api_received:
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
+
+        # Đảm bảo đang ở tab "Công việc nhận về" (CHỈ match button/a/tab, KHÔNG match div#root!)
+        try:
+            nhan_ve_btn = page.locator(
+                "button:has-text('Công việc nhận về'), a:has-text('Công việc nhận về'), [role='tab']:has-text('Công việc nhận về')"
+            ).first
             if await nhan_ve_btn.count() > 0:
-                await nhan_ve_btn.click()
-                await _safe_wait_network_idle(page, 24000)
-                await asyncio.sleep(1)
+                btn_cls = (await nhan_ve_btn.get_attribute("class") or "").lower()
+                # Chỉ click nếu nút chưa ở trạng thái active/primary (tránh reload thừa)
+                if "primary" not in btn_cls and "active" not in btn_cls:
+                    await nhan_ve_btn.click()
+                    await _safe_wait_network_idle(page, 24000)
+                    await asyncio.sleep(1.0)
         except Exception as tab_e:
             logger.debug(f"[TICKET_BATCH] Chuyển tab 'Công việc nhận về': {tab_e}")
-        
+
+        # Nếu API tasks/paging có nhiều hơn 1 trang -> chủ động gọi API lấy hết trang 2..N
+        if api_total_page > 1 and captured_ticket_auth and captured_paging_payload:
+            max_api_pages = min(api_total_page, 20)
+            logger.info(f"[TICKET_BATCH] API tasks/paging có {api_total_page} trang, đang tải các trang 2..{max_api_pages}...")
+            for page_idx in range(2, max_api_pages + 1):
+                try:
+                    req_body = dict(captured_paging_payload)
+                    req_body["page"] = page_idx
+                    page_json = await page.evaluate(
+                        """async ([auth, bodyObj]) => {
+                            const resp = await fetch('https://ticket-gpms.ggg.com.vn/api/tasks/paging', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': auth
+                                },
+                                body: JSON.stringify(bodyObj)
+                            });
+                            if (!resp.ok) return null;
+                            return await resp.json();
+                        }""",
+                        [captured_ticket_auth, req_body],
+                    )
+                    if isinstance(page_json, dict):
+                        p_items = (page_json.get("data") or {}).get("items") or []
+                        if isinstance(p_items, list):
+                            _ingest_api_items(p_items)
+                except Exception as pg_err:
+                    logger.warning(f"[TICKET_BATCH] Lỗi tải tasks/paging trang {page_idx}: {pg_err}")
+                    break
+
+        # Lớp 2 (DOM Fallback & Merge): Quét DOM bảng trực tiếp kết hợp cuộn sâu
         prev_row_count = 0
         no_new_rows_count = 0
-        max_scrolls = 60  # Đảm bảo duyệt sâu mọi đợt lazy-load
-        
+        max_scrolls = 30
+
         for scroll_idx in range(1, max_scrolls + 1):
-            await asyncio.sleep(0.8)
-            
+            await asyncio.sleep(0.6)
             try:
-                # Parse bảng ticket trực tiếp từ DOM
-                rows = await page.locator('tbody tr').all()
+                rows = await page.locator("table:not(.ant-picker-content) tbody tr").all()
                 current_row_count = len(rows)
-                
+
                 for row in rows:
                     try:
-                        cells = await row.locator('td').all()
+                        cells = await row.locator("td").all()
                         if len(cells) < 4:
                             continue
-                        
-                        # Cột Mã (cell 0)
-                        ma_cell = cells[0]
-                        ma_text = (await ma_cell.inner_text()).strip()
+
+                        # Cột Mã (cell 0) - bỏ qua hàng đo kích thước trống của Ant/React Table
+                        ma_text = (await cells[0].inner_text()).strip()
                         if not ma_text or ma_text in seen_tickets_dict:
                             continue
-                        
-                        # Tên nhiệm vụ (cell 1) - lấy cả title lẫn text
-                        ten_text = (await cells[1].inner_text()).strip()
+
+                        # Tên nhiệm vụ (cell 1) - lấy text_content (không bị CSS ellipsis cắt) + inner_text + title
+                        ten_inner = (await cells[1].inner_text()).strip()
+                        ten_content = (await cells[1].text_content() or "").strip()
+                        ten_text = ten_content if len(ten_content) > len(ten_inner) else ten_inner
                         cell_title = ""
                         try:
-                            for tag in ['a', 'span', 'p', 'div']:
+                            for tag in ["a", "span", "p", "div"]:
                                 loc = cells[1].locator(tag)
                                 c = await loc.count()
                                 for idx in range(min(c, 5)):
@@ -615,15 +992,12 @@ async def _fetch_ticket_list(page, username: str) -> List[Dict[str, Any]]:
                             pass
 
                         full_task_name = cell_title if (cell_title and len(cell_title) > len(ten_text)) else ten_text
-                        
-                        # Người tạo (cell 2)
+
+                        # Người tạo (cell 2), Người xử lý (cell 3), Ngày YCHT (cell 4), Trạng thái (cell 6)
                         nguoi_tao = (await cells[2].inner_text()).strip() if len(cells) > 2 else ""
-                        
-                        # Người xử lý (cell 3)
                         nguoi_xu_ly = (await cells[3].inner_text()).strip() if len(cells) > 3 else ""
-                        
-                        # Ngày YCHT (cell 4)
                         ngay_ycht = (await cells[4].inner_text()).strip() if len(cells) > 4 else ""
+                        trang_thai = (await cells[6].inner_text()).strip() if len(cells) > 6 else "Mới mở"
 
                         if _is_ticket_match(full_task_name, nguoi_xu_ly):
                             seen_tickets_dict[ma_text] = {
@@ -634,29 +1008,26 @@ async def _fetch_ticket_list(page, username: str) -> List[Dict[str, Any]]:
                                 "due_date": ngay_ycht,
                                 "url": f"https://gpms.ggg.com.vn/gticket/work-list/detail?id={ma_text}",
                                 "source_type": "TICKET",
-                                "status": "Mới mở",
+                                "status": trang_thai or "Mới mở",
                             }
                     except Exception as row_err:
                         logger.debug(f"[TICKET_BATCH] Skip row: {row_err}")
 
-                # Kiểm tra nếu số dòng tăng lên
                 if current_row_count > prev_row_count:
                     prev_row_count = current_row_count
                     no_new_rows_count = 0
                 else:
                     no_new_rows_count += 1
-                    if no_new_rows_count >= 6:
-                        logger.info(f"[TICKET_BATCH] Đã cuộn hết trang sau {scroll_idx} lần cuộn (tổng {current_row_count} hàng trong DOM)")
+                    if no_new_rows_count >= 4:
+                        logger.info(
+                            f"[TICKET_BATCH] Đã quét xong bảng work-list sau {scroll_idx} lượt (tổng {current_row_count} hàng DOM)"
+                        )
                         break
 
-                # Cuộn sâu cả container lẫn window bằng nhiều cơ chế
                 await page.evaluate("""
                     () => {
                         window.scrollTo(0, document.body.scrollHeight);
-                        if (document.documentElement) {
-                            document.documentElement.scrollTop = document.documentElement.scrollHeight;
-                        }
-                        const scrollables = document.querySelectorAll('div, section, main, [class*="scroll"], [class*="table"], [class*="wrapper"], tbody');
+                        const scrollables = document.querySelectorAll('div, section, main, [class*="scroll"], [class*="table"], tbody');
                         for (const el of scrollables) {
                             if (el.scrollHeight > el.clientHeight && el.clientHeight > 0) {
                                 el.scrollTop = el.scrollHeight;
@@ -665,38 +1036,20 @@ async def _fetch_ticket_list(page, username: str) -> List[Dict[str, Any]]:
                         }
                     }
                 """)
-                
-                # Cuộn chuột wheel
-                try:
-                    await page.mouse.wheel(0, 1500)
-                except Exception:
-                    pass
-
-                # Kéo dòng cuối cùng vào tầm nhìn
-                try:
-                    last_row = page.locator('tbody tr').last
-                    if await last_row.count() > 0:
-                        await last_row.scroll_into_view_if_needed(timeout=1500)
-                except Exception:
-                    pass
-
-                # Phím PageDown / End
-                try:
-                    await page.keyboard.press("PageDown")
-                    await page.keyboard.press("End")
-                except Exception:
-                    pass
-
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(0.8)
             except Exception as e:
                 logger.warning(f"[TICKET_BATCH] Lỗi trong lần cuộn {scroll_idx}: {e}")
                 break
     finally:
         try:
+            page.remove_listener("request", _on_ticket_request)
+        except Exception:
+            pass
+        try:
             page.remove_listener("response", _on_ticket_response)
         except Exception:
             pass
-    
+
     tickets = list(seen_tickets_dict.values())
     logger.info(f"[TICKET_BATCH] Tìm thấy {len(tickets)} tickets 3CX của {username}")
     return tickets
@@ -714,6 +1067,7 @@ async def _fetch_gprocess_mission_list(page, username: str) -> List[Dict[str, An
     """
     gprocess_items = []
     seen_ids = set()
+    _gp_handler = None
     try:
         logger.info("[GPROCESS] Bắt đầu lấy danh sách nhiệm vụ từ https://gpms.ggg.com.vn/g-process/my-mission...")
         intercepted_tasks: List[Dict[str, Any]] = []
@@ -749,10 +1103,19 @@ async def _fetch_gprocess_mission_list(page, username: str) -> List[Dict[str, An
                 except Exception:
                     pass
 
+        _gp_handler = _on_response
         page.on("response", _on_response)
 
-        await page.goto("https://gpms.ggg.com.vn/g-process/my-mission", timeout=480000)
+        gp_url = "https://gpms.ggg.com.vn/g-process/my-mission"
+        await page.goto(gp_url, timeout=480000)
         await _safe_wait_network_idle(page, 60000)
+
+        # Kiểm tra nếu bị đẩy về SSO giữa chừng thì tự động đăng nhập lại
+        try:
+            u_cfg, p_cfg = get_sso_credentials()
+            await _recover_sso_if_redirected(page, gp_url, u_cfg, p_cfg)
+        except Exception:
+            pass
 
         # Chờ bảng xuất hiện hoặc spinner biến mất
         try:
@@ -1018,6 +1381,12 @@ async def _fetch_gprocess_mission_list(page, username: str) -> List[Dict[str, An
                     break
     except Exception as e:
         logger.warning(f"[GPROCESS] Lỗi lấy danh sách my-mission: {e}")
+    finally:
+        if _gp_handler is not None:
+            try:
+                page.remove_listener("response", _gp_handler)
+            except Exception:
+                pass
 
     logger.info(f"[GPROCESS] Tổng số nhiệm vụ G-Process tìm thấy: {len(gprocess_items)}")
     return gprocess_items

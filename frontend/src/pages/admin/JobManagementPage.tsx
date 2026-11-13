@@ -4656,16 +4656,20 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
                       📊 Xem Timesheet Tháng Này (giờ trống còn lại / ngày)
                     </summary>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
-                      {Object.entries(ticketHistory.timesheet_summary).sort().map(([day, hours]) => (
-                        <span key={day} style={{
-                          padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600,
-                          backgroundColor: hours < 8 ? '#FEF9C3' : '#F0FDF4',
-                          color: hours < 8 ? '#A16207' : '#166534',
-                          border: `1px solid ${hours < 8 ? '#FDE047' : '#86EFAC'}`
-                        }}>
-                          {day.slice(5)}: {hours}h
-                        </span>
-                      ))}
+                      {Object.entries(ticketHistory.timesheet_summary).sort().map(([day, hours]) => {
+                        const isFull = hours <= 0;
+                        const isLow = !isFull && hours < 8;
+                        return (
+                          <span key={day} style={{
+                            padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600,
+                            backgroundColor: isFull ? '#FEE2E2' : (isLow ? '#FEF9C3' : '#F0FDF4'),
+                            color: isFull ? '#991B1B' : (isLow ? '#A16207' : '#166534'),
+                            border: `1px solid ${isFull ? '#FCA5A5' : (isLow ? '#FDE047' : '#86EFAC')}`
+                          }}>
+                            {day.slice(5)}: {hours}h
+                          </span>
+                        );
+                      })}
                     </div>
                   </details>
                 )}
