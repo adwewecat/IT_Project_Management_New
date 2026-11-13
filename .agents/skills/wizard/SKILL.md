@@ -1,6 +1,6 @@
 ---
 name: wizard
-description: Generate an interactive bash wizard that walks a human through steps only they can perform. Use when provisioning infrastructure, setting up credentials or CI secrets, walking an unfamiliar third-party dashboard, or running a one-off migration or cutover. Don't invoke this for steps the agent can perform itself.
+description: "Manual trigger ONLY — run ONLY when the user explicitly chats 'cau hinh' (or invokes /wizard). Generates an interactive bash wizard that walks the user step-by-step through manual off-code setup (.env, API keys, GitHub Secrets, environment configuration)."
 ---
 
 # Wizard

@@ -1,6 +1,6 @@
 ---
 name: domain-modeling
-description: Build and sharpen a project's domain model. Use when discussing codebase terminology, writing or editing a GLOSSARY.md, or recording or editing an ADR.
+description: On-demand domain modeling discipline invoked by /grill-with-docs, /improve-codebase-architecture, /triage, /wayfinder, or explicit user request to update GLOSSARY.md or ADRs.
 ---
 
 # Domain Modeling

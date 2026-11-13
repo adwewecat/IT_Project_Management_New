@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: Test-driven development. Use when the user wants to build features or fix bugs test-first, mentions "red-green-refactor", or wants integration tests.
+description: On-demand Matt Pocock TDD guide (invoke only when called by /implement, /implement-spec, or explicit user command; automatic TDD uses superpowers:test-driven-development).
 ---
 
 # Test-Driven Development

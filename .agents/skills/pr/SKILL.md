@@ -1,6 +1,7 @@
 ---
 name: pr
-description: "Use when writing a PR body."
+description: "Manual PR description template (invoke only when explicitly requested to format a PR body)."
+disable-model-invocation: true
 metadata:
   credits:
     skill: show-me

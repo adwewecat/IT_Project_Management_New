@@ -19,8 +19,12 @@ dist/
 .pnpm-debug.log*
 
 # Environment & local files
+.env
+.env.*
+!.env.example
 *.env.local
 *.env.*.local
+.private-journal/
 .DS_Store
 Thumbs.db
 
