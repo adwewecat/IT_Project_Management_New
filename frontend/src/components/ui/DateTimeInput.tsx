@@ -53,16 +53,20 @@ export const DateTimeInput: React.FC<DateTimeInputProps> = ({
   };
 
   const selectStyle: React.CSSProperties = {
-    height: '40px',
-    padding: '0 8px',
+    height: '38px',
+    width: '46px',
+    minWidth: '44px',
+    padding: '0 2px',
     borderRadius: 'var(--radius-md, 6px)',
     border: '1px solid var(--border-color, #cbd5e1)',
     backgroundColor: disabled ? 'var(--bg-secondary, #f8fafc)' : 'var(--bg-primary)',
     color: 'var(--text-primary)',
-    fontSize: '13.5px',
+    fontSize: '13px',
     fontWeight: 600,
     cursor: disabled ? 'not-allowed' : 'pointer',
     outline: 'none',
+    textAlign: 'center',
+    boxSizing: 'border-box',
   };
 
   return (
@@ -74,8 +78,8 @@ export const DateTimeInput: React.FC<DateTimeInputProps> = ({
         </label>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap' }}>
-        <div style={{ flex: 1, minWidth: '145px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap', width: '100%' }}>
+        <div style={{ flex: '1 1 125px', minWidth: '120px' }}>
           <DateInput
             value={datePart}
             onChange={(nextIsoDate) => emitCombined(nextIsoDate, hourPart, minutePart)}
@@ -90,12 +94,12 @@ export const DateTimeInput: React.FC<DateTimeInputProps> = ({
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '4px',
+            gap: '3px',
             flexShrink: 0,
           }}
           title="Chọn giờ theo định dạng 24h (HH:mm)"
         >
-          <Clock size={14} style={{ color: 'var(--text-muted, #64748b)' }} />
+          <Clock size={13} style={{ color: 'var(--text-muted, #64748b)', flexShrink: 0 }} />
           <select
             aria-label="Giờ (24h)"
             value={hourPart}

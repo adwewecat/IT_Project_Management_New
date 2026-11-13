@@ -2196,7 +2196,7 @@ export const ViolationAndLeavePage: React.FC = () => {
         isOpen={isLeaveModalOpen}
         onClose={() => setIsLeaveModalOpen(false)}
         title={editingLeave ? 'Chỉnh Sửa Nghỉ Phép / Xin Về Sớm' : 'Ghi Nhận Nghỉ Phép / Xin Về Sớm'}
-        maxWidth="600px"
+        maxWidth="680px"
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', width: '100%' }}>
             <Button variant="secondary" onClick={() => setIsLeaveModalOpen(false)}>
@@ -2362,23 +2362,19 @@ export const ViolationAndLeavePage: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <DateTimeInput
-                label="Thời Gian Bắt Đầu"
-                value={lStartTime}
-                onChange={handleStartTimeChange}
-                required
-              />
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: '14px' }}>
+            <DateTimeInput
+              label="Thời Gian Bắt Đầu"
+              value={lStartTime}
+              onChange={handleStartTimeChange}
+              required
+            />
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <DateTimeInput
-                label="Thời Gian Kết Thúc"
-                value={lEndTime}
-                onChange={setLEndTime}
-              />
-            </div>
+            <DateTimeInput
+              label="Thời Gian Kết Thúc"
+              value={lEndTime}
+              onChange={setLEndTime}
+            />
           </div>
 
           {/* Tóm tắt ca nghỉ */}

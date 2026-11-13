@@ -5,6 +5,8 @@
 
 <!-- Archived entries go below, newest archived at top -->
 
+- **[2026-11-10] Ràng buộc bắt buộc nhập Subject Email trên Webmail** (`cabf985`)
+
 - **[2026-11-09] Khắc phục lỗi xóa hình ảnh minh họa phiên bản phần mềm không lưu được** (`2bbc861`)
 - **[2026-11-09] Khắc phục lỗi dán bảng Excel vào soạn thư Webmail bị chuyển thành ảnh — giữ nguyên HTML table text chỉnh sửa được** (`2dabae7`)
 - **[2026-11-09] Multi-Collection Live Order Tracker cho Logs Order Bàn & Dynamic Fleet Tablet/Thiết Bị Nhà Hàng** (`132d9ee`)
