@@ -144,6 +144,9 @@ BASE_PERMISSION_DEFINITIONS = [
     {"chucnang": "agent_multitask_2", "module": "Màn Hình & Phân Hệ Mới", "action": "Quyền Quản Lý & Hỗ Trợ Từ Xa Agent Multitask 2"},
     {"chucnang": "view_agent_multitask_2", "module": "Màn Hình & Phân Hệ Mới", "action": "Xem Màn Hình Hỗ Trợ Từ Xa Agent Multitask 2"},
     {"chucnang": "update_agent_multitask_2", "module": "Màn Hình & Phân Hệ Mới", "action": "Truyền File & Thực Thi Lệnh Từ Xa Agent Multitask 2"},
+    {"chucnang": "gpms_report", "module": "Màn Hình & Phân Hệ Mới", "action": "Quyền Sử Dụng Báo Cáo GPMS (Phân Tích & Thống Kê Ticket)"},
+    {"chucnang": "view_gpms_report", "module": "Màn Hình & Phân Hệ Mới", "action": "Xem Báo Cáo & Biểu Đồ Phân Tích GPMS"},
+    {"chucnang": "update_gpms_report", "module": "Màn Hình & Phân Hệ Mới", "action": "Tải File Excel & Cấu Hình Vùng Miền Báo Cáo GPMS"},
 ]
 
 

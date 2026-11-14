@@ -5,6 +5,12 @@
 
 <!-- Archived entries go below, newest archived at top -->
 
+- **[2026-11-11] Rà soát & chuẩn hóa rule so khớp tài khoản SSO/IAM (Strict Identity Matching)** (`079afb0`, `a0fd2a5`)
+  - **Done:** Khắc phục lỗi khớp nhầm user đầu danh sách khi khóa/đổi mật khẩu hàng loạt SSO/IAM (`uyen.hoang` vs `duyen.hoang`), bổ sung bộ lọc nhanh và hiển thị kiểu khớp.
+
+- **[2026-11-10] Nâng cấp Quản Lý Lịch Hẹn Giờ Đẩy Param (Auto-Polling, Chi Tiết Param, Tái Sử Dụng)** (`135233f`)
+  - **Done:** Thêm tự động cập nhật trạng thái thời gian thực, xem chi tiết cấu hình param đã đẩy, tái sử dụng (clone) cấu hình và đẩy ngay.
+
 - **[2026-11-10] Ràng buộc bắt buộc nhập Subject Email trên Webmail** (`cabf985`)
 
 - **[2026-11-09] Khắc phục lỗi xóa hình ảnh minh họa phiên bản phần mềm không lưu được** (`2bbc861`)

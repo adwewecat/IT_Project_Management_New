@@ -99,6 +99,7 @@ async def lifespan(app: FastAPI):
         )
         from app.models.webmail import SystemEmailConfig, UserEmailSignature, WebmailSentLog, WebmailUserRead
         from app.models.managed_api import ManagedAPI
+        from app.models.gpms_report import GpmsReportBatch, GpmsRegionConfig
         from sqlalchemy import text
         Base.metadata.create_all(engine, tables=[
             OvernightDeviceLog.__table__,
@@ -118,6 +119,8 @@ async def lifespan(app: FastAPI):
             WebmailSentLog.__table__,
             WebmailUserRead.__table__,
             ManagedAPI.__table__,
+            GpmsReportBatch.__table__,
+            GpmsRegionConfig.__table__,
         ], checkfirst=True)
 
         # Tự động nạp mẫu kịch bản mặc định nếu bảng trống
@@ -276,6 +279,42 @@ async def lifespan(app: FastAPI):
                             cached_at DATETIME NOT NULL DEFAULT GETDATE()
                         );
                         CREATE INDEX IX_WEBMAIL_DETAIL_CACHE_TIME ON dbo.WEBMAIL_DETAIL_CACHE (cached_at DESC);
+                    END
+                """))
+                _tc.commit()
+
+                # Kiểm tra phòng vệ bảng GPMS_REPORT_BATCHES và GPMS_REGION_CONFIG
+                _tc.execute(text("""
+                    IF OBJECT_ID('dbo.GPMS_REPORT_BATCHES', 'U') IS NULL
+                    BEGIN
+                        CREATE TABLE dbo.GPMS_REPORT_BATCHES (
+                            id INT IDENTITY(1,1) PRIMARY KEY,
+                            report_name NVARCHAR(255) NOT NULL,
+                            file_name NVARCHAR(255) NOT NULL,
+                            period_label NVARCHAR(100) NULL,
+                            export_at DATETIME NULL,
+                            total_rows INT NOT NULL DEFAULT 0,
+                            unique_senders INT NOT NULL DEFAULT 0,
+                            unique_receivers INT NOT NULL DEFAULT 0,
+                            source_type NVARCHAR(30) NOT NULL DEFAULT 'UPLOAD',
+                            payload_gzip_b64 VARCHAR(MAX) NOT NULL,
+                            uploaded_by NVARCHAR(100) NULL,
+                            uploaded_at DATETIME NOT NULL DEFAULT GETDATE(),
+                            is_active BIT NOT NULL DEFAULT 1
+                        );
+                    END
+                    IF OBJECT_ID('dbo.GPMS_REGION_CONFIG', 'U') IS NULL
+                    BEGIN
+                        CREATE TABLE dbo.GPMS_REGION_CONFIG (
+                            id INT IDENTITY(1,1) PRIMARY KEY,
+                            username NVARCHAR(100) NOT NULL UNIQUE,
+                            full_name NVARCHAR(200) NULL,
+                            region NVARCHAR(20) NOT NULL DEFAULT 'NAM',
+                            note NVARCHAR(255) NULL,
+                            updated_by NVARCHAR(100) NULL,
+                            updated_at DATETIME NOT NULL DEFAULT GETDATE()
+                        );
+                        CREATE INDEX IX_GPMS_REGION_CONFIG_USER ON dbo.GPMS_REGION_CONFIG(username);
                     END
                 """))
                 _tc.commit()

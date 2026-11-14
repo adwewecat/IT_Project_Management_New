@@ -40,6 +40,8 @@ ALL_PERMISSIONS = [
     "webmail", "view_webmail", "update_webmail",
     # Agent Multitask 2 permissions
     "agent_multitask_2", "view_agent_multitask_2", "update_agent_multitask_2",
+    # Báo Cáo GPMS permissions (Rule 10)
+    "gpms_report", "view_gpms_report", "update_gpms_report",
 ]
 
 ROLE_MAP = {

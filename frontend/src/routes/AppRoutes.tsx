@@ -19,6 +19,7 @@ import { IncidentListPage } from '../pages/app/IncidentListPage';
 import { ViolationAndLeavePage } from '../pages/admin/ViolationAndLeavePage';
 import { StaffEvaluationReportPage } from '../pages/reports/StaffEvaluationReportPage';
 import { CentralizedLogsPage } from '../pages/reports/CentralizedLogsPage';
+import { GpmsReportPage } from '../pages/reports/GpmsReportPage';
 import { AppAnnouncementPage } from '../pages/app/AppAnnouncementPage';
 import { WorkChecklistPage } from '../pages/app/WorkChecklistPage';
 import { RestaurantMongoPage } from '../pages/app/RestaurantMongoPage';
@@ -111,6 +112,15 @@ export const AppRoutes: React.FC = () => {
         <Route path="reports/staff-evaluation" element={<StaffEvaluationReportPage />} />
         <Route path="staff-evaluation" element={<Navigate to="/reports/staff-evaluation" replace />} />
         <Route path="reports/centralized-logs" element={<CentralizedLogsPage />} />
+        <Route
+          path="reports/gpms"
+          element={
+            <ProtectedRoute requiredPermission="gpms_report">
+              <GpmsReportPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="gpms-report" element={<Navigate to="/reports/gpms" replace />} />
         <Route path="reports/logs" element={<Navigate to="/reports/centralized-logs" replace />} />
         <Route path="logs" element={<Navigate to="/reports/centralized-logs" replace />} />
         <Route path="pim" element={<PimPage />} />

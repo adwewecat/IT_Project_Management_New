@@ -30,6 +30,7 @@ import {
   Cpu,
   Zap,
   Mail,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { dashboardService, PendingSummaryResponse } from '../../services/dashboardService';
@@ -684,6 +685,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <Award size={18} style={{ color: '#F59E0B' }} />
               <span>Báo Cáo Đánh Giá Team App</span>
+            </NavLink>
+          </li>
+        )}
+        {hasNewScreenAccess(user, 'gpms_report') && (
+          <li>
+            <NavLink
+              to="/reports/gpms"
+              className="sidebar-interactive-item"
+              style={({ isActive }) => getLinkStyle(isActive)}
+            >
+              <BarChart3 size={18} style={{ color: 'var(--color-primary)' }} />
+              <span>Báo Cáo GPMS</span>
             </NavLink>
           </li>
         )}
