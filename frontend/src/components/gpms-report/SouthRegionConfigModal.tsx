@@ -38,6 +38,13 @@ export const SouthRegionConfigModal: React.FC<SouthRegionConfigModalProps> = ({
     }
   }, [isOpen, initialSelected]);
 
+  // Giữ cố định tập lựa chọn ban đầu khi mở modal để sắp xếp 1 lần duy nhất,
+  // tránh giật/nhảy vị trí dòng lên đầu danh sách mỗi lần tick chọn hoặc bỏ chọn user.
+  const initialSelectedSet = useMemo(
+    () => new Set(initialSelected.map((u) => u.trim().toLowerCase()).filter(Boolean)),
+    [initialSelected, isOpen]
+  );
+
   const mergedCandidates = useMemo(() => {
     const map = new Map<string, GpmsSouthUserCandidate>();
     for (const c of candidates) {
@@ -51,14 +58,14 @@ export const SouthRegionConfigModal: React.FC<SouthRegionConfigModalProps> = ({
     }
     const arr = Array.from(map.values());
     arr.sort((a, b) => {
-      const aSel = selectedSet.has(a.username.toLowerCase()) ? 1 : 0;
-      const bSel = selectedSet.has(b.username.toLowerCase()) ? 1 : 0;
+      const aSel = initialSelectedSet.has(a.username.toLowerCase()) ? 1 : 0;
+      const bSel = initialSelectedSet.has(b.username.toLowerCase()) ? 1 : 0;
       if (aSel !== bSel) return bSel - aSel;
       if (a.ticket_count !== b.ticket_count) return b.ticket_count - a.ticket_count;
       return a.username.localeCompare(b.username);
     });
     return arr;
-  }, [candidates, extraCandidates, selectedSet]);
+  }, [candidates, extraCandidates, initialSelectedSet]);
 
   const filteredCandidates = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -349,3 +356,4 @@ export const SouthRegionConfigModal: React.FC<SouthRegionConfigModalProps> = ({
     </Modal>
   );
 };
+

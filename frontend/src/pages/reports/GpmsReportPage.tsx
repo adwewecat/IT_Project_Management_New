@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BarChart3,
   Clock,
+  Compass,
   Eye,
   Filter,
   FolderInput,
+  MapPin,
   RefreshCw,
   Search,
   Settings2,
@@ -526,6 +528,41 @@ export const GpmsReportPage: React.FC = () => {
               )}
             </div>
           )}
+
+          {/* Chọn Vùng Miền phân tích ngay trên thanh công cụ (Tất cả / Miền Nam / Miền Bắc) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <MapPin size={13} style={{ color: '#F59E0B' }} />
+              Vùng miền:
+            </span>
+            <button
+              type="button"
+              className={`gpms-pill-btn ${!filters.region ? 'is-active' : ''}`}
+              onClick={() => applyFilterPatch({ region: '' })}
+            >
+              Tất cả vùng
+            </button>
+            <button
+              type="button"
+              className={`gpms-pill-btn ${filters.region === 'NAM' ? 'is-active' : ''}`}
+              onClick={() => applyFilterPatch({ region: filters.region === 'NAM' ? '' : 'NAM' })}
+              title="Chỉ phân tích toàn bộ 6 bảng theo các User thuộc Miền Nam"
+            >
+              <MapPin size={12} />
+              <span>
+                Miền Nam ({dashboard?.south_usernames.length || 0} user)
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`gpms-pill-btn ${filters.region === 'BAC' ? 'is-active' : ''}`}
+              onClick={() => applyFilterPatch({ region: filters.region === 'BAC' ? '' : 'BAC' })}
+              title="Chỉ phân tích toàn bộ 6 bảng theo các User thuộc Miền Bắc"
+            >
+              <Compass size={12} />
+              <span>Miền Bắc</span>
+            </button>
+          </div>
 
           {/* Mốc so sánh trễ hạn YCHT */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
