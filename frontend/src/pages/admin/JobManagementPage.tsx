@@ -34,6 +34,8 @@ import {
 } from '../../types/ticketBatch';
 import { unassigned3cxService } from '../../services/unassigned3cxService';
 import { UnassignedTicketItem } from '../../types/unassigned3cx';
+import { Hotline3cxDutyModal } from '../../components/admin/Hotline3cxDutyModal';
+import { hotline3cxAutoService } from '../../services/hotline3cxAutoService';
 import { mailMemoService, MailMemoStatusResponse, LocalAgentStatus } from '../../services/mailMemoService';
 import {
   mongoMosquittoService,
@@ -1580,6 +1582,37 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
     }
   };
 
+  // ══ 3CX HOTLINE DUTY STATE & HANDLERS ════════════════════════════
+  const [showHotline3cxModal, setShowHotline3cxModal] = useState<boolean>(false);
+  const [hotline3cxInitialTab, setHotline3cxInitialTab] = useState<'schedule' | 'members' | 'config' | 'logs'>('schedule');
+  const [runningHotline3cxAction, setRunningHotline3cxAction] = useState<boolean>(false);
+
+  const handleOpenHotline3cxModal = (tab: 'schedule' | 'members' | 'config' | 'logs' = 'schedule') => {
+    setHotline3cxInitialTab(tab);
+    setShowHotline3cxModal(true);
+  };
+
+  const handleQuickHotline3cxDryRun = async () => {
+    setRunningHotline3cxAction(true);
+    showToast('Đang kích hoạt chạy thử nghiệm phân ca Hotline 3CX (không lưu)...', 'info');
+    try {
+      const res = await hotline3cxAutoService.dryRun();
+      if (res.status === 'SUCCESS' || res.status === 'DRY_RUN') {
+        showToast(`Chạy thử thành công! Hàng đợi: ${res.queue_name}, số line: ${res.applied_lines?.length || 0}`, 'success');
+      } else if (res.status === 'SKIPPED') {
+        showToast(`Bỏ qua ca trực: ${res.error_message || 'Không có line nào cần gán'}`, 'info');
+      } else {
+        showToast(`Chạy thử thất bại: ${res.error_message || 'Có lỗi xảy ra'}`, 'error');
+      }
+      handleOpenHotline3cxModal('logs');
+      loadData();
+    } catch (err: any) {
+      showToast('Lỗi khi chạy thử 3CX: ' + (err.response?.data?.detail || err.message), 'error');
+    } finally {
+      setRunningHotline3cxAction(false);
+    }
+  };
+
   // Mail Memo Modal & Actions
   const [showMailMemoModal, setShowMailMemoModal] = useState<boolean>(false);
   const [mailMemoStatus, setMailMemoStatus] = useState<MailMemoStatusResponse | null>(null);
@@ -2884,8 +2917,8 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
                       <span>Cấu Hình Email</span>
                     </button>
 
-                    {/* Chạy Thử (Dry-run) button - Ẩn đối với ticket_batch_by_category, job_check_unassigned_3cx_tickets, job_scan_mail_memo_auto */}
-                    {job.job_id !== 'job_ticket_batch_by_category' && job.job_id !== 'job_check_unassigned_3cx_tickets' && job.job_id !== 'job_scan_mail_memo_auto' && (
+                    {/* Chạy Thử (Dry-run) button - Ẩn đối với ticket_batch_by_category, job_check_unassigned_3cx_tickets, job_scan_mail_memo_auto, job_auto_sync_3cx_hotline_duty */}
+                    {job.job_id !== 'job_ticket_batch_by_category' && job.job_id !== 'job_check_unassigned_3cx_tickets' && job.job_id !== 'job_scan_mail_memo_auto' && job.job_id !== 'job_auto_sync_3cx_hotline_duty' && (
                       <button
                         type="button"
                         onClick={() => handleRunDryRun(job)}
@@ -3094,6 +3127,117 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
                         >
                           <Server size={13} color="#d97706" />
                           <span>Xem Bảng Kết Quả</span>
+                        </button>
+                      </>
+                    )}
+
+                    {/* Tự Động Phân Hàng Đợi Trực Hotline 3CX */}
+                    {job.job_id === 'job_auto_sync_3cx_hotline_duty' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenHotline3cxModal('schedule')}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            borderRadius: '6px',
+                            border: '1px solid #3b82f6',
+                            backgroundColor: '#eff6ff',
+                            color: '#1d4ed8',
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 2px rgba(59, 130, 246, 0.15)',
+                            transition: 'all 0.15s ease'
+                          }}
+                          title="Mở quản lý lịch trực tuần và cấu hình hàng đợi 3CX"
+                        >
+                          <Calendar size={13} color="#2563eb" />
+                          <span>Lịch Trực & Cấu Hình 3CX</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleQuickHotline3cxDryRun}
+                          disabled={runningHotline3cxAction}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '6px 13px',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            borderRadius: '6px',
+                            border: 'none',
+                            backgroundColor: '#2563eb',
+                            color: '#fff',
+                            cursor: runningHotline3cxAction ? 'not-allowed' : 'pointer',
+                            opacity: runningHotline3cxAction ? 0.7 : 1,
+                            boxShadow: '0 1px 2px rgba(37, 99, 235, 0.2)',
+                            transition: 'all 0.15s ease'
+                          }}
+                          title="Chạy thử nghiệm Playwright mở portal 3CX nhưng không bấm Save"
+                        >
+                          {runningHotline3cxAction ? (
+                            <>
+                              <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                              <span>Đang Chạy Thử...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Play size={13} />
+                              <span>Chạy Thử (Không Lưu)</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenHotline3cxModal('schedule')}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            borderRadius: '6px',
+                            border: '1px solid #d97706',
+                            backgroundColor: '#fffbeb',
+                            color: '#b45309',
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 2px rgba(217, 119, 6, 0.15)',
+                            transition: 'all 0.15s ease'
+                          }}
+                          title="Mở bảng lịch để chọn ngày và áp dụng ca trực ngay vào portal 3CX thật"
+                        >
+                          <Zap size={13} color="#d97706" />
+                          <span>Áp Dụng Ca Ngay</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenHotline3cxModal('logs')}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            borderRadius: '6px',
+                            border: '1px solid var(--border-color)',
+                            backgroundColor: 'var(--bg-primary)',
+                            color: 'var(--text-primary)',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                          title="Xem lịch sử các lần chạy tự động và ảnh chụp màn hình Playwright"
+                        >
+                          <Eye size={13} color="var(--text-secondary)" />
+                          <span>Lịch Sử & Ảnh</span>
                         </button>
                       </>
                     )}
@@ -8965,6 +9109,17 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* Modal Tự Động Phân Hàng Đợi Trực Hotline 3CX */}
+      {showHotline3cxModal && (
+        <Hotline3cxDutyModal
+          isOpen={showHotline3cxModal}
+          onClose={() => setShowHotline3cxModal(false)}
+          initialTab={hotline3cxInitialTab}
+          onSyncTriggered={() => loadData()}
+          showToast={showToast}
+        />
       )}
     </div>
   );
