@@ -9,10 +9,12 @@ Dịch vụ nghiệp vụ Tự Động Phân Hàng Đợi Trực Hotline 3CX (Pa
 
 from __future__ import annotations
 
+import asyncio
 import calendar
 from datetime import date, datetime, timedelta
 import json
 import logging
+import os
 from typing import Dict, List, Optional, Set, Tuple
 from sqlalchemy.orm import Session
 
@@ -21,6 +23,7 @@ from app.models.hotline_3cx_auto import (
     Hotline3cxConfig,
     Hotline3cxMember,
     Hotline3cxSchedule,
+    Hotline3cxSyncLog,
 )
 from app.schemas.hotline_3cx_auto import (
     Hotline3cxConfigOut,
@@ -32,7 +35,17 @@ from app.schemas.hotline_3cx_auto import (
     ScheduleDayItem,
     ScheduleDayUpsertItem,
 )
-from app.services.ticket_batch_service import _decode_password, _encode_password
+from app.services.ticket_batch_service import (
+    _decode_password,
+    _encode_password,
+    _is_timeout_error,
+    _setup_playwright_browsers_path,
+    format_friendly_error,
+    SMTP_HOST,
+    SMTP_PORT,
+    SMTP_USER,
+    SMTP_PASSWORD,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -598,6 +611,10 @@ def resolve_shift_plan(
     4. Bỏ qua đồng bộ (should_skip=True) nếu không có nhân sự nào được phân.
     """
     shift_code_upper = shift_code.upper()
+    if shift_code_upper not in ("MORNING", "EVENING"):
+        raise ValueError(
+            f"shift_code không hợp lệ: '{shift_code}'. Chỉ chấp nhận 'MORNING' hoặc 'EVENING'."
+        )
 
     # 1. Xác định effective_mode
     raw_shift_mode = schedule_row.shift_mode if schedule_row else "AUTO"
@@ -687,3 +704,532 @@ def resolve_shift_plan(
         should_skip=False,
         skip_reason=None,
     )
+
+
+# ==============================================================================
+# 5. TỰ ĐỘNG HÓA PLAYWRIGHT ĐỒNG BỘ HÀNG ĐỢI 3CX (PLAYWRIGHT SYNC ENGINE)
+# ==============================================================================
+
+
+async def _create_3cx_browser_context(playwright_instance):
+    """
+    Khởi tạo Chromium browser và context riêng biệt cho portal 3CX.
+    Viewport cố định 1440x900 đảm bảo giao diện web desktop của 3CX
+    không bao giờ bị co lại thành layout mobile hay ẩn sidebar / cột hàng đợi.
+    """
+    _setup_playwright_browsers_path()
+    browser = None
+    launch_err = None
+    chromium_args = [
+        "--disable-dev-shm-usage",
+        "--no-sandbox",
+        "--disable-gpu",
+        "--mute-audio",
+    ]
+    for ch in [None, "msedge", "chrome"]:
+        try:
+            if ch is None:
+                browser = await playwright_instance.chromium.launch(
+                    headless=True, args=chromium_args
+                )
+            else:
+                browser = await playwright_instance.chromium.launch(
+                    channel=ch, headless=True, args=chromium_args
+                )
+            if browser:
+                break
+        except Exception as e:
+            launch_err = e
+            continue
+
+    if not browser:
+        if launch_err:
+            raise launch_err
+        raise RuntimeError("Không thể khởi động trình duyệt Playwright Chromium cho 3CX")
+
+    context = await browser.new_context(
+        ignore_https_errors=True,
+        viewport={"width": 1440, "height": 900},
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    )
+    context.set_default_timeout(45000)
+    context.set_default_navigation_timeout(60000)
+    return browser, context
+
+
+async def _playwright_sync_3cx_queue(
+    portal_url: str,
+    username: str,
+    password: str,
+    plan: ResolvedShiftPlan,
+    dry_run: bool = False,
+    screenshot_file_path: Optional[str] = None,
+) -> dict:
+    """
+    Đồng bộ danh sách máy nhánh và Skill Group vào hàng đợi 3CX bằng Playwright.
+    Sử dụng các selector Angular chính xác đã được live probe xác thực.
+    """
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as p:
+        browser, context = await _create_3cx_browser_context(p)
+        page = await context.new_page()
+        try:
+            # 1. Điều hướng và Đăng nhập
+            logger.info(f"[3CX_SYNC] Đang kết nối tới portal 3CX: {portal_url}")
+            await page.goto(portal_url, wait_until="networkidle", timeout=60000)
+
+            # Điền Extension / Username
+            user_input = page.locator("#loginInput, input[placeholder*='Extension']").first
+            await user_input.wait_for(state="visible", timeout=20000)
+            await user_input.fill(username)
+
+            # Điền Password
+            pass_input = page.locator("#passwordInput, input[type='password']").first
+            await pass_input.fill(password)
+
+            # Nhấn Login
+            submit_btn = page.locator("button[type='submit']").first
+            await submit_btn.click()
+
+            # Chờ chuyển hướng vào hệ thống (Dashboard hoặc Admin menu xuất hiện)
+            admin_btn = page.locator("a#menuAdmin, a:has-text('Admin')").first
+            try:
+                await admin_btn.wait_for(state="visible", timeout=30000)
+            except Exception:
+                # Kiểm tra thông báo lỗi trên màn hình đăng nhập
+                err_loc = page.locator(".alert-danger, .error-message, .pw-login-error, .invalid-feedback")
+                if await err_loc.count() > 0 and await err_loc.first.is_visible():
+                    err_txt = (await err_loc.first.inner_text()).strip()
+                    raise ValueError(f"Đăng nhập 3CX thất bại: {err_txt}")
+                raise ValueError("Sai tài khoản hoặc mật khẩu 3CX (không thể vào màn hình quản trị)")
+
+            # 2. Điều hướng vào Admin -> Call Handling
+            logger.info("[3CX_SYNC] Đăng nhập thành công, điều hướng vào Call Handling...")
+            await admin_btn.click()
+            await page.wait_for_load_state("networkidle", timeout=20000)
+
+            call_handling_link = page.locator("a:has-text('Call Handling')").first
+            await call_handling_link.wait_for(state="visible", timeout=15000)
+            await call_handling_link.click()
+            await page.wait_for_load_state("networkidle", timeout=20000)
+
+            # 3. Mở hàng đợi tương ứng (0006 cho Day, 0007 cho Night)
+            logger.info(f"[3CX_SYNC] Tìm kiếm hàng đợi '{plan.queue_name}'...")
+            queue_row = page.locator(f"tr:has-text('{plan.queue_name}')").first
+            if await queue_row.count() == 0:
+                # Fallback theo mã hàng đợi 0006 hoặc 0007
+                fallback_code = "0006" if "day" in plan.queue_name.lower() else "0007"
+                queue_row = page.locator(f"tr:has-text('{fallback_code}')").first
+
+            await queue_row.wait_for(state="visible", timeout=15000)
+            await queue_row.click()
+            await page.wait_for_load_state("networkidle", timeout=20000)
+
+            # 4. Chuyển sang tab Users
+            users_tab = page.locator("button[role='tab']:has-text('Users'), a:has-text('Users'), [id='users-link']").first
+            await users_tab.wait_for(state="visible", timeout=15000)
+            await users_tab.click()
+            await page.wait_for_load_state("networkidle", timeout=15000)
+            await asyncio.sleep(1)
+
+            # Thu thập danh sách user hiện tại
+            existing_user_elems = await page.locator("button[data-qa='remove-agent']").all()
+            existing_count = len(existing_user_elems)
+            logger.info(f"[3CX_SYNC] Số nhân sự hiện tại trong hàng đợi: {existing_count}")
+
+            # 5. Xử lý Chế Độ DRY_RUN (Kiểm tra đọc, KHÔNG thay đổi dữ liệu)
+            if dry_run:
+                logger.info("[3CX_SYNC] Chạy ở chế độ DRY_RUN - chụp ảnh màn hình và không ghi dữ liệu")
+                if screenshot_file_path:
+                    os.makedirs(os.path.dirname(os.path.abspath(screenshot_file_path)), exist_ok=True)
+                    await page.screenshot(path=screenshot_file_path, full_page=True)
+
+                back_btn = page.locator("button[data-qa='back-btn']").first
+                if await back_btn.count() > 0 and await back_btn.is_visible():
+                    await back_btn.click()
+
+                return {
+                    "status": "DRY_RUN",
+                    "queue_name": plan.queue_name,
+                    "existing_users_count": existing_count,
+                    "verified_lines": [e.ext_line for e in plan.entries],
+                }
+
+            # 6. Xử lý Chế Độ Đồng Bộ Thực Tế (dry_run=False)
+            # 6.1. Xóa toàn bộ nhân sự cũ (Zero-wipe guard)
+            logger.info("[3CX_SYNC] Đang xóa toàn bộ nhân sự cũ trong hàng đợi...")
+            trash_loc = page.locator("button[data-qa='remove-agent']")
+            deletes_done = 0
+            while await trash_loc.count() > 0 and deletes_done < 50:
+                await trash_loc.first.click()
+                await asyncio.sleep(0.3)
+                deletes_done += 1
+
+            remaining = await trash_loc.count()
+            if remaining != 0:
+                raise RuntimeError(f"Zero-wipe guard thất bại: vẫn còn {remaining} nhân sự chưa được xóa")
+
+            logger.info(f"[3CX_SYNC] Đã xóa sạch {deletes_done} nhân sự cũ thành công (count = 0)")
+
+            # 6.2. Thêm từng nhân sự theo kế hoạch phân ca
+            add_btn = page.locator("[data-qa='add-agent'] button, button:has-text('Add User')").first
+            for idx, assignment in enumerate(plan.entries):
+                logger.info(f"[3CX_SYNC] Thêm nhân sự [{idx + 1}/{len(plan.entries)}]: máy nhánh {assignment.ext_line}, Skill Group {assignment.skill_group}")
+                await add_btn.click()
+                await asyncio.sleep(0.5)
+
+                # Dòng mới thêm vào nằm ở cuối danh sách UserListItem
+                new_row = page.locator(".queueAgent.cdk-drag, [id^='UserListItem']").last
+                user_input = new_row.locator("app-dn-select input[role='combobox']").first
+                await user_input.wait_for(state="visible", timeout=10000)
+                await user_input.fill(assignment.ext_line)
+                await asyncio.sleep(0.6)
+
+                # Chọn kết quả tìm kiếm trong dropdown .ng-option
+                opt = page.locator(f".ng-option:has-text('{assignment.ext_line}')").first
+                await opt.wait_for(state="visible", timeout=10000)
+                await opt.click()
+                await asyncio.sleep(0.3)
+
+                # Nếu hàng đợi sử dụng Skill Group (chế độ ca chiều / cuối tuần)
+                if plan.use_skill_group and assignment.skill_group:
+                    skill_select = new_row.locator("ng-select[bindvalue='value'], ng-select").nth(1)
+                    await skill_select.click()
+                    await asyncio.sleep(0.3)
+                    skill_opt = page.locator(f".ng-option:has-text('{assignment.skill_group}')").first
+                    await skill_opt.wait_for(state="visible", timeout=10000)
+                    await skill_opt.click()
+                    await asyncio.sleep(0.3)
+
+            # Xác thực số lượng dòng bằng đúng số nhân sự cần phân
+            final_rows_count = await page.locator("button[data-qa='remove-agent']").count()
+            if final_rows_count != len(plan.entries):
+                raise RuntimeError(
+                    f"Số lượng nhân sự phân bổ không khớp: mong đợi {len(plan.entries)}, thực tế {final_rows_count}"
+                )
+
+            # 6.3. Nhấn Lưu cấu hình
+            logger.info("[3CX_SYNC] Đang lưu cấu hình hàng đợi 3CX...")
+            save_btn = page.locator("button#btnSave, button[data-qa='save']").first
+            await save_btn.click()
+            await page.wait_for_load_state("networkidle", timeout=20000)
+            await asyncio.sleep(2)
+
+            # Chụp ảnh xác nhận kết quả
+            if screenshot_file_path:
+                os.makedirs(os.path.dirname(os.path.abspath(screenshot_file_path)), exist_ok=True)
+                await page.screenshot(path=screenshot_file_path, full_page=True)
+                logger.info(f"[3CX_SYNC] Đã chụp ảnh xác nhận: {screenshot_file_path}")
+
+            return {
+                "status": "SUCCESS",
+                "queue_name": plan.queue_name,
+                "applied_lines": [e.ext_line for e in plan.entries],
+                "count": len(plan.entries),
+            }
+        finally:
+            await context.close()
+            await browser.close()
+
+
+# ==============================================================================
+# 6. GỬI EMAIL THÔNG BÁO & CẢNH BÁO LỖI (EMAIL ALERTS)
+# ==============================================================================
+
+
+def send_sync_alert_email(
+    subject: str,
+    body: str,
+    alert_emails: Optional[str] = None,
+) -> bool:
+    """
+    Gửi email thông báo / cảnh báo kết quả đồng bộ Hotline 3CX qua Office365 SMTP.
+    Tái sử dụng các hằng số SMTP từ ticket_batch_service.
+    """
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    recipients = []
+    if alert_emails and alert_emails.strip():
+        for e in alert_emails.replace(";", ",").split(","):
+            cleaned = e.strip()
+            if cleaned and "@" in cleaned:
+                recipients.append(cleaned)
+
+    if not recipients:
+        recipients = ["dung.nguyenanh@ggg.com.vn"]
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["From"] = SMTP_USER
+        msg["To"] = ", ".join(recipients)
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "html", "utf-8"))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_USER, recipients, msg.as_string())
+
+        logger.info(f"[3CX_HOTLINE] Đã gửi email cảnh báo tới: {recipients}")
+        return True
+    except Exception as exc:
+        logger.error(f"[3CX_HOTLINE] Lỗi khi gửi email cảnh báo: {exc}")
+        return False
+
+
+# ==============================================================================
+# 7. QUẢN LÝ NHẬT KÝ & ĐIỀU PHỐI ĐỒNG BỘ CA TRỰC (RUN SYNC & LOGS)
+# ==============================================================================
+
+
+def has_successful_sync(db: Session, duty_date: date, shift_code: str) -> bool:
+    """
+    Kiểm tra xem ca trực ngày duty_date đã có bản ghi đồng bộ THÀNH CÔNG THỰC TẾ
+    (status='SUCCESS' và KHÔNG PHẢI DRY RUN is_dry_run=False) hay chưa.
+    Dùng làm safety guard chống chạy lặp lại các ca đã thành công.
+    """
+    row = (
+        db.query(Hotline3cxSyncLog)
+        .filter(
+            Hotline3cxSyncLog.duty_date == duty_date,
+            Hotline3cxSyncLog.shift_code == shift_code.upper(),
+            Hotline3cxSyncLog.status == "SUCCESS",
+            Hotline3cxSyncLog.is_dry_run.is_(False),
+        )
+        .first()
+    )
+    return row is not None
+
+
+def list_sync_logs(db: Session, limit: int = 50) -> List[Hotline3cxSyncLog]:
+    """Lấy danh sách nhật ký đồng bộ Hotline 3CX mới nhất."""
+    return (
+        db.query(Hotline3cxSyncLog)
+        .order_by(Hotline3cxSyncLog.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+async def run_shift_sync(
+    db: Session,
+    duty_date: Optional[date] = None,
+    shift_code: Optional[str] = None,
+    triggered_by: Optional[str] = "Admin",
+    dry_run: bool = False,
+    allow_retry: bool = False,
+    sync_fn=None,
+    sleep_fn=None,
+    alert_fn=None,
+) -> Hotline3cxSyncLog:
+    """
+    Điều phối quy trình đồng bộ ca trực Hotline 3CX:
+    1. Xác định duty_date và shift_code (mặc định hôm nay, ca sáng nếu < 12h, ca chiều nếu >= 12h).
+    2. Tính toán kế hoạch phân ca (resolve_shift_plan). Nếu rỗng (should_skip=True), lưu log SKIPPED, gửi cảnh báo và kết thúc.
+    3. Lấy thông tin xác thực runtime 3CX. Nếu thiếu mật khẩu, ghi nhận FAILED và cảnh báo.
+    4. Thực thi Playwright worker (sync_fn) với cơ chế Retry tối đa 3 lần (mỗi lần cách 60 giây) khi gặp lỗi Timeout.
+    5. Lưu kết quả vào HOTLINE_3CX_SYNC_LOGS (SUCCESS / DRY_RUN / FAILED), lưu ảnh chụp màn hình và gửi email thông báo khi lỗi/bỏ qua.
+    """
+    eff_date = duty_date or date.today()
+
+    if shift_code is None:
+        eff_shift = "MORNING" if datetime.now().hour < 12 else "EVENING"
+    else:
+        eff_shift = shift_code.upper()
+
+    if eff_shift not in ("MORNING", "EVENING"):
+        raise ValueError(
+            f"Ca trực không hợp lệ: '{shift_code}'. Chỉ chấp nhận 'MORNING' hoặc 'EVENING'."
+        )
+
+    # Đọc bản ghi lịch trực và cấu hình singleton
+    schedule_row = (
+        db.query(Hotline3cxSchedule)
+        .filter(Hotline3cxSchedule.duty_date == eff_date)
+        .first()
+    )
+    config = get_or_create_config(db)
+    active_mems = list_members(db, active_only=True)
+    active_lines = {m.ext_line for m in active_mems}
+
+    # Tính toán kế hoạch phân ca
+    plan = resolve_shift_plan(
+        eff_date, eff_shift, schedule_row, config, active_lines=active_lines
+    )
+
+    # Nếu không có nhân sự trực nào được cấu hình -> Ghi log SKIPPED
+    if plan.should_skip:
+        now_ts = datetime.now()
+        skip_log = Hotline3cxSyncLog(
+            duty_date=eff_date,
+            shift_code=eff_shift,
+            queue_name=plan.queue_name,
+            applied_lines_json="[]",
+            status="SKIPPED",
+            is_dry_run=dry_run,
+            triggered_by=triggered_by,
+            error_message=plan.skip_reason,
+            screenshot_path=None,
+            started_at=now_ts,
+            finished_at=now_ts,
+        )
+        db.add(skip_log)
+        db.commit()
+        db.refresh(skip_log)
+
+        if not dry_run:
+            subject = (
+                f"[CẢNH BÁO 3CX] Bỏ qua đồng bộ Hotline ca {eff_shift} ngày {eff_date.strftime('%d-%m-%Y')}"
+            )
+            body = (
+                f"<p>Hệ thống tự động bỏ qua đồng bộ vì: <strong>{plan.skip_reason}</strong></p>"
+                f"<p>Vui lòng vào màn hình Lịch Trực Hotline 3CX để cập nhật nhân sự phân ca.</p>"
+            )
+            if alert_fn:
+                await alert_fn(subject, body)
+            else:
+                await asyncio.to_thread(
+                    send_sync_alert_email, subject, body, config.alert_emails
+                )
+
+        return skip_log
+
+    # Lấy thông tin xác thực portal 3CX
+    creds = get_runtime_credentials(db)
+    if not creds.password:
+        err_msg = "Mật khẩu 3CX chưa được cấu hình trong Hệ Thống hoặc file .env"
+        now_ts = datetime.now()
+        fail_log = Hotline3cxSyncLog(
+            duty_date=eff_date,
+            shift_code=eff_shift,
+            queue_name=plan.queue_name,
+            applied_lines_json=json.dumps(
+                [e.ext_line for e in plan.entries], ensure_ascii=False
+            ),
+            status="FAILED",
+            is_dry_run=dry_run,
+            triggered_by=triggered_by,
+            error_message=err_msg,
+            screenshot_path=None,
+            started_at=now_ts,
+            finished_at=now_ts,
+        )
+        db.add(fail_log)
+        db.commit()
+        db.refresh(fail_log)
+
+        if not dry_run:
+            subject = (
+                f"[LỖI 3CX] Thiếu thông tin xác thực ca {eff_shift} ngày {eff_date.strftime('%d-%m-%Y')}"
+            )
+            body = f"<p>Lỗi: <strong>{err_msg}</strong></p>"
+            if alert_fn:
+                await alert_fn(subject, body)
+            else:
+                await asyncio.to_thread(
+                    send_sync_alert_email, subject, body, config.alert_emails
+                )
+
+        return fail_log
+
+    # Chuẩn bị đường dẫn ảnh chụp màn hình (static endpoint /uploads/hotline_3cx/)
+    filename = (
+        f"sync_{eff_date.strftime('%Y%m%d')}_{eff_shift.lower()}_{datetime.now().strftime('%H%M%S')}.png"
+    )
+    backend_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    abs_screenshot_dir = os.path.join(backend_root, "uploads", "hotline_3cx")
+    abs_screenshot_path = os.path.join(abs_screenshot_dir, filename)
+    url_screenshot_path = f"/uploads/hotline_3cx/{filename}"
+
+    actual_sync_fn = sync_fn or _playwright_sync_3cx_queue
+    max_attempts = 3 if (allow_retry and not dry_run) else 1
+    started_at = datetime.now()
+    last_error: Optional[Exception] = None
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            logger.info(
+                f"[3CX_SYNC] Bắt đầu đồng bộ ca {eff_shift} ngày {eff_date.strftime('%d-%m-%Y')} (Lần thử {attempt}/{max_attempts})..."
+            )
+            await actual_sync_fn(
+                portal_url=creds.portal_url,
+                username=creds.username,
+                password=creds.password,
+                plan=plan,
+                dry_run=dry_run,
+                screenshot_file_path=abs_screenshot_path,
+            )
+            last_error = None
+            break
+        except Exception as exc:
+            last_error = exc
+            logger.warning(
+                f"[3CX_SYNC] Lần thử {attempt}/{max_attempts} thất bại: {exc}"
+            )
+            if attempt < max_attempts and _is_timeout_error(exc):
+                logger.info("[3CX_SYNC] Tạm dừng 60 giây trước khi thử lại...")
+                if sleep_fn:
+                    await sleep_fn(60)
+                else:
+                    await asyncio.sleep(60)
+            else:
+                break
+
+    finished_at = datetime.now()
+    applied_lines = [e.ext_line for e in plan.entries]
+
+    if last_error is not None:
+        final_status = "FAILED"
+        friendly = format_friendly_error(last_error)
+        raw_err = str(last_error).strip()
+        if raw_err and raw_err not in friendly:
+            final_error_msg = f"{friendly} ({raw_err})"
+        else:
+            final_error_msg = friendly
+    else:
+        final_status = "DRY_RUN" if dry_run else "SUCCESS"
+        final_error_msg = None
+
+    screenshot_saved = None
+    if os.path.isfile(abs_screenshot_path):
+        screenshot_saved = url_screenshot_path
+
+    log = Hotline3cxSyncLog(
+        duty_date=eff_date,
+        shift_code=eff_shift,
+        queue_name=plan.queue_name,
+        applied_lines_json=json.dumps(applied_lines, ensure_ascii=False),
+        status=final_status,
+        is_dry_run=dry_run,
+        triggered_by=triggered_by,
+        error_message=final_error_msg,
+        screenshot_path=screenshot_saved,
+        started_at=started_at,
+        finished_at=finished_at,
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+
+    # Gửi email cảnh báo khi thất bại thực tế (không phải dry run)
+    if final_status == "FAILED" and not dry_run:
+        subject = (
+            f"[LỖI 3CX] Thất bại đồng bộ Hotline ca {eff_shift} ngày {eff_date.strftime('%d-%m-%Y')}"
+        )
+        body = (
+            f"<p>Quy trình đồng bộ 3CX thất bại sau {max_attempts} lần thử.</p>"
+            f"<p>Lỗi chi tiết: <strong>{final_error_msg}</strong></p>"
+        )
+        if alert_fn:
+            await alert_fn(subject, body)
+        else:
+            await asyncio.to_thread(
+                send_sync_alert_email, subject, body, config.alert_emails
+            )
+
+    return log

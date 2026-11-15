@@ -47,8 +47,11 @@ from app.services.hotline_3cx_auto_service import (
     get_runtime_credentials,
     get_week_monday,
     get_week_schedules,
+    has_successful_sync,
     list_members,
+    list_sync_logs,
     resolve_shift_plan,
+    run_shift_sync,
     update_config,
     update_member,
     upsert_schedules,
@@ -494,3 +497,233 @@ def test_week_and_month_bulk_helpers(db_session: Session):
     )
     assert len(dec_range) == 1
     assert dec_range[0].morning_lines == ["8778"]
+
+
+# ==============================================================================
+# TESTS FOR TASK 3: Playwright Automation, Retry, Empty Skip, Alert & Dedupe
+# ==============================================================================
+
+
+def test_run_sync_skips_when_plan_empty_never_calls_browser(db_session: Session):
+    """
+    1. test_run_sync_skips_when_plan_empty_never_calls_browser:
+       verify sync_fn mock is NOT called (call_count == 0),
+       DB logs status="SKIPPED", alert email hook called.
+    """
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    ensure_seeded_data(db_session)
+    mock_sync = AsyncMock()
+    mock_alert = AsyncMock()
+
+    duty_date = date(2026, 11, 16)  # No schedules seeded for this day -> plan.should_skip is True
+
+    log = asyncio.run(
+        run_shift_sync(
+            db_session,
+            duty_date=duty_date,
+            shift_code="MORNING",
+            triggered_by="TestRunner",
+            dry_run=False,
+            allow_retry=False,
+            sync_fn=mock_sync,
+            alert_fn=mock_alert,
+        )
+    )
+
+    assert mock_sync.call_count == 0
+    assert log.status == "SKIPPED"
+    assert "Chưa cấu hình nhân sự trực" in (log.error_message or "")
+    assert mock_alert.call_count == 1
+    assert "CẢNH BÁO" in mock_alert.call_args[0][0] or "SKIPPED" in mock_alert.call_args[0][0] or "BỎ QUA" in mock_alert.call_args[0][0]
+
+
+def test_run_sync_retries_twice_on_transient_error_then_succeeds(db_session: Session):
+    """
+    2. test_run_sync_retries_twice_on_transient_error_then_succeeds:
+       inject failing sync_fn throwing TimeoutError("3CX timeout") twice then returning success dict on attempt 3;
+       inject sleep_fn=async_noop; verify call_count == 3, final log status="SUCCESS", alert not sent.
+    """
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    ensure_seeded_data(db_session)
+    # Seed schedule so plan has lines
+    duty_date = date(2026, 11, 16)
+    upsert_schedules(
+        db_session,
+        [
+            ScheduleDayUpsertItem(
+                duty_date=duty_date,
+                shift_mode="WEEKDAY",
+                morning_lines=["8775", "8778"],
+            )
+        ],
+    )
+
+    call_count = 0
+
+    async def mock_sync(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count < 3:
+            raise TimeoutError("3CX timeout connection dropped")
+        return {"status": "SUCCESS", "queue_name": "IT HCM App Day", "count": 2}
+
+    mock_sleep = AsyncMock()
+    mock_alert = AsyncMock()
+
+    log = asyncio.run(
+        run_shift_sync(
+            db_session,
+            duty_date=duty_date,
+            shift_code="MORNING",
+            triggered_by="TestRunner",
+            dry_run=False,
+            allow_retry=True,
+            sync_fn=mock_sync,
+            sleep_fn=mock_sleep,
+            alert_fn=mock_alert,
+        )
+    )
+
+    assert call_count == 3
+    assert mock_sleep.call_count == 2
+    assert log.status == "SUCCESS"
+    assert log.error_message is None
+    assert mock_alert.call_count == 0
+
+
+def test_run_sync_fails_after_three_attempts_and_sends_alert(db_session: Session):
+    """
+    3. test_run_sync_fails_after_three_attempts_and_sends_alert:
+       inject sync_fn failing 3 times; verify call_count == 3, log status="FAILED",
+       alert email hook called once.
+    """
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    ensure_seeded_data(db_session)
+    duty_date = date(2026, 11, 16)
+    upsert_schedules(
+        db_session,
+        [
+            ScheduleDayUpsertItem(
+                duty_date=duty_date,
+                shift_mode="WEEKDAY",
+                morning_lines=["8775", "8778"],
+            )
+        ],
+    )
+
+    mock_sync = AsyncMock(side_effect=TimeoutError("Permanent connection failure"))
+    mock_sleep = AsyncMock()
+    mock_alert = AsyncMock()
+
+    log = asyncio.run(
+        run_shift_sync(
+            db_session,
+            duty_date=duty_date,
+            shift_code="MORNING",
+            triggered_by="TestRunner",
+            dry_run=False,
+            allow_retry=True,
+            sync_fn=mock_sync,
+            sleep_fn=mock_sleep,
+            alert_fn=mock_alert,
+        )
+    )
+
+    assert mock_sync.call_count == 3
+    assert mock_sleep.call_count == 2
+    assert log.status == "FAILED"
+    assert "Permanent connection failure" in (log.error_message or "")
+    assert mock_alert.call_count == 1
+
+
+def test_has_successful_sync_blocks_only_after_success(db_session: Session):
+    """
+    4. test_has_successful_sync_blocks_only_after_success:
+       a FAILED or DRY_RUN log for (2026-11-16, "MORNING") returns has_successful_sync() is False;
+       a non-dry-run SUCCESS log returns True.
+    """
+    duty_date = date(2026, 11, 16)
+    shift_code = "MORNING"
+
+    # Ban đầu chưa có log
+    assert has_successful_sync(db_session, duty_date, shift_code) is False
+
+    # Thêm FAILED log
+    log_failed = Hotline3cxSyncLog(
+        duty_date=duty_date,
+        shift_code=shift_code,
+        queue_name="IT HCM App Day",
+        applied_lines_json='["8775"]',
+        status="FAILED",
+        is_dry_run=False,
+        error_message="Timeout",
+    )
+    db_session.add(log_failed)
+    db_session.commit()
+    assert has_successful_sync(db_session, duty_date, shift_code) is False
+
+    # Thêm DRY_RUN log (kể cả status là DRY_RUN hay SUCCESS nhưng is_dry_run=True)
+    log_dry = Hotline3cxSyncLog(
+        duty_date=duty_date,
+        shift_code=shift_code,
+        queue_name="IT HCM App Day",
+        applied_lines_json='["8775"]',
+        status="SUCCESS",
+        is_dry_run=True,
+    )
+    db_session.add(log_dry)
+    db_session.commit()
+    assert has_successful_sync(db_session, duty_date, shift_code) is False
+
+    # Thêm non-dry-run SUCCESS log
+    log_success = Hotline3cxSyncLog(
+        duty_date=duty_date,
+        shift_code=shift_code,
+        queue_name="IT HCM App Day",
+        applied_lines_json='["8775"]',
+        status="SUCCESS",
+        is_dry_run=False,
+    )
+    db_session.add(log_success)
+    db_session.commit()
+    assert has_successful_sync(db_session, duty_date, shift_code) is True
+
+
+def test_service_is_python310_compatible():
+    """
+    5. test_service_is_python310_compatible:
+       AST + BOM check on backend/app/services/hotline_3cx_auto_service.py.
+       Verifies zero UTF-8 BOM, valid AST, no backslash inside f-strings, no 3.11+ constructs.
+    """
+    service_path = Path(__file__).resolve().parent.parent / "app" / "services" / "hotline_3cx_auto_service.py"
+    raw_bytes = service_path.read_bytes()
+
+    # Cấm UTF-8 BOM
+    assert not raw_bytes.startswith(b"\xef\xbb\xbf"), "Tập tin chứa UTF-8 BOM cấm!"
+
+    source_code = raw_bytes.decode("utf-8")
+    tree = ast.parse(source_code, filename=str(service_path))
+
+    # Quét AST đảm bảo không có cú pháp 3.11+
+    for node in ast.walk(tree):
+        # Không dùng TryStar (except*) chỉ có từ 3.11
+        assert not hasattr(ast, "TryStar") or not isinstance(node, getattr(ast, "TryStar")), "Cấm dùng except* (Python 3.11+)"
+        # Không dùng TypeAlias (type X = ...) chỉ có từ 3.12
+        assert not hasattr(ast, "TypeAlias") or not isinstance(node, getattr(ast, "TypeAlias")), "Cấm dùng type X = ... (Python 3.12+)"
+
+    # Quét f-string expressions đảm bảo không có backslash
+    for node in ast.walk(tree):
+        if isinstance(node, ast.JoinedStr):
+            for part in node.values:
+                if isinstance(part, ast.FormattedValue):
+                    # Lấy đoạn mã tương ứng với expression
+                    expr_segment = ast.get_source_segment(source_code, part.value)
+                    if expr_segment:
+                        assert "\\" not in expr_segment, f"Phát hiện backslash trong f-string: {expr_segment}"
+
