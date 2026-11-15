@@ -1117,4 +1117,56 @@ def test_job_scheduler_3cx_sync_execution(monkeypatch):
     assert len(mock_sync_called) == count_before
 
 
+def test_mssql_boolean_queries_never_emit_is_1_or_is_0(db_session: Session):
+    """Hồi quy T-SQL: mọi filter BIT trên SQL Server phải biên dịch thành = 1 / = 0, không dùng IS 1 / IS 0."""
+    from sqlalchemy import select
+    from sqlalchemy.dialects import mssql
+
+    service_src = (
+        Path(__file__).resolve().parent.parent / "app" / "services" / "hotline_3cx_auto_service.py"
+    ).read_text(encoding="utf-8")
+    tree = ast.parse(service_src)
+    is_calls = [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "is_"
+    ]
+    assert is_calls == [], f"Phát hiện lời gọi SQLAlchemy .is_(...) gây lỗi syntax MSSQL tại dòng {is_calls}"
+
+    stmt_member = select(Hotline3cxMember).where(Hotline3cxMember.is_active == True)  # noqa: E712
+    stmt_log = select(Hotline3cxSyncLog).where(Hotline3cxSyncLog.is_dry_run == False)  # noqa: E712
+    sql_member = str(stmt_member.compile(dialect=mssql.dialect(), compile_kwargs={"literal_binds": True}))
+    sql_log = str(stmt_log.compile(dialect=mssql.dialect(), compile_kwargs={"literal_binds": True}))
+    assert "IS 1" not in sql_member.upper() and "IS 0" not in sql_log.upper()
+    assert "= 1" in sql_member
+    assert "= 0" in sql_log
+
+    # Đảm bảo gọi hàm thật vẫn hoạt động bình thường
+    ensure_seeded_data(db_session)
+    assert len(list_members(db_session, active_only=True)) == 7
+    assert has_successful_sync(db_session, date(2026, 11, 16), "MORNING") is False
+
+
+def test_playwright_sync_selectors_scoped_to_queue_tabpanel():
+    """Hồi quy selector 3CX: Tab Users phải scoped bên trong Edit Queue và dropdown phải scoped ng-dropdown-panel."""
+    service_src = (
+        Path(__file__).resolve().parent.parent / "app" / "services" / "hotline_3cx_auto_service.py"
+    ).read_text(encoding="utf-8")
+    tree = ast.parse(service_src)
+    str_literals = [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    ]
+    assert any("a#users-link[role='tab']" in s for s in str_literals)
+    assert all("a:has-text('Users')" not in s for s in str_literals)
+    assert any("div.tab-pane.active[role='tabpanel']" in s for s in str_literals)
+    assert any("ng-dropdown-panel .ng-option" in s for s in str_literals)
+    assert any("ng-select[bindvalue='value']" in s for s in str_literals)
+
+
+
+
 

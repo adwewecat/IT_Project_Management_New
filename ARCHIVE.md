@@ -5,6 +5,9 @@
 
 <!-- Archived entries go below, newest archived at top -->
 
+- **[2026-11-11] Phát triển tính năng dán mã RK7 thêm món hàng loạt vào nhóm món SO-CO** (`62ef03e`)
+  - **Done:** Cho phép paste danh sách mã RK7 để link tự động tên món/đơn giá từ MID và Master RK7.
+
 - **[2026-11-11] Rà soát & chuẩn hóa rule so khớp tài khoản SSO/IAM (Strict Identity Matching)** (`079afb0`, `a0fd2a5`)
   - **Done:** Khắc phục lỗi khớp nhầm user đầu danh sách khi khóa/đổi mật khẩu hàng loạt SSO/IAM (`uyen.hoang` vs `duyen.hoang`), bổ sung bộ lọc nhanh và hiển thị kiểu khớp.
 

@@ -4,6 +4,10 @@
 
 ## Recent Milestones
 
+- **[2026-11-16] Xây dựng tác vụ ngầm Tự Động Chỉnh Trực Hotline 3CX (IT HCM App Day & Night)**
+  - **Done:** Tạo 4 bảng `HOTLINE_3CX_*` (SQL Server `.25`, local `ITDEPT`, `main.py` lifespan, `Script/Full_SCRIPT_SQL_TABLE.sql`) và nạp sẵn 7 nhân sự mặc định; xây dựng engine `resolve_shift_plan` (ca sáng song song 06:00 T2-T6, ca tối chính/phụ 16:29 Skill 1/2, tự động đảo ca T7-CN/Lễ lúc 16:29, zero-wipe safety, retry 2 lần x 60s, chụp ảnh PNG, SMTP alert), 13 API `/api/v1/hotline-3cx-auto/*`, tích hợp scheduler `job_auto_sync_3cx_hotline_duty` (`06:00` & `16:29`), và modal UI 4 tab `Hotline3cxDutyModal` (`dd-mm-yyyy`, LIFO Esc/X).
+  - **Verification:** `35 passed` (`pytest tests/test_hotline_3cx_models.py tests/test_hotline_3cx_auto.py tests/test_jobs.py`, bao gồm test hồi quy T-SQL `== True/False` & selector tabpanel), Playwright live E2E với 3CX (`DRY_RUN` vào đúng `Edit Queue 0006 -> Users`, Lightbox load ảnh, LIFO `Esc`, 0 console errors), `npm run build` exit 0 (`web.config` OK), và Python 3.10 AST check (`0` lỗi).
+
 - **[2026-11-14] Xây dựng màn hình Báo Cáo GPMS tương tác đa chiều tại mục Báo Cáo & Nhật Ký**
   - **Done:** Phát triển trọn bộ Backend + Frontend phân hệ **Báo Cáo GPMS** (`/reports/gpms`) đọc file Excel GPMS (`ChiTietCongViec_*.xlsx`, lưu nén gzip+b64 vào SQL Server `GPMS_REPORT_BATCHES` + tự động nạp từ `REPORT/`), cấu hình User Miền Nam (`GPMS_REGION_CONFIG` — còn lại tự động vào Miền Bắc), bộ lọc nhanh `Vùng miền` (`Tất cả vùng` / `Miền Nam` / `Miền Bắc`) ngay trên thanh công cụ đầu trang, modal cấu hình User Miền Nam giữ nguyên vị trí cuộn & thứ tự danh sách khi tích chọn cho tới khi bấm `Lưu Cấu Hình` (không giật/nhảy đầu trang), và 6 chiều phân tích tương tác động + lọc chéo: (1) Top 5 Người gửi (mở rộng, bật/tắt Anonymous), (2) Top 5 Người nhận với biểu đồ 1 cột 3 màu (`Trễ hạn YCHT`, `Chưa trễ hạn YCHT`, `Hủy`) + mở rộng xem tất cả, (3) Donut & thanh 5 tiêu chí SLA (`HT đúng hạn`, `HT trễ hạn`, `Chưa HT chưa trễ`, `Chưa HT trễ hạn`, `Đã hủy`), (4) So sánh Miền Nam vs Miền Bắc kèm danh sách user từng miền & modal cấu hình có tìm kiếm, (5) Phân loại theo cột `Phân loại`, (6) Danh mục công việc (`DMCV cấp 1 -> cấp 2`). Áp dụng phân quyền Rule 10 (`gpms_report` / `view_gpms_report` / `update_gpms_report`), tự động tạo bảng trong `main.py` lifespan và bổ sung DDL vào `Script/Full_SCRIPT_SQL_TABLE.sql`.
   - **Verification:** `python -m unittest tests/test_gpms_report.py` (5/5 PASS trên 18.414 ticket thực tế + RBAC + Python 3.10 AST), `python -m compileall app`, smoke test `from app.main import app` PASSED 100%, `cmd /c "npm run build"` exit code 0 (zero TS6133), và kiểm thử Playwright live UI Desktop (Light/Dark, modal tick không nhảy `scrollTop === 220`, lọc riêng `Miền Nam` 4.270/18.414 ticket & `0` console errors) + Mobile 390px.
@@ -38,6 +42,3 @@
 
 - **[2026-11-11] Giới hạn hiển thị tối đa 20 phiên lịch hẹn giờ đẩy Param & đồng bộ Báo Cáo Logs Tập Trung** (`d17345c`)
   - **Done:** Giới hạn danh sách hiển thị 20 lịch hẹn gần nhất trên modal Quản Lý Lịch Hẹn Giờ và lưu đầy đủ lịch sử sang Báo Cáo Logs Tập Trung.
-
-- **[2026-11-11] Phát triển tính năng dán mã RK7 thêm món hàng loạt vào nhóm món SO-CO** (`62ef03e`)
-  - **Done:** Cho phép paste danh sách mã RK7 để link tự động tên món/đơn giá từ MID và Master RK7.

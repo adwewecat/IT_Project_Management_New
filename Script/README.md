@@ -4757,3 +4757,23 @@ estaurantService.ts: Cập nhật nút tải scrcpy.zip (~11MB) kèm nhãn ⚡ B
   * **Kiểm tra tĩnh**: Không còn `<input type="date" | "datetime-local" | "month">` hiển thị trực tiếp ở bất kỳ trang/modal nào ngoài nút lịch ẩn trong `DateInput.tsx` và `MonthInput.tsx`.
   * **Frontend Build**: `cmd /c "npm run build"` tại `frontend/` chạy `tsc -b && vite build` đạt exit code `0` (`✓ built in 5.54s`, `1803 modules transformed`), sẵn `frontend/dist/` kèm `web.config`.
   * **Unit Test & Headless Edge Playwright (`locale="en-US"`)**: Pass 100% kiểm tra `parseDateToIso`, `formatDateDDMM`, `formatMonthMMYYYY`, `DateInput`, `DateTimeInput`, `MonthInput`, từ chối `11-25-2026`, giữ `01-11: 4h`, không lỗi console/pageerror trên bản `vite preview` (`/login` HTTP 200).
+
+
+---
+
+### [2026-11-16] TÍNH NĂNG TỰ ĐỘNG CHỈNH TRỰC HOTLINE 3CX (`job_auto_sync_3cx_hotline_duty`)
+
+- **Mục tiêu:** Tự động hóa việc cập nhật danh sách nhân sự trực cho 2 hàng đợi `IT HCM App Day` (`0006`, T2-T6 06:00 chạy song song) và `IT HCM App Night` (`0007`, T2-T6 16:29 chính/phụ với Skill Group `1`/`2`; T7-CN & Ngày Lễ 06:00 Chính-Phụ -> 16:29 tự động đảo Phụ-Chính) trên portal `https://ggg.ringbot.co:5001/#/login`.
+- **Database & DDL (`Script/Full_SCRIPT_SQL_TABLE.sql` + `backend/app/main.py` lifespan + DB Production `.25`):**
+  - 4 bảng mới: `HOTLINE_3CX_MEMBERS` (seed sẵn 7 nhân sự: `8775`, `8778`, `8776`, `8772`, `8779`, `8741`, `8740`), `HOTLINE_3CX_SCHEDULES` (`shift_mode`: `AUTO`/`WEEKDAY`/`WEEKEND`, JSON lines sáng/tối/cuối tuần/ghi đè ca chiều), `HOTLINE_3CX_SYNC_LOGS` (kèm composite index `IX_HOTLINE_3CX_SYNC_LOGS_DATE_SHIFT` đảm bảo idempotent ngoài `IF OBJECT_ID IS NULL`), và `HOTLINE_3CX_CONFIG` (mật khẩu mã hóa qua `_encode_password`, fallback `HOTLINE_3CX_PASSWORD` trong `.env`).
+- **Backend (`backend/app/models/hotline_3cx_auto.py`, `schemas/hotline_3cx_auto.py`, `services/hotline_3cx_auto_service.py`, `api/v1/hotline_3cx_auto.py`, `job_scheduler_service.py`):**
+  - `resolve_shift_plan`: Bảo vệ an toàn bỏ qua (`should_skip=True`, không xóa queue hiện có) khi ca chưa gán nhân sự.
+  - `_playwright_sync_3cx_queue`: Chờ bảng queue render (`tr.clickable`), chọn tab `Users` bên trong Edit Queue (`a#users-link[role='tab']` - tránh click nhầm sidebar `#/office/users`), scope thao tác vào `div.tab-pane.active[role='tabpanel']`, Zero-wipe xóa sạch trước khi thêm, scope dropdown `ng-dropdown-panel .ng-option` và `ng-select[bindvalue='value']`, hỗ trợ `dry_run` chụp ảnh `/uploads/hotline_3cx/` không bấm Save, retry 2 lần cách nhau 60s và gửi SMTP alert khi lỗi.
+  - Sửa lỗi tương thích T-SQL SQL Server: Thay `.is_(True)` / `.is_(False)` thành `== True` / `== False` (`list_members`, `has_successful_sync`) tránh lỗi syntax `Incorrect syntax near '1'`.
+  - Tích hợp `job_auto_sync_3cx_hotline_duty` (mặc định tắt `is_enabled=False`, chạy 06:00 & 16:29, dedupe `f"{job_id}@{current_time}"`, bỏ qua nếu trong ngày đã có bản ghi `SUCCESS` và `is_dry_run=0`).
+- **Frontend (`frontend/src/types/hotline3cxAuto.ts`, `services/hotline3cxAutoService.ts`, `components/admin/Hotline3cxDutyModal.tsx`, `components/admin/hotline3cx/*`, `pages/admin/JobManagementPage.tsx`):**
+  - Modal 4 tab (`Lịch Trực Tuần / Tháng` giữ bản nháp chưa lưu khi chuyển tab, nhập liệu 7 ngày T2-CN `dd-mm-yyyy`, sao chép tuần trước, áp dụng mẫu cả tháng; `Thành Viên Trực`; `Cấu Hình 3CX & Email`; `Lịch Sử Thực Thi & Ảnh` kèm Lightbox LIFO Esc).
+- **Kiểm thử & Xác thực:**
+  - `backend`: `python -m compileall app`, smoke test `from app.main import app; print('>>> PASSED 100%')`, `AST Python 3.10` (0 lỗi), `pytest tests/test_hotline_3cx_models.py tests/test_hotline_3cx_auto.py tests/test_jobs.py -v` -> `35 passed`.
+  - `frontend`: `cmd /c "npm run build"` -> `exit code 0`, tồn tại `frontend/dist/web.config`.
+  - E2E Playwright live UI trên `http://localhost:5173/admin/jobs`: Kiểm tra lưu lịch trực, giữ nháp chuyển tab, lưu cấu hình bảo mật, chạy thử `DRY_RUN` vào đúng `Edit Queue 0006 -> Users`, Lightbox hiển thị ảnh (`1440x900`), đóng modal theo thứ tự LIFO `Esc`, 0 lỗi console sau tải trang.

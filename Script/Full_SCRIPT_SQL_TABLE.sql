@@ -1993,7 +1993,6 @@ BEGIN
         [created_at] DATETIME NOT NULL DEFAULT GETDATE(),
         [updated_at] DATETIME NOT NULL DEFAULT GETDATE()
     );
-    CREATE INDEX [IX_HOTLINE_3CX_MEMBERS_LINE] ON [dbo].[HOTLINE_3CX_MEMBERS] ([ext_line]);
     PRINT N'Table [dbo].[HOTLINE_3CX_MEMBERS] created successfully.';
 END
 GO
@@ -2015,7 +2014,6 @@ BEGIN
         [updated_by] NVARCHAR(100) NULL,
         [updated_at] DATETIME NOT NULL DEFAULT GETDATE()
     );
-    CREATE INDEX [IX_HOTLINE_3CX_SCHEDULES_DATE] ON [dbo].[HOTLINE_3CX_SCHEDULES] ([duty_date]);
     PRINT N'Table [dbo].[HOTLINE_3CX_SCHEDULES] created successfully.';
 END
 GO

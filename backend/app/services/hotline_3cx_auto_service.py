@@ -15,6 +15,7 @@ from datetime import date, datetime, timedelta
 import json
 import logging
 import os
+import re
 from typing import Dict, List, Optional, Set, Tuple
 from sqlalchemy.orm import Session
 
@@ -131,7 +132,8 @@ def list_members(db: Session, active_only: bool = False) -> List[Hotline3cxMembe
     """Lấy danh sách nhân sự trực hotline theo thứ tự sort_order tăng dần."""
     query = db.query(Hotline3cxMember)
     if active_only:
-        query = query.filter(Hotline3cxMember.is_active.is_(True))
+        # Dung == True thay vi .is_(True) vi MSSQL T-SQL khong ho tro cu phap 'IS 1' cho cot BIT
+        query = query.filter(Hotline3cxMember.is_active == True)  # noqa: E712
     return query.order_by(Hotline3cxMember.sort_order.asc(), Hotline3cxMember.id.asc()).all()
 
 
@@ -816,25 +818,33 @@ async def _playwright_sync_3cx_queue(
 
             # 3. Mở hàng đợi tương ứng (0006 cho Day, 0007 cho Night)
             logger.info(f"[3CX_SYNC] Tìm kiếm hàng đợi '{plan.queue_name}'...")
+            fallback_code = "0006" if "day" in plan.queue_name.lower() else "0007"
+            # Cho bang queue Angular render xong truoc khi loc ten/ma hang doi
+            await page.locator("tr.clickable, table tbody tr").first.wait_for(state="visible", timeout=15000)
             queue_row = page.locator(f"tr:has-text('{plan.queue_name}')").first
-            if await queue_row.count() == 0:
+            try:
+                await queue_row.wait_for(state="visible", timeout=5000)
+            except Exception:
                 # Fallback theo mã hàng đợi 0006 hoặc 0007
-                fallback_code = "0006" if "day" in plan.queue_name.lower() else "0007"
                 queue_row = page.locator(f"tr:has-text('{fallback_code}')").first
+                await queue_row.wait_for(state="visible", timeout=15000)
 
-            await queue_row.wait_for(state="visible", timeout=15000)
             await queue_row.click()
+            await page.locator("button[data-qa='back-btn']").wait_for(state="visible", timeout=15000)
             await page.wait_for_load_state("networkidle", timeout=20000)
 
-            # 4. Chuyển sang tab Users
-            users_tab = page.locator("button[role='tab']:has-text('Users'), a:has-text('Users'), [id='users-link']").first
+            # 4. Chuyển sang tab Users BEN TRONG chi tiet Queue (khong dung a:has-text('Users') de tranh bam nham sidebar #/office/users)
+            users_tab = page.locator(
+                "a#users-link[role='tab'], ul.nav-tabs a#users-link, [role='tab']:has-text('Users')"
+            ).first
             await users_tab.wait_for(state="visible", timeout=15000)
             await users_tab.click()
-            await page.wait_for_load_state("networkidle", timeout=15000)
-            await asyncio.sleep(1)
+            users_panel = page.locator("div.tab-pane.active[role='tabpanel'], [role='tabpanel'][aria-labelledby='users-link']").first
+            await users_panel.locator("[data-qa='add-agent'] button").wait_for(state="visible", timeout=15000)
+            await asyncio.sleep(0.5)
 
-            # Thu thập danh sách user hiện tại
-            existing_user_elems = await page.locator("button[data-qa='remove-agent']").all()
+            # Thu thập danh sách user hiện tại ben trong tabpanel Users của Queue
+            existing_user_elems = await users_panel.locator("button[data-qa='remove-agent']").all()
             existing_count = len(existing_user_elems)
             logger.info(f"[3CX_SYNC] Số nhân sự hiện tại trong hàng đợi: {existing_count}")
 
@@ -859,7 +869,7 @@ async def _playwright_sync_3cx_queue(
             # 6. Xử lý Chế Độ Đồng Bộ Thực Tế (dry_run=False)
             # 6.1. Xóa toàn bộ nhân sự cũ (Zero-wipe guard)
             logger.info("[3CX_SYNC] Đang xóa toàn bộ nhân sự cũ trong hàng đợi...")
-            trash_loc = page.locator("button[data-qa='remove-agent']")
+            trash_loc = users_panel.locator("button[data-qa='remove-agent']")
             deletes_done = 0
             while await trash_loc.count() > 0 and deletes_done < 50:
                 await trash_loc.first.click()
@@ -873,37 +883,40 @@ async def _playwright_sync_3cx_queue(
             logger.info(f"[3CX_SYNC] Đã xóa sạch {deletes_done} nhân sự cũ thành công (count = 0)")
 
             # 6.2. Thêm từng nhân sự theo kế hoạch phân ca
-            add_btn = page.locator("[data-qa='add-agent'] button, button:has-text('Add User')").first
+            add_btn = users_panel.locator("[data-qa='add-agent'] button, button:has-text('Add User')").first
             for idx, assignment in enumerate(plan.entries):
                 logger.info(f"[3CX_SYNC] Thêm nhân sự [{idx + 1}/{len(plan.entries)}]: máy nhánh {assignment.ext_line}, Skill Group {assignment.skill_group}")
                 await add_btn.click()
                 await asyncio.sleep(0.5)
 
-                # Dòng mới thêm vào nằm ở cuối danh sách UserListItem
-                new_row = page.locator(".queueAgent.cdk-drag, [id^='UserListItem']").last
+                # Dòng mới thêm vào nằm ở cuối danh sách UserListItem ben trong users_panel
+                new_row = users_panel.locator(".queueAgent.cdk-drag, [id^='UserListItem']").last
                 user_input = new_row.locator("app-dn-select input[role='combobox']").first
                 await user_input.wait_for(state="visible", timeout=10000)
                 await user_input.fill(assignment.ext_line)
                 await asyncio.sleep(0.6)
 
-                # Chọn kết quả tìm kiếm trong dropdown .ng-option
-                opt = page.locator(f".ng-option:has-text('{assignment.ext_line}')").first
+                # Chọn kết quả tìm kiếm dung ma line ben trong ng-dropdown-panel
+                line_pattern = re.compile(rf"^\s*{re.escape(assignment.ext_line)}\b")
+                opt = page.locator("ng-dropdown-panel .ng-option").filter(has_text=line_pattern).first
                 await opt.wait_for(state="visible", timeout=10000)
                 await opt.click()
                 await asyncio.sleep(0.3)
 
                 # Nếu hàng đợi sử dụng Skill Group (chế độ ca chiều / cuối tuần)
                 if plan.use_skill_group and assignment.skill_group:
-                    skill_select = new_row.locator("ng-select[bindvalue='value'], ng-select").nth(1)
+                    skill_select = new_row.locator("ng-select[bindvalue='value']").first
+                    await skill_select.wait_for(state="visible", timeout=10000)
                     await skill_select.click()
                     await asyncio.sleep(0.3)
-                    skill_opt = page.locator(f".ng-option:has-text('{assignment.skill_group}')").first
+                    skill_pattern = re.compile(rf"^\s*{re.escape(str(assignment.skill_group))}\s*$")
+                    skill_opt = page.locator("ng-dropdown-panel .ng-option").filter(has_text=skill_pattern).first
                     await skill_opt.wait_for(state="visible", timeout=10000)
                     await skill_opt.click()
                     await asyncio.sleep(0.3)
 
             # Xác thực số lượng dòng bằng đúng số nhân sự cần phân
-            final_rows_count = await page.locator("button[data-qa='remove-agent']").count()
+            final_rows_count = await users_panel.locator("button[data-qa='remove-agent']").count()
             if final_rows_count != len(plan.entries):
                 raise RuntimeError(
                     f"Số lượng nhân sự phân bổ không khớp: mong đợi {len(plan.entries)}, thực tế {final_rows_count}"
@@ -997,7 +1010,8 @@ def has_successful_sync(db: Session, duty_date: date, shift_code: str) -> bool:
             Hotline3cxSyncLog.duty_date == duty_date,
             Hotline3cxSyncLog.shift_code == shift_code.upper(),
             Hotline3cxSyncLog.status == "SUCCESS",
-            Hotline3cxSyncLog.is_dry_run.is_(False),
+            # Dung == False thay vi .is_(False) vi MSSQL T-SQL khong ho tro 'IS 0' cho cot BIT
+            Hotline3cxSyncLog.is_dry_run == False,  # noqa: E712
         )
         .first()
     )

@@ -343,7 +343,6 @@ async def lifespan(app: FastAPI):
                             created_at DATETIME NOT NULL DEFAULT GETDATE(),
                             updated_at DATETIME NOT NULL DEFAULT GETDATE()
                         );
-                        CREATE INDEX IX_HOTLINE_3CX_MEMBERS_LINE ON dbo.HOTLINE_3CX_MEMBERS(ext_line);
                     END
                     IF OBJECT_ID('dbo.HOTLINE_3CX_SCHEDULES', 'U') IS NULL
                     BEGIN
@@ -359,7 +358,6 @@ async def lifespan(app: FastAPI):
                             updated_by NVARCHAR(100) NULL,
                             updated_at DATETIME NOT NULL DEFAULT GETDATE()
                         );
-                        CREATE INDEX IX_HOTLINE_3CX_SCHEDULES_DATE ON dbo.HOTLINE_3CX_SCHEDULES(duty_date);
                     END
                     IF OBJECT_ID('dbo.HOTLINE_3CX_SYNC_LOGS', 'U') IS NULL
                     BEGIN
@@ -377,6 +375,14 @@ async def lifespan(app: FastAPI):
                             started_at DATETIME NOT NULL DEFAULT GETDATE(),
                             finished_at DATETIME NULL
                         );
+                    END
+                    IF OBJECT_ID('dbo.HOTLINE_3CX_SYNC_LOGS', 'U') IS NOT NULL
+                       AND NOT EXISTS (
+                           SELECT 1 FROM sys.indexes
+                           WHERE name = 'IX_HOTLINE_3CX_SYNC_LOGS_DATE_SHIFT'
+                             AND object_id = OBJECT_ID('dbo.HOTLINE_3CX_SYNC_LOGS')
+                       )
+                    BEGIN
                         CREATE INDEX IX_HOTLINE_3CX_SYNC_LOGS_DATE_SHIFT ON dbo.HOTLINE_3CX_SYNC_LOGS(duty_date, shift_code);
                     END
                     IF OBJECT_ID('dbo.HOTLINE_3CX_CONFIG', 'U') IS NULL
