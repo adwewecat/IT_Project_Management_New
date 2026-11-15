@@ -1977,3 +1977,98 @@ BEGIN
     PRINT N'Table [dbo].[GPMS_REGION_CONFIG] created successfully.';
 END
 GO
+
+-- ----------------------------------------------------------------------------
+-- BẢNG: HOTLINE_3CX_MEMBERS (Danh mục nhân sự & máy nhánh trực hotline 3CX)
+-- ----------------------------------------------------------------------------
+IF OBJECT_ID(N'[dbo].[HOTLINE_3CX_MEMBERS]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[HOTLINE_3CX_MEMBERS] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [ext_line] NVARCHAR(20) NOT NULL UNIQUE,
+        [full_name] NVARCHAR(200) NOT NULL,
+        [department] NVARCHAR(100) NULL DEFAULT N'',
+        [is_active] BIT NOT NULL DEFAULT 1,
+        [sort_order] INT NOT NULL DEFAULT 0,
+        [created_at] DATETIME NOT NULL DEFAULT GETDATE(),
+        [updated_at] DATETIME NOT NULL DEFAULT GETDATE()
+    );
+    CREATE INDEX [IX_HOTLINE_3CX_MEMBERS_LINE] ON [dbo].[HOTLINE_3CX_MEMBERS] ([ext_line]);
+    PRINT N'Table [dbo].[HOTLINE_3CX_MEMBERS] created successfully.';
+END
+GO
+
+-- ----------------------------------------------------------------------------
+-- BẢNG: HOTLINE_3CX_SCHEDULES (Lịch gán line trực hotline 3CX theo ngày)
+-- ----------------------------------------------------------------------------
+IF OBJECT_ID(N'[dbo].[HOTLINE_3CX_SCHEDULES]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[HOTLINE_3CX_SCHEDULES] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [duty_date] DATE NOT NULL UNIQUE,
+        [shift_mode] NVARCHAR(20) NOT NULL DEFAULT N'AUTO',
+        [morning_lines_json] NVARCHAR(MAX) NOT NULL DEFAULT N'[]',
+        [evening_lines_json] NVARCHAR(MAX) NOT NULL DEFAULT N'[]',
+        [weekend_lines_json] NVARCHAR(MAX) NOT NULL DEFAULT N'[]',
+        [weekend_evening_override_json] NVARCHAR(MAX) NOT NULL DEFAULT N'[]',
+        [note] NVARCHAR(500) NULL,
+        [updated_by] NVARCHAR(100) NULL,
+        [updated_at] DATETIME NOT NULL DEFAULT GETDATE()
+    );
+    CREATE INDEX [IX_HOTLINE_3CX_SCHEDULES_DATE] ON [dbo].[HOTLINE_3CX_SCHEDULES] ([duty_date]);
+    PRINT N'Table [dbo].[HOTLINE_3CX_SCHEDULES] created successfully.';
+END
+GO
+
+-- ----------------------------------------------------------------------------
+-- BẢNG: HOTLINE_3CX_SYNC_LOGS (Nhật ký đồng bộ Playwright vào portal 3CX)
+-- ----------------------------------------------------------------------------
+IF OBJECT_ID(N'[dbo].[HOTLINE_3CX_SYNC_LOGS]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[HOTLINE_3CX_SYNC_LOGS] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [duty_date] DATE NOT NULL,
+        [shift_code] NVARCHAR(20) NOT NULL,
+        [queue_name] NVARCHAR(150) NOT NULL,
+        [applied_lines_json] NVARCHAR(MAX) NOT NULL DEFAULT N'[]',
+        [status] NVARCHAR(20) NOT NULL,
+        [is_dry_run] BIT NOT NULL DEFAULT 0,
+        [triggered_by] NVARCHAR(100) NULL,
+        [error_message] NVARCHAR(MAX) NULL,
+        [screenshot_path] NVARCHAR(500) NULL,
+        [started_at] DATETIME NOT NULL DEFAULT GETDATE(),
+        [finished_at] DATETIME NULL
+    );
+    CREATE INDEX [IX_HOTLINE_3CX_SYNC_LOGS_DATE_SHIFT] ON [dbo].[HOTLINE_3CX_SYNC_LOGS] ([duty_date], [shift_code]);
+    PRINT N'Table [dbo].[HOTLINE_3CX_SYNC_LOGS] created successfully.';
+END
+GO
+
+-- ----------------------------------------------------------------------------
+-- BẢNG: HOTLINE_3CX_CONFIG (Cấu hình kết nối & tham số tự động trực hotline 3CX)
+-- ----------------------------------------------------------------------------
+IF OBJECT_ID(N'[dbo].[HOTLINE_3CX_CONFIG]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[HOTLINE_3CX_CONFIG] (
+        [id] INT PRIMARY KEY,
+        [portal_url] NVARCHAR(500) NOT NULL DEFAULT N'https://ggg.ringbot.co:5001/#/login',
+        [username] NVARCHAR(100) NOT NULL DEFAULT N'8740',
+        [password_enc] NVARCHAR(500) NOT NULL DEFAULT N'',
+        [day_queue_name] NVARCHAR(150) NOT NULL DEFAULT N'IT HCM App Day',
+        [night_queue_name] NVARCHAR(150) NOT NULL DEFAULT N'IT HCM App Night',
+        [morning_time] NVARCHAR(10) NOT NULL DEFAULT N'06:00',
+        [evening_time] NVARCHAR(10) NOT NULL DEFAULT N'16:29',
+        [alert_emails] NVARCHAR(1000) NOT NULL DEFAULT N'dung.nguyenanh@ggg.com.vn',
+        [updated_at] DATETIME NOT NULL DEFAULT GETDATE()
+    );
+    PRINT N'Table [dbo].[HOTLINE_3CX_CONFIG] created successfully.';
+END
+GO
+
+IF OBJECT_ID(N'[dbo].[HOTLINE_3CX_CONFIG]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM [dbo].[HOTLINE_3CX_CONFIG] WHERE [id] = 1)
+BEGIN
+    INSERT INTO [dbo].[HOTLINE_3CX_CONFIG] ([id], [portal_url], [username], [password_enc], [day_queue_name], [night_queue_name], [morning_time], [evening_time], [alert_emails], [updated_at])
+    VALUES (1, N'https://ggg.ringbot.co:5001/#/login', N'8740', N'', N'IT HCM App Day', N'IT HCM App Night', N'06:00', N'16:29', N'dung.nguyenanh@ggg.com.vn', GETDATE());
+    PRINT N'Default row id=1 inserted into [dbo].[HOTLINE_3CX_CONFIG].';
+END
+GO

@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # Database Backup Zip Password
     DB_BACKUP_ZIP_PASSWORD: str = "Abc0102009@"
 
+    # 3CX Hotline Auto Scheduler (Fallback password từ .env nếu chưa lưu trong HOTLINE_3CX_CONFIG)
+    HOTLINE_3CX_PASSWORD: str = ""
+
     @staticmethod
     def build_database_uri(
         server: str,
