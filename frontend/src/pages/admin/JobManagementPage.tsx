@@ -36,6 +36,7 @@ import { unassigned3cxService } from '../../services/unassigned3cxService';
 import { UnassignedTicketItem } from '../../types/unassigned3cx';
 import { Hotline3cxDutyModal } from '../../components/admin/Hotline3cxDutyModal';
 import { hotline3cxAutoService } from '../../services/hotline3cxAutoService';
+import { extractApiErrorMessage } from '../../components/admin/hotline3cx/hotline3cxHelpers';
 import { mailMemoService, MailMemoStatusResponse, LocalAgentStatus } from '../../services/mailMemoService';
 import {
   mongoMosquittoService,
@@ -1585,10 +1586,15 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
   // ══ 3CX HOTLINE DUTY STATE & HANDLERS ════════════════════════════
   const [showHotline3cxModal, setShowHotline3cxModal] = useState<boolean>(false);
   const [hotline3cxInitialTab, setHotline3cxInitialTab] = useState<'schedule' | 'members' | 'config' | 'logs'>('schedule');
+  const [hotline3cxOpenApplyConfirm, setHotline3cxOpenApplyConfirm] = useState<boolean>(false);
   const [runningHotline3cxAction, setRunningHotline3cxAction] = useState<boolean>(false);
 
-  const handleOpenHotline3cxModal = (tab: 'schedule' | 'members' | 'config' | 'logs' = 'schedule') => {
+  const handleOpenHotline3cxModal = (
+    tab: 'schedule' | 'members' | 'config' | 'logs' = 'schedule',
+    openApplyConfirm: boolean = false
+  ) => {
     setHotline3cxInitialTab(tab);
+    setHotline3cxOpenApplyConfirm(openApplyConfirm);
     setShowHotline3cxModal(true);
   };
 
@@ -1606,8 +1612,8 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
       }
       handleOpenHotline3cxModal('logs');
       loadData();
-    } catch (err: any) {
-      showToast('Lỗi khi chạy thử 3CX: ' + (err.response?.data?.detail || err.message), 'error');
+    } catch (err: unknown) {
+      showToast('Lỗi khi chạy thử 3CX: ' + extractApiErrorMessage(err), 'error');
     } finally {
       setRunningHotline3cxAction(false);
     }
@@ -3195,7 +3201,7 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
 
                         <button
                           type="button"
-                          onClick={() => handleOpenHotline3cxModal('schedule')}
+                          onClick={() => handleOpenHotline3cxModal('schedule', true)}
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -9115,8 +9121,12 @@ ${selectedErrorDetail.error_details || 'Không có chi tiết stack trace'}
       {showHotline3cxModal && (
         <Hotline3cxDutyModal
           isOpen={showHotline3cxModal}
-          onClose={() => setShowHotline3cxModal(false)}
+          onClose={() => {
+            setShowHotline3cxModal(false);
+            setHotline3cxOpenApplyConfirm(false);
+          }}
           initialTab={hotline3cxInitialTab}
+          initialOpenApplyConfirm={hotline3cxOpenApplyConfirm}
           onSyncTriggered={() => loadData()}
           showToast={showToast}
         />
