@@ -5,8 +5,9 @@ import asyncio
 import smtplib
 import ssl
 import logging
+import traceback
 from email.message import EmailMessage
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import List, Dict, Any, Optional
 from app.schemas.job import (
     JobItem, JobScheduleConfig, JobRunLog,
@@ -18,6 +19,8 @@ from app.services.sales_report_service import sales_report_service
 from app.services.network_monitor_service import network_monitor_service
 from app.services.maintenance_service import maintenance_service
 from app.services.restaurant_audit_service import restaurant_audit_service
+
+logger = logging.getLogger("app.job_scheduler")
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -272,6 +275,28 @@ DEFAULT_JOBS = [
             "days_of_week": [1, 2, 3, 4, 5, 6, 7],
             "cron_expression": "30 8 * * *",
             "human_readable": "Hàng ngày lúc 08:30"
+        }
+    },
+    {
+        "job_id": "job_auto_sync_3cx_hotline_duty",
+        "job_name": "Tự Động Chỉnh Trực Hotline 3CX (IT HCM App)",
+        "category": "dung_utility",
+        "category_name": "Tiện Ích của Dũng",
+        "description": "Tự động đăng nhập 3CX Admin Console để xóa sạch danh sách cũ và cập nhật lại User trực cho Queue IT HCM App Day (06:00 T2-T6) & Queue IT HCM App Night (16:29 T2-T6, 06:00 & 16:29 T7-CN / Ngày Lễ với Skill Group 1 Chính / 2 Phụ).",
+        "source_reference": "hotline_3cx_auto_service.py: run_shift_sync",
+        "has_email_notification": True,
+        "email_recipients": "dung.nguyenanh@ggg.com.vn",
+        "is_enabled": False,
+        "restricted_to_dung": True,
+        "is_hidden": False,
+        "schedule": {
+            "schedule_type": "daily",
+            "time": "06:00",
+            "time_2": "16:29",
+            "interval_minutes": 60,
+            "days_of_week": [1, 2, 3, 4, 5, 6, 7],
+            "cron_expression": "0 6,16 * * *",
+            "human_readable": "Hàng ngày lúc 06:00 & 16:29"
         }
     },
     {
@@ -904,7 +929,12 @@ class JobSchedulerService:
         self._save_config()
         return [j for j in self.get_all_jobs() if j.job_id == job_id][0]
 
-    async def trigger_job_dry_run(self, job_id: str, triggered_by: str = "Admin") -> Optional[JobRunLog]:
+    async def trigger_job_dry_run(
+        self,
+        job_id: str,
+        triggered_by: str = "Admin",
+        target_time: Optional[str] = None,
+    ) -> Optional[JobRunLog]:
         if job_id not in self._jobs:
             return None
 
@@ -2233,7 +2263,156 @@ class JobSchedulerService:
                     asyncio.create_task(asyncio.to_thread(self._send_job_execution_email, job, err_entry))
                 return JobRunLog(**err_entry)
 
-        # 15. Safe Simulation for other jobs
+        # 15. Real execution for 3CX Hotline Duty Auto Sync (Tự Động Chỉnh Trực Hotline 3CX)
+        elif job_id == "job_auto_sync_3cx_hotline_duty":
+            try:
+                from app.core.database import SessionLocal
+                from app.services.hotline_3cx_auto_service import (
+                    has_successful_sync,
+                    run_shift_sync,
+                )
+
+                today = date.today()
+                sched = job.get("schedule", {})
+                time_morning = sched.get("time") or "06:00"
+                time_evening = sched.get("time_2") or "16:29"
+
+                if target_time:
+                    if target_time == time_evening:
+                        shift_code = "EVENING"
+                    elif target_time == time_morning:
+                        shift_code = "MORNING"
+                    else:
+                        shift_code = "MORNING" if start_dt.hour < 12 else "EVENING"
+                else:
+                    shift_code = "MORNING" if start_dt.hour < 12 else "EVENING"
+
+                db = SessionLocal()
+                try:
+                    is_auto = (triggered_by == "Hệ thống (Auto)")
+                    today_str = today.strftime("%d-%m-%Y")
+                    if is_auto and has_successful_sync(db, today, shift_code):
+                        logger.info(
+                            f"[JOB_AUTO] Bỏ qua vì ca {shift_code} ngày {today_str} đã đồng bộ thành công trước đó."
+                        )
+                        end_dt = datetime.now()
+                        duration = round((end_dt - start_dt).total_seconds(), 2)
+                        end_str = end_dt.strftime("%Y-%m-%d %H:%M:%S")
+
+                        job["status"] = "idle"
+                        job["last_run_at"] = end_str
+                        job["last_duration"] = duration
+                        job["last_status"] = "success"
+                        job["total_runs"] = job.get("total_runs", 0) + 1
+                        job["success_runs"] = job.get("success_runs", 0) + 1
+
+                        msg = f"Bỏ qua vì ca {shift_code} ngày {today_str} đã đồng bộ thành công trước đó."
+                        log_entry = {
+                            "id": log_id,
+                            "job_id": job_id,
+                            "job_name": job["job_name"],
+                            "started_at": start_str,
+                            "finished_at": end_str,
+                            "duration_seconds": duration,
+                            "status": "success",
+                            "message": msg,
+                            "details": msg,
+                            "triggered_by": triggered_by,
+                        }
+                        self._logs.insert(0, log_entry)
+                        self._save_config()
+                        self._save_logs()
+                        return JobRunLog(**log_entry)
+
+                    # Thực thi run_shift_sync
+                    sync_log = await run_shift_sync(
+                        db,
+                        duty_date=today,
+                        shift_code=shift_code,
+                        triggered_by=triggered_by,
+                        dry_run=False,
+                        allow_retry=is_auto,
+                    )
+                finally:
+                    db.close()
+
+                end_dt = datetime.now()
+                duration = round((end_dt - start_dt).total_seconds(), 2)
+                end_str = end_dt.strftime("%Y-%m-%d %H:%M:%S")
+
+                is_success = (sync_log.status == "SUCCESS")
+                job["status"] = "idle"
+                job["last_run_at"] = end_str
+                job["last_duration"] = duration
+                job["last_status"] = "success" if is_success else "failed"
+                job["total_runs"] = job.get("total_runs", 0) + 1
+                if is_success:
+                    job["success_runs"] = job.get("success_runs", 0) + 1
+                else:
+                    job["failed_runs"] = job.get("failed_runs", 0) + 1
+
+                today_str = today.strftime("%d-%m-%Y")
+                msg = f"Đồng bộ Hotline 3CX ca {shift_code} ngày {today_str}: {sync_log.status}"
+                err_text = sync_log.error_message or "Không"
+                details = (
+                    f"Trạng thái: {sync_log.status}\n"
+                    f"Hàng đợi: {sync_log.queue_name}\n"
+                    f"Danh sách lines: {sync_log.applied_lines_json}\n"
+                    f"Lỗi: {err_text}"
+                )
+                log_entry = {
+                    "id": log_id,
+                    "job_id": job_id,
+                    "job_name": job["job_name"],
+                    "started_at": start_str,
+                    "finished_at": end_str,
+                    "duration_seconds": duration,
+                    "status": "success" if is_success else "failed",
+                    "message": msg,
+                    "details": details,
+                    "triggered_by": triggered_by,
+                }
+                self._logs.insert(0, log_entry)
+                self._save_config()
+                self._save_logs()
+
+                if not is_success and (job.get("has_email_notification") or job.get("email_recipients")) and job.get("email_recipients"):
+                    asyncio.create_task(asyncio.to_thread(self._send_job_execution_email, job, log_entry))
+
+                return JobRunLog(**log_entry)
+
+            except Exception as e:
+                end_dt = datetime.now()
+                duration = round((end_dt - start_dt).total_seconds(), 2)
+                end_str = end_dt.strftime("%Y-%m-%d %H:%M:%S")
+
+                job["status"] = "idle"
+                job["last_run_at"] = end_str
+                job["last_duration"] = duration
+                job["last_status"] = "failed"
+                job["total_runs"] = job.get("total_runs", 0) + 1
+                job["failed_runs"] = job.get("failed_runs", 0) + 1
+
+                err_entry = {
+                    "id": log_id,
+                    "job_id": job_id,
+                    "job_name": job["job_name"],
+                    "started_at": start_str,
+                    "finished_at": end_str,
+                    "duration_seconds": duration,
+                    "status": "failed",
+                    "message": f"Lỗi đồng bộ Hotline 3CX: {str(e)}",
+                    "details": traceback.format_exc(),
+                    "triggered_by": triggered_by,
+                }
+                self._logs.insert(0, err_entry)
+                self._save_config()
+                self._save_logs()
+                if (job.get("has_email_notification") or job.get("email_recipients")) and job.get("email_recipients"):
+                    asyncio.create_task(asyncio.to_thread(self._send_job_execution_email, job, err_entry))
+                return JobRunLog(**err_entry)
+
+        # 16. Safe Simulation for other jobs
         await asyncio.sleep(0.8)
         end_dt = datetime.now()
         duration = round((end_dt - start_dt).total_seconds(), 2)
@@ -2346,7 +2525,8 @@ async def job_schedule_worker(stop_event: asyncio.Event):
 
                 if sched_type in ("daily", "weekly"):
                     if current_dow in days_of_week and current_time in target_times:
-                        last_run = last_executed.get(job_id)
+                        exec_key = f"{job_id}@{current_time}"
+                        last_run = last_executed.get(exec_key)
                         if not last_run or (now - last_run).total_seconds() >= 65:
                             should_run = True
 
@@ -2356,9 +2536,12 @@ async def job_schedule_worker(stop_event: asyncio.Event):
                         should_run = True
 
                 if should_run:
-                    last_executed[job_id] = now
+                    if sched_type in ("daily", "weekly"):
+                        last_executed[f"{job_id}@{current_time}"] = now
+                    else:
+                        last_executed[job_id] = now
                     sched_logger.info(f"[JOB_AUTO] Đến giờ thực thi tác vụ '{job.get('job_name')}' ({job_id}) lúc {current_time}...")
-                    asyncio.create_task(job_scheduler_service.trigger_job_dry_run(job_id, triggered_by="Hệ thống (Auto)"))
+                    asyncio.create_task(job_scheduler_service.trigger_job_dry_run(job_id, triggered_by="Hệ thống (Auto)", target_time=current_time))
 
         except Exception as e:
             sched_logger.error(f"Lỗi vòng lặp Job Schedule Worker: {e}")

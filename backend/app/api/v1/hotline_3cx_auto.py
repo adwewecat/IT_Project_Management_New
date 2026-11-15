@@ -1,0 +1,390 @@
+# -*- coding: utf-8 -*-
+"""
+FastAPI Router cho phân hệ Tự Động Phân Hàng Đợi Trực Hotline 3CX (/api/v1/hotline-3cx-auto).
+Cung cấp các API quản lý:
+- Danh mục nhân sự hotline (CRUD)
+- Lịch phân line theo ngày/tuần/tháng (Lấy, Lưu hàng loạt, Nhân bản tuần, Áp dụng tháng)
+- Cấu hình hệ thống 3CX & Email cảnh báo (Bảo mật, ẩn mật khẩu)
+- Kích hoạt chạy thử nghiệm (dry-run) và áp dụng trực tiếp (apply-now)
+- Nhật ký đồng bộ và ảnh chụp màn hình
+
+Bảo vệ phân quyền: Chỉ Quản trị viên (Super Admin) và tài khoản dung.nguyenanh.
+Tương thích 100% Python 3.10 trên server production.
+"""
+
+from __future__ import annotations
+
+import json
+from datetime import date, timedelta
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from app.api.deps import require_super_admin_or_dung
+from app.core.database import get_db
+from app.models.hotline_3cx_auto import Hotline3cxSyncLog
+from app.schemas.hotline_3cx_auto import (
+    ApplyMonthTemplateRequest,
+    ApplyNowRequest,
+    CloneWeekRequest,
+    Hotline3cxConfigOut,
+    Hotline3cxConfigUpdate,
+    Hotline3cxSyncLogOut,
+    HotlineMemberCreate,
+    HotlineMemberOut,
+    HotlineMemberUpdate,
+    ScheduleBulkSaveRequest,
+    ScheduleDayItem,
+)
+from app.services.hotline_3cx_auto_service import (
+    apply_week_template_to_month,
+    clone_previous_week_schedules,
+    create_member,
+    delete_member,
+    ensure_seeded_data,
+    get_public_config,
+    get_schedules_range,
+    get_week_monday,
+    list_members,
+    list_sync_logs,
+    run_shift_sync,
+    update_config,
+    update_member,
+    upsert_schedules,
+)
+
+router = APIRouter(prefix="/hotline-3cx-auto", tags=["Hotline 3CX Auto"])
+
+
+def check_is_dung_or_super_admin(current_user) -> bool:
+    """
+    Kiểm tra xem người dùng có phải là Super Admin hoặc tài khoản dung.nguyenanh hay không.
+    Đồng bộ logic bảo mật với jobs.py.
+    """
+    username = (getattr(current_user, "username", "") or "").lower().strip()
+    is_super = (
+        getattr(current_user, "is_super_admin", False)
+        or username in ["admin", "administrator", "dung.nguyenanh"]
+    )
+    pq = str(getattr(current_user, "phanquyen", "") or "").strip()
+    return is_super or username == "dung.nguyenanh" or pq == "0"
+
+
+def require_hotline_access(
+    current_user=Depends(require_super_admin_or_dung),
+):
+    """Dependency xác thực người dùng có quyền quản trị tính năng Hotline 3CX Auto."""
+    if not check_is_dung_or_super_admin(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ Quản trị viên hoặc user dung.nguyenanh mới có quyền truy cập.",
+        )
+    return current_user
+
+
+def serialize_sync_log(log: Hotline3cxSyncLog) -> Hotline3cxSyncLogOut:
+    """
+    Chuyển đổi ORM Hotline3cxSyncLog sang schema Hotline3cxSyncLogOut an toàn.
+    Chuyển applied_lines_json thành danh sách List[dict] chuẩn schema Pydantic.
+    """
+    applied_lines_list: List[dict] = []
+    if log.applied_lines_json:
+        try:
+            parsed = json.loads(log.applied_lines_json)
+            if isinstance(parsed, list):
+                for item in parsed:
+                    if isinstance(item, dict):
+                        applied_lines_list.append(item)
+                    elif isinstance(item, str):
+                        applied_lines_list.append({"ext_line": item})
+                    else:
+                        applied_lines_list.append({"value": str(item)})
+        except Exception:
+            applied_lines_list = []
+
+    return Hotline3cxSyncLogOut(
+        id=log.id,
+        duty_date=log.duty_date,
+        shift_code=log.shift_code,
+        queue_name=log.queue_name,
+        applied_lines=applied_lines_list,
+        status=log.status,
+        is_dry_run=bool(log.is_dry_run),
+        triggered_by=log.triggered_by,
+        error_message=log.error_message,
+        screenshot_path=log.screenshot_path,
+        started_at=log.started_at,
+        finished_at=log.finished_at,
+    )
+
+
+# ==============================================================================
+# 1. API QUẢN LÝ NHÂN SỰ HOTLINE (MEMBERS)
+# ==============================================================================
+
+
+@router.get("/members", response_model=List[HotlineMemberOut])
+def get_members(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """
+    Lấy danh sách toàn bộ nhân sự trực Hotline 3CX.
+    Tự động seed 7 nhân sự mặc định nếu cơ sở dữ liệu chưa có dữ liệu.
+    """
+    ensure_seeded_data(db)
+    return list_members(db, active_only=False)
+
+
+@router.post("/members", response_model=HotlineMemberOut)
+def create_new_member(
+    payload: HotlineMemberCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """Thêm mới một nhân sự trực Hotline 3CX."""
+    return create_member(db, payload)
+
+
+@router.put("/members/{member_id}", response_model=HotlineMemberOut)
+def update_existing_member(
+    member_id: int,
+    payload: HotlineMemberUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """Cập nhật thông tin nhân sự trực Hotline 3CX theo ID."""
+    updated = update_member(db, member_id, payload)
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy nhân sự yêu cầu.",
+        )
+    return updated
+
+
+@router.delete("/members/{member_id}")
+def delete_existing_member(
+    member_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """Xóa một nhân sự trực Hotline 3CX khỏi hệ thống."""
+    deleted = delete_member(db, member_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Không tìm thấy nhân sự yêu cầu.",
+        )
+    return {"success": True}
+
+
+# ==============================================================================
+# 2. API QUẢN LÝ LỊCH TRỰC (SCHEDULES)
+# ==============================================================================
+
+
+@router.get("/schedules", response_model=List[ScheduleDayItem])
+def get_schedules(
+    start_date: Optional[date] = Query(None, description="Ngày bắt đầu (ISO YYYY-MM-DD)"),
+    end_date: Optional[date] = Query(None, description="Ngày kết thúc (ISO YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """
+    Lấy danh sách lịch trực theo khoảng ngày.
+    Mặc định nếu không truyền tham số: Trả về tuần hiện tại (Thứ Hai đến Chủ Nhật).
+    """
+    monday = get_week_monday(date.today())
+    eff_start = start_date or monday
+    eff_end = end_date or (eff_start + timedelta(days=6))
+
+    if eff_start > eff_end:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ngày bắt đầu không được lớn hơn ngày kết thúc.",
+        )
+
+    return get_schedules_range(db, eff_start, eff_end)
+
+
+@router.put("/schedules", response_model=List[ScheduleDayItem])
+def save_schedules_bulk(
+    payload: ScheduleBulkSaveRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """Lưu hàng loạt cấu hình lịch trực cho nhiều ngày."""
+    if not payload.days:
+        return []
+
+    username = getattr(current_user, "username", "Admin")
+    upsert_schedules(db, payload.days, updated_by=username)
+
+    min_date = min(d.duty_date for d in payload.days)
+    max_date = max(d.duty_date for d in payload.days)
+    return get_schedules_range(db, min_date, max_date)
+
+
+@router.post("/schedules/clone-week", response_model=List[ScheduleDayItem])
+def clone_week_schedule(
+    payload: CloneWeekRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """
+    Sao chép lịch trực của tuần liền trước sang tuần mục tiêu.
+    Trả về danh sách 7 ngày của tuần mục tiêu sau khi đã sao chép.
+    """
+    username = getattr(current_user, "username", "Admin")
+    clone_previous_week_schedules(db, payload.target_week_start, updated_by=username)
+
+    t_monday = get_week_monday(payload.target_week_start)
+    t_sunday = t_monday + timedelta(days=6)
+    return get_schedules_range(db, t_monday, t_sunday)
+
+
+@router.post("/schedules/apply-month")
+def apply_month_template(
+    payload: ApplyMonthTemplateRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """
+    Áp dụng mẫu lịch 7 ngày (Thứ 2 - Chủ Nhật) cho toàn bộ các ngày trong tháng được chỉ định.
+    """
+    username = getattr(current_user, "username", "Admin")
+    count = apply_week_template_to_month(
+        db=db,
+        year=payload.year,
+        month=payload.month,
+        template_days=payload.template_days,
+        updated_by=username,
+        overwrite_existing=payload.overwrite_existing,
+    )
+    return {"success": True, "applied_days": count}
+
+
+# ==============================================================================
+# 3. API CẤU HÌNH HỆ THỐNG 3CX (CONFIG)
+# ==============================================================================
+
+
+@router.get("/config", response_model=Hotline3cxConfigOut)
+def get_config(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """
+    Lấy thông tin cấu hình cổng 3CX và email cảnh báo.
+    Mật khẩu luôn được che giấu an toàn, chỉ trả về cờ has_password.
+    """
+    return get_public_config(db)
+
+
+@router.put("/config", response_model=Hotline3cxConfigOut)
+def update_system_config(
+    payload: Hotline3cxConfigUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """
+    Cập nhật cấu hình cổng 3CX và email cảnh báo.
+    Đồng bộ cấu hình giờ chạy và email sang Job Scheduler (job_auto_sync_3cx_hotline_duty) nếu có.
+    """
+    update_config(db, payload)
+
+    # Đồng bộ thông số giờ chạy và email nhận tin sang Job Scheduler service
+    try:
+        from app.services.job_scheduler_service import job_scheduler_service
+
+        job_id = "job_auto_sync_3cx_hotline_duty"
+        if hasattr(job_scheduler_service, "_jobs") and job_id in job_scheduler_service._jobs:
+            job = job_scheduler_service._jobs[job_id]
+            sched = job.setdefault("schedule", {})
+            if payload.morning_time:
+                sched["time"] = payload.morning_time
+            if payload.evening_time:
+                sched["time_2"] = payload.evening_time
+            if payload.alert_emails is not None:
+                cleaned_emails = (payload.alert_emails or "").strip()
+                job["email_recipients"] = cleaned_emails
+                job["has_email_notification"] = bool(cleaned_emails)
+            job_scheduler_service._save_config()
+    except Exception:
+        # Scheduler có thể chưa nạp, không chặn việc cập nhật cấu hình DB
+        pass
+
+    return get_public_config(db)
+
+
+# ==============================================================================
+# 4. API ĐỒNG BỘ THỰC TẾ & CHẠY THỬ NGHIỆM (DRY-RUN / APPLY-NOW)
+# ==============================================================================
+
+
+@router.post("/dry-run", response_model=Hotline3cxSyncLogOut)
+async def dry_run_sync(
+    payload: Optional[ApplyNowRequest] = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """
+    Kích hoạt chạy thử nghiệm quy trình đồng bộ ca trực Hotline 3CX (dry_run=True).
+    Hệ thống sẽ tính toán kế hoạch, mở portal 3CX, điền thông tin nhưng KHÔNG bấm nút Save.
+    """
+    username = getattr(current_user, "username", "Admin")
+    d_date = payload.duty_date if payload else None
+    s_code = payload.shift_code if payload else None
+
+    log = await run_shift_sync(
+        db,
+        duty_date=d_date,
+        shift_code=s_code,
+        triggered_by=username,
+        dry_run=True,
+        allow_retry=False,
+    )
+    return serialize_sync_log(log)
+
+
+@router.post("/apply-now", response_model=Hotline3cxSyncLogOut)
+async def apply_now_sync(
+    payload: Optional[ApplyNowRequest] = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """
+    Kích hoạt đồng bộ trực tiếp ca trực Hotline 3CX vào hàng đợi portal (dry_run=False).
+    Thực hiện xóa danh sách cũ và cập nhật danh sách nhân sự trực mới vào hàng đợi 3CX thật.
+    """
+    username = getattr(current_user, "username", "Admin")
+    d_date = payload.duty_date if payload else None
+    s_code = payload.shift_code if payload else None
+
+    log = await run_shift_sync(
+        db,
+        duty_date=d_date,
+        shift_code=s_code,
+        triggered_by=username,
+        dry_run=False,
+        allow_retry=False,
+    )
+    return serialize_sync_log(log)
+
+
+# ==============================================================================
+# 5. API NHẬT KÝ ĐỒNG BỘ (SYNC LOGS)
+# ==============================================================================
+
+
+@router.get("/logs", response_model=List[Hotline3cxSyncLogOut])
+def get_sync_logs(
+    limit: int = Query(50, ge=1, le=200, description="Số lượng bản ghi tối đa"),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """Lấy danh sách nhật ký đồng bộ Hotline 3CX mới nhất."""
+    logs = list_sync_logs(db, limit=limit)
+    return [serialize_sync_log(log) for log in logs]

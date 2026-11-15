@@ -549,6 +549,8 @@ def test_run_sync_retries_twice_on_transient_error_then_succeeds(db_session: Ses
     from unittest.mock import AsyncMock
 
     ensure_seeded_data(db_session)
+    # Cấu hình mật khẩu test để bypass kiểm tra thông tin xác thực runtime
+    update_config(db_session, Hotline3cxConfigUpdate(password="test_secret_password"))
     # Seed schedule so plan has lines
     duty_date = date(2026, 11, 16)
     upsert_schedules(
@@ -605,6 +607,7 @@ def test_run_sync_fails_after_three_attempts_and_sends_alert(db_session: Session
     from unittest.mock import AsyncMock
 
     ensure_seeded_data(db_session)
+    update_config(db_session, Hotline3cxConfigUpdate(password="test_secret_password"))
     duty_date = date(2026, 11, 16)
     upsert_schedules(
         db_session,
@@ -726,4 +729,392 @@ def test_service_is_python310_compatible():
                     expr_segment = ast.get_source_segment(source_code, part.value)
                     if expr_segment:
                         assert "\\" not in expr_segment, f"Phát hiện backslash trong f-string: {expr_segment}"
+
+
+# ==============================================================================
+# 6. TESTS CHO FASTAPI ROUTER & SCHEDULER INTEGRATION (TASK 4)
+# ==============================================================================
+
+class MockSuperUser:
+    """Mock tài khoản Super Admin dùng cho unit test API."""
+    id = 1
+    username = "admin"
+    full_name = "Super Admin"
+    email = "admin@ggg.com.vn"
+    quyen = 0
+    phanquyen = "0"
+    is_active = True
+    is_super_admin = True
+    roles = ["admin"]
+    role_name = "Quản trị viên"
+
+
+class MockRegularUser:
+    """Mock tài khoản thường (không có quyền Admin/Dũng) dùng cho test phân quyền 403."""
+    id = 2
+    username = "regular_user"
+    full_name = "Regular User"
+    email = "user@ggg.com.vn"
+    quyen = 2
+    phanquyen = "2"
+    is_active = True
+    is_super_admin = False
+    roles = ["user"]
+    role_name = "Nhân viên"
+
+
+@pytest.fixture
+def api_test_db():
+    """Tạo DB SQLite StaticPool cô lập trong bộ nhớ cho FastAPI TestClient."""
+    from sqlalchemy.pool import StaticPool
+    from sqlalchemy.orm import sessionmaker
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Hotline3cxMember.__table__,
+            Hotline3cxSchedule.__table__,
+            Hotline3cxSyncLog.__table__,
+            Hotline3cxConfig.__table__,
+        ],
+    )
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    session = TestingSessionLocal()
+    try:
+        yield session, TestingSessionLocal
+    finally:
+        session.close()
+
+
+def test_api_requires_super_admin_or_dung(api_test_db):
+    """
+    MockRegularUser nhận mã HTTP 403 khi truy cập các endpoints /members và /config.
+    """
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.core.database import get_db
+    from app.api.deps import require_super_admin_or_dung
+
+    session, TestingSessionLocal = api_test_db
+
+    def _override_db():
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_db
+    app.dependency_overrides[require_super_admin_or_dung] = lambda: MockRegularUser()
+
+    try:
+        with TestClient(app) as client:
+            res_members = client.get("/api/v1/hotline-3cx-auto/members")
+            assert res_members.status_code == 403
+
+            res_config = client.get("/api/v1/hotline-3cx-auto/config")
+            assert res_config.status_code == 403
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_api_members_schedule_config_endpoints(api_test_db):
+    """
+    FastAPI TestClient với MockSuperUser và SQLite test session:
+    - GET /api/v1/hotline-3cx-auto/members trả về 7 nhân sự mặc định đã được seed.
+    - POST -> PUT -> DELETE member roundtrip.
+    - GET /api/v1/hotline-3cx-auto/schedules?start_date=2026-11-16&end_date=2026-11-22 trả về 7 ngày.
+    - PUT /api/v1/hotline-3cx-auto/schedules lưu thay đổi thành công.
+    - GET /api/v1/hotline-3cx-auto/config trả về has_password boolean và KHÔNG để lộ password.
+    - POST /api/v1/hotline-3cx-auto/dry-run kích hoạt dry-run và trả về payload log.
+    """
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.core.database import get_db
+    from app.api.deps import require_super_admin_or_dung
+
+    session, TestingSessionLocal = api_test_db
+
+    def _override_db():
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_db
+    app.dependency_overrides[require_super_admin_or_dung] = lambda: MockSuperUser()
+
+    try:
+        with TestClient(app) as client:
+            # 1. GET /members -> 7 nhân sự mặc định
+            res_m = client.get("/api/v1/hotline-3cx-auto/members")
+            assert res_m.status_code == 200
+            members_data = res_m.json()
+            assert len(members_data) == 7
+            exts = [m["ext_line"] for m in members_data]
+            assert "8775" in exts
+            assert "8740" in exts
+
+            # 2. Member POST -> PUT -> DELETE roundtrip
+            new_mem_payload = {
+                "ext_line": "8799",
+                "full_name": "Nguyen Van Test",
+                "department": "HCM IT DEPT",
+                "is_active": True,
+                "sort_order": 99,
+            }
+            res_create = client.post("/api/v1/hotline-3cx-auto/members", json=new_mem_payload)
+            assert res_create.status_code == 200
+            created_member = res_create.json()
+            assert created_member["ext_line"] == "8799"
+            new_id = created_member["id"]
+
+            res_update = client.put(
+                f"/api/v1/hotline-3cx-auto/members/{new_id}",
+                json={"full_name": "Nguyen Van Test Updated", "is_active": False},
+            )
+            assert res_update.status_code == 200
+            assert res_update.json()["full_name"] == "Nguyen Van Test Updated"
+            assert res_update.json()["is_active"] is False
+
+            res_delete = client.delete(f"/api/v1/hotline-3cx-auto/members/{new_id}")
+            assert res_delete.status_code == 200
+            assert res_delete.json().get("success") is True
+
+            # Xác nhận đã xóa
+            res_m_after = client.get("/api/v1/hotline-3cx-auto/members")
+            assert len(res_m_after.json()) == 7
+
+            # 3. GET /schedules
+            res_sched = client.get(
+                "/api/v1/hotline-3cx-auto/schedules?start_date=2026-11-16&end_date=2026-11-22"
+            )
+            assert res_sched.status_code == 200
+            sched_data = res_sched.json()
+            assert len(sched_data) == 7
+            assert sched_data[0]["duty_date"] == "2026-11-16"
+            assert sched_data[6]["duty_date"] == "2026-11-22"
+
+            # 4. PUT /schedules
+            bulk_payload = {
+                "days": [
+                    {
+                        "duty_date": "2026-11-16",
+                        "shift_mode": "AUTO",
+                        "morning_lines": ["8775", "8778"],
+                        "evening_lines": ["8776", "8772"],
+                        "weekend_lines": [],
+                        "weekend_evening_override": [],
+                        "note": "Tuần kiểm thử tự động",
+                    }
+                ]
+            }
+            res_bulk = client.put("/api/v1/hotline-3cx-auto/schedules", json=bulk_payload)
+            assert res_bulk.status_code == 200
+            res_bulk_data = res_bulk.json()
+            assert len(res_bulk_data) >= 1
+            saved_item = next(d for d in res_bulk_data if d["duty_date"] == "2026-11-16")
+            assert saved_item["morning_lines"] == ["8775", "8778"]
+            assert saved_item["note"] == "Tuần kiểm thử tự động"
+
+            # 5. GET /config & PUT /config (với sync sang Scheduler)
+            res_cfg = client.get("/api/v1/hotline-3cx-auto/config")
+            assert res_cfg.status_code == 200
+            cfg_data = res_cfg.json()
+            assert "has_password" in cfg_data
+            assert isinstance(cfg_data["has_password"], bool)
+            assert "password" not in cfg_data
+            assert "password_enc" not in cfg_data
+
+            update_cfg_payload = {
+                "portal_url": "https://ggg.ringbot.co:5001/#/login",
+                "morning_time": "06:15",
+                "evening_time": "16:45",
+                "alert_emails": "test_alert@ggg.com.vn",
+            }
+            res_cfg_put = client.put("/api/v1/hotline-3cx-auto/config", json=update_cfg_payload)
+            assert res_cfg_put.status_code == 200
+            assert res_cfg_put.json()["morning_time"] == "06:15"
+            assert res_cfg_put.json()["evening_time"] == "16:45"
+            assert res_cfg_put.json()["alert_emails"] == "test_alert@ggg.com.vn"
+
+            # 6. POST /dry-run
+            res_dry = client.post("/api/v1/hotline-3cx-auto/dry-run", json={})
+            assert res_dry.status_code == 200
+            dry_data = res_dry.json()
+            assert "status" in dry_data
+            assert dry_data["is_dry_run"] is True
+
+            # 7. POST /apply-now
+            res_apply = client.post("/api/v1/hotline-3cx-auto/apply-now", json={})
+            assert res_apply.status_code == 200
+            apply_data = res_apply.json()
+            assert "status" in apply_data
+            assert apply_data["is_dry_run"] is False
+
+            # 8. POST /schedules/clone-week
+            res_clone = client.post(
+                "/api/v1/hotline-3cx-auto/schedules/clone-week",
+                json={"target_week_start": "2026-11-23"},
+            )
+            assert res_clone.status_code == 200
+            clone_items = res_clone.json()
+            assert len(clone_items) == 7
+            assert clone_items[0]["duty_date"] == "2026-11-23"
+
+            # 9. POST /schedules/apply-month
+            res_month = client.post(
+                "/api/v1/hotline-3cx-auto/schedules/apply-month",
+                json={
+                    "year": 2026,
+                    "month": 12,
+                    "template_days": [
+                        {
+                            "duty_date": "2026-11-16",
+                            "shift_mode": "WEEKDAY",
+                            "morning_lines": ["8775"],
+                            "evening_lines": ["8776"],
+                            "weekend_lines": [],
+                            "weekend_evening_override": [],
+                        }
+                    ],
+                    "overwrite_existing": True,
+                },
+            )
+            assert res_month.status_code == 200
+            assert res_month.json()["success"] is True
+            assert res_month.json()["applied_days"] >= 1
+
+            # 10. GET /schedules (default không truyền tham số)
+            res_sched_default = client.get("/api/v1/hotline-3cx-auto/schedules")
+            assert res_sched_default.status_code == 200
+            assert len(res_sched_default.json()) == 7
+
+            # 11. GET /logs
+            res_logs = client.get("/api/v1/hotline-3cx-auto/logs?limit=10")
+            assert res_logs.status_code == 200
+            logs_data = res_logs.json()
+            assert isinstance(logs_data, list)
+            assert len(logs_data) >= 1
+
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_router_is_python310_compatible():
+    """
+    Kiểm tra router backend/app/api/v1/hotline_3cx_auto.py:
+    Zero BOM UTF-8, AST hợp lệ, không có backslash trong f-string, không có cú pháp 3.11+.
+    """
+    router_path = Path(__file__).resolve().parent.parent / "app" / "api" / "v1" / "hotline_3cx_auto.py"
+    if not router_path.exists():
+        pytest.skip("Chưa tạo router hotline_3cx_auto.py (TDD RED)")
+
+    raw_bytes = router_path.read_bytes()
+    assert not raw_bytes.startswith(b"\xef\xbb\xbf"), "Tập tin chứa UTF-8 BOM cấm!"
+
+    source_code = raw_bytes.decode("utf-8")
+    tree = ast.parse(source_code, filename=str(router_path))
+
+    for node in ast.walk(tree):
+        assert not hasattr(ast, "TryStar") or not isinstance(node, getattr(ast, "TryStar")), "Cấm dùng except* (Python 3.11+)"
+        assert not hasattr(ast, "TypeAlias") or not isinstance(node, getattr(ast, "TypeAlias")), "Cấm dùng type X = ... (Python 3.12+)"
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.JoinedStr):
+            for part in node.values:
+                if isinstance(part, ast.FormattedValue):
+                    expr_segment = ast.get_source_segment(source_code, part.value)
+                    if expr_segment:
+                        assert "\\" not in expr_segment, f"Phát hiện backslash trong f-string: {expr_segment}"
+
+
+def test_job_scheduler_3cx_sync_execution(monkeypatch):
+    """
+    Kiểm tra luồng thực thi job_auto_sync_3cx_hotline_duty qua job_scheduler_service:
+    - Bỏ qua dedupe khi ca đã thành công trước đó (Hệ thống (Auto)).
+    - Chạy đồng bộ khi được trigger và ghi log scheduler.
+    """
+    import asyncio
+    from app.services.job_scheduler_service import job_scheduler_service
+
+    assert "job_auto_sync_3cx_hotline_duty" in job_scheduler_service._jobs
+    job = job_scheduler_service._jobs["job_auto_sync_3cx_hotline_duty"]
+    assert job["restricted_to_dung"] is True
+    sched_morning = job["schedule"].get("time") or "06:00"
+    sched_evening = job["schedule"].get("time_2") or "16:29"
+
+    # Mock SessionLocal and run_shift_sync
+    mock_sync_called = []
+
+    async def _mock_run_shift_sync(*args, **kwargs):
+        mock_sync_called.append(kwargs)
+        from app.models.hotline_3cx_auto import Hotline3cxSyncLog
+        return Hotline3cxSyncLog(
+            id=1,
+            duty_date=date.today(),
+            shift_code=kwargs.get("shift_code", "MORNING"),
+            queue_name="IT HCM App Day",
+            applied_lines_json='["8775"]',
+            status="SUCCESS",
+            is_dry_run=False,
+            triggered_by=kwargs.get("triggered_by", "Admin"),
+        )
+
+    # 1. Test target_time mapping to MORNING vs EVENING
+    import app.services.job_scheduler_service as jss_module
+
+    class DummyDB:
+        def close(self):
+            pass
+
+    monkeypatch.setattr("app.core.database.SessionLocal", lambda: DummyDB())
+    monkeypatch.setattr("app.services.hotline_3cx_auto_service.has_successful_sync", lambda db, d, s: False)
+    monkeypatch.setattr("app.services.hotline_3cx_auto_service.run_shift_sync", _mock_run_shift_sync)
+
+    log1 = asyncio.run(
+        job_scheduler_service.trigger_job_dry_run(
+            "job_auto_sync_3cx_hotline_duty",
+            triggered_by="Admin",
+            target_time=sched_morning,
+        )
+    )
+    assert log1 is not None
+    assert log1.status == "success"
+    assert mock_sync_called[-1]["shift_code"] == "MORNING"
+
+    log2 = asyncio.run(
+        job_scheduler_service.trigger_job_dry_run(
+            "job_auto_sync_3cx_hotline_duty",
+            triggered_by="Admin",
+            target_time=sched_evening,
+        )
+    )
+    assert log2 is not None
+    assert log2.status == "success"
+    assert mock_sync_called[-1]["shift_code"] == "EVENING"
+
+    # 2. Test auto dedupe: when has_successful_sync returns True and triggered_by is "Hệ thống (Auto)"
+    monkeypatch.setattr("app.services.hotline_3cx_auto_service.has_successful_sync", lambda db, d, s: True)
+    count_before = len(mock_sync_called)
+    log_auto_skip = asyncio.run(
+        job_scheduler_service.trigger_job_dry_run(
+            "job_auto_sync_3cx_hotline_duty",
+            triggered_by="Hệ thống (Auto)",
+            target_time=sched_morning,
+        )
+    )
+    assert log_auto_skip is not None
+    assert log_auto_skip.status == "success"
+    assert "Bỏ qua vì ca MORNING" in log_auto_skip.message
+    # run_shift_sync should NOT have been called
+    assert len(mock_sync_called) == count_before
+
+
 

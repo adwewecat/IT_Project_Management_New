@@ -37,6 +37,7 @@ from app.api.v1.agent_multitask_v2 import router as agent_multitask_v2_router
 from app.api.v1.partner import router as partner_router
 from app.api.v1.managed_apis import router as managed_apis_router
 from app.api.v1.gpms_report import router as gpms_report_router
+from app.api.v1.hotline_3cx_auto import router as hotline_3cx_auto_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(auth_router)
@@ -77,6 +78,7 @@ api_v1_router.include_router(agent_multitask_v2_router)
 api_v1_router.include_router(partner_router)
 api_v1_router.include_router(managed_apis_router)
 api_v1_router.include_router(gpms_report_router)
+api_v1_router.include_router(hotline_3cx_auto_router)
 
 
 

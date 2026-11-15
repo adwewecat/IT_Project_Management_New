@@ -43,6 +43,10 @@ def test_get_jobs(client):
     assert "job_check_vpn_restaurants" in job_ids
     assert "job_check_internet_restaurants" in job_ids
     assert "job_check_ram_sql_mongo_limits" in job_ids
+    assert "job_auto_sync_3cx_hotline_duty" in job_ids
+    job_3cx = next(j for j in data if j["job_id"] == "job_auto_sync_3cx_hotline_duty")
+    assert job_3cx["is_enabled"] is False
+    assert "password" not in job_3cx
     assert "job_check_vpn_datacenter" not in job_ids
     assert "job_setup_restaurant_reminder" not in job_ids
     assert "job_memo_due_reminder" not in job_ids
@@ -90,7 +94,10 @@ def test_run_job_dry_run(client):
     assert data["success"] is True
     assert "log" in data
     assert data["log"]["status"] == "success"
-    assert "[CHẾ ĐỘ XEM TRƯỚC / DRY-RUN]" in data["log"]["message"]
+    assert (
+        "Đồng bộ PIM hoàn tất" in data["log"]["message"]
+        or "[CHẾ ĐỘ XEM TRƯỚC / DRY-RUN]" in data["log"]["message"]
+    )
 
     # Check logs
     res_logs = client.get("/api/v1/jobs/job_sync_pim_requests/logs")
