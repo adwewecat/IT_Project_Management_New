@@ -2070,3 +2070,19 @@ BEGIN
     PRINT N'Default row id=1 inserted into [dbo].[HOTLINE_3CX_CONFIG].';
 END
 GO
+
+-- ----------------------------------------------------------------------------
+-- BẢNG: HOTLINE_3CX_HOLIDAYS (Danh mục Ngày Lễ Riêng trực hotline 3CX)
+-- ----------------------------------------------------------------------------
+IF OBJECT_ID(N'[dbo].[HOTLINE_3CX_HOLIDAYS]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[HOTLINE_3CX_HOLIDAYS] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [holiday_date] DATE NOT NULL UNIQUE,
+        [name] NVARCHAR(250) NOT NULL DEFAULT N'',
+        [created_by] NVARCHAR(100) NULL,
+        [created_at] DATETIME NOT NULL DEFAULT GETDATE()
+    );
+    PRINT N'Table [dbo].[HOTLINE_3CX_HOLIDAYS] created successfully.';
+END
+GO

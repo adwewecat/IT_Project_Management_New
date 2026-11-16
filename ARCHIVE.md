@@ -5,6 +5,9 @@
 
 <!-- Archived entries go below, newest archived at top -->
 
+- **[2026-11-12] Hỗ trợ tùy chọn dán mã RK7 hoặc SAP thêm món hàng loạt SO-CO** (`0c9cb56`)
+  - **Done:** Bổ sung chế độ chọn dán mã RK7 hoặc SAP thêm món hàng loạt và tra cứu tên/đơn giá tự động từ MID/Server.
+
 - **[2026-11-11] Giới hạn hiển thị tối đa 20 phiên lịch hẹn giờ đẩy Param & đồng bộ Báo Cáo Logs Tập Trung** (`d17345c`)
   - **Done:** Giới hạn danh sách hiển thị 20 lịch hẹn gần nhất trên modal Quản Lý Lịch Hẹn Giờ và lưu đầy đủ lịch sử sang Báo Cáo Logs Tập Trung.
 

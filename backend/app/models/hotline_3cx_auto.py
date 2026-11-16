@@ -112,3 +112,19 @@ class Hotline3cxConfig(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
     )
+
+
+class Hotline3cxHoliday(Base):
+    """
+    Bảng danh mục Ngày Lễ Riêng (ngày nghỉ lễ phát sinh / đột xuất / lễ công ty không theo lịch nhà nước).
+    Các ngày trong bảng này sẽ tự động chạy theo chế độ ngày lễ (Night 0007: 06:00 Chính-Phụ -> 16:29 tự đảo)
+    và được bảo vệ khi sao chép tuần hoặc áp dụng mẫu tháng.
+    """
+
+    __tablename__ = "HOTLINE_3CX_HOLIDAYS"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    holiday_date: Mapped[date] = mapped_column(Date, unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(Unicode(250), default="", nullable=False)
+    created_by: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)

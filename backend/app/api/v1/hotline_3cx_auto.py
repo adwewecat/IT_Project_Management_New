@@ -31,6 +31,8 @@ from app.schemas.hotline_3cx_auto import (
     Hotline3cxConfigOut,
     Hotline3cxConfigUpdate,
     Hotline3cxSyncLogOut,
+    HotlineHolidayBatchCreateRequest,
+    HotlineHolidayItem,
     HotlineMemberCreate,
     HotlineMemberOut,
     HotlineMemberUpdate,
@@ -41,16 +43,19 @@ from app.services.hotline_3cx_auto_service import (
     apply_week_template_to_month,
     clone_previous_week_schedules,
     create_member,
+    delete_holiday,
     delete_member,
     ensure_seeded_data,
     get_public_config,
     get_schedules_range,
     get_week_monday,
+    list_holidays,
     list_members,
     list_sync_logs,
     run_shift_sync,
     update_config,
     update_member,
+    upsert_holidays_batch,
     upsert_schedules,
 )
 
@@ -264,6 +269,51 @@ def apply_month_template(
         overwrite_existing=payload.overwrite_existing,
     )
     return {"success": True, "applied_days": count}
+
+
+# ==============================================================================
+# 2B. API DANH MỤC NGÀY LỄ RIÊNG (CUSTOM HOLIDAYS)
+# ==============================================================================
+
+
+@router.get("/holidays", response_model=List[HotlineHolidayItem])
+def get_holidays(
+    year: Optional[int] = Query(None, ge=2020, le=2100, description="Lọc theo năm"),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """Lấy danh sách Ngày Lễ Riêng (tùy chọn lọc theo năm)."""
+    return list_holidays(db, year=year)
+
+
+@router.post("/holidays", response_model=List[HotlineHolidayItem])
+def add_holidays(
+    payload: HotlineHolidayBatchCreateRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """Thêm hoặc cập nhật 1 ngày lễ hoặc một khoảng ngày lễ liên tiếp."""
+    username = getattr(current_user, "username", "Admin")
+    try:
+        return upsert_holidays_batch(db, payload, created_by=username)
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+
+
+@router.delete("/holidays/{holiday_id}")
+def remove_holiday(
+    holiday_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """Xóa một Ngày Lễ Riêng theo ID."""
+    ok = delete_holiday(db, holiday_id)
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Không tìm thấy ngày lễ ID={holiday_id}.",
+        )
+    return {"success": True}
 
 
 # ==============================================================================

@@ -105,6 +105,7 @@ async def lifespan(app: FastAPI):
             Hotline3cxSchedule,
             Hotline3cxSyncLog,
             Hotline3cxConfig,
+            Hotline3cxHoliday,
         )
         from sqlalchemy import text
         Base.metadata.create_all(engine, tables=[
@@ -131,6 +132,7 @@ async def lifespan(app: FastAPI):
             Hotline3cxSchedule.__table__,
             Hotline3cxSyncLog.__table__,
             Hotline3cxConfig.__table__,
+            Hotline3cxHoliday.__table__,
         ], checkfirst=True)
 
         # Tự động nạp mẫu kịch bản mặc định nếu bảng trống
@@ -404,6 +406,16 @@ async def lifespan(app: FastAPI):
                     BEGIN
                         INSERT INTO dbo.HOTLINE_3CX_CONFIG (id, portal_url, username, password_enc, day_queue_name, night_queue_name, morning_time, evening_time, alert_emails, updated_at)
                         VALUES (1, N'https://ggg.ringbot.co:5001/#/login', N'8740', N'', N'IT HCM App Day', N'IT HCM App Night', N'06:00', N'16:29', N'dung.nguyenanh@ggg.com.vn', GETDATE());
+                    END
+                    IF OBJECT_ID('dbo.HOTLINE_3CX_HOLIDAYS', 'U') IS NULL
+                    BEGIN
+                        CREATE TABLE dbo.HOTLINE_3CX_HOLIDAYS (
+                            id INT IDENTITY(1,1) PRIMARY KEY,
+                            holiday_date DATE NOT NULL UNIQUE,
+                            name NVARCHAR(250) NOT NULL DEFAULT N'',
+                            created_by NVARCHAR(100) NULL,
+                            created_at DATETIME NOT NULL DEFAULT GETDATE()
+                        );
                     END
                 """))
                 _tc.commit()

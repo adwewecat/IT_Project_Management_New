@@ -2,6 +2,7 @@ import React from 'react';
 import {
   AlertCircle,
   Calendar,
+  CalendarHeart,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -37,6 +38,9 @@ export interface ScheduleTabProps {
   onGoToThisWeek: () => void;
   onClonePreviousWeek: () => void;
   onOpenApplyMonthModal: () => void;
+  holidaysCount: number;
+  onOpenHolidayManagerModal: () => void;
+  onQuickToggleHoliday: (day: Hotline3cxScheduleDay) => void;
   onSaveSchedules: () => void;
   onQuickDryRun: () => void;
   onOpenApplyNowModal: () => void;
@@ -61,6 +65,9 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
   onGoToThisWeek,
   onClonePreviousWeek,
   onOpenApplyMonthModal,
+  holidaysCount,
+  onOpenHolidayManagerModal,
+  onQuickToggleHoliday,
   onSaveSchedules,
   onQuickDryRun,
   onOpenApplyNowModal,
@@ -225,6 +232,28 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
 
           <button
             type="button"
+            onClick={onOpenHolidayManagerModal}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: 600,
+              borderRadius: '6px',
+              border: '1px solid #ef4444',
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              color: '#dc2626',
+              cursor: 'pointer',
+            }}
+            title="Chọn ngày nào là Ngày Lễ Riêng (nghỉ lễ đột xuất / không theo lịch nhà nước)"
+          >
+            <CalendarHeart size={13} />
+            <span>Ngày Lễ Riêng ({holidaysCount})</span>
+          </button>
+
+          <button
+            type="button"
             onClick={onSaveSchedules}
             disabled={savingSchedules || !hasUnsavedChanges}
             style={{
@@ -325,8 +354,13 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
             <tbody>
               {schedules.map((day) => {
                 const isWeekendDay = day.is_weekend;
+                const isCustomHoliday = Boolean(day.is_custom_holiday);
                 const isEffectiveWeekend =
-                  day.shift_mode === 'WEEKEND' || (day.shift_mode === 'AUTO' && isWeekendDay);
+                  day.shift_mode === 'WEEKEND' ||
+                  (day.shift_mode === 'AUTO' && (isWeekendDay || isCustomHoliday));
+                const isHolidayMode =
+                  (isCustomHoliday && day.shift_mode !== 'WEEKDAY') ||
+                  (!isWeekendDay && day.shift_mode === 'WEEKEND');
                 const hasCustomOverride =
                   day.weekend_evening_override && day.weekend_evening_override.length > 0;
 
@@ -335,7 +369,11 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                     key={day.duty_date}
                     style={{
                       borderBottom: '1px solid var(--border-color)',
-                      backgroundColor: isWeekendDay ? 'rgba(245, 158, 11, 0.03)' : 'transparent',
+                      backgroundColor: isHolidayMode
+                        ? 'rgba(239, 68, 68, 0.04)'
+                        : isWeekendDay
+                          ? 'rgba(245, 158, 11, 0.03)'
+                          : 'transparent',
                     }}
                   >
                     {/* Cột 1: Thứ & Ngày */}
@@ -354,17 +392,36 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                           padding: '2px 6px',
                           borderRadius: '4px',
                           fontWeight: 600,
-                          backgroundColor: isWeekendDay
-                            ? 'rgba(245, 158, 11, 0.12)'
-                            : 'rgba(59, 130, 246, 0.1)',
-                          color: isWeekendDay ? '#d97706' : '#2563eb',
+                          backgroundColor: isHolidayMode
+                            ? 'rgba(239, 68, 68, 0.12)'
+                            : isWeekendDay
+                              ? 'rgba(245, 158, 11, 0.12)'
+                              : 'rgba(59, 130, 246, 0.1)',
+                          color: isHolidayMode
+                            ? '#dc2626'
+                            : isWeekendDay
+                              ? '#d97706'
+                              : '#2563eb',
                         }}
                       >
-                        {isWeekendDay ? 'Cuối tuần' : 'T2–T6'}
+                        {isHolidayMode ? '🎉 Ngày Lễ' : isWeekendDay ? 'Cuối tuần' : 'T2–T6'}
                       </span>
+                      {isCustomHoliday && day.holiday_name && (
+                        <div
+                          style={{
+                            marginTop: '3px',
+                            fontSize: '10.5px',
+                            fontWeight: 600,
+                            color: '#dc2626',
+                            lineHeight: 1.25,
+                          }}
+                        >
+                          {day.holiday_name}
+                        </div>
+                      )}
                     </td>
 
-                    {/* Cột 2: Chế độ ngày (AUTO / WEEKDAY / WEEKEND) */}
+                    {/* Cột 2: Chế độ ngày (AUTO / WEEKDAY / WEEKEND) + Nút Ngày Lễ nhanh */}
                     <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
                       <select
                         value={day.shift_mode}
@@ -385,10 +442,56 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                           color: 'var(--text-primary)',
                         }}
                       >
-                        <option value="AUTO">Tự Động (T2–T6/T7–CN)</option>
+                        <option value="AUTO">
+                          {isCustomHoliday ? 'Tự Động (Đang là Ngày Lễ)' : 'Tự Động (T2–T6/T7–CN)'}
+                        </option>
                         <option value="WEEKDAY">Ngày Thường (T2–T6)</option>
                         <option value="WEEKEND">Ngày Lễ / Cuối Tuần</option>
                       </select>
+
+                      {isCustomHoliday ? (
+                        <button
+                          type="button"
+                          onClick={() => onQuickToggleHoliday(day)}
+                          style={{
+                            marginTop: '6px',
+                            width: '100%',
+                            padding: '3px 6px',
+                            fontSize: '10.5px',
+                            fontWeight: 600,
+                            borderRadius: '4px',
+                            border: '1px solid rgba(239, 68, 68, 0.35)',
+                            backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                            color: '#dc2626',
+                            cursor: 'pointer',
+                          }}
+                          title="Xóa ngày này khỏi danh sách Ngày Lễ Riêng"
+                        >
+                          ✕ Bỏ Ngày Lễ
+                        </button>
+                      ) : (
+                        !isWeekendDay && (
+                          <button
+                            type="button"
+                            onClick={() => onQuickToggleHoliday(day)}
+                            style={{
+                              marginTop: '6px',
+                              width: '100%',
+                              padding: '3px 6px',
+                              fontSize: '10.5px',
+                              fontWeight: 600,
+                              borderRadius: '4px',
+                              border: '1px solid rgba(245, 158, 11, 0.45)',
+                              backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                              color: '#b45309',
+                              cursor: 'pointer',
+                            }}
+                            title="Đánh dấu ngày này là Ngày Lễ Riêng"
+                          >
+                            🎉 Đặt Ngày Lễ
+                          </button>
+                        )
+                      )}
                     </td>
 
                     {/* Cột 3: Ca Sáng 06:00 (Day Queue 0006 — Song Song) */}

@@ -109,3 +109,11 @@ def test_hotline_tables_sqlite_in_memory_creation():
         assert sched.shift_mode == "AUTO"
         assert cfg.username == "8740"
         assert log.is_dry_run is False
+
+
+def test_hotline_3cx_holiday_model_metadata():
+    from app.models.hotline_3cx_auto import Hotline3cxHoliday
+
+    assert Hotline3cxHoliday.__tablename__ == "HOTLINE_3CX_HOLIDAYS"
+    cols = set(Hotline3cxHoliday.__table__.columns.keys())
+    assert {"id", "holiday_date", "name", "created_by", "created_at"}.issubset(cols)

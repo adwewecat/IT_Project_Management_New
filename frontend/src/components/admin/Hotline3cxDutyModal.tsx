@@ -9,10 +9,12 @@ import { Modal } from '../ui/Modal';
 import {
   Hotline3cxConfig,
   Hotline3cxConfigUpdate,
+  Hotline3cxHoliday,
   Hotline3cxMember,
   Hotline3cxMemberCreate,
   Hotline3cxScheduleDay,
   Hotline3cxSyncLog,
+  HotlineHolidayBatchCreateRequest,
   ScheduleDayUpsertItem,
   ShiftCode,
 } from '../../types/hotline3cxAuto';
@@ -28,6 +30,7 @@ import { ConfigTab } from './hotline3cx/ConfigTab';
 import { LogsTab } from './hotline3cx/LogsTab';
 import { ApplyNowConfirmModal } from './hotline3cx/ApplyNowConfirmModal';
 import { ApplyMonthModal } from './hotline3cx/ApplyMonthModal';
+import { HolidayManagerModal } from './hotline3cx/HolidayManagerModal';
 import { ScreenshotLightboxModal } from './hotline3cx/ScreenshotLightboxModal';
 import {
   formatDateDDMMYYYY,
@@ -67,6 +70,15 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
   const [targetMonth, setTargetMonth] = useState<string>(() => getCurrentIsoMonth());
   const [overwriteMonth, setOverwriteMonth] = useState<boolean>(true);
   const [applyingMonth, setApplyingMonth] = useState<boolean>(false);
+
+  // Quản lý Ngày Lễ Riêng modal state
+  const [holidays, setHolidays] = useState<Hotline3cxHoliday[]>([]);
+  const [loadingHolidays, setLoadingHolidays] = useState<boolean>(false);
+  const [savingHolidays, setSavingHolidays] = useState<boolean>(false);
+  const [showHolidayModal, setShowHolidayModal] = useState<boolean>(false);
+  const [holidayModalInitialDate, setHolidayModalInitialDate] = useState<string | undefined>(
+    undefined
+  );
 
   // ── Tab 2: Members State ──
   const [members, setMembers] = useState<Hotline3cxMember[]>([]);
@@ -146,6 +158,58 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
     [notify]
   );
 
+  // Đồng bộ metadata Ngày Lễ Riêng lên lưới tuần hiện tại mà KHÔNG làm mất các chỉnh sửa chưa lưu
+  const syncHolidaysOntoSchedules = useCallback(
+    (
+      holList: Hotline3cxHoliday[],
+      forceWeekendAssign?: { dates: Set<string>; lines: string[] }
+    ) => {
+      const holMap = new Map<string, Hotline3cxHoliday>();
+      holList.forEach((h) => holMap.set(h.holiday_date, h));
+
+      setSchedules((prev) =>
+        prev.map((d) => {
+          const matched = holMap.get(d.duty_date);
+          const isHol = Boolean(matched);
+          const nextMode =
+            d.shift_mode === 'WEEKDAY' || d.shift_mode === 'WEEKEND'
+              ? d.shift_mode
+              : isHol || d.is_weekend
+                ? 'WEEKEND'
+                : 'WEEKDAY';
+
+          const shouldUpdateLines =
+            forceWeekendAssign &&
+            forceWeekendAssign.dates.has(d.duty_date) &&
+            forceWeekendAssign.lines.length > 0;
+
+          return {
+            ...d,
+            is_custom_holiday: isHol,
+            holiday_name: matched ? matched.name : null,
+            effective_mode: nextMode,
+            weekend_lines: shouldUpdateLines ? [...forceWeekendAssign.lines] : d.weekend_lines,
+          };
+        })
+      );
+    },
+    []
+  );
+
+  // Load danh mục Ngày Lễ Riêng
+  const fetchHolidays = useCallback(async () => {
+    setLoadingHolidays(true);
+    try {
+      const data = await hotline3cxAutoService.getHolidays();
+      setHolidays(data);
+      syncHolidaysOntoSchedules(data);
+    } catch (err: unknown) {
+      notify(`Không thể tải danh sách ngày lễ: ${extractApiErrorMessage(err)}`, 'error');
+    } finally {
+      setLoadingHolidays(false);
+    }
+  }, [notify, syncHolidaysOntoSchedules]);
+
   // Load config
   const fetchConfig = useCallback(async () => {
     setLoadingConfig(true);
@@ -187,6 +251,7 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
     if (isOpen && !wasOpenRef.current) {
       setActiveTab(initialTab);
       fetchMembers();
+      fetchHolidays();
       fetchSchedules(currentMonday);
       if (initialOpenApplyConfirm) {
         setApplyNowDate(getTodayIsoDate());
@@ -194,7 +259,15 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
       }
     }
     wasOpenRef.current = isOpen;
-  }, [isOpen, initialTab, initialOpenApplyConfirm, currentMonday, fetchMembers, fetchSchedules]);
+  }, [
+    isOpen,
+    initialTab,
+    initialOpenApplyConfirm,
+    currentMonday,
+    fetchMembers,
+    fetchHolidays,
+    fetchSchedules,
+  ]);
 
   // Khi người dùng chuyển tab: chỉ nạp dữ liệu của tab đích nếu chưa có (KHÔNG nạp lại schedules để giữ unsaved edits)
   useEffect(() => {
@@ -364,10 +437,73 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
       );
       // Reload current schedules
       fetchSchedules(currentMonday);
+      fetchHolidays();
     } catch (err: unknown) {
       notify(`Lỗi khi áp dụng mẫu tháng: ${extractApiErrorMessage(err)}`, 'error');
     } finally {
       setApplyingMonth(false);
+    }
+  };
+
+  // Thêm Ngày Lễ Riêng (giữ nguyên các chỉnh sửa chưa lưu trên lưới)
+  const handleAddHolidays = async (payload: HotlineHolidayBatchCreateRequest): Promise<boolean> => {
+    setSavingHolidays(true);
+    try {
+      const created = await hotline3cxAutoService.addHolidays(payload);
+      const updatedAll = await hotline3cxAutoService.getHolidays();
+      setHolidays(updatedAll);
+      syncHolidaysOntoSchedules(updatedAll, {
+        dates: new Set(created.map((h) => h.holiday_date)),
+        lines: payload.weekend_lines || [],
+      });
+      notify(`Đã lưu ${created.length} ngày lễ riêng thành công!`, 'success');
+      return true;
+    } catch (err: unknown) {
+      notify(`Lỗi khi lưu ngày lễ: ${extractApiErrorMessage(err)}`, 'error');
+      return false;
+    } finally {
+      setSavingHolidays(false);
+    }
+  };
+
+  // Xóa Ngày Lễ Riêng theo ID (giữ nguyên các chỉnh sửa chưa lưu khác)
+  const handleDeleteHoliday = async (holidayId: number): Promise<void> => {
+    try {
+      const targetHol = holidays.find((h) => h.id === holidayId);
+      await hotline3cxAutoService.deleteHoliday(holidayId);
+      const updatedAll = await hotline3cxAutoService.getHolidays();
+      setHolidays(updatedAll);
+      if (targetHol) {
+        setSchedules((prev) =>
+          prev.map((d) =>
+            d.duty_date === targetHol.holiday_date && !d.is_weekend && d.shift_mode === 'WEEKEND'
+              ? { ...d, shift_mode: 'AUTO' }
+              : d
+          )
+        );
+      }
+      syncHolidaysOntoSchedules(updatedAll);
+      notify('Đã xóa ngày lễ riêng thành công!', 'success');
+    } catch (err: unknown) {
+      notify(`Lỗi khi xóa ngày lễ: ${extractApiErrorMessage(err)}`, 'error');
+    }
+  };
+
+  // Bật / Bỏ nhanh Ngày Lễ từ từng dòng trong lưới tuần
+  const handleQuickToggleHoliday = async (day: Hotline3cxScheduleDay) => {
+    if (day.is_custom_holiday) {
+      let targetHol = holidays.find((h) => h.holiday_date === day.duty_date);
+      if (!targetHol) {
+        const fresh = await hotline3cxAutoService.getHolidays();
+        setHolidays(fresh);
+        targetHol = fresh.find((h) => h.holiday_date === day.duty_date);
+      }
+      if (targetHol) {
+        await handleDeleteHoliday(targetHol.id);
+      }
+    } else {
+      setHolidayModalInitialDate(day.duty_date);
+      setShowHolidayModal(true);
     }
   };
 
@@ -700,6 +836,13 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
               onGoToThisWeek={handleGoToThisWeek}
               onClonePreviousWeek={handleClonePreviousWeek}
               onOpenApplyMonthModal={() => setShowApplyMonthModal(true)}
+              holidaysCount={holidays.length}
+              onOpenHolidayManagerModal={() => {
+                setHolidayModalInitialDate(undefined);
+                setShowHolidayModal(true);
+                fetchHolidays();
+              }}
+              onQuickToggleHoliday={handleQuickToggleHoliday}
               onSaveSchedules={handleSaveSchedules}
               onQuickDryRun={handleQuickDryRun}
               onOpenApplyNowModal={() => {
@@ -790,6 +933,23 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
           onOverwriteChange={setOverwriteMonth}
           applying={applyingMonth}
           onConfirm={handleApplyMonthTemplate}
+        />
+      )}
+
+      {/* ══ MODAL QUẢN LÝ NGÀY LỄ RIÊNG ══ */}
+      {showHolidayModal && (
+        <HolidayManagerModal
+          isOpen={showHolidayModal}
+          onClose={() => setShowHolidayModal(false)}
+          initialStartDate={holidayModalInitialDate}
+          holidays={holidays}
+          loading={loadingHolidays}
+          saving={savingHolidays}
+          activeMembers={activeMembers}
+          memberMap={memberMap}
+          onAddHolidays={handleAddHolidays}
+          onDeleteHoliday={handleDeleteHoliday}
+          onJumpToWeek={handleJumpToWeek}
         />
       )}
     </>

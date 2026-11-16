@@ -91,8 +91,37 @@ class ScheduleDayItem(ScheduleDayUpsertItem):
         default="WEEKDAY", description="Chế độ phân ca thực tế (WEEKDAY / WEEKEND)"
     )
     is_weekend: bool = Field(default=False, description="Có phải T7 hoặc CN không")
+    is_custom_holiday: bool = Field(
+        default=False, description="Ngày được khai báo trong danh mục Ngày Lễ Riêng hay không"
+    )
+    holiday_name: Optional[str] = Field(
+        default=None, description="Tên ngày lễ riêng (nếu có)"
+    )
     updated_by: Optional[str] = None
     updated_at: Optional[datetime] = None
+
+
+class HotlineHolidayItem(BaseModel):
+    """Thông tin một ngày lễ riêng trong danh mục ngày lễ hotline."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    holiday_date: date
+    name: str = ""
+    weekday_label: str = ""
+    weekend_lines: List[str] = Field(default_factory=list)
+    created_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+class HotlineHolidayBatchCreateRequest(BaseModel):
+    """Yêu cầu thêm một ngày lễ hoặc một khoảng ngày lễ liên tiếp (kèm nhân sự 06:00 tuỳ chọn)."""
+
+    start_date: date
+    end_date: Optional[date] = None
+    name: str = Field(default="", max_length=250)
+    weekend_lines: List[str] = Field(default_factory=list)
 
 
 class ScheduleBulkSaveRequest(BaseModel):

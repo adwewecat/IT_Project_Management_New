@@ -25,6 +25,7 @@ from app.core.config import settings
 from app.core.database import Base
 from app.models.hotline_3cx_auto import (
     Hotline3cxConfig,
+    Hotline3cxHoliday,
     Hotline3cxMember,
     Hotline3cxSchedule,
     Hotline3cxSyncLog,
@@ -69,6 +70,7 @@ def db_session():
             Hotline3cxSchedule.__table__,
             Hotline3cxSyncLog.__table__,
             Hotline3cxConfig.__table__,
+            Hotline3cxHoliday.__table__,
         ],
     )
     with Session(engine) as session:
@@ -781,6 +783,7 @@ def api_test_db():
             Hotline3cxSchedule.__table__,
             Hotline3cxSyncLog.__table__,
             Hotline3cxConfig.__table__,
+            Hotline3cxHoliday.__table__,
         ],
     )
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -1253,6 +1256,301 @@ def test_playwright_sync_uses_domcontentloaded_and_supports_no_proxy_fallback():
     ).read_text(encoding="utf-8")
     assert '--no-proxy-server' in service_src
     assert 'wait_until="domcontentloaded"' in service_src
+
+
+def test_custom_holiday_crud_and_range_enrichment():
+    """
+    Thêm 1 ngày / khoảng ngày lễ riêng + nhân sự trực sẵn,
+    xác nhận get_schedules_range tự chuyển T2-T6 sang WEEKEND + trả is_custom_holiday=True + holiday_name,
+    và khi xóa ngày lễ thì khôi phục về WEEKDAY.
+    """
+    from sqlalchemy.orm import sessionmaker
+    from app.models.hotline_3cx_auto import Hotline3cxHoliday
+    from app.schemas.hotline_3cx_auto import HotlineHolidayBatchCreateRequest
+    from app.services.hotline_3cx_auto_service import (
+        delete_holiday,
+        get_schedules_range,
+        list_holidays,
+        upsert_holidays_batch,
+    )
+
+    eng = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(
+        eng,
+        tables=[
+            Hotline3cxMember.__table__,
+            Hotline3cxSchedule.__table__,
+            Hotline3cxSyncLog.__table__,
+            Hotline3cxConfig.__table__,
+            Hotline3cxHoliday.__table__,
+        ],
+    )
+    with Session(eng) as s:
+        ensure_seeded_data(s)
+        created = upsert_holidays_batch(
+            s,
+            HotlineHolidayBatchCreateRequest(
+                start_date=date(2026, 11, 18),  # Thứ Tư
+                end_date=date(2026, 11, 19),    # Thứ Năm
+                name="Nghỉ lễ công ty",
+                weekend_lines=["8775", "8778"],
+            ),
+            created_by="dung.nguyenanh",
+        )
+        assert len(created) == 2
+
+        listed = list_holidays(s, year=2026)
+        assert [h.holiday_date for h in listed] == [date(2026, 11, 18), date(2026, 11, 19)]
+        assert listed[0].name == "Nghỉ lễ công ty"
+        assert listed[0].weekend_lines == ["8775", "8778"]
+        assert listed[0].weekday_label == "Thứ Tư"
+
+        week_items = get_schedules_range(s, date(2026, 11, 16), date(2026, 11, 22))
+        wed = next(d for d in week_items if d.duty_date == date(2026, 11, 18))
+        assert wed.shift_mode == "AUTO"
+        assert wed.is_custom_holiday is True
+        assert wed.holiday_name == "Nghỉ lễ công ty"
+        assert wed.effective_mode == "WEEKEND"
+        assert wed.weekend_lines == ["8775", "8778"]
+
+        deleted = delete_holiday(s, listed[0].id)
+        assert deleted is True
+        week_after = get_schedules_range(s, date(2026, 11, 16), date(2026, 11, 22))
+        wed_after = next(d for d in week_after if d.duty_date == date(2026, 11, 18))
+        assert wed_after.is_custom_holiday is False
+        assert wed_after.holiday_name is None
+        assert wed_after.effective_mode == "WEEKDAY"
+
+
+def test_resolve_and_run_sync_respect_custom_holiday():
+    """Ngày thường (T4) có mặt trong HOTLINE_3CX_HOLIDAYS sẽ chạy Night 0007 (sáng Chính-Phụ, chiều Tự đảo)."""
+    import asyncio
+    from unittest.mock import AsyncMock
+    from app.models.hotline_3cx_auto import Hotline3cxHoliday
+    from app.schemas.hotline_3cx_auto import HotlineHolidayBatchCreateRequest
+    from app.services.hotline_3cx_auto_service import upsert_holidays_batch
+
+    eng = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(
+        eng,
+        tables=[
+            Hotline3cxMember.__table__,
+            Hotline3cxSchedule.__table__,
+            Hotline3cxSyncLog.__table__,
+            Hotline3cxConfig.__table__,
+            Hotline3cxHoliday.__table__,
+        ],
+    )
+    with Session(eng) as s:
+        ensure_seeded_data(s)
+        update_config(s, Hotline3cxConfigUpdate(password="test_secret_password"))
+        upsert_holidays_batch(
+            s,
+            HotlineHolidayBatchCreateRequest(
+                start_date=date(2026, 11, 18),  # Thứ Tư
+                name="Ngày hội công ty",
+                weekend_lines=["8775", "8778"],
+            ),
+            created_by="tester",
+        )
+        captured_plans = []
+
+        async def mock_sync(*args, **kwargs):
+            captured_plans.append(kwargs["plan"])
+            return {"status": "SUCCESS"}
+
+        log_am = asyncio.run(
+            run_shift_sync(
+                s,
+                duty_date=date(2026, 11, 18),
+                shift_code="MORNING",
+                triggered_by="tester",
+                dry_run=False,
+                allow_retry=False,
+                sync_fn=mock_sync,
+                alert_fn=AsyncMock(),
+            )
+        )
+        assert log_am.status == "SUCCESS"
+        assert log_am.queue_name == "IT HCM App Night"
+        assert [(e.ext_line, e.skill_group) for e in captured_plans[-1].entries] == [
+            ("8775", "1"),
+            ("8778", "2"),
+        ]
+
+        log_pm = asyncio.run(
+            run_shift_sync(
+                s,
+                duty_date=date(2026, 11, 18),
+                shift_code="EVENING",
+                triggered_by="tester",
+                dry_run=False,
+                allow_retry=False,
+                sync_fn=mock_sync,
+                alert_fn=AsyncMock(),
+            )
+        )
+        assert log_pm.status == "SUCCESS"
+        assert [(e.ext_line, e.skill_group) for e in captured_plans[-1].entries] == [
+            ("8778", "1"),
+            ("8775", "2"),
+        ]
+
+
+def test_clone_week_and_apply_month_protect_custom_holidays():
+    """Sao chép tuần không làm lây WEEKEND sang tuần mới, và Áp mẫu tháng giữ nguyên ngày lễ riêng."""
+    from app.models.hotline_3cx_auto import Hotline3cxHoliday
+    from app.schemas.hotline_3cx_auto import HotlineHolidayBatchCreateRequest
+    from app.services.hotline_3cx_auto_service import get_schedules_range, upsert_holidays_batch
+
+    eng = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(
+        eng,
+        tables=[
+            Hotline3cxMember.__table__,
+            Hotline3cxSchedule.__table__,
+            Hotline3cxSyncLog.__table__,
+            Hotline3cxConfig.__table__,
+            Hotline3cxHoliday.__table__,
+        ],
+    )
+    with Session(eng) as s:
+        ensure_seeded_data(s)
+        # Tuần 16-22/11: Thứ Tư 18-11 là ngày lễ công ty (hoặc shift_mode='WEEKEND')
+        upsert_schedules(
+            s,
+            [
+                ScheduleDayUpsertItem(
+                    duty_date=date(2026, 11, 18),
+                    shift_mode="WEEKEND",
+                    weekend_lines=["8775", "8778"],
+                ),
+                ScheduleDayUpsertItem(
+                    duty_date=date(2026, 11, 20),
+                    shift_mode="AUTO",
+                    morning_lines=["8772"],
+                    evening_lines=["8779", "8741"],
+                ),
+            ],
+        )
+        # Đánh dấu riêng Thứ Sáu 27-11-2026 và Thứ Tư 09-12-2026 là ngày lễ công ty
+        upsert_holidays_batch(
+            s,
+            HotlineHolidayBatchCreateRequest(
+                start_date=date(2026, 11, 27),
+                name="Black Friday Công Ty",
+                weekend_lines=["8741", "8740"],
+            ),
+        )
+        upsert_holidays_batch(
+            s,
+            HotlineHolidayBatchCreateRequest(
+                start_date=date(2026, 12, 9),
+                name="Lễ Tháng 12",
+                weekend_lines=["8776", "8779"],
+            ),
+        )
+
+        # Clone sang tuần 23-29/11:
+        # - Thứ Tư 25-11 KHÔNG được kế thừa shift_mode='WEEKEND' từ 18-11!
+        # - Thứ Sáu 27-11 vẫn là ngày lễ riêng & giữ nguyên ["8741", "8740"]!
+        clone_previous_week_schedules(s, target_week_start=date(2026, 11, 23))
+        next_week = get_week_schedules(s, date(2026, 11, 23))
+        wed_next = next(d for d in next_week if d.duty_date == date(2026, 11, 25))
+        fri_next = next(d for d in next_week if d.duty_date == date(2026, 11, 27))
+        assert wed_next.shift_mode == "AUTO"
+        assert wed_next.effective_mode == "WEEKDAY"
+        assert fri_next.is_custom_holiday is True
+        assert fri_next.effective_mode == "WEEKEND"
+        assert fri_next.weekend_lines == ["8741", "8740"]
+
+        # Áp dụng mẫu tuần cho tháng 12/2026 với overwrite_existing=True:
+        # Thứ Tư 09-12 vẫn phải giữ effective_mode="WEEKEND", is_custom_holiday=True và ["8776", "8779"]!
+        template_days = [
+            ScheduleDayUpsertItem(
+                duty_date=date(2026, 11, 16) + __import__("datetime").timedelta(days=i),
+                shift_mode="AUTO",
+                morning_lines=["8775", "8778"],
+                evening_lines=["8775", "8778"],
+                weekend_lines=["8772", "8779"] if i >= 5 else [],
+            )
+            for i in range(7)
+        ]
+        apply_week_template_to_month(
+            s, year=2026, month=12, template_days=template_days, overwrite_existing=True
+        )
+        dec_hol = get_schedules_range(s, date(2026, 12, 9), date(2026, 12, 9))[0]
+        assert dec_hol.is_custom_holiday is True
+        assert dec_hol.effective_mode == "WEEKEND"
+        assert dec_hol.weekend_lines == ["8776", "8779"]
+
+
+def test_holidays_api_endpoints():
+    """Kiểm thử CRUD API /api/v1/hotline-3cx-auto/holidays."""
+    from fastapi.testclient import TestClient
+    from sqlalchemy.pool import StaticPool
+    from sqlalchemy.orm import sessionmaker
+    from app.main import app
+    from app.core.database import get_db
+    from app.api.deps import require_super_admin_or_dung
+    from app.models.hotline_3cx_auto import Hotline3cxHoliday
+
+    eng = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(
+        eng,
+        tables=[
+            Hotline3cxMember.__table__,
+            Hotline3cxSchedule.__table__,
+            Hotline3cxSyncLog.__table__,
+            Hotline3cxConfig.__table__,
+            Hotline3cxHoliday.__table__,
+        ],
+    )
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=eng)
+
+    def _override_db():
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_db
+    app.dependency_overrides[require_super_admin_or_dung] = lambda: MockSuperUser()
+    try:
+        with TestClient(app) as client:
+            res_add = client.post(
+                "/api/v1/hotline-3cx-auto/holidays",
+                json={
+                    "start_date": "2026-11-20",
+                    "end_date": "2026-11-20",
+                    "name": "Ngày Nhà Giáo Việt Nam (Nghỉ Riêng)",
+                    "weekend_lines": ["8775", "8778"],
+                },
+            )
+            assert res_add.status_code == 200
+            created_list = res_add.json()
+            assert len(created_list) == 1
+            hid = created_list[0]["id"]
+            assert created_list[0]["name"] == "Ngày Nhà Giáo Việt Nam (Nghỉ Riêng)"
+
+            res_get = client.get("/api/v1/hotline-3cx-auto/holidays?year=2026")
+            assert res_get.status_code == 200
+            assert len(res_get.json()) == 1
+
+            res_del = client.delete(f"/api/v1/hotline-3cx-auto/holidays/{hid}")
+            assert res_del.status_code == 200
+            assert res_del.json()["success"] is True
+
+            res_del_missing = client.delete(f"/api/v1/hotline-3cx-auto/holidays/{hid}")
+            assert res_del_missing.status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
 
 
 

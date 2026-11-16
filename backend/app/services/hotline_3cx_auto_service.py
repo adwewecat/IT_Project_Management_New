@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.hotline_3cx_auto import (
     Hotline3cxConfig,
+    Hotline3cxHoliday,
     Hotline3cxMember,
     Hotline3cxSchedule,
     Hotline3cxSyncLog,
@@ -31,6 +32,8 @@ from app.models.hotline_3cx_auto import (
 from app.schemas.hotline_3cx_auto import (
     Hotline3cxConfigOut,
     Hotline3cxConfigUpdate,
+    HotlineHolidayBatchCreateRequest,
+    HotlineHolidayItem,
     HotlineMemberCreate,
     HotlineMemberUpdate,
     ResolvedShiftPlan,
@@ -302,11 +305,20 @@ def get_week_monday(anchor: date) -> date:
     return anchor - timedelta(days=anchor.weekday())
 
 
-def compute_effective_mode(duty_date: date, shift_mode: str) -> str:
-    """Xác định chế độ phân ca thực tế: WEEKDAY (ngày thường) hoặc WEEKEND (cuối tuần / lễ)."""
+def compute_effective_mode(
+    duty_date: date,
+    shift_mode: str,
+    holiday_dates: Optional[Set[date]] = None,
+) -> str:
+    """
+    Xác định chế độ phân ca thực tế: WEEKDAY (ngày thường) hoặc WEEKEND (cuối tuần / lễ).
+    - Nếu shift_mode ép cụ thể là WEEKDAY hoặc WEEKEND -> ưu tiên theo chỉ định.
+    - Nếu là AUTO: ngày nằm trong HOTLINE_3CX_HOLIDAYS hoặc Thứ Bảy (6) / Chủ Nhật (7) -> WEEKEND.
+    """
     if shift_mode in ("WEEKDAY", "WEEKEND"):
         return shift_mode
-    # Nếu là AUTO: Thứ Bảy (6) và Chủ Nhật (7) là WEEKEND, còn lại là WEEKDAY
+    if holiday_dates and duty_date in holiday_dates:
+        return "WEEKEND"
     return "WEEKEND" if duty_date.isoweekday() in (6, 7) else "WEEKDAY"
 
 
@@ -323,10 +335,170 @@ def _parse_json_lines(json_str: Optional[str]) -> List[str]:
         return []
 
 
+def get_holiday_map(
+    db: Session,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+) -> Dict[date, Hotline3cxHoliday]:
+    """Lấy map {holiday_date: Hotline3cxHoliday} trong khoảng ngày (hoặc toàn bộ nếu không truyền)."""
+    query = db.query(Hotline3cxHoliday)
+    if start_date is not None:
+        query = query.filter(Hotline3cxHoliday.holiday_date >= start_date)
+    if end_date is not None:
+        query = query.filter(Hotline3cxHoliday.holiday_date <= end_date)
+    rows = query.order_by(Hotline3cxHoliday.holiday_date.asc()).all()
+    return {r.holiday_date: r for r in rows}
+
+
+def _build_holiday_item(
+    row: Hotline3cxHoliday,
+    sched_map: Dict[date, Hotline3cxSchedule],
+) -> HotlineHolidayItem:
+    """Đóng gói một bản ghi Hotline3cxHoliday kèm thứ và nhân sự 06:00 (nếu có)."""
+    sched = sched_map.get(row.holiday_date)
+    weekend_lines = _parse_json_lines(sched.weekend_lines_json) if sched else []
+    return HotlineHolidayItem(
+        id=row.id,
+        holiday_date=row.holiday_date,
+        name=row.name or "",
+        weekday_label=WEEKDAY_NAMES.get(row.holiday_date.isoweekday(), ""),
+        weekend_lines=weekend_lines,
+        created_by=row.created_by,
+        created_at=row.created_at,
+    )
+
+
+def list_holidays(db: Session, year: Optional[int] = None) -> List[HotlineHolidayItem]:
+    """Liệt kê danh sách Ngày Lễ Riêng (tùy chọn lọc theo năm) kèm nhân sự ca lễ đang gán."""
+    query = db.query(Hotline3cxHoliday)
+    if year is not None:
+        query = query.filter(
+            Hotline3cxHoliday.holiday_date >= date(year, 1, 1),
+            Hotline3cxHoliday.holiday_date <= date(year, 12, 31),
+        )
+    rows = query.order_by(Hotline3cxHoliday.holiday_date.asc()).all()
+    if not rows:
+        return []
+
+    dates = [r.holiday_date for r in rows]
+    sched_rows = (
+        db.query(Hotline3cxSchedule)
+        .filter(Hotline3cxSchedule.duty_date.in_(dates))
+        .all()
+    )
+    sched_map = {s.duty_date: s for s in sched_rows}
+    return [_build_holiday_item(r, sched_map) for r in rows]
+
+
+def upsert_holidays_batch(
+    db: Session,
+    payload: HotlineHolidayBatchCreateRequest,
+    created_by: Optional[str] = None,
+) -> List[HotlineHolidayItem]:
+    """
+    Thêm hoặc cập nhật 1 ngày lễ hoặc một khoảng ngày lễ liên tiếp [start_date..end_date].
+    Nếu payload.weekend_lines có giá trị, cập nhật luôn danh sách Chính/Phụ 06:00 cho các ngày lễ đó.
+    """
+    start_d = payload.start_date
+    end_d = payload.end_date or payload.start_date
+    if end_d < start_d:
+        raise ValueError("Ngày kết thúc không được nhỏ hơn ngày bắt đầu.")
+    total_days = (end_d - start_d).days + 1
+    if total_days > 62:
+        raise ValueError("Chỉ được thêm tối đa 62 ngày lễ liên tiếp trong một lần.")
+
+    clean_name = (payload.name or "").strip() or "Nghỉ lễ riêng"
+    clean_lines = _clean_lines(payload.weekend_lines or [])
+    target_dates = [start_d + timedelta(days=i) for i in range(total_days)]
+
+    existing_hols = (
+        db.query(Hotline3cxHoliday)
+        .filter(Hotline3cxHoliday.holiday_date.in_(target_dates))
+        .all()
+    )
+    hol_map = {h.holiday_date: h for h in existing_hols}
+    saved_hols: List[Hotline3cxHoliday] = []
+
+    for d_val in target_dates:
+        existing_h = hol_map.get(d_val)
+        if existing_h:
+            existing_h.name = clean_name
+            saved_hols.append(existing_h)
+        else:
+            new_h = Hotline3cxHoliday(
+                holiday_date=d_val,
+                name=clean_name,
+                created_by=created_by,
+                created_at=datetime.now(),
+            )
+            db.add(new_h)
+            saved_hols.append(new_h)
+
+    existing_scheds = (
+        db.query(Hotline3cxSchedule)
+        .filter(Hotline3cxSchedule.duty_date.in_(target_dates))
+        .all()
+    )
+    sched_map = {s.duty_date: s for s in existing_scheds}
+    now_ts = datetime.now()
+
+    for d_val in target_dates:
+        s_row = sched_map.get(d_val)
+        if s_row:
+            # Nếu trước đó ép WEEKDAY thì mở lại AUTO để nhận diện chế độ ngày lễ
+            if s_row.shift_mode == "WEEKDAY":
+                s_row.shift_mode = "AUTO"
+            if clean_lines:
+                s_row.weekend_lines_json = json.dumps(clean_lines, ensure_ascii=False)
+                s_row.updated_by = created_by
+                s_row.updated_at = now_ts
+        elif clean_lines:
+            new_s = Hotline3cxSchedule(
+                duty_date=d_val,
+                shift_mode="AUTO",
+                morning_lines_json="[]",
+                evening_lines_json="[]",
+                weekend_lines_json=json.dumps(clean_lines, ensure_ascii=False),
+                weekend_evening_override_json="[]",
+                note=clean_name,
+                updated_by=created_by,
+                updated_at=now_ts,
+            )
+            db.add(new_s)
+            sched_map[d_val] = new_s
+
+    db.commit()
+    for h_row in saved_hols:
+        db.refresh(h_row)
+    return [_build_holiday_item(h_row, sched_map) for h_row in saved_hols]
+
+
+def delete_holiday(db: Session, holiday_id: int) -> bool:
+    """Xóa một Ngày Lễ Riêng theo ID và khôi phục chế độ ngày thường nếu đang ép WEEKEND."""
+    row = db.query(Hotline3cxHoliday).filter(Hotline3cxHoliday.id == holiday_id).first()
+    if not row:
+        return False
+    target_date = row.holiday_date
+    db.delete(row)
+
+    # Nếu lịch ngày thường T2-T6 từng lưu shift_mode='WEEKEND', đưa về 'AUTO' để tránh kẹt lễ
+    if target_date.isoweekday() not in (6, 7):
+        sched = (
+            db.query(Hotline3cxSchedule)
+            .filter(Hotline3cxSchedule.duty_date == target_date)
+            .first()
+        )
+        if sched and sched.shift_mode == "WEEKEND":
+            sched.shift_mode = "AUTO"
+
+    db.commit()
+    return True
+
+
 def get_schedules_range(db: Session, start_date: date, end_date: date) -> List[ScheduleDayItem]:
     """
     Lấy lưới lịch trực trong khoảng ngày [start_date, end_date] (bao gồm cả 2 đầu mút).
-    Những ngày chưa có bản ghi trong DB sẽ tự động được bổ sung hàng mặc định rỗng kèm nhãn thứ và effective_mode.
+    Tự động kết hợp danh mục Ngày Lễ Riêng (HOTLINE_3CX_HOLIDAYS).
     """
     rows = (
         db.query(Hotline3cxSchedule)
@@ -337,6 +509,8 @@ def get_schedules_range(db: Session, start_date: date, end_date: date) -> List[S
         .all()
     )
     row_map = {r.duty_date: r for r in rows}
+    holiday_map = get_holiday_map(db, start_date, end_date)
+    holiday_dates = set(holiday_map.keys())
 
     result: List[ScheduleDayItem] = []
     cur_date = start_date
@@ -345,10 +519,13 @@ def get_schedules_range(db: Session, start_date: date, end_date: date) -> List[S
     while cur_date <= end_date:
         is_wk = cur_date.isoweekday() in (6, 7)
         wk_label = WEEKDAY_NAMES.get(cur_date.isoweekday(), "")
+        hol_row = holiday_map.get(cur_date)
+        is_hol = hol_row is not None
+        hol_name = hol_row.name if hol_row else None
 
         if cur_date in row_map:
             r = row_map[cur_date]
-            eff_mode = compute_effective_mode(cur_date, r.shift_mode)
+            eff_mode = compute_effective_mode(cur_date, r.shift_mode, holiday_dates=holiday_dates)
             item = ScheduleDayItem(
                 id=r.id,
                 duty_date=r.duty_date,
@@ -361,11 +538,13 @@ def get_schedules_range(db: Session, start_date: date, end_date: date) -> List[S
                 weekday_label=wk_label,
                 effective_mode=eff_mode,
                 is_weekend=is_wk,
+                is_custom_holiday=is_hol,
+                holiday_name=hol_name,
                 updated_by=r.updated_by,
                 updated_at=r.updated_at,
             )
         else:
-            eff_mode = "WEEKEND" if is_wk else "WEEKDAY"
+            eff_mode = compute_effective_mode(cur_date, "AUTO", holiday_dates=holiday_dates)
             item = ScheduleDayItem(
                 id=None,
                 duty_date=cur_date,
@@ -378,6 +557,8 @@ def get_schedules_range(db: Session, start_date: date, end_date: date) -> List[S
                 weekday_label=wk_label,
                 effective_mode=eff_mode,
                 is_weekend=is_wk,
+                is_custom_holiday=is_hol,
+                holiday_name=hol_name,
                 updated_by=None,
                 updated_at=None,
             )
@@ -449,9 +630,12 @@ def clone_previous_week_schedules(
 ) -> List[Hotline3cxSchedule]:
     """
     Sao chép lịch trực của tuần liền trước sang tuần mục tiêu (bắt đầu từ target_week_start).
-    Tương ứng từng ngày T2->T2, T3->T3... CN->CN.
+    Tương ứng từng ngày T2->T2, T3->T3... CN->CN, đồng thời:
+    - Không sao chép nhầm trạng thái WEEKEND của ngày lễ đột xuất tuần trước sang ngày thường tuần mới.
+    - Bảo toàn nhân sự trực lễ nếu ngày đích nằm trong danh mục Ngày Lễ Riêng.
     """
     target_monday = get_week_monday(target_week_start)
+    target_sunday = target_monday + timedelta(days=6)
     prev_monday = target_monday - timedelta(days=7)
     prev_sunday = prev_monday + timedelta(days=6)
 
@@ -465,36 +649,62 @@ def clone_previous_week_schedules(
     )
     prev_map = {r.duty_date: r for r in prev_rows}
 
+    target_rows = (
+        db.query(Hotline3cxSchedule)
+        .filter(
+            Hotline3cxSchedule.duty_date >= target_monday,
+            Hotline3cxSchedule.duty_date <= target_sunday,
+        )
+        .all()
+    )
+    target_existing_map = {r.duty_date: r for r in target_rows}
+    target_holidays = set(get_holiday_map(db, target_monday, target_sunday).keys())
+
     upsert_items: List[ScheduleDayUpsertItem] = []
     for day_offset in range(7):
         p_date = prev_monday + timedelta(days=day_offset)
         t_date = target_monday + timedelta(days=day_offset)
         prev_row = prev_map.get(p_date)
+        existing_target = target_existing_map.get(t_date)
+        is_target_holiday = t_date in target_holidays
 
         if prev_row:
+            prev_wk_lines = _parse_json_lines(prev_row.weekend_lines_json)
+            prev_ov_lines = _parse_json_lines(prev_row.weekend_evening_override_json)
+            if is_target_holiday and existing_target:
+                ex_wk = _parse_json_lines(existing_target.weekend_lines_json)
+                if ex_wk:
+                    prev_wk_lines = ex_wk
+                    prev_ov_lines = _parse_json_lines(existing_target.weekend_evening_override_json)
+
+            # Không để WEEKEND (lễ đột xuất tuần trước) lây sang T2-T6 tuần mới
+            cloned_mode = prev_row.shift_mode
+            if is_target_holiday or (cloned_mode == "WEEKEND" and t_date.isoweekday() not in (6, 7)):
+                cloned_mode = "AUTO"
+
             upsert_items.append(
                 ScheduleDayUpsertItem(
                     duty_date=t_date,
-                    shift_mode=prev_row.shift_mode,
+                    shift_mode=cloned_mode,
                     morning_lines=_parse_json_lines(prev_row.morning_lines_json),
                     evening_lines=_parse_json_lines(prev_row.evening_lines_json),
-                    weekend_lines=_parse_json_lines(prev_row.weekend_lines_json),
-                    weekend_evening_override=_parse_json_lines(
-                        prev_row.weekend_evening_override_json
-                    ),
+                    weekend_lines=prev_wk_lines,
+                    weekend_evening_override=prev_ov_lines,
                     note=prev_row.note,
                 )
             )
         else:
+            existing_wk = _parse_json_lines(existing_target.weekend_lines_json) if (is_target_holiday and existing_target) else []
+            existing_ov = _parse_json_lines(existing_target.weekend_evening_override_json) if (is_target_holiday and existing_target) else []
             upsert_items.append(
                 ScheduleDayUpsertItem(
                     duty_date=t_date,
                     shift_mode="AUTO",
                     morning_lines=[],
                     evening_lines=[],
-                    weekend_lines=[],
-                    weekend_evening_override=[],
-                    note=None,
+                    weekend_lines=existing_wk,
+                    weekend_evening_override=existing_ov,
+                    note=existing_target.note if (is_target_holiday and existing_target) else None,
                 )
             )
 
@@ -511,45 +721,69 @@ def apply_week_template_to_month(
 ) -> int:
     """
     Áp dụng mẫu tuần (7 ngày mẫu) cho toàn bộ các ngày trong tháng (year, month).
-    Khớp từng ngày theo thứ trong tuần (isoweekday 1..7).
-    Trả về tổng số ngày đã được lưu cấu hình.
+    Khớp từng ngày theo thứ trong tuần (isoweekday 1..7), ĐỒNG THỜI BẢO VỆ các Ngày Lễ Riêng:
+    - Không ghi đè thành ngày thường nếu ngày đó nằm trong HOTLINE_3CX_HOLIDAYS.
+    - Giữ nguyên danh sách trực lễ đã cấu hình riêng cho ngày lễ đó (nếu chưa có thì gợi ý theo T7/CN mẫu).
     """
-    # Xây dựng bản đồ mẫu theo thứ trong tuần: 1=Thứ Hai ... 7=Chủ Nhật
     template_by_isoweekday = {item.duty_date.isoweekday(): item for item in template_days}
+
+    # Tìm nhân sự cuối tuần mẫu mặc định (ưu tiên CN rồi T7) để dự phòng nếu ngày lễ chưa chọn người
+    default_holiday_lines: List[str] = []
+    for wk_day in (7, 6):
+        tmpl_wk = template_by_isoweekday.get(wk_day)
+        if tmpl_wk and tmpl_wk.weekend_lines:
+            default_holiday_lines = list(tmpl_wk.weekend_lines)
+            break
 
     _, total_days_in_month = calendar.monthrange(year, month)
     month_start = date(year, month, 1)
     month_end = date(year, month, total_days_in_month)
 
-    existing_dates = set()
-    if not overwrite_existing:
-        existing_rows = (
-            db.query(Hotline3cxSchedule.duty_date)
-            .filter(
-                Hotline3cxSchedule.duty_date >= month_start,
-                Hotline3cxSchedule.duty_date <= month_end,
-            )
-            .all()
+    existing_rows = (
+        db.query(Hotline3cxSchedule)
+        .filter(
+            Hotline3cxSchedule.duty_date >= month_start,
+            Hotline3cxSchedule.duty_date <= month_end,
         )
-        existing_dates = {r[0] for r in existing_rows}
+        .all()
+    )
+    existing_map = {r.duty_date: r for r in existing_rows}
+    holiday_dates = set(get_holiday_map(db, month_start, month_end).keys())
 
     upsert_items: List[ScheduleDayUpsertItem] = []
     for day_num in range(1, total_days_in_month + 1):
         target_date = date(year, month, day_num)
-        if not overwrite_existing and target_date in existing_dates:
+        existing_row = existing_map.get(target_date)
+        if not overwrite_existing and existing_row is not None:
             continue
 
         template_item = template_by_isoweekday.get(target_date.isoweekday())
         if template_item:
+            is_hol = target_date in holiday_dates
+            if is_hol:
+                eff_mode = "AUTO"
+                ex_wk = _parse_json_lines(existing_row.weekend_lines_json) if existing_row else []
+                ex_ov = _parse_json_lines(existing_row.weekend_evening_override_json) if existing_row else []
+                wk_lines = ex_wk if ex_wk else (list(template_item.weekend_lines) or list(default_holiday_lines))
+                ov_lines = ex_ov if ex_wk else list(template_item.weekend_evening_override)
+            else:
+                eff_mode = (
+                    "AUTO"
+                    if (template_item.shift_mode == "WEEKEND" and target_date.isoweekday() not in (6, 7))
+                    else template_item.shift_mode
+                )
+                wk_lines = list(template_item.weekend_lines)
+                ov_lines = list(template_item.weekend_evening_override)
+
             upsert_items.append(
                 ScheduleDayUpsertItem(
                     duty_date=target_date,
-                    shift_mode=template_item.shift_mode,
+                    shift_mode=eff_mode,
                     morning_lines=list(template_item.morning_lines),
                     evening_lines=list(template_item.evening_lines),
-                    weekend_lines=list(template_item.weekend_lines),
-                    weekend_evening_override=list(template_item.weekend_evening_override),
-                    note=template_item.note,
+                    weekend_lines=wk_lines,
+                    weekend_evening_override=ov_lines,
+                    note=existing_row.note if (is_hol and existing_row and existing_row.note) else template_item.note,
                 )
             )
 
@@ -593,6 +827,7 @@ def resolve_shift_plan(
     schedule_row: Optional[Hotline3cxSchedule],
     config: Hotline3cxConfig,
     active_lines: Optional[Set[str]] = None,
+    holiday_dates: Optional[Set[date]] = None,
 ) -> ResolvedShiftPlan:
     """
     Thuật toán cốt lõi tính toán kế hoạch gán máy nhánh và Skill Group vào hàng đợi 3CX:
@@ -620,9 +855,11 @@ def resolve_shift_plan(
             f"shift_code không hợp lệ: '{shift_code}'. Chỉ chấp nhận 'MORNING' hoặc 'EVENING'."
         )
 
-    # 1. Xác định effective_mode
+    # 1. Xác định effective_mode (có xét Ngày Lễ Riêng nếu có)
     raw_shift_mode = schedule_row.shift_mode if schedule_row else "AUTO"
-    effective_mode = compute_effective_mode(duty_date, raw_shift_mode)
+    effective_mode = compute_effective_mode(
+        duty_date, raw_shift_mode, holiday_dates=holiday_dates
+    )
 
     # 2. Đọc các mảng line từ bản ghi lịch trực
     if schedule_row:
@@ -1193,19 +1430,25 @@ async def run_shift_sync(
             f"Ca trực không hợp lệ: '{shift_code}'. Chỉ chấp nhận 'MORNING' hoặc 'EVENING'."
         )
 
-    # Đọc bản ghi lịch trực và cấu hình singleton
+    # Đọc bản ghi lịch trực, ngày lễ riêng và cấu hình singleton
     schedule_row = (
         db.query(Hotline3cxSchedule)
         .filter(Hotline3cxSchedule.duty_date == eff_date)
         .first()
     )
+    holiday_dates = set(get_holiday_map(db, eff_date, eff_date).keys())
     config = get_or_create_config(db)
     active_mems = list_members(db, active_only=True)
     active_lines = {m.ext_line for m in active_mems}
 
     # Tính toán kế hoạch phân ca
     plan = resolve_shift_plan(
-        eff_date, eff_shift, schedule_row, config, active_lines=active_lines
+        eff_date,
+        eff_shift,
+        schedule_row,
+        config,
+        active_lines=active_lines,
+        holiday_dates=holiday_dates,
     )
 
     # Nếu không có nhân sự trực nào được cấu hình -> Ghi log SKIPPED

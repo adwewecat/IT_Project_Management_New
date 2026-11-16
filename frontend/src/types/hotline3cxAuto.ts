@@ -51,8 +51,28 @@ export interface Hotline3cxScheduleDay extends ScheduleDayUpsertItem {
   weekday_label: string;
   effective_mode: string; // 'WEEKDAY' | 'WEEKEND'
   is_weekend: boolean;
+  is_custom_holiday?: boolean;
+  holiday_name?: string | null;
   updated_by?: string | null;
   updated_at?: string | null;
+}
+
+/** Bản ghi Ngày Lễ Riêng (không theo lịch nhà nước) */
+export interface Hotline3cxHoliday {
+  id: number;
+  holiday_date: string; // ISO YYYY-MM-DD
+  name: string;
+  weekday_label?: string;
+  weekend_lines?: string[];
+  created_by?: string | null;
+  created_at?: string | null;
+}
+
+export interface HotlineHolidayBatchCreateRequest {
+  start_date: string; // ISO YYYY-MM-DD
+  end_date?: string; // ISO YYYY-MM-DD
+  name: string;
+  weekend_lines?: string[];
 }
 
 export interface ScheduleBulkSaveRequest {

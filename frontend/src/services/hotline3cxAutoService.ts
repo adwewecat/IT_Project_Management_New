@@ -4,11 +4,13 @@ import {
   ApplyNowRequest,
   Hotline3cxConfig,
   Hotline3cxConfigUpdate,
+  Hotline3cxHoliday,
   Hotline3cxMember,
   Hotline3cxMemberCreate,
   Hotline3cxMemberUpdate,
   Hotline3cxScheduleDay,
   Hotline3cxSyncLog,
+  HotlineHolidayBatchCreateRequest,
   ScheduleDayUpsertItem,
 } from '../types/hotline3cxAuto';
 
@@ -69,6 +71,28 @@ export const hotline3cxAutoService = {
     const res = await apiClient.post<{ success: boolean; applied_days: number }>(
       '/hotline-3cx-auto/schedules/apply-month',
       payload
+    );
+    return res.data;
+  },
+
+  /** Lấy danh sách Ngày Lễ Riêng (tùy chọn lọc theo năm) */
+  async getHolidays(year?: number): Promise<Hotline3cxHoliday[]> {
+    const res = await apiClient.get<Hotline3cxHoliday[]>('/hotline-3cx-auto/holidays', {
+      params: year ? { year } : undefined,
+    });
+    return res.data;
+  },
+
+  /** Thêm hoặc cập nhật 1 ngày lễ hoặc khoảng ngày lễ riêng */
+  async addHolidays(payload: HotlineHolidayBatchCreateRequest): Promise<Hotline3cxHoliday[]> {
+    const res = await apiClient.post<Hotline3cxHoliday[]>('/hotline-3cx-auto/holidays', payload);
+    return res.data;
+  },
+
+  /** Xóa một Ngày Lễ Riêng theo ID */
+  async deleteHoliday(holidayId: number): Promise<{ success: boolean }> {
+    const res = await apiClient.delete<{ success: boolean }>(
+      `/hotline-3cx-auto/holidays/${holidayId}`
     );
     return res.data;
   },
