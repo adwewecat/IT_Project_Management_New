@@ -99,6 +99,8 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
   const [configForm, setConfigForm] = useState<Hotline3cxConfigUpdate>({});
   const [loadingConfig, setLoadingConfig] = useState<boolean>(false);
   const [savingConfig, setSavingConfig] = useState<boolean>(false);
+  const [regeneratingToken, setRegeneratingToken] = useState<boolean>(false);
+  const [downloadingPackage, setDownloadingPackage] = useState<boolean>(false);
 
   // ── Tab 4: Logs State ──
   const [logs, setLogs] = useState<Hotline3cxSyncLog[]>([]);
@@ -216,16 +218,17 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
     try {
       const data = await hotline3cxAutoService.getConfig();
       setConfig(data);
-      setConfigForm({
+      setConfigForm((prev) => ({
         portal_url: data.portal_url,
         username: data.username,
-        password: '',
+        password: prev.password || '',
         day_queue_name: data.day_queue_name,
         night_queue_name: data.night_queue_name,
         morning_time: data.morning_time,
         evening_time: data.evening_time,
         alert_emails: data.alert_emails,
-      });
+        execution_mode: data.execution_mode || 'DIRECT',
+      }));
     } catch (err: unknown) {
       notify(`Không thể tải cấu hình 3CX: ${extractApiErrorMessage(err)}`, 'error');
     } finally {
@@ -233,18 +236,27 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
     }
   }, [notify]);
 
-  // Load logs
-  const fetchLogs = useCallback(async () => {
-    setLoadingLogs(true);
-    try {
-      const data = await hotline3cxAutoService.getLogs(50);
-      setLogs(data);
-    } catch (err: unknown) {
-      notify(`Không thể tải nhật ký đồng bộ: ${extractApiErrorMessage(err)}`, 'error');
-    } finally {
-      setLoadingLogs(false);
-    }
-  }, [notify]);
+  // Load logs (hỗ trợ silent polling cho Relay Worker đang chạy)
+  const fetchLogs = useCallback(
+    async (silent: boolean = false) => {
+      if (!silent) {
+        setLoadingLogs(true);
+      }
+      try {
+        const data = await hotline3cxAutoService.getLogs(50);
+        setLogs(data);
+      } catch (err: unknown) {
+        if (!silent) {
+          notify(`Không thể tải nhật ký đồng bộ: ${extractApiErrorMessage(err)}`, 'error');
+        }
+      } finally {
+        if (!silent) {
+          setLoadingLogs(false);
+        }
+      }
+    },
+    [notify]
+  );
 
   // Khi modal mở từ đóng -> mở: nạp dữ liệu ban đầu
   useEffect(() => {
@@ -287,6 +299,17 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
     if (!isOpen) return;
     fetchSchedules(currentMonday);
   }, [isOpen, currentMonday, fetchSchedules]);
+
+  // Tự động cập nhật nhật ký mỗi 3 giây khi đang có tác vụ Relay ở trạng thái PENDING / RUNNING
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'logs') return;
+    const hasActiveRelay = logs.some((l) => l.status === 'PENDING' || l.status === 'RUNNING');
+    if (!hasActiveRelay) return;
+    const timer = window.setInterval(() => {
+      fetchLogs(true);
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [isOpen, activeTab, logs, fetchLogs]);
 
   // Active members memo
   const activeMembers = useMemo(() => {
@@ -520,6 +543,11 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
           `Chạy thử thành công! Hàng đợi: ${log.queue_name}, Số line: ${log.applied_lines?.length || 0}`,
           'success'
         );
+      } else if (log.status === 'PENDING' || log.status === 'RUNNING') {
+        notify(
+          `Đã gửi lệnh chạy thử tới Relay Worker (Hàng đợi: ${log.queue_name}). Trạng thái sẽ tự cập nhật khi Worker hoàn tất!`,
+          'info'
+        );
       } else if (log.status === 'SKIPPED') {
         notify(`Bỏ qua ca trực: ${log.error_message || 'Không có line nào cần gán'}`, 'info');
       } else {
@@ -549,6 +577,11 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
         notify(
           `Áp dụng thành công vào cổng 3CX! Hàng đợi: ${log.queue_name}, đã cập nhật ${log.applied_lines?.length || 0} line trực.`,
           'success'
+        );
+      } else if (log.status === 'PENDING' || log.status === 'RUNNING') {
+        notify(
+          `Đã đẩy lệnh áp dụng vào hàng đợi 3CX Relay Worker (${log.queue_name}). Hệ thống sẽ tự động cập nhật kết quả và ảnh chụp!`,
+          'info'
         );
       } else if (log.status === 'SKIPPED') {
         notify(`Đã bỏ qua ca trực: ${log.error_message || 'Không có cấu hình line'}`, 'info');
@@ -659,18 +692,58 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
         morning_time: configForm.morning_time?.trim(),
         evening_time: configForm.evening_time?.trim(),
         alert_emails: configForm.alert_emails?.trim(),
+        execution_mode: configForm.execution_mode || 'DIRECT',
       };
       if (configForm.password && configForm.password.trim()) {
         payload.password = configForm.password.trim();
       }
       const updated = await hotline3cxAutoService.updateConfig(payload);
       setConfig(updated);
-      setConfigForm((prev) => ({ ...prev, password: '' }));
+      setConfigForm((prev) => ({ ...prev, password: '', execution_mode: updated.execution_mode || 'DIRECT' }));
       notify('Đã lưu cấu hình 3CX & đồng bộ lịch tác vụ Scheduler thành công!', 'success');
     } catch (err: unknown) {
       notify(`Lỗi khi lưu cấu hình: ${extractApiErrorMessage(err)}`, 'error');
     } finally {
       setSavingConfig(false);
+    }
+  };
+
+  // Tạo mới Relay Token bảo mật
+  const handleRegenerateRelayToken = async () => {
+    const confirmRegen = window.confirm(
+      'Tạo Relay Token mới sẽ làm token cũ ngừng hoạt động (bạn cần tải lại bộ cài hoặc cập nhật relay_config.json trên PC Relay). Tiếp tục?'
+    );
+    if (!confirmRegen) return;
+    setRegeneratingToken(true);
+    try {
+      const updated = await hotline3cxAutoService.regenerateRelayToken();
+      setConfig(updated);
+      notify('Đã tạo Relay Token mới thành công!', 'success');
+    } catch (err: unknown) {
+      notify(`Lỗi khi tạo Relay Token mới: ${extractApiErrorMessage(err)}`, 'error');
+    } finally {
+      setRegeneratingToken(false);
+    }
+  };
+
+  // Tải file ZIP bộ cài 3CX Sync Relay Worker
+  const handleDownloadRelayPackage = async (serverUrl: string) => {
+    setDownloadingPackage(true);
+    try {
+      const blob = await hotline3cxAutoService.downloadRelayPackage(serverUrl);
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = '3CX_Sync_Relay_Worker.zip';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+      notify('Đã tải gói 3CX_Sync_Relay_Worker.zip thành công!', 'success');
+    } catch (err: unknown) {
+      notify(`Lỗi tải gói Relay Worker: ${extractApiErrorMessage(err)}`, 'error');
+    } finally {
+      setDownloadingPackage(false);
     }
   };
 
@@ -880,8 +953,13 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
               configForm={configForm}
               loadingConfig={loadingConfig}
               savingConfig={savingConfig}
+              regeneratingToken={regeneratingToken}
+              downloadingPackage={downloadingPackage}
               onConfigFormChange={setConfigForm}
               onSaveConfig={handleSaveConfig}
+              onRefreshConfig={fetchConfig}
+              onRegenerateToken={handleRegenerateRelayToken}
+              onDownloadRelayPackage={handleDownloadRelayPackage}
             />
           )}
 
@@ -890,7 +968,7 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
             <LogsTab
               logs={logs}
               loadingLogs={loadingLogs}
-              onRefreshLogs={fetchLogs}
+              onRefreshLogs={() => fetchLogs(false)}
               onViewScreenshot={(screenshotPath) => {
                 const cleanUrl = screenshotPath.startsWith('/') ? screenshotPath : `/${screenshotPath}`;
                 setSelectedScreenshotUrl(cleanUrl);

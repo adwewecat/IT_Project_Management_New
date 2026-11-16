@@ -5,6 +5,7 @@
 
 export type ShiftMode = 'AUTO' | 'WEEKDAY' | 'WEEKEND';
 export type ShiftCode = 'MORNING' | 'EVENING';
+export type ExecutionMode = 'DIRECT' | 'RELAY';
 
 /** Bản ghi nhân sự trực hotline 3CX */
 export interface Hotline3cxMember {
@@ -100,6 +101,12 @@ export interface Hotline3cxConfig {
   morning_time: string;
   evening_time: string;
   alert_emails: string;
+  execution_mode?: ExecutionMode;
+  relay_token?: string | null;
+  relay_worker_name?: string | null;
+  relay_last_ip?: string | null;
+  relay_last_seen_at?: string | null;
+  relay_online?: boolean;
   updated_at?: string | null;
 }
 
@@ -112,6 +119,7 @@ export interface Hotline3cxConfigUpdate {
   morning_time?: string;
   evening_time?: string;
   alert_emails?: string;
+  execution_mode?: ExecutionMode;
 }
 
 export interface ApplyNowRequest {

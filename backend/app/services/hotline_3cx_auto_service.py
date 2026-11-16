@@ -12,10 +12,12 @@ from __future__ import annotations
 import asyncio
 import calendar
 from datetime import date, datetime, timedelta
+import hmac
 import json
 import logging
 import os
 import re
+import secrets
 import socket
 from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
@@ -26,6 +28,7 @@ from app.models.hotline_3cx_auto import (
     Hotline3cxConfig,
     Hotline3cxHoliday,
     Hotline3cxMember,
+    Hotline3cxRelayTask,
     Hotline3cxSchedule,
     Hotline3cxSyncLog,
 )
@@ -36,6 +39,7 @@ from app.schemas.hotline_3cx_auto import (
     HotlineHolidayItem,
     HotlineMemberCreate,
     HotlineMemberUpdate,
+    RelayTaskPayload,
     ResolvedShiftPlan,
     ResolvedUserAssignment,
     ScheduleDayItem,
@@ -214,15 +218,41 @@ class RuntimeCredentials:
         return iter((self.portal_url, self.username, self.password))
 
 
+def _ensure_relay_token_on_cfg(db: Session, cfg: Hotline3cxConfig) -> str:
+    """Đảm bảo cấu hình luôn có sẵn relay_token ngẫu nhiên bảo mật."""
+    existing = (getattr(cfg, "relay_token", None) or "").strip()
+    if not existing:
+        cfg.relay_token = secrets.token_urlsafe(32)
+        db.commit()
+        db.refresh(cfg)
+        return cfg.relay_token
+    return existing
+
+
 def get_or_create_config(db: Session) -> Hotline3cxConfig:
-    """Lấy bản ghi cấu hình id=1, nếu chưa có thì tự động tạo mới."""
+    """Lấy bản ghi cấu hình id=1, nếu chưa có thì tự động tạo mới và sinh relay_token."""
     cfg = db.query(Hotline3cxConfig).filter(Hotline3cxConfig.id == 1).first()
     if not cfg:
-        cfg = Hotline3cxConfig(id=1)
+        cfg = Hotline3cxConfig(
+            id=1,
+            execution_mode="DIRECT",
+            relay_token=secrets.token_urlsafe(32),
+        )
         db.add(cfg)
         db.commit()
         db.refresh(cfg)
+        return cfg
+
+    _ensure_relay_token_on_cfg(db, cfg)
     return cfg
+
+
+def _is_relay_online(cfg: Hotline3cxConfig, max_age_seconds: int = 90) -> bool:
+    """Kiểm tra Relay Worker có đang heartbeat gần đây hay không."""
+    last_seen = getattr(cfg, "relay_last_seen_at", None)
+    if not last_seen:
+        return False
+    return (datetime.now() - last_seen).total_seconds() <= max_age_seconds
 
 
 def get_public_config(db: Session) -> Hotline3cxConfigOut:
@@ -244,6 +274,12 @@ def get_public_config(db: Session) -> Hotline3cxConfigOut:
         morning_time=cfg.morning_time,
         evening_time=cfg.evening_time,
         alert_emails=cfg.alert_emails,
+        execution_mode=(cfg.execution_mode or "DIRECT").upper(),
+        relay_token=cfg.relay_token,
+        relay_worker_name=cfg.relay_worker_name,
+        relay_last_ip=cfg.relay_last_ip,
+        relay_last_seen_at=cfg.relay_last_seen_at,
+        relay_online=_is_relay_online(cfg),
         updated_at=cfg.updated_at,
     )
 
@@ -284,15 +320,41 @@ def update_config(db: Session, config_in: Hotline3cxConfigUpdate) -> Hotline3cxC
         "morning_time",
         "evening_time",
         "alert_emails",
+        "execution_mode",
     ):
         val = getattr(config_in, field, None)
         if val is not None:
+            if field == "execution_mode":
+                val = str(val).strip().upper()
+                if val not in ("DIRECT", "RELAY"):
+                    val = "DIRECT"
             setattr(cfg, field, val)
 
     cfg.updated_at = datetime.now()
     db.commit()
     db.refresh(cfg)
     return cfg
+
+
+def regenerate_relay_token(db: Session) -> Hotline3cxConfigOut:
+    """Tạo mới relay_token bảo mật cho Relay Worker."""
+    cfg = get_or_create_config(db)
+    cfg.relay_token = secrets.token_urlsafe(32)
+    cfg.updated_at = datetime.now()
+    db.commit()
+    db.refresh(cfg)
+    return get_public_config(db)
+
+
+def verify_relay_token(db: Session, provided_token: Optional[str]) -> bool:
+    """Kiểm tra X-Relay-Token gửi từ Relay Worker bằng so sánh an toàn constant-time."""
+    if not provided_token or not provided_token.strip():
+        return False
+    cfg = get_or_create_config(db)
+    expected = (cfg.relay_token or "").strip()
+    if not expected:
+        return False
+    return hmac.compare_digest(provided_token.strip(), expected)
 
 
 # ==============================================================================
@@ -1369,6 +1431,276 @@ def send_sync_alert_email(
 # ==============================================================================
 
 
+def _get_hotline_upload_dir() -> str:
+    """Trả về đường dẫn thư mục lưu ảnh chụp đồng bộ 3CX (tĩnh tại /uploads/hotline_3cx)."""
+    backend_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    return os.path.join(backend_root, "uploads", "hotline_3cx")
+
+
+def has_pending_relay_sync(db: Session, duty_date: date, shift_code: str) -> bool:
+    """Kiểm tra có tác vụ Relay thực tế (không phải dry_run) đang chờ/chạy cho ca này không."""
+    row = (
+        db.query(Hotline3cxRelayTask)
+        .filter(
+            Hotline3cxRelayTask.duty_date == duty_date,
+            Hotline3cxRelayTask.shift_code == shift_code.upper(),
+            Hotline3cxRelayTask.status.in_(["PENDING", "RUNNING"]),
+            # Dung == False thay vi .is_(False) vi MSSQL T-SQL khong ho tro 'IS 0' cho cot BIT
+            Hotline3cxRelayTask.is_dry_run == False,  # noqa: E712
+        )
+        .first()
+    )
+    return row is not None
+
+
+def record_relay_heartbeat(
+    db: Session,
+    worker_name: str,
+    client_ip: Optional[str] = None,
+) -> Hotline3cxConfig:
+    """Ghi nhận tín hiệu hoạt động gần nhất từ 3CX Sync Relay Worker."""
+    cfg = get_or_create_config(db)
+    clean_worker = (worker_name or "3CX-Relay-PC").strip()[:150] or "3CX-Relay-PC"
+    clean_ip = (client_ip or "").strip()[:60] or None
+    cfg.relay_worker_name = clean_worker
+    if clean_ip:
+        cfg.relay_last_ip = clean_ip
+    cfg.relay_last_seen_at = datetime.now()
+    db.commit()
+    db.refresh(cfg)
+    return cfg
+
+
+def expire_stale_relay_tasks(
+    db: Session,
+    timeout_minutes: int = 15,
+    alert_fn=None,
+) -> int:
+    """
+    Đánh dấu TIMEOUT cho các task Relay bị kẹt quá timeout_minutes (mặc định 15 phút),
+    đồng thời cập nhật Hotline3cxSyncLog thành FAILED và gửi email cảnh báo nếu là ca chạy thật.
+    """
+    now_ts = datetime.now()
+    cutoff = now_ts - timedelta(minutes=timeout_minutes)
+    active_tasks = (
+        db.query(Hotline3cxRelayTask)
+        .filter(Hotline3cxRelayTask.status.in_(["PENDING", "RUNNING"]))
+        .all()
+    )
+    expired_items: List[Hotline3cxRelayTask] = []
+    for task in active_tasks:
+        ref_time = task.claimed_at or task.created_at
+        if ref_time and ref_time < cutoff:
+            expired_items.append(task)
+
+    if not expired_items:
+        return 0
+
+    cfg = get_or_create_config(db)
+    err_msg = (
+        f"Không thấy 3CX Relay Worker online hoặc phản hồi kết quả sau {timeout_minutes} phút."
+    )
+
+    for task in expired_items:
+        task.status = "TIMEOUT"
+        task.finished_at = now_ts
+        task.error_message = err_msg
+        if task.sync_log_id:
+            sync_log = (
+                db.query(Hotline3cxSyncLog)
+                .filter(Hotline3cxSyncLog.id == task.sync_log_id)
+                .first()
+            )
+            if sync_log and sync_log.status in ("PENDING", "RUNNING"):
+                sync_log.status = "FAILED"
+                sync_log.error_message = err_msg
+                sync_log.finished_at = now_ts
+
+    db.commit()
+
+    for task in expired_items:
+        if not task.is_dry_run:
+            subject = (
+                f"[LỖI 3CX] Relay Worker quá hạn đồng bộ ca {task.shift_code} "
+                f"ngày {task.duty_date.strftime('%d-%m-%Y')}"
+            )
+            body = (
+                f"<p><strong>{err_msg}</strong></p>"
+                f"<p>Hàng đợi: {task.queue_name}. Vui lòng kiểm tra PC chạy 3CX Relay Worker.</p>"
+            )
+            if alert_fn:
+                alert_fn(subject, body, cfg.alert_emails)
+            else:
+                send_sync_alert_email(subject, body, cfg.alert_emails)
+
+    return len(expired_items)
+
+
+def claim_next_relay_task(
+    db: Session,
+    worker_name: str,
+    client_ip: Optional[str] = None,
+) -> Optional[RelayTaskPayload]:
+    """
+    Nhận nguyên tử (atomic claim) tác vụ PENDING cũ nhất giao cho Relay Worker.
+    Chống trùng lặp khi có nhiều Worker cùng poll đồng thời.
+    """
+    record_relay_heartbeat(db, worker_name=worker_name, client_ip=client_ip)
+    expire_stale_relay_tasks(db, timeout_minutes=15)
+
+    clean_worker = (worker_name or "3CX-Relay-PC").strip()[:150] or "3CX-Relay-PC"
+    for _ in range(3):
+        candidate = (
+            db.query(Hotline3cxRelayTask)
+            .filter(Hotline3cxRelayTask.status == "PENDING")
+            .order_by(Hotline3cxRelayTask.id.asc())
+            .first()
+        )
+        if not candidate:
+            return None
+
+        now_ts = datetime.now()
+        updated = (
+            db.query(Hotline3cxRelayTask)
+            .filter(
+                Hotline3cxRelayTask.id == candidate.id,
+                Hotline3cxRelayTask.status == "PENDING",
+            )
+            .update(
+                {
+                    "status": "RUNNING",
+                    "worker_name": clean_worker,
+                    "claimed_at": now_ts,
+                },
+                synchronize_session=False,
+            )
+        )
+        db.commit()
+        if updated != 1:
+            continue
+
+        if candidate.sync_log_id:
+            sync_log = (
+                db.query(Hotline3cxSyncLog)
+                .filter(Hotline3cxSyncLog.id == candidate.sync_log_id)
+                .first()
+            )
+            if sync_log and sync_log.status == "PENDING":
+                sync_log.status = "RUNNING"
+                db.commit()
+
+        plan = ResolvedShiftPlan.model_validate_json(candidate.plan_json)
+        creds = get_runtime_credentials(db)
+        return RelayTaskPayload(
+            task_id=candidate.id,
+            duty_date=candidate.duty_date,
+            shift_code=candidate.shift_code,
+            queue_name=candidate.queue_name,
+            is_dry_run=bool(candidate.is_dry_run),
+            portal_url=creds.portal_url,
+            username=creds.username,
+            password=creds.password,
+            plan=plan,
+        )
+
+    return None
+
+
+def report_relay_task_result(
+    db: Session,
+    task_id: int,
+    status_str: str,
+    worker_name: str = "3CX-Relay-PC",
+    applied_lines_json: Optional[str] = None,
+    error_message: Optional[str] = None,
+    screenshot_bytes: Optional[bytes] = None,
+    alert_fn=None,
+) -> Tuple[Hotline3cxRelayTask, Optional[str]]:
+    """
+    Lưu kết quả thực thi từ Relay Worker (SUCCESS / DRY_RUN / FAILED),
+    lưu ảnh PNG đính kèm và cập nhật Hotline3cxSyncLog tương ứng.
+    """
+    task = (
+        db.query(Hotline3cxRelayTask)
+        .filter(Hotline3cxRelayTask.id == task_id)
+        .first()
+    )
+    if not task:
+        raise ValueError(f"Không tìm thấy tác vụ Relay ID={task_id}.")
+
+    final_status = (status_str or "").strip().upper()
+    if final_status not in ("SUCCESS", "DRY_RUN", "FAILED"):
+        raise ValueError(f"Trạng thái báo cáo không hợp lệ: '{status_str}'.")
+
+    now_ts = datetime.now()
+    clean_worker = (worker_name or task.worker_name or "3CX-Relay-PC").strip()[:150]
+    clean_err = (error_message or "").strip() or None
+
+    saved_url_path: Optional[str] = None
+    if screenshot_bytes and len(screenshot_bytes) > 0:
+        if len(screenshot_bytes) > 10 * 1024 * 1024:
+            raise ValueError("Dung lượng ảnh chụp màn hình vượt quá 10MB.")
+        upload_dir = _get_hotline_upload_dir()
+        os.makedirs(upload_dir, exist_ok=True)
+        fname = (
+            f"relay_{task.duty_date.strftime('%Y%m%d')}_{task.shift_code.lower()}_"
+            f"{now_ts.strftime('%H%M%S')}_{task.id}.png"
+        )
+        abs_path = os.path.join(upload_dir, fname)
+        with open(abs_path, "wb") as f_out:
+            f_out.write(screenshot_bytes)
+        saved_url_path = f"/uploads/hotline_3cx/{fname}"
+
+    task.status = final_status
+    task.worker_name = clean_worker
+    task.error_message = clean_err
+    task.finished_at = now_ts
+
+    cfg = get_or_create_config(db)
+    cfg.relay_worker_name = clean_worker
+    cfg.relay_last_seen_at = now_ts
+
+    if task.sync_log_id:
+        sync_log = (
+            db.query(Hotline3cxSyncLog)
+            .filter(Hotline3cxSyncLog.id == task.sync_log_id)
+            .first()
+        )
+        if sync_log:
+            sync_log.status = final_status
+            if applied_lines_json and applied_lines_json.strip():
+                sync_log.applied_lines_json = applied_lines_json.strip()
+            sync_log.error_message = clean_err
+            if saved_url_path:
+                sync_log.screenshot_path = saved_url_path
+            sync_log.finished_at = now_ts
+            orig_trig = (sync_log.triggered_by or "Relay").strip()
+            relay_suffix = f"Relay: {clean_worker}"
+            if relay_suffix not in orig_trig:
+                sync_log.triggered_by = f"{orig_trig} ({relay_suffix})"[:100]
+
+    db.commit()
+    db.refresh(task)
+
+    if final_status == "FAILED" and not task.is_dry_run:
+        subject = (
+            f"[LỖI 3CX] Relay Worker thất bại ca {task.shift_code} "
+            f"ngày {task.duty_date.strftime('%d-%m-%Y')}"
+        )
+        body = (
+            f"<p>Relay Worker <strong>{clean_worker}</strong> đồng bộ 3CX thất bại.</p>"
+            f"<p>Lỗi chi tiết: <strong>{clean_err or 'Không xác định'}</strong></p>"
+        )
+        if alert_fn:
+            alert_fn(subject, body, cfg.alert_emails)
+        else:
+            send_sync_alert_email(subject, body, cfg.alert_emails)
+
+    return task, saved_url_path
+
+
 def has_successful_sync(db: Session, duty_date: date, shift_code: str) -> bool:
     """
     Kiểm tra xem ca trực ngày duty_date đã có bản ghi đồng bộ THÀNH CÔNG THỰC TẾ
@@ -1527,13 +1859,52 @@ async def run_shift_sync(
         return fail_log
 
     # Chuẩn bị đường dẫn ảnh chụp màn hình (static endpoint /uploads/hotline_3cx/)
+    if (config.execution_mode or "DIRECT").upper() == "RELAY":
+        now_ts = datetime.now()
+        applied_lines = [e.ext_line for e in plan.entries]
+        queued_log = Hotline3cxSyncLog(
+            duty_date=eff_date,
+            shift_code=eff_shift,
+            queue_name=plan.queue_name,
+            applied_lines_json=json.dumps(applied_lines, ensure_ascii=False),
+            status="PENDING",
+            is_dry_run=dry_run,
+            triggered_by=triggered_by,
+            error_message=None,
+            screenshot_path=None,
+            started_at=now_ts,
+            finished_at=None,
+        )
+        db.add(queued_log)
+        db.flush()
+
+        relay_task = Hotline3cxRelayTask(
+            duty_date=eff_date,
+            shift_code=eff_shift,
+            queue_name=plan.queue_name,
+            is_dry_run=dry_run,
+            triggered_by=triggered_by,
+            plan_json=plan.model_dump_json(),
+            status="PENDING",
+            sync_log_id=queued_log.id,
+            created_at=now_ts,
+        )
+        db.add(relay_task)
+        db.commit()
+        db.refresh(queued_log)
+        logger.info(
+            "[3CX_RELAY] Đã đưa lệnh đồng bộ ca %s ngày %s vào hàng đợi Relay Worker (task_id=%s, log_id=%s)",
+            eff_shift,
+            eff_date.strftime("%d-%m-%Y"),
+            relay_task.id,
+            queued_log.id,
+        )
+        return queued_log
+
     filename = (
         f"sync_{eff_date.strftime('%Y%m%d')}_{eff_shift.lower()}_{datetime.now().strftime('%H%M%S')}.png"
     )
-    backend_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    )
-    abs_screenshot_dir = os.path.join(backend_root, "uploads", "hotline_3cx")
+    abs_screenshot_dir = _get_hotline_upload_dir()
     abs_screenshot_path = os.path.join(abs_screenshot_dir, filename)
     url_screenshot_path = f"/uploads/hotline_3cx/{filename}"
 

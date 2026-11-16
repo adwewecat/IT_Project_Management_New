@@ -106,6 +106,7 @@ async def lifespan(app: FastAPI):
             Hotline3cxSyncLog,
             Hotline3cxConfig,
             Hotline3cxHoliday,
+            Hotline3cxRelayTask,
         )
         from sqlalchemy import text
         Base.metadata.create_all(engine, tables=[
@@ -133,6 +134,7 @@ async def lifespan(app: FastAPI):
             Hotline3cxSyncLog.__table__,
             Hotline3cxConfig.__table__,
             Hotline3cxHoliday.__table__,
+            Hotline3cxRelayTask.__table__,
         ], checkfirst=True)
 
         # Tự động nạp mẫu kịch bản mặc định nếu bảng trống
@@ -416,6 +418,47 @@ async def lifespan(app: FastAPI):
                             created_by NVARCHAR(100) NULL,
                             created_at DATETIME NOT NULL DEFAULT GETDATE()
                         );
+                    END
+                    IF OBJECT_ID('dbo.HOTLINE_3CX_CONFIG', 'U') IS NOT NULL
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='HOTLINE_3CX_CONFIG' AND COLUMN_NAME='execution_mode')
+                            ALTER TABLE dbo.HOTLINE_3CX_CONFIG ADD execution_mode NVARCHAR(20) NOT NULL CONSTRAINT DF_HOTLINE_3CX_CONFIG_EXEC_MODE DEFAULT N'DIRECT';
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='HOTLINE_3CX_CONFIG' AND COLUMN_NAME='relay_token')
+                            ALTER TABLE dbo.HOTLINE_3CX_CONFIG ADD relay_token NVARCHAR(120) NULL;
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='HOTLINE_3CX_CONFIG' AND COLUMN_NAME='relay_worker_name')
+                            ALTER TABLE dbo.HOTLINE_3CX_CONFIG ADD relay_worker_name NVARCHAR(150) NULL;
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='HOTLINE_3CX_CONFIG' AND COLUMN_NAME='relay_last_ip')
+                            ALTER TABLE dbo.HOTLINE_3CX_CONFIG ADD relay_last_ip NVARCHAR(60) NULL;
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='HOTLINE_3CX_CONFIG' AND COLUMN_NAME='relay_last_seen_at')
+                            ALTER TABLE dbo.HOTLINE_3CX_CONFIG ADD relay_last_seen_at DATETIME NULL;
+                    END
+                    IF OBJECT_ID('dbo.HOTLINE_3CX_RELAY_TASKS', 'U') IS NULL
+                    BEGIN
+                        CREATE TABLE dbo.HOTLINE_3CX_RELAY_TASKS (
+                            id INT IDENTITY(1,1) PRIMARY KEY,
+                            duty_date DATE NOT NULL,
+                            shift_code NVARCHAR(20) NOT NULL,
+                            queue_name NVARCHAR(150) NOT NULL,
+                            is_dry_run BIT NOT NULL DEFAULT 0,
+                            triggered_by NVARCHAR(100) NULL,
+                            plan_json NVARCHAR(MAX) NOT NULL,
+                            status NVARCHAR(20) NOT NULL DEFAULT N'PENDING',
+                            worker_name NVARCHAR(150) NULL,
+                            sync_log_id INT NULL,
+                            error_message NVARCHAR(MAX) NULL,
+                            created_at DATETIME NOT NULL DEFAULT GETDATE(),
+                            claimed_at DATETIME NULL,
+                            finished_at DATETIME NULL
+                        );
+                    END
+                    IF OBJECT_ID('dbo.HOTLINE_3CX_RELAY_TASKS', 'U') IS NOT NULL
+                       AND NOT EXISTS (
+                           SELECT 1 FROM sys.indexes
+                           WHERE name = 'IX_HOTLINE_3CX_RELAY_TASKS_STATUS_DATE'
+                             AND object_id = OBJECT_ID('dbo.HOTLINE_3CX_RELAY_TASKS')
+                       )
+                    BEGIN
+                        CREATE INDEX IX_HOTLINE_3CX_RELAY_TASKS_STATUS_DATE ON dbo.HOTLINE_3CX_RELAY_TASKS(status, duty_date);
                     END
                 """))
                 _tc.commit()

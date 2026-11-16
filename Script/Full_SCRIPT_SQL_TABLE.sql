@@ -2057,16 +2057,36 @@ BEGIN
         [morning_time] NVARCHAR(10) NOT NULL DEFAULT N'06:00',
         [evening_time] NVARCHAR(10) NOT NULL DEFAULT N'16:29',
         [alert_emails] NVARCHAR(1000) NOT NULL DEFAULT N'dung.nguyenanh@ggg.com.vn',
+        [execution_mode] NVARCHAR(20) NOT NULL DEFAULT N'DIRECT',
+        [relay_token] NVARCHAR(120) NULL,
+        [relay_worker_name] NVARCHAR(150) NULL,
+        [relay_last_ip] NVARCHAR(60) NULL,
+        [relay_last_seen_at] DATETIME NULL,
         [updated_at] DATETIME NOT NULL DEFAULT GETDATE()
     );
     PRINT N'Table [dbo].[HOTLINE_3CX_CONFIG] created successfully.';
 END
 GO
 
+IF OBJECT_ID(N'[dbo].[HOTLINE_3CX_CONFIG]', N'U') IS NOT NULL
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='HOTLINE_3CX_CONFIG' AND COLUMN_NAME='execution_mode')
+        ALTER TABLE [dbo].[HOTLINE_3CX_CONFIG] ADD [execution_mode] NVARCHAR(20) NOT NULL CONSTRAINT DF_HOTLINE_3CX_CONFIG_EXEC_MODE DEFAULT N'DIRECT';
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='HOTLINE_3CX_CONFIG' AND COLUMN_NAME='relay_token')
+        ALTER TABLE [dbo].[HOTLINE_3CX_CONFIG] ADD [relay_token] NVARCHAR(120) NULL;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='HOTLINE_3CX_CONFIG' AND COLUMN_NAME='relay_worker_name')
+        ALTER TABLE [dbo].[HOTLINE_3CX_CONFIG] ADD [relay_worker_name] NVARCHAR(150) NULL;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='HOTLINE_3CX_CONFIG' AND COLUMN_NAME='relay_last_ip')
+        ALTER TABLE [dbo].[HOTLINE_3CX_CONFIG] ADD [relay_last_ip] NVARCHAR(60) NULL;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='HOTLINE_3CX_CONFIG' AND COLUMN_NAME='relay_last_seen_at')
+        ALTER TABLE [dbo].[HOTLINE_3CX_CONFIG] ADD [relay_last_seen_at] DATETIME NULL;
+END
+GO
+
 IF OBJECT_ID(N'[dbo].[HOTLINE_3CX_CONFIG]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM [dbo].[HOTLINE_3CX_CONFIG] WHERE [id] = 1)
 BEGIN
-    INSERT INTO [dbo].[HOTLINE_3CX_CONFIG] ([id], [portal_url], [username], [password_enc], [day_queue_name], [night_queue_name], [morning_time], [evening_time], [alert_emails], [updated_at])
-    VALUES (1, N'https://ggg.ringbot.co:5001/#/login', N'8740', N'', N'IT HCM App Day', N'IT HCM App Night', N'06:00', N'16:29', N'dung.nguyenanh@ggg.com.vn', GETDATE());
+    INSERT INTO [dbo].[HOTLINE_3CX_CONFIG] ([id], [portal_url], [username], [password_enc], [day_queue_name], [night_queue_name], [morning_time], [evening_time], [alert_emails], [execution_mode], [updated_at])
+    VALUES (1, N'https://ggg.ringbot.co:5001/#/login', N'8740', N'', N'IT HCM App Day', N'IT HCM App Night', N'06:00', N'16:29', N'dung.nguyenanh@ggg.com.vn', N'DIRECT', GETDATE());
     PRINT N'Default row id=1 inserted into [dbo].[HOTLINE_3CX_CONFIG].';
 END
 GO
@@ -2084,5 +2104,31 @@ BEGIN
         [created_at] DATETIME NOT NULL DEFAULT GETDATE()
     );
     PRINT N'Table [dbo].[HOTLINE_3CX_HOLIDAYS] created successfully.';
+END
+GO
+
+-- ----------------------------------------------------------------------------
+-- BẢNG: HOTLINE_3CX_RELAY_TASKS (Hàng đợi tác vụ cho 3CX Sync Relay Worker)
+-- ----------------------------------------------------------------------------
+IF OBJECT_ID(N'[dbo].[HOTLINE_3CX_RELAY_TASKS]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[HOTLINE_3CX_RELAY_TASKS] (
+        [id] INT IDENTITY(1,1) PRIMARY KEY,
+        [duty_date] DATE NOT NULL,
+        [shift_code] NVARCHAR(20) NOT NULL,
+        [queue_name] NVARCHAR(150) NOT NULL,
+        [is_dry_run] BIT NOT NULL DEFAULT 0,
+        [triggered_by] NVARCHAR(100) NULL,
+        [plan_json] NVARCHAR(MAX) NOT NULL,
+        [status] NVARCHAR(20) NOT NULL DEFAULT N'PENDING',
+        [worker_name] NVARCHAR(150) NULL,
+        [sync_log_id] INT NULL,
+        [error_message] NVARCHAR(MAX) NULL,
+        [created_at] DATETIME NOT NULL DEFAULT GETDATE(),
+        [claimed_at] DATETIME NULL,
+        [finished_at] DATETIME NULL
+    );
+    CREATE INDEX [IX_HOTLINE_3CX_RELAY_TASKS_STATUS_DATE] ON [dbo].[HOTLINE_3CX_RELAY_TASKS] ([status], [duty_date]);
+    PRINT N'Table [dbo].[HOTLINE_3CX_RELAY_TASKS] created successfully.';
 END
 GO

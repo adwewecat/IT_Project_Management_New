@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # Định nghĩa các loại chế độ phân ca và mã ca trực
 ShiftMode = Literal["AUTO", "WEEKDAY", "WEEKEND"]
 ShiftCode = Literal["MORNING", "EVENING"]
+ExecutionMode = Literal["DIRECT", "RELAY"]
 
 
 # ==============================================================================
@@ -172,6 +173,12 @@ class Hotline3cxConfigOut(BaseModel):
     morning_time: str
     evening_time: str
     alert_emails: str
+    execution_mode: str = "DIRECT"
+    relay_token: Optional[str] = None
+    relay_worker_name: Optional[str] = None
+    relay_last_ip: Optional[str] = None
+    relay_last_seen_at: Optional[datetime] = None
+    relay_online: bool = False
     updated_at: Optional[datetime] = None
 
 
@@ -188,6 +195,7 @@ class Hotline3cxConfigUpdate(BaseModel):
     morning_time: Optional[str] = None
     evening_time: Optional[str] = None
     alert_emails: Optional[str] = None
+    execution_mode: Optional[ExecutionMode] = None
 
 
 class ApplyNowRequest(BaseModel):
@@ -255,3 +263,54 @@ class Hotline3cxSyncLogOut(BaseModel):
     screenshot_path: Optional[str] = None
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
+
+
+# ==============================================================================
+# 6. SCHEMAS CHO 3CX SYNC RELAY WORKER
+# ==============================================================================
+
+
+class RelayHeartbeatIn(BaseModel):
+    """Thông tin heartbeat gửi từ Relay Worker trên PC văn phòng."""
+
+    worker_name: str = Field(default="3CX-Relay-PC", max_length=150)
+    can_reach_3cx: bool = True
+    last_probe_error: Optional[str] = None
+
+
+class RelayHeartbeatOut(BaseModel):
+    """Phản hồi heartbeat cho Relay Worker."""
+
+    ok: bool = True
+    server_time: datetime
+    execution_mode: str
+
+
+class RelayTaskPayload(BaseModel):
+    """Payload tác vụ đầy đủ giao cho Relay Worker thực thi Playwright cục bộ."""
+
+    task_id: int
+    duty_date: date
+    shift_code: str
+    queue_name: str
+    is_dry_run: bool
+    portal_url: str
+    username: str
+    password: str
+    plan: ResolvedShiftPlan
+
+
+class RelayNextTaskOut(BaseModel):
+    """Phản hồi endpoint GET /relay/next-task."""
+
+    has_task: bool
+    task: Optional[RelayTaskPayload] = None
+
+
+class RelayReportOut(BaseModel):
+    """Phản hồi sau khi Relay Worker nộp kết quả thực thi."""
+
+    success: bool
+    task_id: int
+    sync_log_id: Optional[int] = None
+    screenshot_path: Optional[str] = None

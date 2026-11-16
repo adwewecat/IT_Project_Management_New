@@ -109,9 +109,40 @@ class Hotline3cxConfig(Base):
     alert_emails: Mapped[str] = mapped_column(
         Unicode(1000), default="dung.nguyenanh@ggg.com.vn", nullable=False
     )
+    execution_mode: Mapped[str] = mapped_column(
+        Unicode(20), default="DIRECT", nullable=False
+    )
+    relay_token: Mapped[Optional[str]] = mapped_column(Unicode(120), nullable=True)
+    relay_worker_name: Mapped[Optional[str]] = mapped_column(Unicode(150), nullable=True)
+    relay_last_ip: Mapped[Optional[str]] = mapped_column(Unicode(60), nullable=True)
+    relay_last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
     )
+
+
+class Hotline3cxRelayTask(Base):
+    """
+    Hàng đợi tác vụ cho 3CX Sync Relay Worker (Phương án 2 khi máy chủ web bị tường lửa DC chặn cổng 5001).
+    Lưu trạng thái PENDING / RUNNING / SUCCESS / DRY_RUN / FAILED / TIMEOUT và kế hoạch JSON cần đồng bộ.
+    """
+
+    __tablename__ = "HOTLINE_3CX_RELAY_TASKS"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    duty_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    shift_code: Mapped[str] = mapped_column(Unicode(20), nullable=False)
+    queue_name: Mapped[str] = mapped_column(Unicode(150), nullable=False)
+    is_dry_run: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    triggered_by: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
+    plan_json: Mapped[str] = mapped_column(UnicodeText, nullable=False)
+    status: Mapped[str] = mapped_column(Unicode(20), default="PENDING", nullable=False, index=True)
+    worker_name: Mapped[Optional[str]] = mapped_column(Unicode(150), nullable=True)
+    sync_log_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    error_message: Mapped[Optional[str]] = mapped_column(UnicodeText, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False)
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class Hotline3cxHoliday(Base):

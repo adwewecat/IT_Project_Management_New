@@ -149,7 +149,15 @@ export const LogsTab: React.FC<LogsTabProps> = ({
                 let statusBg = 'rgba(16, 185, 129, 0.12)';
                 let statusLabel = 'Thành công';
 
-                if (log.status === 'FAILED') {
+                if (log.status === 'PENDING') {
+                  statusColor = '#b45309';
+                  statusBg = 'rgba(245, 158, 11, 0.16)';
+                  statusLabel = log.is_dry_run ? 'Chờ Relay (Thử)' : 'Chờ Relay';
+                } else if (log.status === 'RUNNING') {
+                  statusColor = '#1d4ed8';
+                  statusBg = 'rgba(59, 130, 246, 0.16)';
+                  statusLabel = log.is_dry_run ? 'Relay chạy thử...' : 'Relay đang chạy...';
+                } else if (log.status === 'FAILED') {
                   statusColor = '#dc2626';
                   statusBg = 'rgba(239, 68, 68, 0.12)';
                   statusLabel = 'Thất bại';

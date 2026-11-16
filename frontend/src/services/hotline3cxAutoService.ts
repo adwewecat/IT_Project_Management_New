@@ -136,4 +136,19 @@ export const hotline3cxAutoService = {
     });
     return res.data;
   },
+
+  /** Tạo mới Relay Token bảo mật */
+  async regenerateRelayToken(): Promise<Hotline3cxConfig> {
+    const res = await apiClient.post<Hotline3cxConfig>('/hotline-3cx-auto/relay/regenerate-token');
+    return res.data;
+  },
+
+  /** Tải về file ZIP bộ cài 3CX Sync Relay Worker đã nhúng sẵn URL & Token */
+  async downloadRelayPackage(serverUrl?: string): Promise<Blob> {
+    const res = await apiClient.get<Blob>('/hotline-3cx-auto/relay/download-package', {
+      params: serverUrl && serverUrl.trim() ? { server_url: serverUrl.trim() } : undefined,
+      responseType: 'blob',
+    });
+    return res.data;
+  },
 };

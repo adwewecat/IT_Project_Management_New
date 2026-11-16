@@ -1,0 +1,10 @@
+{
+  "server_url": "__SERVER_URL__",
+  "relay_token": "__RELAY_TOKEN__",
+  "worker_name": "AUTO",
+  "poll_interval_seconds": 5,
+  "heartbeat_interval_seconds": 30,
+  "headless": true,
+  "verify_ssl": false
+}
+

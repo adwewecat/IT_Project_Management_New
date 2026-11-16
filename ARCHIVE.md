@@ -5,6 +5,9 @@
 
 <!-- Archived entries go below, newest archived at top -->
 
+- **[2026-11-13] Sửa triệt để lỗi đóng ticket 3CX treo 110s & thất bại do popup Timesheet 422 / Toast / `#basic_typeTicket`** (`1484df0`)
+  - **Done:** Cập nhật `backend/app/services/ticket_batch_service.py` xử lý xoay vòng ngày trống khi `POST /api/worklog` trả 422, bắt toast `react-hot-toast` (`[role="status"]`) + API `PUT /api/tasks/{id}`, chuẩn hóa radio `#basic_typeTicket input[type='radio'][value='2']`.
+
 - **[2026-11-13] Sửa lỗi quét 0 ticket 3CX & sai Timesheet 24h/ngày trên GPMS** (`d02ba27`)
   - **Done:** Bổ sung phục hồi SSO (`_recover_sso_if_redirected`), phân trang `tasks/paging`, parse Ant Design RangePicker & tiêu đề bảng `/timesheet-management` trên `ticket_batch_service.py`, nâng cấp badge `timesheet_summary` trên `JobManagementPage.tsx`.
 

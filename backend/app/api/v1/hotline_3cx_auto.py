@@ -18,7 +18,19 @@ import json
 from datetime import date, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_super_admin_or_dung
@@ -36,11 +48,16 @@ from app.schemas.hotline_3cx_auto import (
     HotlineMemberCreate,
     HotlineMemberOut,
     HotlineMemberUpdate,
+    RelayHeartbeatIn,
+    RelayHeartbeatOut,
+    RelayNextTaskOut,
+    RelayReportOut,
     ScheduleBulkSaveRequest,
     ScheduleDayItem,
 )
 from app.services.hotline_3cx_auto_service import (
     apply_week_template_to_month,
+    claim_next_relay_task,
     clone_previous_week_schedules,
     create_member,
     delete_holiday,
@@ -52,12 +69,17 @@ from app.services.hotline_3cx_auto_service import (
     list_holidays,
     list_members,
     list_sync_logs,
+    record_relay_heartbeat,
+    regenerate_relay_token,
+    report_relay_task_result,
     run_shift_sync,
     update_config,
     update_member,
     upsert_holidays_batch,
     upsert_schedules,
+    verify_relay_token,
 )
+from app.services.hotline_3cx_relay_package import build_relay_package_zip_bytes
 
 router = APIRouter(prefix="/hotline-3cx-auto", tags=["Hotline 3CX Auto"])
 
@@ -438,3 +460,145 @@ def get_sync_logs(
     """Lấy danh sách nhật ký đồng bộ Hotline 3CX mới nhất."""
     logs = list_sync_logs(db, limit=limit)
     return [serialize_sync_log(log) for log in logs]
+
+
+# ==============================================================================
+# 6. API RELAY WORKER & TAI GOI CAI DAT (PHUONG AN 2)
+# ==============================================================================
+
+
+def _extract_client_ip(request: Request) -> str:
+    """Trích xuất IP máy trạm (hỗ trợ qua reverse proxy IIS X-Forwarded-For)."""
+    xff = (request.headers.get("X-Forwarded-For") or "").strip()
+    if xff:
+        return xff.split(",")[0].strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return ""
+
+
+def require_relay_auth(
+    x_relay_token: Optional[str] = Header(default=None, alias="X-Relay-Token"),
+    db: Session = Depends(get_db),
+) -> None:
+    """Dependency xác thực X-Relay-Token cho các endpoint của 3CX Relay Worker."""
+    if not verify_relay_token(db, x_relay_token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="X-Relay-Token không hợp lệ hoặc đã bị thu hồi.",
+        )
+
+
+@router.post("/relay/regenerate-token", response_model=Hotline3cxConfigOut)
+def regen_relay_token(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """Tạo mới Relay Token bảo mật (vô hiệu hóa token cũ)."""
+    return regenerate_relay_token(db)
+
+
+@router.get("/relay/download-package")
+def download_relay_package(
+    request: Request,
+    server_url: Optional[str] = Query(
+        None, description="URL gốc của Server Web (mặc định tự suy từ request)"
+    ),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """Đóng gói và tải về bộ cài 3CX Sync Relay Worker (.zip) đã nhúng sẵn URL Server và Relay Token."""
+    cfg = get_public_config(db)
+    base_url = (server_url or str(request.base_url)).strip().rstrip("/")
+    zip_bytes = build_relay_package_zip_bytes(
+        server_url=base_url,
+        relay_token=cfg.relay_token or "",
+    )
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": "attachment; filename=3CX_Sync_Relay_Worker.zip",
+        },
+    )
+
+
+@router.post("/relay/heartbeat", response_model=RelayHeartbeatOut)
+def relay_heartbeat(
+    request: Request,
+    payload: Optional[RelayHeartbeatIn] = None,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_relay_auth),
+):
+    """Nhận tín hiệu Heartbeat từ Relay Worker trên PC văn phòng."""
+    from datetime import datetime
+
+    worker_name = payload.worker_name if payload else "3CX-Relay-PC"
+    cfg = record_relay_heartbeat(
+        db,
+        worker_name=worker_name,
+        client_ip=_extract_client_ip(request),
+    )
+    return RelayHeartbeatOut(
+        ok=True,
+        server_time=datetime.now(),
+        execution_mode=(cfg.execution_mode or "DIRECT").upper(),
+    )
+
+
+@router.get("/relay/next-task", response_model=RelayNextTaskOut)
+def relay_next_task(
+    request: Request,
+    worker_name: str = Query(default="3CX-Relay-PC", max_length=150),
+    db: Session = Depends(get_db),
+    _auth=Depends(require_relay_auth),
+):
+    """Relay Worker poll để nhận nguyên tử (atomic claim) 1 tác vụ PENDING cũ nhất."""
+    claimed = claim_next_relay_task(
+        db,
+        worker_name=worker_name,
+        client_ip=_extract_client_ip(request),
+    )
+    if not claimed:
+        return RelayNextTaskOut(has_task=False, task=None)
+    return RelayNextTaskOut(has_task=True, task=claimed)
+
+
+@router.post("/relay/tasks/{task_id}/report", response_model=RelayReportOut)
+async def relay_report_task(
+    task_id: int,
+    status_val: str = Form(..., alias="status"),
+    worker_name: str = Form(default="3CX-Relay-PC"),
+    applied_lines_json: str = Form(default="[]"),
+    error_message: str = Form(default=""),
+    screenshot: Optional[UploadFile] = File(default=None),
+    db: Session = Depends(get_db),
+    _auth=Depends(require_relay_auth),
+):
+    """Nhận kết quả thực thi và ảnh PNG chụp màn hình từ Relay Worker."""
+    img_bytes: Optional[bytes] = None
+    if screenshot is not None:
+        img_bytes = await screenshot.read()
+
+    try:
+        task, saved_url = report_relay_task_result(
+            db,
+            task_id=task_id,
+            status_str=status_val,
+            worker_name=worker_name,
+            applied_lines_json=applied_lines_json,
+            error_message=error_message,
+            screenshot_bytes=img_bytes,
+        )
+    except ValueError as ve:
+        msg = str(ve)
+        if "Không tìm thấy" in msg:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+
+    return RelayReportOut(
+        success=True,
+        task_id=task.id,
+        sync_log_id=task.sync_log_id,
+        screenshot_path=saved_url,
+    )

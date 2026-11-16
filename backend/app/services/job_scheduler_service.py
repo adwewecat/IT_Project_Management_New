@@ -2268,6 +2268,7 @@ class JobSchedulerService:
             try:
                 from app.core.database import SessionLocal
                 from app.services.hotline_3cx_auto_service import (
+                    has_pending_relay_sync,
                     has_successful_sync,
                     run_shift_sync,
                 )
@@ -2291,9 +2292,12 @@ class JobSchedulerService:
                 try:
                     is_auto = (triggered_by == "Hệ thống (Auto)")
                     today_str = today.strftime("%d-%m-%Y")
-                    if is_auto and has_successful_sync(db, today, shift_code):
+                    if is_auto and (
+                        has_successful_sync(db, today, shift_code)
+                        or has_pending_relay_sync(db, today, shift_code)
+                    ):
                         logger.info(
-                            f"[JOB_AUTO] Bỏ qua vì ca {shift_code} ngày {today_str} đã đồng bộ thành công trước đó."
+                            f"[JOB_AUTO] Bỏ qua vì ca {shift_code} ngày {today_str} đã đồng bộ thành công hoặc đang chờ Relay."
                         )
                         end_dt = datetime.now()
                         duration = round((end_dt - start_dt).total_seconds(), 2)
@@ -2306,7 +2310,7 @@ class JobSchedulerService:
                         job["total_runs"] = job.get("total_runs", 0) + 1
                         job["success_runs"] = job.get("success_runs", 0) + 1
 
-                        msg = f"Bỏ qua vì ca {shift_code} ngày {today_str} đã đồng bộ thành công trước đó."
+                        msg = f"Bỏ qua vì ca {shift_code} ngày {today_str} đã đồng bộ thành công hoặc đang chờ Relay."
                         log_entry = {
                             "id": log_id,
                             "job_id": job_id,
@@ -2340,7 +2344,7 @@ class JobSchedulerService:
                 duration = round((end_dt - start_dt).total_seconds(), 2)
                 end_str = end_dt.strftime("%Y-%m-%d %H:%M:%S")
 
-                is_success = (sync_log.status == "SUCCESS")
+                is_success = (sync_log.status in ("SUCCESS", "PENDING"))
                 job["status"] = "idle"
                 job["last_run_at"] = end_str
                 job["last_duration"] = duration
@@ -2488,10 +2492,24 @@ async def job_schedule_worker(stop_event: asyncio.Event):
     sched_logger.info("Khởi động tiến trình chạy nền Job Schedule Worker...")
 
     last_executed: Dict[str, datetime] = {}
+    last_relay_sweep: Optional[datetime] = None
 
     while not stop_event.is_set():
         try:
             now = datetime.now()
+            if not last_relay_sweep or (now - last_relay_sweep).total_seconds() >= 60:
+                last_relay_sweep = now
+                try:
+                    def _sweep_relay():
+                        from app.core.database import SessionLocal
+                        from app.services.hotline_3cx_auto_service import expire_stale_relay_tasks
+
+                        with SessionLocal() as _sdb:
+                            expire_stale_relay_tasks(_sdb, timeout_minutes=15)
+
+                    await asyncio.to_thread(_sweep_relay)
+                except Exception as _sweep_err:
+                    sched_logger.warning("Lỗi kiểm tra tác vụ 3CX Relay quá hạn: %s", _sweep_err)
             current_time = now.strftime("%H:%M")
             current_dow = now.isoweekday()  # 1: Monday ... 7: Sunday
 
