@@ -1986,16 +1986,165 @@ async def preview_tickets() -> Dict[str, Any]:
     }
 
 
+def _is_gprocess_step_completed(step_text: str) -> bool:
+    """Kiểm tra bước IT xác nhận trên thanh Tiến trình đã hoàn thành/không duyệt hay vẫn đang thực hiện."""
+    low = (step_text or "").lower()
+    if not low.strip():
+        return False
+    if "đang thực hiện" in low or "chưa thực hiện" in low:
+        return False
+    return ("không duyệt" in low) or ("hoàn thành" in low)
+
+
+def _verify_gprocess_mission_completed(
+    mission_id: str,
+    curr_url: str,
+    step2_text: str,
+    confirm_disabled: bool,
+    mission_api_succeeded: bool,
+) -> bool:
+    """
+    Chỉ xác nhận đóng G-Process thành công dựa trên tín hiệu thật từ GPMS:
+    - URL rời trang chi tiết /my-mission/{id}, HOẶC
+    - API process-gpms cập nhật task trả về HTTP 200/201, HOẶC
+    - Bước 'IT xác nhận lỗi kỹ thuật' đổi khỏi 'Đang thực hiện' (Không duyệt / Hoàn thành) và nút Xác nhận bị khóa.
+    Không bao giờ lấy toast lưu Timesheet làm căn cứ hoàn tất nhiệm vụ!
+    """
+    if "my-mission" in (curr_url or "") and mission_id and mission_id not in curr_url:
+        return True
+    if mission_api_succeeded:
+        return True
+    if confirm_disabled and _is_gprocess_step_completed(step2_text):
+        return True
+    return False
+
+
+async def _handle_gprocess_popups_and_resubmit(detail_page, mission_id: str) -> bool:
+    """
+    Xử lý các popup liên tiếp sau khi bấm 'Xác nhận' (Khai báo Timesheet 0h, modal Xác nhận).
+    Trả về True nếu vừa lưu modal Khai báo Timesheet (vì GPMS Pn() thoát sớm ở lần bấm đầu
+    nên cần bấm 'Xác nhận' lần 2 để thực sự gửi handleUpdateTask).
+    """
+    timesheet_saved = False
+    for modal_step in range(5):
+        await asyncio.sleep(0.8)
+        visible_modal = detail_page.locator(
+            'div[class*="container_content_modal"]:visible, .ant-modal:visible, .ant-modal-content:visible'
+        ).first
+        if await visible_modal.count() == 0 or not await visible_modal.is_visible():
+            break
+
+        modal_text = ""
+        try:
+            modal_text = (await visible_modal.inner_text()).lower()
+        except Exception:
+            pass
+        logger.info(f"[GPROCESS] #{mission_id} (modal step {modal_step+1}): Phát hiện modal: {modal_text[:100]}...")
+
+        time_inputs = visible_modal.locator(
+            'input[name*="actual_time"], input[name*="time"], input[name*="hour"], input[type="number"]'
+        )
+        has_time_input = await time_inputs.count() > 0
+        if "timesheet" in modal_text or "thời gian" in modal_text or "khai báo" in modal_text or has_time_input:
+            logger.info(f"[GPROCESS] #{mission_id}: Phát hiện popup Khai báo Timesheet -> Để thời gian HTTT là 0.")
+            try:
+                await visible_modal.evaluate("""(modal) => {
+                    const rows = modal.querySelectorAll('tbody tr, .ant-table-row, div[class*="row"]');
+                    if (rows && rows.length > 0) {
+                        rows.forEach(r => {
+                            const inputs = r.querySelectorAll('input:not([type="hidden"])');
+                            if (inputs.length >= 3) {
+                                if (!inputs[1].value || inputs[1].value.trim() === '') {
+                                    inputs[1].value = '1';
+                                    inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+                                    inputs[1].dispatchEvent(new Event('change', { bubbles: true }));
+                                }
+                                inputs[2].value = '0';
+                                inputs[2].dispatchEvent(new Event('input', { bubbles: true }));
+                                inputs[2].dispatchEvent(new Event('change', { bubbles: true }));
+                                if (inputs.length >= 4 && (!inputs[3].value || inputs[3].value.trim() === '')) {
+                                    inputs[3].value = '-';
+                                    inputs[3].dispatchEvent(new Event('input', { bubbles: true }));
+                                    inputs[3].dispatchEvent(new Event('change', { bubbles: true }));
+                                }
+                            }
+                        });
+                    }
+                    const allInps = modal.querySelectorAll('input:not([type="hidden"])');
+                    allInps.forEach(inp => {
+                        const name = (inp.getAttribute('name') || '').toLowerCase();
+                        const placeholder = (inp.getAttribute('placeholder') || '').toLowerCase();
+                        if (name.includes('time') || name.includes('hour') || name.includes('actual') ||
+                            placeholder.includes('thời gian') || placeholder.includes('time')) {
+                            inp.value = '0';
+                            inp.dispatchEvent(new Event('input', { bubbles: true }));
+                            inp.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    });
+                }""")
+                await asyncio.sleep(0.3)
+            except Exception as eval_err:
+                logger.debug(f"[GPROCESS] #{mission_id}: Evaluate Timesheet rows: {eval_err}")
+
+            for t_idx in range(await time_inputs.count()):
+                try:
+                    t_inp = time_inputs.nth(t_idx)
+                    name_attr = (await t_inp.get_attribute("name") or "").lower()
+                    if any(k in name_attr for k in ["quantity", "count", "so_lan", "solan", "sp"]):
+                        continue
+                    await t_inp.fill("0")
+                    await asyncio.sleep(0.05)
+                except Exception:
+                    pass
+
+            note_inputs = visible_modal.locator(
+                'input[name*="note"], textarea[name*="note"], input[placeholder*="Ghi chú"], textarea'
+            )
+            for n_idx in range(await note_inputs.count()):
+                try:
+                    n_inp = note_inputs.nth(n_idx)
+                    n_val = await n_inp.input_value()
+                    if not n_val or n_val.strip() == "":
+                        await n_inp.fill("-")
+                        await asyncio.sleep(0.05)
+                except Exception:
+                    pass
+
+            save_btn = visible_modal.locator(
+                'button:has-text("Lưu"), button.ant-btn-primary:has-text("Lưu"), button:has-text("Xác nhận"), button:has-text("Đồng ý")'
+            ).first
+            if await save_btn.count() > 0:
+                await save_btn.click(timeout=15000)
+                timesheet_saved = True
+                logger.info(f"[GPROCESS] #{mission_id}: Đã bấm 'Lưu' Timesheet (HTTT = 0), chờ modal đóng để xác nhận lần 2.")
+                try:
+                    await visible_modal.wait_for(state="hidden", timeout=8000)
+                except Exception:
+                    pass
+                await asyncio.sleep(1.0)
+            continue
+
+        confirm_modal_btn = visible_modal.locator(
+            'button:has-text("Đồng ý"), button:has-text("Xác nhận"), button:has-text("OK"), button.ant-btn-primary'
+        ).first
+        if await confirm_modal_btn.count() > 0:
+            btn_txt = await confirm_modal_btn.inner_text()
+            logger.info(f"[GPROCESS] #{mission_id}: Bấm xác nhận trên popup ('{btn_txt}').")
+            await confirm_modal_btn.click(timeout=15000)
+            await asyncio.sleep(1.2)
+            continue
+    return timesheet_saved
+
+
 async def _close_gprocess_mission(page, context, mission: Dict[str, Any]) -> Dict[str, Any]:
     """
     Xử lý 1 nhiệm vụ G-Process:
     - Mở chi tiết nhiệm vụ (qua URL trực tiếp hoặc click từ bảng my-mission)
-    - Check 'Không đạt' ở ô Phản hồi xác nhận thông tin
-    - Điền feedback_message: 'Dear NH, Với xác nhận lỗi hạ tầng, Nhà Hàng vui lòng gửi ticket tới huy.ld nhé'
-    - Check 'Không phê duyệt' và 'Kết thúc quy trình'
-    - Click 'Xác nhận'
-    - Xử lý các popup liên tiếp (Xác nhận, Khai báo Timesheet...)
-    - Xác thực kết quả thực tế từ GPMS (bắt lỗi nếu có toast lỗi, đợi toast thành công và buffer 3s an toàn)
+    - Check đúng radio thứ 2 ('Không đạt') trong hàng checklist (tự mở ô 'Viết bình luận')
+    - Điền feedback_message & blur để lưu comment checklist
+    - Chọn 'Không phê duyệt' và 'Kết thúc quy trình' (click đúng input/span AntD)
+    - Bấm 'Xác nhận', xử lý modal Khai báo Timesheet 0h, sau đó bấm 'Xác nhận' lần 2 nếu cần
+    - Xác thực hoàn tất thực tế từ URL / API process-gpms / Tiến trình bước 02
     """
     mission_id = str(mission.get("ticket_id", "")).strip()
     target_url = mission.get("url") or f"https://gpms.ggg.com.vn/g-process/my-mission/{mission_id}"
@@ -2004,7 +2153,9 @@ async def _close_gprocess_mission(page, context, mission: Dict[str, Any]) -> Dic
     logger.info(f"[GPROCESS] Bắt đầu xử lý nhiệm vụ G-Process #{mission_id} ({target_url})...")
     detail_page = page
     opened_new_page = False
-    
+    gp_resp_listener = None
+    mission_api_state: Dict[str, Any] = {"succeeded": False, "error": None}
+
     try:
         # 1. Mở trang chi tiết:
         navigated = False
@@ -2013,7 +2164,6 @@ async def _close_gprocess_mission(page, context, mission: Dict[str, Any]) -> Dic
                 detail_page = await context.new_page()
                 opened_new_page = True
                 await detail_page.goto(target_url, timeout=120000)
-                # Chờ form nhiệm vụ được render đầy đủ
                 try:
                     await detail_page.wait_for_selector(
                         'button:has-text("Xác nhận"), label:has-text("Không đạt"), label:has-text("Không phê duyệt"), label:has-text("Phê duyệt")',
@@ -2021,7 +2171,6 @@ async def _close_gprocess_mission(page, context, mission: Dict[str, Any]) -> Dic
                     )
                 except Exception:
                     pass
-                # Đợi thêm 2.5s để React SPA hoàn tất nạp dữ liệu API và hydrate DOM
                 await asyncio.sleep(2.5)
                 navigated = True
                 logger.info(f"[GPROCESS] Đã vào trực tiếp {target_url}")
@@ -2055,22 +2204,45 @@ async def _close_gprocess_mission(page, context, mission: Dict[str, Any]) -> Dic
             else:
                 raise RuntimeError(f"Không tìm thấy nhiệm vụ #{mission_id} trên trang my-mission")
 
-        # Đặt timeout tối đa 40s cho detail_page để an toàn với mạng chậm
         try:
             detail_page.set_default_timeout(40000)
         except Exception:
             pass
 
-        # Kiểm tra xem nhiệm vụ này đã được kết thúc / đã xử lý trước đó chưa
-        # Chỉ coi là đã kết thúc khi bước '02. IT xác nhận lỗi kỹ thuật' trên thanh tiến trình đã chuyển sang 'Hoàn thành'
-        # hoặc không còn nút 'Xác nhận' nào trên trang
+        # Theo dõi API submit G-Process thực tế (loại trừ API worklog / comment / dynamic-forms)
+        async def _on_gp_response(resp):
+            try:
+                req = resp.request
+                if req.method not in ("POST", "PUT", "PATCH"):
+                    return
+                r_url = resp.url.lower()
+                if "process-gpms" not in r_url or "/tasks" not in r_url:
+                    return
+                if any(ex in r_url for ex in ("worklog", "comment", "assign")):
+                    return
+                if resp.status in (200, 201):
+                    mission_api_state["succeeded"] = True
+                    logger.info(f"[GPROCESS] #{mission_id}: API cập nhật G-Process trả HTTP {resp.status} ({req.url}).")
+                elif resp.status >= 400:
+                    err_txt = ""
+                    try:
+                        err_txt = await resp.text()
+                    except Exception:
+                        pass
+                    mission_api_state["error"] = f"HTTP {resp.status}: {err_txt[:200]}"
+            except Exception:
+                pass
+
+        gp_resp_listener = _on_gp_response
+        detail_page.on("response", gp_resp_listener)
+
+        # Kiểm tra bước 'IT xác nhận lỗi kỹ thuật' trực tiếp trong vùng ProcessStatus_stepContainer (tránh đụng #root chứa bước 01 Hoàn thành)
+        step2_loc = detail_page.locator('[class*="ProcessStatus_stepContainer"]:has-text("IT xác nhận lỗi kỹ thuật")').first
         is_already_done = False
         try:
-            it_step = detail_page.locator('div:has-text("02. IT xác nhận lỗi kỹ thuật"), div:has-text("IT xác nhận lỗi kỹ thuật")').first
-            if await it_step.count() > 0:
-                step_txt = (await it_step.inner_text()).lower()
-                if "hoàn thành" in step_txt and "đang thực hiện" not in step_txt:
-                    is_already_done = True
+            if await step2_loc.count() > 0:
+                step_txt = await step2_loc.inner_text()
+                is_already_done = _is_gprocess_step_completed(step_txt)
         except Exception:
             pass
 
@@ -2089,19 +2261,7 @@ async def _close_gprocess_mission(page, context, mission: Dict[str, Any]) -> Dic
                 "url": target_url
             }
 
-        # 1.1. KIỂM TRA PHÒNG VỆ TUYỆT ĐỐI (TRƯỚC KHI THAO TÁC FORM):
-        # Đảm bảo nhiệm vụ đã được gán ĐÍCH DANH cho dung.nguyenanh.
-        # Tuyệt đối KHÔNG tự gán cho dung.nguyenanh nếu nhiệm vụ chưa gán hoặc gán cho người khác!
-        target_user = (mission.get("assignee") or "dung.nguyenanh").strip().lower()
-        VALID_TARGETS = [target_user, "dung.nguyenanh", "nguyễn anh dũng", "nguyen anh dung"]
-        UNASSIGNED_KEYWORDS = [
-            "-", "—", "+", "none", "null", "undefined",
-            "chưa gán", "chua gan", "chưa phân công", "chua phan cong",
-            "chưa tiếp nhận", "chua tiep nhan", "gán người", "gan nguoi",
-            "chờ tiếp nhận", "cho tiep nhan"
-        ]
-
-        # Kiểm tra 1: Có nút Tiếp nhận / Nhận việc / Claim task trên trang chi tiết không
+        # 1.1. KIỂM TRA PHÒNG VỆ TUYỆT ĐỐI (TRƯỚC KHI THAO TÁC FORM)
         claim_btn = detail_page.locator(
             'button:has-text("Tiếp nhận"), button:has-text("Nhận việc"), button:has-text("Tiếp nhận nhiệm vụ"), '
             'button:has-text("Nhận nhiệm vụ"), button:has-text("Claim"), button:has-text("Nhận xử lý")'
@@ -2124,282 +2284,149 @@ async def _close_gprocess_mission(page, context, mission: Dict[str, Any]) -> Dic
                 "url": target_url
             }
 
-        # Lưu ý: Người thực hiện của nhiệm vụ này đã được xác thực 100% tại danh sách my-mission
-        # (assignee_id == 442, dom_assignee == 'dung.nguyenanh'). Không quét nhãn 'Người thực hiện'
-        # trong form chi tiết vì form chi tiết có trường 'BƯỚC TIẾP THEO -> Người thực hiện: Chọn người dùng'.
+        # 2. Check đúng ô radio 'Không đạt' trong hàng checklist (radio thứ 2 của [class*="checkListItem"])
+        chk_radios = detail_page.locator('[class*="checkListItem"] label.ant-radio-wrapper')
+        if await chk_radios.count() >= 2:
+            no_pass_radio = chk_radios.nth(1)
+            await no_pass_radio.wait_for(state="visible", timeout=12000)
+            await no_pass_radio.scroll_into_view_if_needed(timeout=5000)
+            cls_now = (await no_pass_radio.get_attribute("class")) or ""
+            if "ant-radio-wrapper-checked" not in cls_now:
+                await no_pass_radio.click(timeout=8000)
+                await asyncio.sleep(0.5)
+            cls_after = (await no_pass_radio.get_attribute("class")) or ""
+            if "ant-radio-wrapper-checked" not in cls_after:
+                await no_pass_radio.locator("span.ant-radio, input.ant-radio-input").first.click(force=True)
+                await asyncio.sleep(0.5)
+            logger.info(f"[GPROCESS] #{mission_id}: Đã chọn radio 'Không đạt' trong hàng checklist.")
+        else:
+            raise RuntimeError("Không tìm thấy radio 'Không đạt' trong hàng Checklist của G-Process.")
 
+        # 3. Nhập nội dung phản hồi vào textarea styles_checkListComment và blur để GPMS gọi handleSubmitComment
+        ta_selector = 'textarea.styles_checkListComment__kiJXw, [class*="checkListItemContainer"] textarea, textarea[placeholder*="Viết bình luận"], textarea:not([disabled]):not([readonly])'
+        active_ta = detail_page.locator(ta_selector).first
+        if await active_ta.count() == 0 or not await active_ta.is_visible():
+            comment_icon = detail_page.locator('[class*="checkListItem"] [class*="commentIcon"] svg').first
+            if await comment_icon.count() > 0:
+                await comment_icon.click(force=True)
+                await asyncio.sleep(0.5)
 
-        # 2. Check vào "Không đạt" ở ô Phản hồi xác nhận thông tin (Checklist)
-        kd_selector = 'label:has-text("Không đạt"), label.ant-radio-wrapper:has-text("Không đạt"), :text("Không đạt")'
-        try:
-            kd_el = detail_page.locator(kd_selector).first
-            await kd_el.wait_for(state="visible", timeout=12000)
-            await kd_el.scroll_into_view_if_needed(timeout=5000)
-            await kd_el.click(timeout=8000)
-            logger.info(f"[GPROCESS] #{mission_id}: Đã click 'Không đạt' qua locator.")
-        except Exception as kd_click_err:
-            logger.warning(f"[GPROCESS] #{mission_id}: Click 'Không đạt' trực tiếp: {kd_click_err}")
+        if await active_ta.count() > 0 and await active_ta.is_visible():
+            await active_ta.scroll_into_view_if_needed(timeout=5000)
+            await active_ta.click()
+            await active_ta.fill(feedback_message)
+            try:
+                await active_ta.blur()
+            except Exception:
+                await detail_page.locator('[class*="checkListLabel"]').first.click()
+            await asyncio.sleep(0.8)
+            logger.info(f"[GPROCESS] #{mission_id}: Đã điền và lưu nội dung phản hồi Checklist.")
+        else:
+            raise RuntimeError("Không mở được ô nhập bình luận Checklist trên G-Process.")
 
-        # Đồng bộ React state chọn 'Không đạt'
-        await detail_page.evaluate("""() => {
-            const labels = Array.from(document.querySelectorAll('label, div[class*="radio"]'));
-            const kd = labels.find(el => el.textContent && el.textContent.trim().includes('Không đạt'));
-            if (kd) {
-                kd.click();
-                const inp = kd.querySelector('input[type="radio"], input');
-                if (inp) {
-                    inp.checked = true;
-                    inp.dispatchEvent(new Event('input', { bubbles: true }));
-                    inp.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            }
-        }""")
-        await asyncio.sleep(0.5)
+        # 4. Chọn 'Không phê duyệt' (nếu chưa auto-check sau Không đạt) & 'Kết thúc quy trình' (tránh bẫy nested <label for="">)
+        kpd_wrapper = detail_page.locator('label.ant-radio-wrapper:has-text("Không phê duyệt")').first
+        await kpd_wrapper.wait_for(state="visible", timeout=12000)
+        kpd_cls = (await kpd_wrapper.get_attribute("class")) or ""
+        if "ant-radio-wrapper-checked" not in kpd_cls:
+            await kpd_wrapper.locator("span.ant-radio, input.ant-radio-input").first.click(force=True)
+            await asyncio.sleep(0.6)
+        logger.info(f"[GPROCESS] #{mission_id}: Đã chọn 'Không phê duyệt'.")
 
-        # 3. Nhập nội dung phản hồi vào textarea còn hiệu lực (không disabled / readonly)
-        active_tas = detail_page.locator('textarea:not([disabled]):not([readonly])')
-        try:
-            if await active_tas.count() > 0:
-                ta = active_tas.first
-                await ta.scroll_into_view_if_needed(timeout=5000)
-                await ta.click()
-                await ta.fill(feedback_message)
-                await ta.evaluate("""(el, msg) => {
-                    el.value = msg;
-                    el.dispatchEvent(new Event('input', { bubbles: true }));
-                    el.dispatchEvent(new Event('change', { bubbles: true }));
-                }""", feedback_message)
-                logger.info(f"[GPROCESS] #{mission_id}: Đã điền nội dung phản hồi.")
-                await asyncio.sleep(0.3)
-        except Exception as ta_err:
-            logger.warning(f"[GPROCESS] #{mission_id}: Điền textarea: {ta_err}")
-
-        # 4. Ở mục THỰC HIỆN: Click "Không phê duyệt"
-        kpd_selector = 'label:has-text("Không phê duyệt"), div[class*="unapprovedItem"] label, :text("Không phê duyệt")'
-        try:
-            kpd_el = detail_page.locator(kpd_selector).first
-            await kpd_el.wait_for(state="visible", timeout=12000)
-            await kpd_el.scroll_into_view_if_needed(timeout=5000)
-            await kpd_el.click(timeout=8000)
-            logger.info(f"[GPROCESS] #{mission_id}: Đã chọn 'Không phê duyệt'.")
-        except Exception as kpd_err:
-            logger.warning(f"[GPROCESS] #{mission_id}: Click 'Không phê duyệt': {kpd_err}")
-
-        # Đồng bộ React state chọn 'Không phê duyệt'
-        await detail_page.evaluate("""() => {
-            const labels = Array.from(document.querySelectorAll('label, div[class*="radio"]'));
-            const kpd = labels.find(el => el.textContent && el.textContent.trim().includes('Không phê duyệt'));
-            if (kpd) {
-                kpd.click();
-                const inp = kpd.querySelector('input[type="radio"], input');
-                if (inp) {
-                    inp.checked = true;
-                    inp.dispatchEvent(new Event('input', { bubbles: true }));
-                    inp.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            }
-        }""")
-        await asyncio.sleep(0.6)
-
-        # BẮT BUỘC: Chọn 'Kết thúc quy trình', tuyệt đối không để rơi vào 'Quay lại'
-        kt_selector = 'label:has-text("Kết thúc quy trình"), div[class*="radioWrapper"]:has-text("Kết thúc quy trình") label, label[title="Kết thúc quy trình"], :text("Kết thúc quy trình")'
-        try:
-            kt_radio = detail_page.locator(kt_selector).first
-            await kt_radio.wait_for(state="visible", timeout=10000)
-            await kt_radio.scroll_into_view_if_needed(timeout=5000)
-            await kt_radio.click(timeout=8000)
-            logger.info(f"[GPROCESS] #{mission_id}: Đã click 'Kết thúc quy trình'.")
-        except Exception as kt_err:
-            logger.warning(f"[GPROCESS] #{mission_id}: Chờ/click 'Kết thúc quy trình': {kt_err}")
-
-        # Đảm bảo 'Kết thúc quy trình' được tick chuẩn trong React state
-        await detail_page.evaluate("""() => {
-            const labels = Array.from(document.querySelectorAll('label, div[class*="radio"]'));
-            const kt = labels.find(l => l.textContent && l.textContent.trim().includes('Kết thúc quy trình'));
-            if (kt) {
-                kt.click();
-                const inp = kt.querySelector('input[type="radio"], input');
-                if (inp) {
-                    inp.checked = true;
-                    inp.dispatchEvent(new Event('input', { bubbles: true }));
-                    inp.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            }
-        }""")
-        await asyncio.sleep(0.5)
+        kt_wrapper = detail_page.locator('label.ant-radio-wrapper:has-text("Kết thúc quy trình")').first
+        await kt_wrapper.wait_for(state="visible", timeout=10000)
+        await kt_wrapper.scroll_into_view_if_needed(timeout=5000)
+        kt_cls = (await kt_wrapper.get_attribute("class")) or ""
+        if "ant-radio-wrapper-checked" not in kt_cls:
+            await kt_wrapper.locator("span.ant-radio, input.ant-radio-input").first.click(force=True)
+            await asyncio.sleep(0.5)
+        kt_cls_after = (await kt_wrapper.get_attribute("class")) or ""
+        if "ant-radio-wrapper-checked" not in kt_cls_after:
+            raise RuntimeError("Không thể kích hoạt lựa chọn 'Kết thúc quy trình' trên GPMS.")
         logger.info(f"[GPROCESS] #{mission_id}: Đã chọn chính xác 'Kết thúc quy trình'.")
 
-        # 5. Bấm nút "Xác nhận" ở cuối form
-        confirm_btn = detail_page.locator('button:has-text("Xác nhận"):not([disabled]), button[type="submit"]:has-text("Xác nhận"):not([disabled]), .ant-btn-primary:has-text("Xác nhận")').last
+        # 5. Bấm nút "Xác nhận" lần 1
+        confirm_btn = detail_page.locator(
+            'button:has-text("Xác nhận"):not([disabled]), button[type="submit"]:has-text("Xác nhận"):not([disabled]), .ant-btn-primary:has-text("Xác nhận"):not([disabled])'
+        ).last
         await confirm_btn.wait_for(state="visible", timeout=12000)
         await confirm_btn.scroll_into_view_if_needed(timeout=5000)
         await confirm_btn.click(timeout=10000)
-        logger.info(f"[GPROCESS] #{mission_id}: Đã bấm nút 'Xác nhận' trên form.")
+        logger.info(f"[GPROCESS] #{mission_id}: Đã bấm nút 'Xác nhận' lần 1.")
         await asyncio.sleep(1.0)
 
-        # 6. Vòng lặp xử lý tất cả các popup liên tiếp (Modal xác nhận, Modal Timesheet...)
-        for modal_step in range(5):
+        # 6. Xử lý popup (Khai báo Timesheet 0h, xác nhận); nếu mới chỉ lưu Timesheet thì bấm 'Xác nhận' lần 2 để thực thi handleUpdateTask
+        timesheet_saved = await _handle_gprocess_popups_and_resubmit(detail_page, mission_id)
+        if timesheet_saved:
             await asyncio.sleep(0.8)
-            visible_modal = detail_page.locator('.ant-modal:visible, #container-portal div[class*="modal"]:visible, .ant-modal-content:visible').first
-            if await visible_modal.count() == 0 or not await visible_modal.is_visible():
-                break
-
-            modal_text = ""
+            still_step2 = False
             try:
-                modal_text = (await visible_modal.inner_text()).lower()
+                if await step2_loc.count() > 0:
+                    still_step2 = not _is_gprocess_step_completed(await step2_loc.inner_text())
+                else:
+                    still_step2 = mission_id in (detail_page.url or "")
             except Exception:
-                pass
-            logger.info(f"[GPROCESS] #{mission_id} (modal step {modal_step+1}): Phát hiện modal: {modal_text[:100]}...")
+                still_step2 = True
 
-            # TH 6.1: Modal Timesheet (QUY TẮC BẮT BUỘC: KHÔNG khai báo timesheet cho G-Process, để Tổng thời gian HTTT = 0)
-            time_inputs = visible_modal.locator('input[name*="actual_time"], input[name*="time"], input[name*="hour"], input[type="number"]')
-            has_time_input = await time_inputs.count() > 0
-            if "timesheet" in modal_text or "thời gian" in modal_text or "khai báo" in modal_text or has_time_input:
-                logger.info(f"[GPROCESS] #{mission_id}: Phát hiện popup Khai báo Timesheet -> Để thời gian HTTT là 0 (KHÔNG khai báo timesheet cho G-Process).")
+            if still_step2 and not mission_api_state["succeeded"] and await confirm_btn.count() > 0 and await confirm_btn.is_visible():
+                await confirm_btn.scroll_into_view_if_needed(timeout=5000)
+                await confirm_btn.click(timeout=10000)
+                logger.info(f"[GPROCESS] #{mission_id}: Đã bấm nút 'Xác nhận' lần 2 sau khi khai báo Timesheet 0h.")
+                await asyncio.sleep(1.0)
+                await _handle_gprocess_popups_and_resubmit(detail_page, mission_id)
 
-                # Cập nhật các hàng trong bảng Timesheet:
-                # - Số lần/Số SP: 1
-                # - Tổng thời gian HTTT: 0 (BẮT BUỘC = 0 theo yêu cầu)
-                # - Ghi chú: '-'
-                try:
-                    await visible_modal.evaluate("""(modal) => {
-                        const rows = modal.querySelectorAll('tbody tr, .ant-table-row, div[class*="row"]');
-                        if (rows && rows.length > 0) {
-                            rows.forEach(r => {
-                                const inputs = r.querySelectorAll('input:not([type="hidden"])');
-                                if (inputs.length >= 3) {
-                                    // inputs[0]: Ngày thực hiện
-                                    // inputs[1]: Số lần / Số SP đã thực hiện (mặc định 1)
-                                    if (!inputs[1].value || inputs[1].value.trim() === '') {
-                                        inputs[1].value = '1';
-                                        inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
-                                        inputs[1].dispatchEvent(new Event('change', { bubbles: true }));
-                                    }
-                                    // inputs[2]: Tổng thời gian HTTT -> BẮT BUỘC ĐỂ 0
-                                    inputs[2].value = '0';
-                                    inputs[2].dispatchEvent(new Event('input', { bubbles: true }));
-                                    inputs[2].dispatchEvent(new Event('change', { bubbles: true }));
-
-                                    // inputs[3]: Ghi chú -> để '-' nếu rỗng
-                                    if (inputs.length >= 4) {
-                                        if (!inputs[3].value || inputs[3].value.trim() === '') {
-                                            inputs[3].value = '-';
-                                            inputs[3].dispatchEvent(new Event('input', { bubbles: true }));
-                                            inputs[3].dispatchEvent(new Event('change', { bubbles: true }));
-                                        }
-                                    }
-                                }
-                            });
-                        }
-                        // Quét phòng ngừa tất cả các ô input thời gian / time / hour để chắc chắn 100% mang giá trị 0
-                        const allInps = modal.querySelectorAll('input:not([type="hidden"])');
-                        allInps.forEach(inp => {
-                            const name = (inp.getAttribute('name') || '').toLowerCase();
-                            const placeholder = (inp.getAttribute('placeholder') || '').toLowerCase();
-                            if (name.includes('time') || name.includes('hour') || name.includes('actual') ||
-                                placeholder.includes('thời gian') || placeholder.includes('time')) {
-                                inp.value = '0';
-                                inp.dispatchEvent(new Event('input', { bubbles: true }));
-                                inp.dispatchEvent(new Event('change', { bubbles: true }));
-                            }
-                        });
-                    }""")
-                    await asyncio.sleep(0.3)
-                except Exception as eval_err:
-                    logger.debug(f"[GPROCESS] #{mission_id}: Evaluate Timesheet rows: {eval_err}")
-
-                # Quét lại qua Playwright locators để đồng bộ giá trị '0' vào các ô thời gian
-                for t_idx in range(await time_inputs.count()):
-                    try:
-                        t_inp = time_inputs.nth(t_idx)
-                        name_attr = (await t_inp.get_attribute("name") or "").lower()
-                        # Không đè lên ô số lần / số lượng
-                        if any(k in name_attr for k in ["quantity", "count", "so_lan", "solan", "sp"]):
-                            continue
-                        await t_inp.fill('0')
-                        await asyncio.sleep(0.05)
-                    except Exception:
-                        pass
-
-                # Ghi chú: Điền '-' nếu rỗng
-                note_inputs = visible_modal.locator('input[name*="note"], textarea[name*="note"], input[placeholder*="Ghi chú"], textarea')
-                for n_idx in range(await note_inputs.count()):
-                    try:
-                        n_inp = note_inputs.nth(n_idx)
-                        n_val = await n_inp.input_value()
-                        if not n_val or n_val.strip() == "":
-                            await n_inp.fill('-')
-                            await asyncio.sleep(0.05)
-                    except Exception:
-                        pass
-
-                # Bấm nút "Lưu" (nút màu vàng ở góc dưới bên phải modal Timesheet)
-                save_btn = visible_modal.locator('button:has-text("Lưu"), button.ant-btn-primary:has-text("Lưu"), button:has-text("Xác nhận"), button:has-text("Đồng ý")').first
-                if await save_btn.count() > 0:
-                    await save_btn.click(timeout=15000)
-                    logger.info(f"[GPROCESS] #{mission_id}: Đã bấm nút 'Lưu' Timesheet (Tổng thời gian HTTT = 0).")
-                    await asyncio.sleep(1.2)
-                continue
-
-            # TH 6.2: Modal Xác nhận / Đồng ý kết thúc
-            confirm_modal_btn = visible_modal.locator('button:has-text("Đồng ý"), button:has-text("Xác nhận"), button:has-text("OK"), button.ant-btn-primary').first
-            if await confirm_modal_btn.count() > 0:
-                btn_txt = await confirm_modal_btn.inner_text()
-                logger.info(f"[GPROCESS] #{mission_id}: Bấm xác nhận trên popup ('{btn_txt}').")
-                await confirm_modal_btn.click(timeout=15000)
-                await asyncio.sleep(1.2)
-                continue
-
-        # 7. Kiểm tra kết quả phản hồi thực tế từ GPMS (Toast Thành công / Lỗi hoặc Chuyển trang) - hỗ trợ cả react-hot-toast [role='status'] & AntD
-        success_toast = detail_page.locator(
-            '[role="status"]:has-text("thành công"), '
-            '.ant-message-success, .ant-notification-notice-success, '
-            'div[class*="ant-message"]:has-text("thành công"), '
-            'div[class*="ant-notification"]:has-text("thành công")'
-        ).first
+        # 7. Xác thực kết quả hoàn tất thực tế (KHÔNG dùng toast của Timesheet để báo Thành công giả)
         error_toast = detail_page.locator(
             '[role="status"]:has-text("lỗi"), [role="status"]:has-text("thất bại"), [role="status"]:has-text("không thể"), '
-            '.ant-message-error, .ant-notification-notice-error, div[class*="ant-message-error"]'
+            '[role="status"]:has-text("yêu cầu"), [role="status"]:has-text("vui lòng"), [role="status"]:has-text("thiếu"), '
+            '.ant-message-error, .ant-message-warning, .ant-notification-notice-error, div[class*="ant-message-error"]'
         ).first
 
         is_success = False
-        for _ in range(42):  # 42 * 0.35s ~= 14.7s (đủ bắt toast 2000ms của react-hot-toast)
+        for _ in range(42):  # ~14.7s
+            if mission_api_state["error"]:
+                raise RuntimeError(f"GPMS API từ chối lưu nhiệm vụ: {mission_api_state['error']}")
+
             if await error_toast.count() > 0 and await error_toast.is_visible():
                 err_msg = (await error_toast.inner_text() or "").strip()
                 if err_msg:
-                    logger.error(f"[GPROCESS] #{mission_id}: GPMS trả về thông báo lỗi: {err_msg}")
+                    logger.error(f"[GPROCESS] #{mission_id}: GPMS trả về thông báo lỗi/validation: {err_msg}")
                     raise RuntimeError(f"GPMS báo lỗi: {err_msg}")
 
-            if await success_toast.count() > 0 and await success_toast.is_visible():
-                succ_msg = (await success_toast.inner_text() or "").strip()
-                logger.info(f"[GPROCESS] #{mission_id}: GPMS xác nhận thành công: {succ_msg}")
-                is_success = True
-                break
-
-            # Kiểm tra xem GPMS có chuyển hướng khỏi trang chi tiết sau khi đóng thành công không
             curr_url = detail_page.url
-            if "my-mission" in curr_url and mission_id not in curr_url:
-                logger.info(f"[GPROCESS] #{mission_id}: GPMS đã tự động chuyển hướng về danh sách.")
+            step2_txt = ""
+            try:
+                if await step2_loc.count() > 0:
+                    step2_txt = await step2_loc.inner_text()
+            except Exception:
+                pass
+            confirm_disabled = False
+            try:
+                btn_any = detail_page.locator('button:has-text("Xác nhận")').last
+                if await btn_any.count() > 0:
+                    confirm_disabled = bool(await btn_any.is_disabled())
+            except Exception:
+                pass
+
+            if _verify_gprocess_mission_completed(
+                mission_id=mission_id,
+                curr_url=curr_url,
+                step2_text=step2_txt,
+                confirm_disabled=confirm_disabled,
+                mission_api_succeeded=bool(mission_api_state["succeeded"]),
+            ):
+                logger.info(f"[GPROCESS] #{mission_id}: Xác thực hoàn tất thực tế trên GPMS (URL={curr_url}, API={mission_api_state['succeeded']}).")
                 is_success = True
                 break
 
             await asyncio.sleep(0.35)
 
         if not is_success:
-            # KIỂM TRA PHÒNG VỆ: Nếu không thấy toast và không redirect, kiểm tra xem nút 'Xác nhận' còn tồn tại không
-            try:
-                confirm_still_there = detail_page.locator('button:has-text("Xác nhận"):not([disabled])')
-                if await confirm_still_there.count() == 0:
-                    is_success = True
-                    logger.info(f"[GPROCESS] #{mission_id}: Nút Xác nhận đã biến mất khỏi form, ghi nhận thành công.")
-            except Exception:
-                pass
+            raise RuntimeError(
+                "GPMS chưa ghi nhận hoàn tất nhiệm vụ (vui lòng kiểm tra Checklist/Bình luận/Kết thúc quy trình hoặc popup trên GPMS)"
+            )
 
-        if not is_success:
-            raise RuntimeError("GPMS không trả về thông báo thành công sau khi bấm Xác nhận (Form chưa được lưu hoặc có trường bắt buộc chưa điền)")
-
-        # Chờ 3.0s an toàn để API ngầm của GPMS hoàn tất ghi nhận vào cơ sở dữ liệu
-        await asyncio.sleep(3.0)
+        await asyncio.sleep(2.0)
 
         logger.info(f"[GPROCESS] ✅ Hoàn tất đóng nhiệm vụ G-Process: #{mission_id}")
         return {
@@ -2433,6 +2460,11 @@ async def _close_gprocess_mission(page, context, mission: Dict[str, Any]) -> Dic
             "url": mission.get("url", f"https://gpms.ggg.com.vn/g-process/my-mission/{mission_id}")
         }
     finally:
+        if gp_resp_listener is not None:
+            try:
+                detail_page.remove_listener("response", gp_resp_listener)
+            except Exception:
+                pass
         if opened_new_page and detail_page != page:
             try:
                 await detail_page.close()

@@ -4,6 +4,11 @@
 
 ## Recent Milestones
 
+- **[2026-11-16] Khắc phục triệt để lỗi G-Process báo "Thành công" giả dù GPMS chưa thực thi (`ticket_batch_service.py`)**
+  - **Root Cause:** Trên GPMS, (1) `label:has-text("Không đạt")` chỉ là header tĩnh nên radio `Không đạt` & textarea `styles_checkListComment__kiJXw` chưa bao giờ mở/nhập, (2) `label:has-text("Kết thúc quy trình")` dính thẻ `<label for="">` lồng nhau khiến radio vẫn kẹt ở `Quay lại`, (3) Khi bấm `Xác nhận` lần 1, hàm GPMS `Pn()` mở modal `Khai báo Timesheet` rồi thoát sớm trước `handleUpdateTask`; bot lưu Timesheet xong thấy toast `"thành công"` của Timesheet nên ngộ nhận nhiệm vụ đã xong, trong khi nhiệm vụ vẫn `Đang thực hiện`.
+  - **Done:** Click đúng radio thứ 2 trong `[class*="checkListItem"]` mở `textarea.styles_checkListComment__kiJXw` và blur lưu comment (`PUT /objects/{id}/customizes`), click `span.ant-radio` / `input.ant-radio-input` của `Không phê duyệt` & `Kết thúc quy trình`, tự bấm `Xác nhận` lần 2 sau khi modal Timesheet đóng, và chỉ xác nhận thành công qua URL rời chi tiết / API `process-gpms` `/tasks` / `ProcessStatus_stepContainer` chuyển `Không duyệt|Hoàn thành` + `Xác nhận` disabled.
+  - **Verification:** `48 passed` (`pytest tests/test_gprocess_close_mission.py tests/test_hotline_3cx_models.py tests/test_hotline_3cx_auto.py tests/test_jobs.py`), `compileall -q app` ✓, `from app.main import app` `>>> PASSED 100%` ✓, live Playwright selector check trên `#688278` (chặn POST/PUT xác nhận 100% radio/textarea khớp).
+
 - **[2026-11-16] Bổ sung quản lý Ngày Lễ Riêng (nghỉ lễ phát sinh không theo lịch nhà nước) cho Hotline 3CX**
   - **Done:** Thêm bảng `HOTLINE_3CX_HOLIDAYS` (`Hotline3cxHoliday` model, `main.py` lifespan, `Script/Full_SCRIPT_SQL_TABLE.sql`, tạo sẵn trên Production `.25` & local `ITDEPT`), 3 API `/api/v1/hotline-3cx-auto/holidays` (`GET`/`POST`/`DELETE`), cập nhật `compute_effective_mode`/`resolve_shift_plan`/`run_shift_sync` và bảo vệ ngày lễ trong `clone_previous_week_schedules` & `apply_week_template_to_month`. Frontend bổ sung `HolidayManagerModal.tsx` (chọn 1 ngày hoặc dải ngày `dd-mm-yyyy`, tên lễ, gán nhanh Chính/Phụ 06:00, nút `Xem` nhảy tới tuần, `Xóa`), nút `Ngày Lễ Riêng (N)` trên thanh công cụ và badge `🎉 Ngày Lễ` + nút bật/bỏ nhanh từng dòng trong `ScheduleTab.tsx` (không làm mất unsaved edits).
   - **Verification:** `44 passed` (`pytest tests/test_hotline_3cx_models.py tests/test_hotline_3cx_auto.py tests/test_jobs.py`), `cmd /c "npm run build"` exit 0 (`dist/web.config` True), `compileall -q app` ✓, `from app.main import app` `>>> PASSED 100%` ✓, Python 3.10 AST `0` lỗi ✓, và Playwright MCP live UI test (bật/tạo/xóa ngày lễ `18-11-2026`, kiểm tra LIFO `Esc`, `0` console errors).
@@ -42,6 +47,3 @@
 
 - **[2026-11-13] Sửa triệt để lỗi đóng ticket 3CX treo 110s & thất bại do popup Timesheet 422 / Toast / `#basic_typeTicket`** (`1484df0`)
   - **Done:** Cập nhật `backend/app/services/ticket_batch_service.py` xử lý xoay vòng ngày trống khi `POST /api/worklog` trả 422, bắt toast `react-hot-toast` (`[role="status"]`) + API `PUT /api/tasks/{id}`, chuẩn hóa radio `#basic_typeTicket input[type='radio'][value='2']`.
-
-- **[2026-11-13] Sửa lỗi quét 0 ticket 3CX & sai Timesheet 24h/ngày trên GPMS** (`d02ba27`)
-  - **Done:** Bổ sung phục hồi SSO (`_recover_sso_if_redirected`), phân trang `tasks/paging`, parse Ant Design RangePicker & tiêu đề bảng `/timesheet-management` trên `ticket_batch_service.py`, nâng cấp badge `timesheet_summary` trên `JobManagementPage.tsx`.

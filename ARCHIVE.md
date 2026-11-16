@@ -5,6 +5,9 @@
 
 <!-- Archived entries go below, newest archived at top -->
 
+- **[2026-11-13] Sửa lỗi quét 0 ticket 3CX & sai Timesheet 24h/ngày trên GPMS** (`d02ba27`)
+  - **Done:** Bổ sung phục hồi SSO (`_recover_sso_if_redirected`), phân trang `tasks/paging`, parse Ant Design RangePicker & tiêu đề bảng `/timesheet-management` trên `ticket_batch_service.py`, nâng cấp badge `timesheet_summary` trên `JobManagementPage.tsx`.
+
 - **[2026-11-12] Hỗ trợ tùy chọn dán mã RK7 hoặc SAP thêm món hàng loạt SO-CO** (`0c9cb56`)
   - **Done:** Bổ sung chế độ chọn dán mã RK7 hoặc SAP thêm món hàng loạt và tra cứu tên/đơn giá tự động từ MID/Server.
 
