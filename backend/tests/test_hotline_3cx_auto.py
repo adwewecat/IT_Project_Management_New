@@ -1167,6 +1167,95 @@ def test_playwright_sync_selectors_scoped_to_queue_tabpanel():
     assert any("ng-select[bindvalue='value']" in s for s in str_literals)
 
 
+def test_format_3cx_sync_error_connection_timed_out_reports_host_port_never_600s():
+    """Lỗi ERR_CONNECTION_TIMED_OUT phải báo đúng chẩn đoán cổng 5001/IP, tuyệt đối không báo nhầm 600s."""
+    from app.services.hotline_3cx_auto_service import format_3cx_sync_error
+
+    err = RuntimeError(
+        'Page.goto: net::ERR_CONNECTION_TIMED_OUT at https://ggg.ringbot.co:5001/#/login'
+    )
+    msg = format_3cx_sync_error(
+        err,
+        portal_url="https://ggg.ringbot.co:5001/#/login",
+        probe_result=("103.146.20.65", False, "timed out"),
+    )
+    assert "600s" not in msg
+    assert "ggg.ringbot.co" in msg
+    assert "5001" in msg
+    assert "103.146.20.65" in msg
+    assert "Firewall" in msg or "NAT" in msg
+
+
+def test_format_3cx_sync_error_navigation_timeout_never_600s():
+    """Lỗi TimeoutError của Playwright phải phản ánh đúng ngưỡng 60s chứ không hardcode 600s."""
+    from app.services.hotline_3cx_auto_service import format_3cx_sync_error
+
+    err = TimeoutError("Timeout 60000ms exceeded while waiting for selector")
+    msg = format_3cx_sync_error(
+        err,
+        portal_url="https://ggg.ringbot.co:5001/#/login",
+        probe_result=("103.146.20.65", True, None),
+    )
+    assert "600s" not in msg
+    assert "60 giây" in msg or "60s" in msg
+
+
+def test_run_shift_sync_logs_3cx_diagnostic_instead_of_600s(db_session: Session, monkeypatch):
+    """run_shift_sync khi gặp ERR_CONNECTION_TIMED_OUT phải ghi log chẩn đoán cổng 5001 rõ ràng, không ghi 600s."""
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    ensure_seeded_data(db_session)
+    update_config(db_session, Hotline3cxConfigUpdate(password="test_secret_password"))
+    duty_date = date(2026, 11, 16)
+    upsert_schedules(
+        db_session,
+        [
+            ScheduleDayUpsertItem(
+                duty_date=duty_date,
+                shift_mode="WEEKDAY",
+                morning_lines=["8772", "8741"],
+            )
+        ],
+    )
+
+    monkeypatch.setattr(
+        "app.services.hotline_3cx_auto_service.probe_portal_tcp",
+        lambda url, timeout_sec=3.0: ("103.146.20.65", False, "timed out"),
+    )
+
+    async def failing_sync(*args, **kwargs):
+        raise RuntimeError(
+            "Page.goto: net::ERR_CONNECTION_TIMED_OUT at https://ggg.ringbot.co:5001/#/login"
+        )
+
+    log = asyncio.run(
+        run_shift_sync(
+            db_session,
+            duty_date=duty_date,
+            shift_code="MORNING",
+            triggered_by="TestRunner",
+            dry_run=False,
+            allow_retry=False,
+            sync_fn=failing_sync,
+            alert_fn=AsyncMock(),
+        )
+    )
+    assert log.status == "FAILED"
+    assert "600s" not in (log.error_message or "")
+    assert "103.146.20.65:5001" in (log.error_message or "")
+
+
+def test_playwright_sync_uses_domcontentloaded_and_supports_no_proxy_fallback():
+    """Hồi quy: goto portal sử dụng domcontentloaded (tránh kẹt WebSocket 3CX) và hỗ trợ cờ no_proxy."""
+    service_src = (
+        Path(__file__).resolve().parent.parent / "app" / "services" / "hotline_3cx_auto_service.py"
+    ).read_text(encoding="utf-8")
+    assert '--no-proxy-server' in service_src
+    assert 'wait_until="domcontentloaded"' in service_src
+
+
+
 
 
 

@@ -5,6 +5,9 @@
 
 <!-- Archived entries go below, newest archived at top -->
 
+- **[2026-11-11] Giới hạn hiển thị tối đa 20 phiên lịch hẹn giờ đẩy Param & đồng bộ Báo Cáo Logs Tập Trung** (`d17345c`)
+  - **Done:** Giới hạn danh sách hiển thị 20 lịch hẹn gần nhất trên modal Quản Lý Lịch Hẹn Giờ và lưu đầy đủ lịch sử sang Báo Cáo Logs Tập Trung.
+
 - **[2026-11-11] Phát triển tính năng dán mã RK7 thêm món hàng loạt vào nhóm món SO-CO** (`62ef03e`)
   - **Done:** Cho phép paste danh sách mã RK7 để link tự động tên món/đơn giá từ MID và Master RK7.
 

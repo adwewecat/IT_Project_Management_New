@@ -16,7 +16,9 @@ import json
 import logging
 import os
 import re
+import socket
 from typing import Dict, List, Optional, Set, Tuple
+from urllib.parse import urlparse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -39,9 +41,9 @@ from app.schemas.hotline_3cx_auto import (
 from app.services.ticket_batch_service import (
     _decode_password,
     _encode_password,
+    _is_browser_missing_error,
     _is_timeout_error,
     _setup_playwright_browsers_path,
-    format_friendly_error,
     SMTP_HOST,
     SMTP_PORT,
     SMTP_USER,
@@ -713,7 +715,108 @@ def resolve_shift_plan(
 # ==============================================================================
 
 
-async def _create_3cx_browser_context(playwright_instance):
+def _extract_host_port(portal_url: str) -> Tuple[str, int]:
+    """Tách hostname và port mặc định từ URL portal 3CX."""
+    parsed = urlparse((portal_url or "").strip())
+    host = parsed.hostname or (portal_url or "").strip()
+    if parsed.port is not None:
+        port = int(parsed.port)
+    elif (parsed.scheme or "").lower() == "http":
+        port = 80
+    else:
+        port = 443
+    return host, port
+
+
+def probe_portal_tcp(
+    portal_url: str, timeout_sec: float = 3.0
+) -> Tuple[Optional[str], bool, Optional[str]]:
+    """
+    Kiểm tra nhanh DNS và kết nối TCP trực tiếp từ máy chủ tới Portal 3CX.
+    Trả về (resolved_ip, direct_tcp_ok, error_detail).
+    """
+    host, port = _extract_host_port(portal_url)
+    if not host:
+        return None, False, "Thiếu hostname Portal 3CX"
+
+    resolved_ip: Optional[str] = None
+    try:
+        resolved_ip = socket.gethostbyname(host)
+    except Exception as dns_err:
+        return None, False, f"Lỗi phân giải DNS '{host}': {dns_err}"
+
+    try:
+        with socket.create_connection((host, port), timeout=timeout_sec):
+            return resolved_ip, True, None
+    except Exception as tcp_err:
+        return resolved_ip, False, str(tcp_err)
+
+
+def format_3cx_sync_error(
+    exc: Exception,
+    portal_url: str = "",
+    probe_result: Optional[Tuple[Optional[str], bool, Optional[str]]] = None,
+) -> str:
+    """
+    Định dạng thông báo lỗi chẩn đoán chính xác cho phân hệ 3CX (không dùng chuỗi 600s gây hiểu nhầm).
+    """
+    raw = str(exc).strip()
+    low = raw.lower()
+    err_type = type(exc).__name__.lower()
+
+    if "err_connection_timed_out" in low or "err_timed_out" in low or "err_proxy" in low:
+        host, port = _extract_host_port(portal_url)
+        ip_info = ""
+        tcp_hint = ""
+        if probe_result is not None:
+            resolved_ip, direct_ok, _ = probe_result
+            if resolved_ip:
+                ip_info = f" -> {resolved_ip}:{port}"
+            if direct_ok:
+                tcp_hint = (
+                    " (Kết nối TCP trực tiếp từ Python THÀNH CÔNG nhưng trình duyệt bị nghẽn — "
+                    "hãy kiểm tra System Proxy/Firewall cho Chromium trên máy chủ)"
+                )
+            else:
+                tcp_hint = (
+                    " — Máy chủ Backend hiện không thông cổng mạng này. Vui lòng kiểm tra trên Server: "
+                    f"(1) Mở Firewall Outbound TCP port {port}, "
+                    "(2) Nếu Server cùng Datacenter với tổng đài 3CX bị chặn NAT Loopback hãy đổi 'URL Portal 3CX' ở tab Cấu Hình sang IP nội bộ hoặc trỏ file hosts, "
+                    f"(3) Kiểm tra proxy chặn cổng {port}"
+                )
+        return (
+            f"Không thể kết nối TCP tới Portal 3CX ({host}:{port}{ip_info}) từ máy chủ Backend"
+            f"{tcp_hint}."
+        )
+
+    if _is_browser_missing_error(exc):
+        return (
+            "Server chưa cài đặt Chromium cho Playwright. Vui lòng chạy install_playwright_server.bat "
+            "hoặc đảm bảo Server có sẵn Microsoft Edge / Chrome."
+        )
+
+    if _is_timeout_error(exc) or "timeout" in err_type:
+        return (
+            "Quá thời gian chờ phản hồi từ Portal 3CX (60 giây). "
+            "Vui lòng kiểm tra tốc độ mạng hoặc đường dẫn Portal 3CX trong tab Cấu Hình."
+        )
+
+    return raw or type(exc).__name__
+
+
+async def _safe_wait_network_idle_3cx(page, timeout_ms: int = 15000) -> None:
+    """Chờ networkidle an toàn cho trang Angular 3CX, không làm sập phiên nếu WebSocket giữ kết nối."""
+    try:
+        await page.wait_for_load_state("domcontentloaded", timeout=min(timeout_ms, 10000))
+    except Exception:
+        pass
+    try:
+        await page.wait_for_load_state("networkidle", timeout=timeout_ms)
+    except Exception:
+        pass
+
+
+async def _create_3cx_browser_context(playwright_instance, bypass_proxy: bool = False):
     """
     Khởi tạo Chromium browser và context riêng biệt cho portal 3CX.
     Viewport cố định 1440x900 đảm bảo giao diện web desktop của 3CX
@@ -728,6 +831,9 @@ async def _create_3cx_browser_context(playwright_instance):
         "--disable-gpu",
         "--mute-audio",
     ]
+    if bypass_proxy:
+        chromium_args.append("--no-proxy-server")
+
     for ch in [None, "msedge", "chrome"]:
         try:
             if ch is None:
@@ -774,12 +880,40 @@ async def _playwright_sync_3cx_queue(
     from playwright.async_api import async_playwright
 
     async with async_playwright() as p:
-        browser, context = await _create_3cx_browser_context(p)
+        browser, context = await _create_3cx_browser_context(p, bypass_proxy=False)
         page = await context.new_page()
         try:
-            # 1. Điều hướng và Đăng nhập
+            # 1. Điều hướng và Đăng nhập (dùng domcontentloaded để không kẹt WebSocket 3CX)
             logger.info(f"[3CX_SYNC] Đang kết nối tới portal 3CX: {portal_url}")
-            await page.goto(portal_url, wait_until="networkidle", timeout=60000)
+            try:
+                await page.goto(portal_url, wait_until="domcontentloaded", timeout=60000)
+            except Exception as nav_err:
+                nav_low = str(nav_err).lower()
+                if (
+                    "err_connection_timed_out" in nav_low
+                    or "err_timed_out" in nav_low
+                    or "err_proxy" in nav_low
+                ):
+                    _, direct_ok, _ = await asyncio.to_thread(probe_portal_tcp, portal_url, 3.0)
+                    if direct_ok:
+                        logger.warning(
+                            "[3CX_SYNC] Trình duyệt mặc định nghẽn kết nối dù TCP trực tiếp thông -> thử lại với --no-proxy-server"
+                        )
+                        try:
+                            await context.close()
+                        except Exception:
+                            pass
+                        try:
+                            await browser.close()
+                        except Exception:
+                            pass
+                        browser, context = await _create_3cx_browser_context(p, bypass_proxy=True)
+                        page = await context.new_page()
+                        await page.goto(portal_url, wait_until="domcontentloaded", timeout=60000)
+                    else:
+                        raise
+                else:
+                    raise
 
             # Điền Extension / Username
             user_input = page.locator("#loginInput, input[placeholder*='Extension']").first
@@ -809,12 +943,12 @@ async def _playwright_sync_3cx_queue(
             # 2. Điều hướng vào Admin -> Call Handling
             logger.info("[3CX_SYNC] Đăng nhập thành công, điều hướng vào Call Handling...")
             await admin_btn.click()
-            await page.wait_for_load_state("networkidle", timeout=20000)
+            await _safe_wait_network_idle_3cx(page, 15000)
 
             call_handling_link = page.locator("a:has-text('Call Handling')").first
             await call_handling_link.wait_for(state="visible", timeout=15000)
             await call_handling_link.click()
-            await page.wait_for_load_state("networkidle", timeout=20000)
+            await _safe_wait_network_idle_3cx(page, 15000)
 
             # 3. Mở hàng đợi tương ứng (0006 cho Day, 0007 cho Night)
             logger.info(f"[3CX_SYNC] Tìm kiếm hàng đợi '{plan.queue_name}'...")
@@ -831,7 +965,7 @@ async def _playwright_sync_3cx_queue(
 
             await queue_row.click()
             await page.locator("button[data-qa='back-btn']").wait_for(state="visible", timeout=15000)
-            await page.wait_for_load_state("networkidle", timeout=20000)
+            await _safe_wait_network_idle_3cx(page, 15000)
 
             # 4. Chuyển sang tab Users BEN TRONG chi tiet Queue (khong dung a:has-text('Users') de tranh bam nham sidebar #/office/users)
             users_tab = page.locator(
@@ -926,7 +1060,7 @@ async def _playwright_sync_3cx_queue(
             logger.info("[3CX_SYNC] Đang lưu cấu hình hàng đợi 3CX...")
             save_btn = page.locator("button#btnSave, button[data-qa='save']").first
             await save_btn.click()
-            await page.wait_for_load_state("networkidle", timeout=20000)
+            await _safe_wait_network_idle_3cx(page, 15000)
             await asyncio.sleep(2)
 
             # Chụp ảnh xác nhận kết quả
@@ -1199,7 +1333,13 @@ async def run_shift_sync(
 
     if last_error is not None:
         final_status = "FAILED"
-        friendly = format_friendly_error(last_error)
+        probe_res = None
+        err_low = str(last_error).lower()
+        if _is_timeout_error(last_error) or "err_connection" in err_low or "err_proxy" in err_low:
+            probe_res = await asyncio.to_thread(probe_portal_tcp, creds.portal_url, 3.0)
+        friendly = format_3cx_sync_error(
+            last_error, portal_url=creds.portal_url, probe_result=probe_res
+        )
         raw_err = str(last_error).strip()
         if raw_err and raw_err not in friendly:
             final_error_msg = f"{friendly} ({raw_err})"
