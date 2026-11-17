@@ -20,6 +20,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { TopScrollTable } from '../ui/TopScrollTable';
 import { ssoManagementService } from '../../services/ssoManagementService';
+import { copyToClipboard } from '../../utils/clipboard';
 import {
   SSOBulkActionType,
   SSOBulkRowProgress,
@@ -224,9 +225,10 @@ export const SsoBulkImportModal: React.FC<SsoBulkImportModalProps> = ({
     stopRequestedRef.current = true;
   };
 
-  // Sao chép pass
-  const handleCopyPass = (id: string, pass: string) => {
-    navigator.clipboard.writeText(pass);
+  // Sao chép pass (tương thích cả HTTP IP nội bộ và HTTPS)
+  const handleCopyPass = async (id: string, pass: string) => {
+    const ok = await copyToClipboard(pass);
+    if (!ok) return;
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };

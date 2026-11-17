@@ -16,6 +16,7 @@ import {
   Hotline3cxConfig,
   Hotline3cxConfigUpdate,
 } from '../../../types/hotline3cxAuto';
+import { copyToClipboard } from '../../../utils/clipboard';
 import { formatDateTimeDDMMYYYY } from '../../../utils/dateFormat';
 import { Button } from '../../ui/Button';
 
@@ -78,11 +79,11 @@ export const ConfigTab: React.FC<ConfigTabProps> = ({
 
   const handleCopyToken = async () => {
     if (!config?.relay_token) return;
-    try {
-      await navigator.clipboard.writeText(config.relay_token);
+    const ok = await copyToClipboard(config.relay_token);
+    if (ok) {
       setCopiedToken(true);
       setTimeout(() => setCopiedToken(false), 1800);
-    } catch {
+    } else {
       setShowToken(true);
     }
   };

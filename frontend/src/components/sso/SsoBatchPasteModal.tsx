@@ -18,6 +18,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { TopScrollTable } from '../ui/TopScrollTable';
 import { ssoManagementService } from '../../services/ssoManagementService';
+import { copyToClipboard } from '../../utils/clipboard';
 import {
   SSOQuickRowProgress,
   SSOBatchExportItem,
@@ -83,15 +84,16 @@ export const SsoBatchPasteModal: React.FC<SsoBatchPasteModalProps> = ({
     setRawText(sample);
   };
 
-  // Sao chép 1 mật khẩu
-  const handleCopySinglePass = (id: string, pass: string) => {
-    navigator.clipboard.writeText(pass);
+  // Sao chép 1 mật khẩu (tương thích cả HTTP IP nội bộ và HTTPS)
+  const handleCopySinglePass = async (id: string, pass: string) => {
+    const ok = await copyToClipboard(pass);
+    if (!ok) return;
     setCopiedPassId(id);
     setTimeout(() => setCopiedPassId(null), 2000);
   };
 
   // Sao chép toàn bộ danh sách kết quả (Username & Pass)
-  const handleCopyAll = () => {
+  const handleCopyAll = async () => {
     const successRows = rows.filter((r) => r.status === 'success');
     if (successRows.length === 0) return;
 
@@ -108,7 +110,8 @@ export const SsoBatchPasteModal: React.FC<SsoBatchPasteModalProps> = ({
           .join('\n');
     }
 
-    navigator.clipboard.writeText(content);
+    const ok = await copyToClipboard(content);
+    if (!ok) return;
     setCopiedAll(true);
     setTimeout(() => setCopiedAll(false), 2500);
   };
@@ -622,15 +625,28 @@ export const SsoBatchPasteModal: React.FC<SsoBatchPasteModalProps> = ({
                                     type="button"
                                     onClick={() => handleCopySinglePass(row.id, row.new_password!)}
                                     style={{
-                                      background: 'none',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      background: copiedPassId === row.id ? 'rgba(16, 185, 129, 0.12)' : 'none',
                                       border: 'none',
+                                      borderRadius: '4px',
                                       cursor: 'pointer',
                                       color: copiedPassId === row.id ? 'var(--color-success)' : 'var(--text-muted)',
-                                      padding: '2px',
+                                      fontSize: '11px',
+                                      fontWeight: 600,
+                                      padding: '2px 5px',
                                     }}
-                                    title="Sao chép mật khẩu"
+                                    title={copiedPassId === row.id ? 'Đã sao chép mật khẩu' : 'Sao chép mật khẩu'}
                                   >
-                                    {copiedPassId === row.id ? <Check size={14} /> : <Copy size={14} />}
+                                    {copiedPassId === row.id ? (
+                                      <>
+                                        <Check size={14} />
+                                        <span>Đã chép</span>
+                                      </>
+                                    ) : (
+                                      <Copy size={14} />
+                                    )}
                                   </button>
                                 </div>
                               ) : (

@@ -5,6 +5,10 @@
 
 <!-- Archived entries go below, newest archived at top -->
 
+- **[2026-11-13] Chuẩn hóa toàn diện định dạng ngày/tháng/giờ Việt Nam (`dd-mm` / `dd-mm-yyyy` / `mm-yyyy` / 24h)** (`de59b31`)
+  - **Done:** Tạo `frontend/src/utils/dateFormat.ts`, `DateTimeInput.tsx`, `MonthInput.tsx`, nâng cấp `DateInput.tsx` (`dd-mm-yyyy`), sửa pill Timesheet `formatDateDDMM(day)` (`01-11: 4h`) và thay toàn bộ `<input type="date" | "datetime-local" | "month">` trên các trang/modal.
+  - **Verification:** `npm run build` (`exit code 0`), unit tests `dateFormat.ts`, và Edge Playwright headless (`locale="en-US"`).
+
 - **[2026-11-13] Sửa triệt để lỗi đóng ticket 3CX treo 110s & thất bại do popup Timesheet 422 / Toast / `#basic_typeTicket`** (`1484df0`)
   - **Done:** Cập nhật `backend/app/services/ticket_batch_service.py` xử lý xoay vòng ngày trống khi `POST /api/worklog` trả 422, bắt toast `react-hot-toast` (`[role="status"]`) + API `PUT /api/tasks/{id}`, chuẩn hóa radio `#basic_typeTicket input[type='radio'][value='2']`.
 

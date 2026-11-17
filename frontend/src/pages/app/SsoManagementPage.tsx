@@ -31,6 +31,7 @@ import { SsoBatchAssignModal } from '../../components/sso/SsoBatchAssignModal';
 import {
   ssoManagementService,
 } from '../../services/ssoManagementService';
+import { copyToClipboard } from '../../utils/clipboard';
 import {
   SSOConfigResponse,
 } from '../../types/ssoManagement';
@@ -298,20 +299,28 @@ export const SsoManagementPage: React.FC = () => {
     }
   };
 
-  // Copy password của User NCC
-  const handleCopyNccPassword = () => {
+  // Copy password của User NCC (tương thích cả HTTP IP nội bộ và HTTPS)
+  const handleCopyNccPassword = async () => {
     if (!nccResultData?.password) return;
-    navigator.clipboard.writeText(nccResultData.password);
+    const ok = await copyToClipboard(nccResultData.password);
+    if (!ok) {
+      showToast('Không thể sao chép mật khẩu vào clipboard!', 'error');
+      return;
+    }
     setCopiedNccPass(true);
     showToast('Đã sao chép mật khẩu User NCC!', 'success');
     setTimeout(() => setCopiedNccPass(false), 3000);
   };
 
   // Copy template tin nhắn gửi cho Đối tác / User NCC
-  const handleCopyNccTemplate = () => {
+  const handleCopyNccTemplate = async () => {
     if (!nccResultData) return;
     const txt = `Hệ thống SSO/IAM đã tạo:\n- Username: ${nccResultData.userName}\n- Mật khẩu: ${nccResultData.password}\n- Email: ${nccResultData.email}`;
-    navigator.clipboard.writeText(txt);
+    const ok = await copyToClipboard(txt);
+    if (!ok) {
+      showToast('Không thể sao chép nội dung vào clipboard!', 'error');
+      return;
+    }
     setCopiedNccTemplate(true);
     showToast('Đã sao chép toàn bộ thông tin gửi đối tác!', 'success');
     setTimeout(() => setCopiedNccTemplate(false), 3000);
