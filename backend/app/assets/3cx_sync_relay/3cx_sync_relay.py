@@ -18,6 +18,7 @@ import re
 import signal
 import socket
 import ssl
+import subprocess
 import sys
 import tempfile
 import time
@@ -721,12 +722,29 @@ def write_pid_file() -> None:
         pass
 
 
-def remove_pid_file() -> None:
+def read_pid_file() -> str:
     try:
         if os.path.isfile(PID_FILE_PATH):
+            with open(PID_FILE_PATH, "r", encoding="ascii", errors="ignore") as f:
+                return f.read().strip()
+    except Exception:
+        pass
+    return ""
+
+
+def remove_pid_file() -> None:
+    try:
+        if os.path.isfile(PID_FILE_PATH) and read_pid_file() == str(os.getpid()):
             os.remove(PID_FILE_PATH)
     except Exception:
         pass
+
+
+def _safe_mtime(path: str) -> float:
+    try:
+        return os.path.getmtime(path)
+    except Exception:
+        return 0.0
 
 
 def main() -> int:
@@ -777,7 +795,39 @@ def main() -> int:
             remove_pid_file()
 
     last_hb = time.monotonic()
+    my_pid = str(os.getpid())
+    script_path = os.path.abspath(__file__)
+    script_mtime = _safe_mtime(script_path)
+    config_mtime = _safe_mtime(args.config)
+
     while not stop_requested["stop"]:
+        active_pid = read_pid_file()
+        if active_pid and active_pid != my_pid:
+            logger.info(
+                "[STOP] Phat hien PID moi hoac lenh dung (%s != %s) -> tu dong thoat tien trinh cu.",
+                active_pid,
+                my_pid,
+            )
+            return 0
+
+        cur_script_mtime = _safe_mtime(script_path)
+        if script_mtime > 0 and cur_script_mtime > 0 and cur_script_mtime != script_mtime:
+            logger.info("[RELOAD] Phat hien file 3cx_sync_relay.py moi tren dia -> tu dong khoi dong lai!")
+            try:
+                subprocess.Popen([sys.executable, script_path] + sys.argv[1:], cwd=APP_DIR)
+            except Exception as spawn_err:
+                logger.error("[RELOAD] Khong the khoi dong tien trinh moi: %s", _to_ascii_safe(spawn_err))
+            return 0
+
+        cur_cfg_mtime = _safe_mtime(args.config)
+        if config_mtime > 0 and cur_cfg_mtime > 0 and cur_cfg_mtime != config_mtime:
+            try:
+                cfg = load_config(args.config)
+                config_mtime = cur_cfg_mtime
+                logger.info("[CONFIG] Da tu dong nap lai relay_config.json moi.")
+            except Exception as cfg_err:
+                logger.warning("[CONFIG] Loi nap lai relay_config.json: %s", _to_ascii_safe(cfg_err))
+
         now_m = time.monotonic()
         if now_m - last_hb >= cfg["heartbeat_interval_seconds"]:
             try:
@@ -793,6 +843,15 @@ def main() -> int:
                 continue
         except urllib.error.HTTPError as http_err:
             if http_err.code == 401:
+                cur_cfg_mtime = _safe_mtime(args.config)
+                if cur_cfg_mtime != config_mtime:
+                    try:
+                        cfg = load_config(args.config)
+                        config_mtime = cur_cfg_mtime
+                        logger.info("[AUTH] Da nap token moi tu relay_config.json.")
+                        continue
+                    except Exception:
+                        pass
                 logger.error("[AUTH] Relay Token khong hop le (HTTP 401). Vui long tai lai goi cai dat tu Web!")
             else:
                 logger.warning("[POLL] Loi HTTP %s tu Server", http_err.code)
