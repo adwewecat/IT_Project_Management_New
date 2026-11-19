@@ -5,6 +5,11 @@
 
 <!-- Archived entries go below, newest archived at top -->
 
+- **[2026-11-13] Khắc phục triệt để lỗi file .bat chớp tắt khi cài Client Agent (Agent Multitask)** (`24de7d2`)
+  - **Root Cause:** Tất cả file `.bat` trong `tools/restaurant_support_agent/` đều dùng Unix LF (`\n`) thay vì Windows CRLF (`\r\n`), khiến `cmd.exe` seek sai byte-offset và quăng lỗi `The system cannot find the batch label specified`. Kết hợp với cấu trúc `for/do (goto :Label)` bên trong ngoặc đơn đa dòng → chớp tắt ngay lập tức.
+  - **Done:** Viết lại `Install_Edge_Framework.bat` cấu trúc phẳng hoàn toàn (zero ngoặc đơn đa dòng), UAC safe qua `%BAT_TARGET%`, flat loop `goto :KiemTraServiceLoop`. Convert `Go_Cai_Dat_Dich_Vu.bat`, `Kiem_Tra_Trang_Thai.bat`, `fix_CO_SO_Fail_to_connect.bat` sang CRLF 100%. Cập nhật API `download-package` tự động chuẩn hóa CRLF cho mọi file text khi đóng gói ZIP. Đóng gói lại 2 ZIP tĩnh. 5/5 unit tests PASS.
+  - **Verification:** `python -m compileall app` ✓, `npm run build` exit 0 ✓, 5 unit tests PASS ✓.
+
 - **[2026-11-13] Integrated `Skill_Workflow_A.I`, 3 MCP Servers & Standardized Project Files**
   - **Done:** Installed/updated 42 curated workflow skills in `.agents/skills/` (`obra/superpowers` auto backbone + `mattpocock/skills` manual triggers `quy trinh moi`, `nghi ngoi`, `cau hinh`), verified `playwright`, `private-journal`, and `context7` in `~/.gemini/config/mcp_config.json`, streamlined `GEMINI.md` strictly under 300 lines, and initialized `PROGRESS.md` + `ARCHIVE.md`.
 

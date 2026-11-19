@@ -723,33 +723,68 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
     return getMatchedRestaurants(newJobPastedCodes, newJobSearchName);
   }, [restaurants, newJobPastedCodes, newJobSearchName]);
 
+  // Lấy IP MongoDB chuẩn (đã trim) từ bản ghi nhà hàng
+  const getRestaurantMongoIp = (r?: RestaurantItem | null): string => {
+    if (!r) return '';
+    return (r.ip || (r as any).mongo_ip || '').trim();
+  };
+
+  // Helper dùng chung: Toggle chọn tất cả nhà hàng đang khớp bộ lọc theo IP (đã loại trùng)
+  const toggleSelectAllMatchedIps = (
+    matchedList: RestaurantItem[],
+    selectedIps: string[],
+    setter: React.Dispatch<React.SetStateAction<string[]>>
+  ) => {
+    const matchedIps = Array.from(
+      new Set(matchedList.map(getRestaurantMongoIp).filter(Boolean))
+    );
+    const allSelected =
+      matchedIps.length > 0 && matchedIps.every((ip) => selectedIps.includes(ip));
+    if (allSelected) {
+      setter((prev) => prev.filter((ip) => !matchedIps.includes(ip)));
+    } else {
+      setter((prev) => Array.from(new Set([...prev, ...matchedIps])));
+    }
+  };
+
+  // Helper dùng chung: Toggle chọn/bỏ chọn 1 IP (đảm bảo không bao giờ trùng lặp trong mảng)
+  const toggleSingleSelectedIp = (
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    rawIp: string
+  ) => {
+    const ip = rawIp.trim();
+    if (!ip) return;
+    setter((prev) =>
+      prev.includes(ip)
+        ? prev.filter((item) => item !== ip)
+        : Array.from(new Set([...prev, ip]))
+    );
+  };
+
+  // Kiểm tra tất cả nhà hàng khớp bộ lọc đã được chọn hết hay chưa
+  const areAllMatchedIpsSelected = (
+    matchedList: RestaurantItem[],
+    selectedIps: string[]
+  ): boolean => {
+    const matchedIps = Array.from(
+      new Set(matchedList.map(getRestaurantMongoIp).filter(Boolean))
+    );
+    return matchedIps.length > 0 && matchedIps.every((ip) => selectedIps.includes(ip));
+  };
+
   // Toggle chọn tất cả nhà hàng trong batch modal
   const handleToggleSelectAllBatchRestaurants = () => {
-    const matchedIps = matchedBatchRestaurants.map((r) => (r.ip || (r as any).mongo_ip || '').trim()).filter(Boolean);
-    const allSelected = matchedIps.length > 0 && matchedIps.every((ip) => batchSelectedIps.includes(ip));
-    if (allSelected) {
-      setBatchSelectedIps((prev) => prev.filter((ip) => !matchedIps.includes(ip)));
-    } else {
-      setBatchSelectedIps((prev) => Array.from(new Set([...prev, ...matchedIps])));
-    }
+    toggleSelectAllMatchedIps(matchedBatchRestaurants, batchSelectedIps, setBatchSelectedIps);
   };
 
   // Toggle chọn 1 nhà hàng trong batch modal
   const handleToggleSingleBatchRestaurant = (ip: string) => {
-    setBatchSelectedIps((prev) =>
-      prev.includes(ip) ? prev.filter((item) => item !== ip) : [...prev, ip]
-    );
+    toggleSingleSelectedIp(setBatchSelectedIps, ip);
   };
 
   // Toggle chọn tất cả nhà hàng trong new job modal
   const handleToggleSelectAllNewJobRestaurants = () => {
-    const matchedIps = matchedNewJobRestaurants.map((r) => (r.ip || (r as any).mongo_ip || '').trim()).filter(Boolean);
-    const allSelected = matchedIps.length > 0 && matchedIps.every((ip) => newJobSelectedIps.includes(ip));
-    if (allSelected) {
-      setNewJobSelectedIps((prev) => prev.filter((ip) => !matchedIps.includes(ip)));
-    } else {
-      setNewJobSelectedIps((prev) => Array.from(new Set([...prev, ...matchedIps])));
-    }
+    toggleSelectAllMatchedIps(matchedNewJobRestaurants, newJobSelectedIps, setNewJobSelectedIps);
   };
 
   // ══════════════════════════════════════════════════════════════
@@ -790,7 +825,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
         }
 
         const targets: BatchTargetRestaurantItem[] = batchSelectedIps.map((ip) => {
-          const r = restaurants.find((item) => (item.ip || (item as any).mongo_ip) === ip);
+          const r = restaurants.find((item) => getRestaurantMongoIp(item) === ip);
           return {
             name: getRestaurantDisplayName(r, ip),
             ip,
@@ -845,7 +880,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
       showToast('Vui lòng chọn giờ chạy (HH:mm)!', 'error');
       return;
     }
-    if (newJobSelectedIps.length === 0) {
+    if (newJobSelectedIps.length === 0 && newJobTargetScope !== 'CURRENT') {
       showToast('Vui lòng chọn ít nhất 1 nhà hàng mục tiêu!', 'error');
       return;
     }
@@ -869,7 +904,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
         return;
       }
       targets = newJobSelectedIps.map((ip) => {
-        const r = restaurants.find((item) => (item.ip || (item as any).mongo_ip) === ip);
+        const r = restaurants.find((item) => getRestaurantMongoIp(item) === ip);
         return {
           name: getRestaurantDisplayName(r, ip),
           ip,
@@ -1032,9 +1067,13 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
     // Nạp danh sách nhà hàng mục tiêu
     if (job.target_restaurants && job.target_restaurants.length > 0) {
       setNewJobTargetScope('MULTIPLE');
-      const ips = job.target_restaurants
-        .map((r: any) => (r.ip || (r as any).mongo_ip || '').trim())
-        .filter(Boolean);
+      const ips = Array.from(
+        new Set(
+          job.target_restaurants
+            .map((r: any) => (r.ip || (r as any).mongo_ip || '').trim())
+            .filter(Boolean)
+        )
+      );
       setNewJobSelectedIps(ips);
     }
 
@@ -1085,7 +1124,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
       }];
     } else {
       targets = newJobSelectedIps.map((ip) => {
-        const r = restaurants.find((item) => (item.ip || (item as any).mongo_ip) === ip);
+        const r = restaurants.find((item) => getRestaurantMongoIp(item) === ip);
         return {
           name: getRestaurantDisplayName(r, ip),
           ip,
@@ -2720,14 +2759,16 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                               padding: '3px 8px',
                               borderRadius: '4px',
                               border: '1px solid #7C3AED',
-                              backgroundColor: '#EDE9FE',
+                              backgroundColor: areAllMatchedIpsSelected(matchedBatchRestaurants, batchSelectedIps) ? '#DDD6FE' : '#EDE9FE',
                               color: '#6D28D9',
                               fontWeight: 700,
                               fontSize: '11.5px',
                               cursor: 'pointer'
                             }}
                           >
-                            ✓ Chọn Tất Cả ({matchedBatchRestaurants.length})
+                            {areAllMatchedIpsSelected(matchedBatchRestaurants, batchSelectedIps)
+                              ? `✕ Bỏ Chọn (${matchedBatchRestaurants.length})`
+                              : `✓ Chọn Tất Cả (${matchedBatchRestaurants.length})`}
                           </button>
                         </div>
                       </div>
@@ -2740,16 +2781,17 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                         </div>
                       ) : (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '4px' }}>
-                          {matchedBatchRestaurants.map((r) => {
-                            const ip = (r.ip || (r as any).mongo_ip || '').trim();
+                          {matchedBatchRestaurants.map((r, idx) => {
+                            const ip = getRestaurantMongoIp(r);
                             const isChecked = batchSelectedIps.includes(ip);
                             const sap = getRestaurantSapCode(r);
                             const rk7 = getRestaurantRk7Code(r);
                             const name = getRestaurantDisplayName(r, ip);
+                            const rowKey = r.id != null ? String(r.id) : `${ip}_${idx}`;
 
                             return (
                               <label
-                                key={ip}
+                                key={rowKey}
                                 style={{
                                   display: 'flex',
                                   alignItems: 'center',
@@ -4145,10 +4187,31 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                     <div style={{ fontWeight: 700, fontSize: '13px' }}>
                       2. Chọn Danh Sách Nhà Hàng Mục Tiêu:
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      {newJobTargetScope === 'CURRENT'
-                        ? `Nhà hàng hiện tại (${getRestaurantDisplayName(selectedRestaurant, currentHost)})`
-                        : `Đã chọn: ${newJobSelectedIps.length} nhà hàng`}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                      <span>
+                        {newJobTargetScope === 'CURRENT'
+                          ? `Nhà hàng hiện tại (${getRestaurantDisplayName(selectedRestaurant, currentHost)})`
+                          : `Đã chọn: ${newJobSelectedIps.length} nhà hàng`}
+                      </span>
+                      {newJobTargetScope === 'MULTIPLE' && newJobSelectedIps.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setNewJobSelectedIps([])}
+                          style={{
+                            padding: '2px 7px',
+                            borderRadius: '4px',
+                            border: '1px solid #FCA5A5',
+                            backgroundColor: '#FEF2F2',
+                            color: '#DC2626',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                          title="Xóa toàn bộ nhà hàng đã chọn"
+                        >
+                          Xóa đã chọn
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -4226,14 +4289,16 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                                 padding: '3px 8px',
                                 borderRadius: '4px',
                                 border: '1px solid #0284C7',
-                                backgroundColor: '#E0F2FE',
+                                backgroundColor: areAllMatchedIpsSelected(matchedNewJobRestaurants, newJobSelectedIps) ? '#BAE6FD' : '#E0F2FE',
                                 color: '#0369A1',
                                 fontWeight: 700,
                                 fontSize: '11.5px',
                                 cursor: 'pointer'
                               }}
                             >
-                              ✓ Chọn Tất Cả ({matchedNewJobRestaurants.length})
+                              {areAllMatchedIpsSelected(matchedNewJobRestaurants, newJobSelectedIps)
+                                ? `✕ Bỏ Chọn (${matchedNewJobRestaurants.length})`
+                                : `✓ Chọn Tất Cả (${matchedNewJobRestaurants.length})`}
                             </button>
                           </div>
                         </div>
@@ -4247,16 +4312,17 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                           </div>
                         ) : (
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '4px' }}>
-                            {matchedNewJobRestaurants.map((r) => {
-                              const ip = (r.ip || (r as any).mongo_ip || '').trim();
+                            {matchedNewJobRestaurants.map((r, idx) => {
+                              const ip = getRestaurantMongoIp(r);
                               const isChecked = newJobSelectedIps.includes(ip);
                               const sap = getRestaurantSapCode(r);
                               const rk7 = getRestaurantRk7Code(r);
                               const name = getRestaurantDisplayName(r, ip);
+                              const rowKey = r.id != null ? String(r.id) : `${ip}_${idx}`;
 
                               return (
                                 <label
-                                  key={ip}
+                                  key={rowKey}
                                   style={{
                                     display: 'flex',
                                     alignItems: 'center',
@@ -4272,11 +4338,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                                   <input
                                     type="checkbox"
                                     checked={isChecked}
-                                    onChange={() =>
-                                      setNewJobSelectedIps((prev) =>
-                                        prev.includes(ip) ? prev.filter((item) => item !== ip) : [...prev, ip]
-                                      )
-                                    }
+                                    onChange={() => toggleSingleSelectedIp(setNewJobSelectedIps, ip)}
                                   />
                                   <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

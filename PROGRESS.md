@@ -4,6 +4,12 @@
 
 ## Recent Milestones
 
+- **[2026-11-19] Khắc phục triệt để lỗi "nhà hàng ma" TCH, lệch checkbox & nhảy bộ đếm tại `Quản Lý Lịch Hẹn Giờ Đẩy Param` (`MongoDbParamManagementTask.tsx`)**
+  - **Root Cause:** Hai cặp nhà hàng active trong `dbo.RESTAURANT` dùng chung địa chỉ `ip` (`1080`/`1163` dùng chung `10.60.10.x/24`, `1095`/`1162` dùng chung `10.60.40.x/24`). Lưới chọn nhà hàng dùng `key={ip}` nên khi lọc theo từ khóa (`TCH`, `gogi`, `ashima`), React fiber Map bị ghi đè khóa trùng khiến các DOM `<label>` (`The Coffee House 771 Phan Văn Trị`, `The Coffee House Cư Xá Bình Thới`) bị bỏ lại vĩnh viễn làm "node ma", nhân bản nhiều bản sao và tách rời trạng thái checkbox khỏi React state. Ngoài ra `handleCreateScheduledJob` thiếu điều kiện `&& newJobTargetScope !== 'CURRENT'` khi kiểm tra mảng chọn.
+  - **Done:** Đổi React `key` sang `r.id != null ? String(r.id) : `${ip}_${idx}`` cho cả hai danh sách `matchedNewJobRestaurants` & `matchedBatchRestaurants`; tách helper dùng chung `getRestaurantMongoIp`, `toggleSelectAllMatchedIps`, `toggleSingleSelectedIp`, `areAllMatchedIpsSelected` (loại trùng bằng `Set`); hiển thị động nút `✓ Chọn Tất Cả (N)` / `✕ Bỏ Chọn (N)` và nút `Xóa đã chọn`; sửa guard `newJobTargetScope !== 'CURRENT'` trong `handleCreateScheduledJob`.
+  - **Verification:** `cmd /c "npm run build"` exit 0 (`dist/web.config` True), Playwright live UI test trên `http://localhost:5173/app/mongo-analysis` (với DB thật chứa các cặp IP trùng): tìm `TCH` -> `51/51` checked (`0` ghost TCH), tìm `gogi` -> `106` kết quả (`0` ghost TCH), tìm `ashima` -> `6` kết quả (`0` ghost TCH), tìm `771 Phan` -> tick bật `51 -> 52` (`checked: true`) và tick tắt `52 -> 51` (`checked: false`).
+
+
 - **[2026-11-19] Bổ sung nút "Áp Dụng Liền" 1-chạm cho ca Backup & các ca trực Hotline 3CX, làm rõ cơ chế nạp lại mã mới Relay Worker**
   - **Done:**
     - Bổ sung nút thao tác nhanh `⚡ Áp dụng liền` trực tiếp trên từng ô của bảng lịch trực (`ScheduleTab.tsx`) cho cả `Ca Sáng Backup`, `Ca Tối Backup`, `Ca Sáng (06:00)`, `Ca Tối (16:29)` và `Cuối Tuần/Lễ`:
@@ -54,8 +60,3 @@
   - **Root Cause:** Modal đặt `maxWidth="600px"` quá chật cho 2 trường `DateTimeInput` (chứa cả input ngày `dd-mm-yyyy`, icon Clock, select Giờ và Phút) trên lưới cố định `1fr 1fr` (~270px/cột), kết hợp với select box không fix width tối ưu khiến ô phút bị đẩy tràn mép phải modal.
   - **Done:** Nâng `maxWidth` của Modal Nghỉ phép từ `600px` lên `680px` (đồng bộ với Modal Loại nghỉ phép `680px`); cấu hình responsive `repeat(auto-fit, minmax(270px, 1fr))` tự động xếp chồng trên mobile; tinh gọn kích thước `DateTimeInput` (`width: 46px, minWidth: 44px, gap: 3px`, icon Clock 13px) giúp 2 cột hiển thị thoáng đãng, sang trọng, không còn bị cắt xén.
   - **Verification:** `cmd /c "npm run build"` (exit code 0, 4.44s), smoke test backend passed 100%.
-
-- **[2026-11-13] Khắc phục triệt để lỗi file .bat chớp tắt khi cài Client Agent (Agent Multitask)** (`24de7d2`)
-  - **Root Cause:** Tất cả file `.bat` trong `tools/restaurant_support_agent/` đều dùng Unix LF (`\n`) thay vì Windows CRLF (`\r\n`), khiến `cmd.exe` seek sai byte-offset và quăng lỗi `The system cannot find the batch label specified`. Kết hợp với cấu trúc `for/do (goto :Label)` bên trong ngoặc đơn đa dòng → chớp tắt ngay lập tức.
-  - **Done:** Viết lại `Install_Edge_Framework.bat` cấu trúc phẳng hoàn toàn (zero ngoặc đơn đa dòng), UAC safe qua `%BAT_TARGET%`, flat loop `goto :KiemTraServiceLoop`. Convert `Go_Cai_Dat_Dich_Vu.bat`, `Kiem_Tra_Trang_Thai.bat`, `fix_CO_SO_Fail_to_connect.bat` sang CRLF 100%. Cập nhật API `download-package` tự động chuẩn hóa CRLF cho mọi file text khi đóng gói ZIP. Đóng gói lại 2 ZIP tĩnh. 5/5 unit tests PASS.
-  - **Verification:** `python -m compileall app` ✓, `npm run build` exit 0 ✓, 5 unit tests PASS ✓.
