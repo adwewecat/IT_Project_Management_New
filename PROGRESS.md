@@ -4,6 +4,15 @@
 
 ## Recent Milestones
 
+- **[2026-11-19] Bổ sung nút "Áp Dụng Liền" 1-chạm cho ca Backup & các ca trực Hotline 3CX, làm rõ cơ chế nạp lại mã mới Relay Worker**
+  - **Done:**
+    - Bổ sung nút thao tác nhanh `⚡ Áp dụng liền` trực tiếp trên từng ô của bảng lịch trực (`ScheduleTab.tsx`) cho cả `Ca Sáng Backup`, `Ca Tối Backup`, `Ca Sáng (06:00)`, `Ca Tối (16:29)` và `Cuối Tuần/Lễ`:
+      - Khi bấm `⚡ Áp dụng liền`, hệ thống tự động lưu các thay đổi trên bảng lịch trước (nếu có `hasUnsavedChanges`), sau đó gọi ngay `hotline3cxAutoService.applyNow` với ca trực tương ứng, tự động chuyển sang tab "Lịch Sử Thực Thi & Ảnh" và tải mới nhật ký để xem kết quả & ảnh chụp Playwright tức thì mà không cần phải chờ tới giờ hẹn.
+      - Chuyển `executingApplyNow` vào `ScheduleTab` để vô hiệu hóa nút bấm và hiển thị trạng thái đang xử lý an toàn.
+    - Làm rõ nguyên nhân lỗi `Locator.wait_for: Timeout 10000ms exceeded`: Cửa sổ CMD `"Administrator: 3CX SYNC RELAY WORKER"` của máy trạm chạy từ 05:51 sáng (PID 848/17820) đang giữ mã nguồn & token cũ trong RAM. Mã nguồn trên đĩa `D:\Setup\3CX_Sync_Relay_Worker\` đã chuẩn 100% với selector `data-qa='peer-number'` và token khớp với DB Server `.25`. Người dùng chỉ cần tắt cửa sổ CMD đen cũ và chạy lại `Chay_3CX_Sync_Relay.bat` là chạy thành công ngay (không cần tải lại file zip).
+  - **Verification:** `cmd /c "npm run build"` exit code 0 (`dist/web.config` True), `pytest -k "hotline_3cx"` 44/44 PASS, backend `compileall` + `from app.main import app` PASSED 100%.
+
+
 - **[2026-11-19] Sửa lỗi timeout chọn máy nhánh 3CX (`8778`) & thêm 2 cột Hẹn Giờ Backup Manual (Ca Sáng / Ca Tối) cho Hotline 3CX**
   - **Root Cause:** Probe DOM thực tế trên `https://ggg.ringbot.co:5001` cho thấy `textContent` của option là `"8778Duy Ngo Nhut HCM IT Dept"` (số máy nằm trong `<span data-qa="peer-number">`, không có khoảng trắng) nên regex `^\s*8778\b` không bao giờ khớp -> `Locator.wait_for: Timeout 10000ms exceeded`. Nút Save của 3CX cũng bị `disabled` khi danh sách không đổi.
   - **Done:** Cả `backend/app/services/hotline_3cx_auto_service.py` và `backend/app/assets/3cx_sync_relay/3cx_sync_relay.py` chọn option bằng `[data-qa='peer-number']` (khớp chính xác) + fallback `^\s*{ext}(?:\D|$)`, chỉ click Save khi `is_enabled()`. Bỏ 2 nút `Sao Chép Tuần Trước → Tuần Này` & `Áp Dụng Mẫu Cho Cả Tháng` khỏi `ScheduleTab.tsx` (xóa `ApplyMonthModal.tsx` không còn dùng), nới modal lên `1480px`, bọc bảng bằng `TopScrollTable`, thêm 2 cột `Ca Sáng Backup` / `Ca Tối Backup` (ô giờ hẹn 24h `HH:mm` + chọn người backup). Thêm 4 cột `morning_backup_time`, `morning_backup_lines_json`, `evening_backup_time`, `evening_backup_lines_json` vào `HOTLINE_3CX_SCHEDULES` (đã chạy DDL trên `.25` & local `ITDEPT`, `main.py` lifespan, `Script/Full_SCRIPT_SQL_TABLE.sql`). Thêm shift `MORNING_BACKUP` / `EVENING_BACKUP` vào `resolve_shift_plan` / `run_shift_sync`, `get_due_manual_backup_shifts`, `has_backup_sync_for_slot` (chống chạy trùng theo mốc giờ) và vòng quét mỗi 20s trong `job_schedule_worker` (chạy cả khi tác vụ chung đang Tạm Dừng; hỗ trợ Direct lẫn Relay). Màn hình `Áp Dụng Ca Ngay` và tab Lịch Sử có thêm ca Backup.

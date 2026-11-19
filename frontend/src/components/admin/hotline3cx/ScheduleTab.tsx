@@ -15,6 +15,7 @@ import {
 import {
   Hotline3cxMember,
   Hotline3cxScheduleDay,
+  ShiftCode,
   ShiftMode,
 } from '../../../types/hotline3cxAuto';
 import { DateInput } from '../../ui/DateInput';
@@ -43,6 +44,8 @@ export interface ScheduleTabProps {
   onSaveSchedules: () => void;
   onQuickDryRun: () => void;
   onOpenApplyNowModal: () => void;
+  onQuickApplyShift: (dutyDate: string, shiftCode: ShiftCode) => void;
+  executingApplyNow: boolean;
   onUpdateScheduleRow: (
     dutyDate: string,
     updater: (prev: Hotline3cxScheduleDay) => Hotline3cxScheduleDay
@@ -67,6 +70,8 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
   onSaveSchedules,
   onQuickDryRun,
   onOpenApplyNowModal,
+  onQuickApplyShift,
+  executingApplyNow,
   onUpdateScheduleRow,
 }) => {
   const sundayOfCurrentWeek = addDaysToIso(currentMonday, 6);
@@ -584,6 +589,34 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                 </option>
                               ))}
                           </select>
+
+                          {/* Nút Áp Dụng Liền Ca Sáng */}
+                          {(day.morning_lines || []).length > 0 && (
+                            <button
+                              type="button"
+                              disabled={savingSchedules || executingApplyNow}
+                              onClick={() => onQuickApplyShift(day.duty_date, 'MORNING')}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                padding: '2px 7px',
+                                fontSize: '10.5px',
+                                fontWeight: 600,
+                                borderRadius: '4px',
+                                border: '1px solid #2563eb',
+                                backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                                color: '#2563eb',
+                                cursor: savingSchedules || executingApplyNow ? 'not-allowed' : 'pointer',
+                                alignSelf: 'flex-start',
+                                marginTop: '2px',
+                              }}
+                              title="Áp dụng ngay ca Sáng vào cổng 3CX thật"
+                            >
+                              <Zap size={10} />
+                              <span>Áp dụng liền</span>
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>
@@ -634,6 +667,34 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                             labelPrefix="2 (Phụ):"
                             labelColor="#d97706"
                           />
+
+                          {/* Nút Áp Dụng Liền Ca Tối */}
+                          {(day.evening_lines || []).filter(Boolean).length > 0 && (
+                            <button
+                              type="button"
+                              disabled={savingSchedules || executingApplyNow}
+                              onClick={() => onQuickApplyShift(day.duty_date, 'EVENING')}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                padding: '2px 7px',
+                                fontSize: '10.5px',
+                                fontWeight: 600,
+                                borderRadius: '4px',
+                                border: '1px solid #7c3aed',
+                                backgroundColor: 'rgba(124, 58, 237, 0.08)',
+                                color: '#7c3aed',
+                                cursor: savingSchedules || executingApplyNow ? 'not-allowed' : 'pointer',
+                                alignSelf: 'flex-start',
+                                marginTop: '2px',
+                              }}
+                              title="Áp dụng ngay ca Tối vào cổng 3CX thật"
+                            >
+                              <Zap size={10} />
+                              <span>Áp dụng liền</span>
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>
@@ -807,6 +868,56 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                   />
                                 </div>
                               </div>
+                            </div>
+                          )}
+
+                          {/* Nút Áp Dụng Liền Ca Cuối Tuần / Lễ */}
+                          {(day.weekend_lines || []).filter(Boolean).length > 0 && (
+                            <div style={{ display: 'flex', gap: '6px', marginTop: '3px' }}>
+                              <button
+                                type="button"
+                                disabled={savingSchedules || executingApplyNow}
+                                onClick={() => onQuickApplyShift(day.duty_date, 'MORNING')}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  padding: '2px 6px',
+                                  fontSize: '10px',
+                                  fontWeight: 600,
+                                  borderRadius: '4px',
+                                  border: '1px solid #059669',
+                                  backgroundColor: 'rgba(5, 150, 105, 0.08)',
+                                  color: '#059669',
+                                  cursor: savingSchedules || executingApplyNow ? 'not-allowed' : 'pointer',
+                                }}
+                                title="Áp dụng ngay ca Sáng 06:00 (Night Queue 0007: 1 Chính / 2 Phụ)"
+                              >
+                                <Zap size={9} />
+                                <span>Áp dụng Sáng</span>
+                              </button>
+                              <button
+                                type="button"
+                                disabled={savingSchedules || executingApplyNow}
+                                onClick={() => onQuickApplyShift(day.duty_date, 'EVENING')}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  padding: '2px 6px',
+                                  fontSize: '10px',
+                                  fontWeight: 600,
+                                  borderRadius: '4px',
+                                  border: '1px solid #d97706',
+                                  backgroundColor: 'rgba(217, 119, 6, 0.08)',
+                                  color: '#d97706',
+                                  cursor: savingSchedules || executingApplyNow ? 'not-allowed' : 'pointer',
+                                }}
+                                title="Áp dụng ngay ca Tối 16:29 (Tự đảo 1↔2 hoặc override)"
+                              >
+                                <Zap size={9} />
+                                <span>Áp dụng Tối</span>
+                              </button>
                             </div>
                           )}
                         </div>
@@ -1038,6 +1149,34 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                 </select>
                               </>
                             )}
+
+                            {/* Nút Áp Dụng Liền Backup Ca Sáng */}
+                            {mbLinesClean.length > 0 && (
+                              <button
+                                type="button"
+                                disabled={savingSchedules || executingApplyNow}
+                                onClick={() => onQuickApplyShift(day.duty_date, 'MORNING_BACKUP')}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '3px 8px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  borderRadius: '4px',
+                                  border: '1px solid #0f766e',
+                                  backgroundColor: 'rgba(13, 148, 136, 0.1)',
+                                  color: '#0f766e',
+                                  cursor: savingSchedules || executingApplyNow ? 'not-allowed' : 'pointer',
+                                  alignSelf: 'flex-start',
+                                  marginTop: '2px',
+                                }}
+                                title="Áp dụng ngay cấu hình Backup Ca Sáng vào cổng 3CX thật (không cần đợi đến giờ hẹn)"
+                              >
+                                <Zap size={11} />
+                                <span>Áp dụng Backup Sáng liền</span>
+                              </button>
+                            )}
                           </div>
                         </td>
                       );
@@ -1178,6 +1317,34 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                                 labelColor="#d97706"
                               />
                             </div>
+
+                            {/* Nút Áp Dụng Liền Backup Ca Tối */}
+                            {ebLinesClean.length > 0 && (
+                              <button
+                                type="button"
+                                disabled={savingSchedules || executingApplyNow}
+                                onClick={() => onQuickApplyShift(day.duty_date, 'EVENING_BACKUP')}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '3px 8px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  borderRadius: '4px',
+                                  border: '1px solid #b45309',
+                                  backgroundColor: 'rgba(217, 119, 6, 0.1)',
+                                  color: '#b45309',
+                                  cursor: savingSchedules || executingApplyNow ? 'not-allowed' : 'pointer',
+                                  alignSelf: 'flex-start',
+                                  marginTop: '2px',
+                                }}
+                                title="Áp dụng ngay cấu hình Backup Ca Tối vào cổng 3CX thật (không cần đợi đến giờ hẹn)"
+                              >
+                                <Zap size={11} />
+                                <span>Áp dụng Backup Tối liền</span>
+                              </button>
+                            )}
                           </div>
                         </td>
                       );

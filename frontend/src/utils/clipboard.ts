@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Sao chep van ban vao clipboard an toan va tuong thich moi moi truong
  * (hoat dong tot tren ca HTTPS, localhost va HTTP qua dia chi IP may chu noi bo)
  */

@@ -553,6 +553,61 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
     }
   };
 
+  // Quick apply for a single shift directly from a table row (Ca Sáng, Ca Tối, Backup Sáng, Backup Tối)
+  const handleQuickApplyShift = async (dutyDate: string, shiftCode: ShiftCode) => {
+    if (hasUnsavedChanges) {
+      try {
+        setSavingSchedules(true);
+        await hotline3cxAutoService.saveSchedules(schedules);
+        setHasUnsavedChanges(false);
+      } catch (saveErr) {
+        notify(`Không thể lưu lịch trước khi áp dụng: ${extractApiErrorMessage(saveErr)}`, 'error');
+        return;
+      } finally {
+        setSavingSchedules(false);
+      }
+    }
+
+    setExecutingApplyNow(true);
+    try {
+      const shiftNameMap: Record<ShiftCode, string> = {
+        MORNING: 'Ca Sáng (06:00)',
+        EVENING: 'Ca Tối (16:29)',
+        MORNING_BACKUP: 'Ca Sáng Backup (Manual)',
+        EVENING_BACKUP: 'Ca Tối Backup (Manual)',
+      };
+      const label = shiftNameMap[shiftCode] || shiftCode;
+
+      const log = await hotline3cxAutoService.applyNow({
+        duty_date: dutyDate,
+        shift_code: shiftCode,
+      });
+
+      if (log.status === 'SUCCESS') {
+        notify(
+          `Áp dụng thành công ${label} vào cổng 3CX! Hàng đợi: ${log.queue_name}, đã cập nhật ${log.applied_lines?.length || 0} line trực.`,
+          'success'
+        );
+      } else if (log.status === 'PENDING' || log.status === 'RUNNING') {
+        notify(
+          `Đã đẩy lệnh áp dụng ${label} vào hàng đợi 3CX Relay Worker (${log.queue_name}). Đang chuyển sang nhật ký...`,
+          'info'
+        );
+      } else if (log.status === 'SKIPPED') {
+        notify(`Đã bỏ qua ca trực: ${log.error_message || 'Không có cấu hình line'}`, 'info');
+      } else {
+        notify(`Đồng bộ thất bại: ${log.error_message || 'Có lỗi xảy ra'}`, 'error');
+      }
+      setActiveTab('logs');
+      fetchLogs();
+      if (onSyncTriggered) onSyncTriggered();
+    } catch (err: unknown) {
+      notify(`Lỗi khi đồng bộ vào 3CX: ${extractApiErrorMessage(err)}`, 'error');
+    } finally {
+      setExecutingApplyNow(false);
+    }
+  };
+
   // Member CRUD handlers
   const handleCreateMember = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -874,6 +929,8 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
                 setApplyNowDate(getTodayIsoDate());
                 setShowApplyNowModal(true);
               }}
+              onQuickApplyShift={handleQuickApplyShift}
+              executingApplyNow={executingApplyNow}
               onUpdateScheduleRow={handleUpdateScheduleRow}
             />
           )}
