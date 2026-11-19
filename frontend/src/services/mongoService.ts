@@ -690,6 +690,17 @@ export const mongoService = {
     return res.data;
   },
 
+  updateScheduledParamJob: async (
+    jobId: number,
+    payload: ScheduledParamJobCreateRequest
+  ): Promise<ScheduledParamJobItem> => {
+    const res = await api.put<ScheduledParamJobItem>(
+      `/mongodb/scheduled-param-jobs/${jobId}`,
+      payload
+    );
+    return res.data;
+  },
+
   deleteScheduledParamJob: async (
     jobId: number
   ): Promise<{ success: boolean; message: string }> => {

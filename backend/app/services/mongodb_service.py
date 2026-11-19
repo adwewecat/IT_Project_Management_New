@@ -1496,59 +1496,45 @@ class MongoDBService:
             return MongoDBService.execute_scheduled_param_job(db=db, job=job, triggered_by=triggered_by)
 
     @staticmethod
-    def get_scheduled_param_jobs(db: Session, status: Optional[str] = None, limit: Optional[int] = 20) -> List[ScheduledParamJobItem]:
-        query = db.query(ScheduledParamPushJob)
-        if status:
-            query = query.filter(ScheduledParamPushJob.status == status.strip().upper())
-        query = query.order_by(
-            ScheduledParamPushJob.run_date.desc(),
-            ScheduledParamPushJob.run_time.desc(),
-            ScheduledParamPushJob.id.desc()
+    def _to_scheduled_param_job_item(job: ScheduledParamPushJob) -> ScheduledParamJobItem:
+        """Chuyển đổi bản ghi ScheduledParamPushJob sang schema ScheduledParamJobItem."""
+        try:
+            targets = json.loads(job.target_restaurants_json or "[]")
+        except Exception:
+            targets = []
+        try:
+            params_list = json.loads(job.params_payload_json or "[]")
+        except Exception:
+            params_list = []
+        try:
+            res_sum = json.loads(job.result_summary_json) if job.result_summary_json else None
+        except Exception:
+            res_sum = None
+
+        return ScheduledParamJobItem(
+            id=job.id,
+            job_title=job.job_title,
+            run_date=job.run_date,
+            run_time=job.run_time,
+            mode=job.mode,
+            target_restaurants=targets,
+            params_payload=params_list,
+            status=job.status,
+            total_restaurants=job.total_restaurants,
+            success_count=job.success_count,
+            failed_count=job.failed_count,
+            result_summary=res_sum,
+            created_by=job.created_by,
+            created_at=job.created_at,
+            executed_at=job.executed_at
         )
-        if limit and limit > 0:
-            query = query.limit(limit)
-        records = query.all()
-
-        results: List[ScheduledParamJobItem] = []
-        for r in records:
-            try:
-                targets = json.loads(r.target_restaurants_json or "[]")
-            except Exception:
-                targets = []
-            try:
-                params_list = json.loads(r.params_payload_json or "[]")
-            except Exception:
-                params_list = []
-            try:
-                res_sum = json.loads(r.result_summary_json) if r.result_summary_json else None
-            except Exception:
-                res_sum = None
-
-            results.append(ScheduledParamJobItem(
-                id=r.id,
-                job_title=r.job_title,
-                run_date=r.run_date,
-                run_time=r.run_time,
-                mode=r.mode,
-                target_restaurants=targets,
-                params_payload=params_list,
-                status=r.status,
-                total_restaurants=r.total_restaurants,
-                success_count=r.success_count,
-                failed_count=r.failed_count,
-                result_summary=res_sum,
-                created_by=r.created_by,
-                created_at=r.created_at,
-                executed_at=r.executed_at
-            ))
-        return results
 
     @staticmethod
-    def create_scheduled_param_job(
+    def _build_scheduled_params_payload(
         db: Session,
-        current_user: UserInfo,
         payload: ScheduledParamJobCreateRequest
-    ) -> ScheduledParamJobItem:
+    ) -> List[Dict[str, Any]]:
+        """Validate thông tin chung và tổng hợp danh sách tham số cho lịch hẹn giờ (tạo mới / cập nhật)."""
         if not payload.job_title.strip():
             raise ValueError("Vui lòng nhập tên lịch hẹn giờ!")
         if not payload.run_date.strip() or not payload.run_time.strip():
@@ -1556,10 +1542,11 @@ class MongoDBService:
         if not payload.target_restaurants or len(payload.target_restaurants) == 0:
             raise ValueError("Vui lòng chọn ít nhất 1 nhà hàng để áp dụng!")
 
-        # Chuẩn bị params payload
-        params_payload = []
+        params_payload: List[Dict[str, Any]] = []
         if payload.selected_param_codes and len(payload.selected_param_codes) > 0:
-            query = db.query(StandardAppParam).filter(StandardAppParam.param_code.in_(payload.selected_param_codes))
+            query = db.query(StandardAppParam).filter(
+                StandardAppParam.param_code.in_(payload.selected_param_codes)
+            )
             std_list = query.all()
             for s in std_list:
                 params_payload.append({
@@ -1608,6 +1595,30 @@ class MongoDBService:
         if not params_payload:
             raise ValueError("Không có tham số nào được chọn hoặc tự nhập để đưa vào lịch hẹn!")
 
+        return params_payload
+
+    @staticmethod
+    def get_scheduled_param_jobs(db: Session, status: Optional[str] = None, limit: Optional[int] = 20) -> List[ScheduledParamJobItem]:
+        query = db.query(ScheduledParamPushJob)
+        if status:
+            query = query.filter(ScheduledParamPushJob.status == status.strip().upper())
+        query = query.order_by(
+            ScheduledParamPushJob.run_date.desc(),
+            ScheduledParamPushJob.run_time.desc(),
+            ScheduledParamPushJob.id.desc()
+        )
+        if limit and limit > 0:
+            query = query.limit(limit)
+        records = query.all()
+        return [MongoDBService._to_scheduled_param_job_item(r) for r in records]
+
+    @staticmethod
+    def create_scheduled_param_job(
+        db: Session,
+        current_user: UserInfo,
+        payload: ScheduledParamJobCreateRequest
+    ) -> ScheduledParamJobItem:
+        params_payload = MongoDBService._build_scheduled_params_payload(db, payload)
         targets_json = json.dumps([t.dict() for t in payload.target_restaurants], ensure_ascii=False)
         params_json = json.dumps(params_payload, ensure_ascii=False)
 
@@ -1653,23 +1664,63 @@ class MongoDBService:
         except Exception as e_log:
             logger.warning("Lỗi ghi log tập trung khi tạo lịch hẹn: %s", e_log)
 
-        return ScheduledParamJobItem(
-            id=job.id,
-            job_title=job.job_title,
-            run_date=job.run_date,
-            run_time=job.run_time,
-            mode=job.mode,
-            target_restaurants=[t.dict() for t in payload.target_restaurants],
-            params_payload=params_payload,
-            status=job.status,
-            total_restaurants=job.total_restaurants,
-            success_count=0,
-            failed_count=0,
-            result_summary=None,
-            created_by=job.created_by,
-            created_at=job.created_at,
-            executed_at=None
+        return MongoDBService._to_scheduled_param_job_item(job)
+
+    @staticmethod
+    def update_scheduled_param_job(
+        db: Session,
+        current_user: UserInfo,
+        job_id: int,
+        payload: ScheduledParamJobCreateRequest
+    ) -> ScheduledParamJobItem:
+        """Cập nhật lại lịch hẹn giờ đẩy param khi tác vụ vẫn ở trạng thái PENDING (chưa chạy)."""
+        job = db.query(ScheduledParamPushJob).filter(ScheduledParamPushJob.id == job_id).first()
+        if not job:
+            raise ValueError(f"Không tìm thấy lịch hẹn giờ ID {job_id}!")
+        if (job.status or "").upper() != "PENDING":
+            raise ValueError(
+                f"Chỉ có thể chỉnh sửa lịch hẹn chưa chạy (Đang chờ). Tác vụ #{job_id} hiện ở trạng thái {job.status}."
+            )
+
+        params_payload = MongoDBService._build_scheduled_params_payload(db, payload)
+        targets_json = json.dumps([t.dict() for t in payload.target_restaurants], ensure_ascii=False)
+        params_json = json.dumps(params_payload, ensure_ascii=False)
+
+        job.job_title = payload.job_title.strip()
+        job.run_date = payload.run_date.strip()
+        job.run_time = payload.run_time.strip()
+        job.mode = payload.mode.strip().lower()
+        job.target_restaurants_json = targets_json
+        job.params_payload_json = params_json
+        job.total_restaurants = len(payload.target_restaurants)
+        db.commit()
+        db.refresh(job)
+
+        audit = AuditLog(
+            manhinh="SCHEDULED_PARAM_JOB",
+            noidung=f"Cập nhật lịch hẹn đẩy Param #{job.id}: '{job.job_title}' (Ngày {job.run_date} lúc {job.run_time}, {job.total_restaurants} nhà hàng, {len(params_payload)} param, Chế độ: {job.mode})",
+            user_thuchien=current_user.username
         )
+        db.add(audit)
+        db.commit()
+
+        # Ghi log tập trung (LOGS__New) để tra cứu bên Báo Cáo Logs Tập Trung
+        try:
+            from app.services.log_service import LogService
+            LogService.record_log(
+                db=db,
+                nhom_quyen="APP",
+                man_hinh="LỊCH HẸN GIỜ PARAM",
+                hanh_dong="CẬP NHẬT LỊCH HẸN",
+                noi_dung=f"Cập nhật lịch hẹn đẩy Param #{job.id} '{job.job_title}' (Ngày chạy: {job.run_date} lúc {job.run_time}, {job.total_restaurants} nhà hàng, {len(params_payload)} param, Chế độ: {job.mode})",
+                user_thuchien=current_user.username,
+                current_user=current_user,
+                force_log=True
+            )
+        except Exception as e_log:
+            logger.warning("Lỗi ghi log tập trung khi cập nhật lịch hẹn: %s", e_log)
+
+        return MongoDBService._to_scheduled_param_job_item(job)
 
     @staticmethod
     def delete_scheduled_param_job(

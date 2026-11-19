@@ -531,6 +531,32 @@ def create_scheduled_param_job(
         )
 
 
+@router.put("/scheduled-param-jobs/{job_id}", response_model=ScheduledParamJobItem)
+def update_scheduled_param_job(
+    job_id: int,
+    payload: ScheduledParamJobCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_app_or_admin)
+):
+    """
+    Chỉnh sửa lịch hẹn giờ đẩy cấu hình param đang ở trạng thái Đang chờ (PENDING / chưa chạy).
+    """
+    try:
+        return MongoDBService.update_scheduled_param_job(
+            db=db,
+            current_user=current_user,
+            job_id=job_id,
+            payload=payload
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi cập nhật lịch hẹn giờ #{job_id}: {str(e)}"
+        )
+
+
 @router.delete("/scheduled-param-jobs/{job_id}")
 def delete_scheduled_param_job(
     job_id: int,

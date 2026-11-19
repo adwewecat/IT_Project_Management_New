@@ -5,6 +5,11 @@
 
 <!-- Archived entries go below, newest archived at top -->
 
+- **[2026-11-13] Sửa lỗi bể giao diện Modal Ghi Nhận Nghỉ Phép / Xin Về Sớm**
+  - **Root Cause:** Modal đặt `maxWidth="600px"` quá chật cho 2 trường `DateTimeInput` (chứa cả input ngày `dd-mm-yyyy`, icon Clock, select Giờ và Phút) trên lưới cố định `1fr 1fr` (~270px/cột), kết hợp với select box không fix width tối ưu khiến ô phút bị đẩy tràn mép phải modal.
+  - **Done:** Nâng `maxWidth` của Modal Nghỉ phép từ `600px` lên `680px` (đồng bộ với Modal Loại nghỉ phép `680px`); cấu hình responsive `repeat(auto-fit, minmax(270px, 1fr))` tự động xếp chồng trên mobile; tinh gọn kích thước `DateTimeInput` (`width: 46px, minWidth: 44px, gap: 3px`, icon Clock 13px) giúp 2 cột hiển thị thoáng đãng, sang trọng, không còn bị cắt xén.
+  - **Verification:** `cmd /c "npm run build"` (exit code 0, 4.44s), smoke test backend passed 100%.
+
 - **[2026-11-13] Khắc phục triệt để lỗi file .bat chớp tắt khi cài Client Agent (Agent Multitask)** (`24de7d2`)
   - **Root Cause:** Tất cả file `.bat` trong `tools/restaurant_support_agent/` đều dùng Unix LF (`\n`) thay vì Windows CRLF (`\r\n`), khiến `cmd.exe` seek sai byte-offset và quăng lỗi `The system cannot find the batch label specified`. Kết hợp với cấu trúc `for/do (goto :Label)` bên trong ngoặc đơn đa dòng → chớp tắt ngay lập tức.
   - **Done:** Viết lại `Install_Edge_Framework.bat` cấu trúc phẳng hoàn toàn (zero ngoặc đơn đa dòng), UAC safe qua `%BAT_TARGET%`, flat loop `goto :KiemTraServiceLoop`. Convert `Go_Cai_Dat_Dich_Vu.bat`, `Kiem_Tra_Trang_Thai.bat`, `fix_CO_SO_Fail_to_connect.bat` sang CRLF 100%. Cập nhật API `download-package` tự động chuẩn hóa CRLF cho mọi file text khi đóng gói ZIP. Đóng gói lại 2 ZIP tĩnh. 5/5 unit tests PASS.

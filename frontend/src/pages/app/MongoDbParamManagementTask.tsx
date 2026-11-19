@@ -29,7 +29,8 @@ import {
   StandardAppParamItem,
   BatchTargetRestaurantItem,
   BatchApplyParamsResponse,
-  ScheduledParamJobItem
+  ScheduledParamJobItem,
+  ScheduledParamJobCreateRequest
 } from '../../services/mongoService';
 import { checkIsAdmin } from '../../utils/authUtils';
 import {
@@ -169,6 +170,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
   const [newJobSelectedParamCodes, setNewJobSelectedParamCodes] = useState<string[]>([]);
   const [newJobParamSearch, setNewJobParamSearch] = useState<string>('');
   const [isCreatingJob, setIsCreatingJob] = useState<boolean>(false);
+  const [editingScheduledJobId, setEditingScheduledJobId] = useState<number | null>(null);
   const [runningJobId, setRunningJobId] = useState<number | null>(null);
   const [viewingJobDetail, setViewingJobDetail] = useState<ScheduledParamJobItem | null>(null);
 
@@ -867,29 +869,47 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
   // ══════════════════════════════════════════════════════════════
   // XỬ LÝ LỊCH HẸN GIỜ ĐẨY PARAM
   // ══════════════════════════════════════════════════════════════
-  const handleCreateScheduledJob = async () => {
+  // Reset toàn bộ form tạo/sửa lịch hẹn giờ về mặc định
+  const resetScheduledJobForm = () => {
+    setEditingScheduledJobId(null);
+    setNewJobTitle('');
+    setNewJobSelectedIps([]);
+    setNewJobSearchName('');
+    setNewJobPastedCodes('');
+    setNewJobSelectedParamCodes([]);
+    setNewJobCustomParams([]);
+    setShowAddCustomParamForm(false);
+    setEditingCustomParamIndex(null);
+  };
+
+  // Xây dựng payload chung cho Tạo mới / Cập nhật / Chạy ngay lịch hẹn giờ
+  const buildScheduledJobPayload = (
+    requireScheduleDateTime: boolean
+  ): ScheduledParamJobCreateRequest | null => {
     if (!newJobTitle.trim()) {
       showToast('Vui lòng nhập Tiêu đề cho tác vụ hẹn giờ!', 'error');
-      return;
+      return null;
     }
-    if (!newJobDate) {
-      showToast('Vui lòng chọn ngày chạy!', 'error');
-      return;
-    }
-    if (!newJobTime) {
-      showToast('Vui lòng chọn giờ chạy (HH:mm)!', 'error');
-      return;
+    if (requireScheduleDateTime) {
+      if (!newJobDate) {
+        showToast('Vui lòng chọn ngày chạy!', 'error');
+        return null;
+      }
+      if (!newJobTime) {
+        showToast('Vui lòng chọn giờ chạy (HH:mm)!', 'error');
+        return null;
+      }
     }
     if (newJobSelectedIps.length === 0 && newJobTargetScope !== 'CURRENT') {
       showToast('Vui lòng chọn ít nhất 1 nhà hàng mục tiêu!', 'error');
-      return;
+      return null;
     }
 
     let targets: BatchTargetRestaurantItem[] = [];
     if (newJobTargetScope === 'CURRENT') {
       if (!currentHost) {
         showToast('Chưa có thông tin host MongoDB nhà hàng hiện tại!', 'error');
-        return;
+        return null;
       }
       targets = [{
         name: getRestaurantDisplayName(selectedRestaurant, currentHost),
@@ -899,18 +919,31 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
         rk7_code: getRestaurantRk7Code(selectedRestaurant)
       }];
     } else {
-      if (newJobSelectedIps.length === 0) {
-        showToast('Vui lòng chọn ít nhất 1 nhà hàng mục tiêu!', 'error');
-        return;
-      }
+      const editingOriginTargets =
+        editingScheduledJobId !== null
+          ? scheduledJobsList.find((j) => j.id === editingScheduledJobId)?.target_restaurants || []
+          : [];
+
       targets = newJobSelectedIps.map((ip) => {
         const r = restaurants.find((item) => getRestaurantMongoIp(item) === ip);
+        if (r) {
+          return {
+            name: getRestaurantDisplayName(r, ip),
+            ip,
+            port: 27017,
+            sap_code: getRestaurantSapCode(r),
+            rk7_code: getRestaurantRk7Code(r)
+          };
+        }
+        const prevTarget = editingOriginTargets.find(
+          (t: any) => (t.ip || t.mongo_ip || '').trim() === ip
+        );
         return {
-          name: getRestaurantDisplayName(r, ip),
+          name: prevTarget?.name || ip,
           ip,
-          port: 27017,
-          sap_code: getRestaurantSapCode(r),
-          rk7_code: getRestaurantRk7Code(r)
+          port: Number(prevTarget?.port || 27017),
+          sap_code: prevTarget?.sap_code || '',
+          rk7_code: prevTarget?.rk7_code || ''
         };
       });
     }
@@ -919,14 +952,10 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
     let customParamsPayload: any[] | undefined = undefined;
 
     if (newJobParamMode === 'CUSTOM') {
-      const combinedCodes = Array.from(new Set([
-        ...newJobSelectedParamCodes,
-        ...newJobCustomParams.map((p) => p.paramCode)
-      ]));
-
+      const combinedCodes = Array.from(new Set(newJobSelectedParamCodes));
       if (combinedCodes.length === 0) {
         showToast('Vui lòng chọn hoặc tự thêm ít nhất 1 tham số để đưa vào phiên hẹn giờ!', 'error');
-        return;
+        return null;
       }
       selectedCodes = combinedCodes;
       customParamsPayload = combinedCodes.map((code) => {
@@ -962,54 +991,132 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
           note: cur?.note || ''
         };
       });
-    } else {
-      if (newJobCustomParams.length > 0) {
-        customParamsPayload = [
-          ...standardParamsList.map((std) => ({
-            paramCode: std.param_code,
-            paramName: std.param_name,
-            paramType: std.param_type,
-            status: std.status,
-            value: std.param_value || '',
-            note: std.note || ''
-          })),
-          ...newJobCustomParams.map((cp) => ({
-            paramCode: cp.paramCode,
-            paramName: cp.paramName || cp.paramCode,
-            paramType: cp.paramType,
-            status: cp.status,
-            value: cp.value,
-            note: cp.note || ''
-          }))
-        ];
-        const map = new Map();
-        customParamsPayload.forEach((p) => map.set(p.paramCode, p));
-        customParamsPayload = Array.from(map.values());
-      }
+    } else if (newJobCustomParams.length > 0) {
+      const map = new Map<string, any>();
+      standardParamsList.forEach((std) => {
+        map.set(std.param_code, {
+          paramCode: std.param_code,
+          paramName: std.param_name,
+          paramType: std.param_type,
+          status: std.status,
+          value: std.param_value || '',
+          note: std.note || ''
+        });
+      });
+      newJobCustomParams.forEach((cp) => {
+        map.set(cp.paramCode, {
+          paramCode: cp.paramCode,
+          paramName: cp.paramName || cp.paramCode,
+          paramType: cp.paramType,
+          status: cp.status,
+          value: cp.value,
+          note: cp.note || ''
+        });
+      });
+      customParamsPayload = Array.from(map.values());
     }
+
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    return {
+      job_title: newJobTitle.trim(),
+      run_date: requireScheduleDateTime ? newJobDate : todayStr,
+      run_time: requireScheduleDateTime ? newJobTime : nowTime,
+      mode: newJobMode,
+      target_restaurants: targets,
+      selected_param_codes: selectedCodes,
+      custom_params: customParamsPayload
+    };
+  };
+
+  // Nạp dữ liệu từ 1 lịch hẹn vào form (isEditMode=true: sửa lịch Đang chờ; false: Tái sử dụng tạo bản sao)
+  const populateFormFromScheduledJob = (job: ScheduledParamJobItem, isEditMode: boolean) => {
+    setScheduledActiveTab('CREATE');
+    setViewingJobDetail(null);
+    setShowAddCustomParamForm(false);
+    setEditingCustomParamIndex(null);
+    setNewJobSearchName('');
+    setNewJobPastedCodes('');
+
+    if (isEditMode) {
+      setEditingScheduledJobId(job.id);
+      setNewJobTitle(job.job_title);
+      setNewJobDate(job.run_date);
+      setNewJobTime(job.run_time);
+    } else {
+      setEditingScheduledJobId(null);
+      setNewJobTitle(`Bản sao: ${job.job_title}`);
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      now.setMinutes(now.getMinutes() + 15);
+      setNewJobDate(todayStr);
+      setNewJobTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
+    }
+
+    setNewJobMode((job.mode as any) || 'upsert');
+
+    if (job.target_restaurants && job.target_restaurants.length > 0) {
+      setNewJobTargetScope('MULTIPLE');
+      const ips = Array.from(
+        new Set(
+          job.target_restaurants
+            .map((r: any) => (r.ip || (r as any).mongo_ip || '').trim())
+            .filter(Boolean)
+        )
+      );
+      setNewJobSelectedIps(ips);
+    } else {
+      setNewJobTargetScope('MULTIPLE');
+      setNewJobSelectedIps([]);
+    }
+
+    if (job.params_payload && job.params_payload.length > 0) {
+      setNewJobParamMode('CUSTOM');
+      const customParams = job.params_payload.map((p: any) => ({
+        paramCode: p.paramCode,
+        paramName: p.paramName || p.paramCode,
+        paramType: (p.paramType as any) || 'FUNCTION',
+        status: p.status !== undefined ? Number(p.status) : 1,
+        value: p.value !== undefined ? String(p.value) : '1',
+        note: p.note || ''
+      }));
+      setNewJobCustomParams(customParams);
+      setNewJobSelectedParamCodes(customParams.map((cp) => cp.paramCode));
+    } else {
+      setNewJobParamMode('CUSTOM');
+      setNewJobCustomParams([]);
+      setNewJobSelectedParamCodes([]);
+    }
+  };
+
+  // Lưu lịch hẹn giờ (tạo mới hoặc cập nhật lịch chưa chạy)
+  const handleCreateScheduledJob = async () => {
+    const payload = buildScheduledJobPayload(true);
+    if (!payload) return;
 
     setIsCreatingJob(true);
     try {
-      await mongoService.createScheduledParamJob({
-        job_title: newJobTitle.trim(),
-        run_date: newJobDate,
-        run_time: newJobTime,
-        mode: newJobMode,
-        target_restaurants: targets,
-        selected_param_codes: selectedCodes,
-        custom_params: customParamsPayload
-      });
-      showToast(`Đã tạo phiên lịch hẹn giờ '${newJobTitle}' chạy vào ${newJobDate} ${newJobTime} thành công!`, 'success');
+      if (editingScheduledJobId !== null) {
+        await mongoService.updateScheduledParamJob(editingScheduledJobId, payload);
+        showToast(
+          `Đã cập nhật lịch hẹn giờ #${editingScheduledJobId} '${payload.job_title}' (${payload.run_date} ${payload.run_time}) thành công!`,
+          'success'
+        );
+      } else {
+        await mongoService.createScheduledParamJob(payload);
+        showToast(
+          `Đã tạo phiên lịch hẹn giờ '${payload.job_title}' chạy vào ${payload.run_date} ${payload.run_time} thành công!`,
+          'success'
+        );
+      }
       setScheduledActiveTab('LIST');
-      setNewJobTitle('');
-      setNewJobSelectedIps([]);
-      setNewJobSelectedParamCodes([]);
-      setNewJobCustomParams([]);
-      setShowAddCustomParamForm(false);
-      setEditingCustomParamIndex(null);
+      resetScheduledJobForm();
       await loadScheduledJobs();
     } catch (err: any) {
-      showToast('Lỗi khi tạo lịch hẹn giờ: ' + (err.response?.data?.detail || err.message), 'error');
+      const actionLabel = editingScheduledJobId !== null ? 'cập nhật' : 'tạo';
+      showToast(`Lỗi khi ${actionLabel} lịch hẹn giờ: ` + (err.response?.data?.detail || err.message), 'error');
     } finally {
       setIsCreatingJob(false);
     }
@@ -1038,6 +1145,9 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
     if (!window.confirm(`Bạn có chắc muốn xóa lịch hẹn giờ #${jobId}?`)) return;
     try {
       await mongoService.deleteScheduledParamJob(jobId);
+      if (editingScheduledJobId === jobId) {
+        resetScheduledJobForm();
+      }
       showToast(`Đã xóa lịch hẹn giờ #${jobId}`, 'success');
       await loadScheduledJobs();
     } catch (err: any) {
@@ -1045,53 +1155,22 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
     }
   };
 
+  // Chỉnh sửa lịch hẹn giờ đang chờ (chưa chạy)
+  const handleEditScheduledJob = (job: ScheduledParamJobItem) => {
+    if (job.status !== 'PENDING') {
+      showToast('Chỉ có thể chỉnh sửa các lịch hẹn giờ chưa chạy (Đang chờ)!', 'error');
+      return;
+    }
+    populateFormFromScheduledJob(job, true);
+    showToast(
+      `Đang chỉnh sửa tác vụ #${job.id}. Bấm biểu tượng bút chì trên từng param hoặc thêm/bớt nhà hàng rồi nhấn "Lưu Thay Đổi".`,
+      'info'
+    );
+  };
+
   // Tái sử dụng cấu hình param & danh sách nhà hàng từ một tác vụ đã có
   const handleReuseScheduledJob = (job: ScheduledParamJobItem) => {
-    setScheduledActiveTab('CREATE');
-    setViewingJobDetail(null); // Đóng modal chi tiết nếu đang mở
-
-    // Tiêu đề gợi ý
-    setNewJobTitle(`Bản sao: ${job.job_title}`);
-    setNewJobMode((job.mode as any) || 'upsert');
-
-    // Thời gian gợi ý: hôm nay, sau thời điểm hiện tại 15 phút
-    const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-    const futureMinutes = now.getMinutes() + 15;
-    now.setMinutes(futureMinutes);
-    const hoursStr = String(now.getHours()).padStart(2, '0');
-    const minsStr = String(now.getMinutes()).padStart(2, '0');
-    setNewJobDate(todayStr);
-    setNewJobTime(`${hoursStr}:${minsStr}`);
-
-    // Nạp danh sách nhà hàng mục tiêu
-    if (job.target_restaurants && job.target_restaurants.length > 0) {
-      setNewJobTargetScope('MULTIPLE');
-      const ips = Array.from(
-        new Set(
-          job.target_restaurants
-            .map((r: any) => (r.ip || (r as any).mongo_ip || '').trim())
-            .filter(Boolean)
-        )
-      );
-      setNewJobSelectedIps(ips);
-    }
-
-    // Nạp danh sách tham số cấu hình
-    if (job.params_payload && job.params_payload.length > 0) {
-      setNewJobParamMode('CUSTOM');
-      const customParams = job.params_payload.map((p: any) => ({
-        paramCode: p.paramCode,
-        paramName: p.paramName || p.paramCode,
-        paramType: (p.paramType as any) || 'FUNCTION',
-        status: p.status !== undefined ? Number(p.status) : 1,
-        value: p.value !== undefined ? String(p.value) : '1',
-        note: p.note || ''
-      }));
-      setNewJobCustomParams(customParams);
-      setNewJobSelectedParamCodes(customParams.map((cp) => cp.paramCode));
-    }
-
+    populateFormFromScheduledJob(job, false);
     showToast(
       `Đã nạp lại cấu hình gồm ${job.params_payload?.length || 0} param và ${job.target_restaurants?.length || 0} nhà hàng từ tác vụ #${job.id}. Bạn có thể chỉnh sửa thêm bớt nhà hàng hoặc đổi tham số tùy ý!`,
       'success'
@@ -1100,147 +1179,35 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
 
   // Lưu tác vụ và kích hoạt đẩy param xuống các nhà hàng ngay lập tức
   const handleCreateAndRunImmediately = async () => {
-    if (!newJobTitle.trim()) {
-      showToast('Vui lòng nhập Tiêu đề cho tác vụ!', 'error');
-      return;
-    }
-    if (newJobSelectedIps.length === 0 && newJobTargetScope !== 'CURRENT') {
-      showToast('Vui lòng chọn ít nhất 1 nhà hàng mục tiêu!', 'error');
-      return;
-    }
+    const payload = buildScheduledJobPayload(false);
+    if (!payload) return;
 
-    let targets: BatchTargetRestaurantItem[] = [];
-    if (newJobTargetScope === 'CURRENT') {
-      if (!currentHost) {
-        showToast('Chưa có thông tin host MongoDB nhà hàng hiện tại!', 'error');
-        return;
-      }
-      targets = [{
-        name: getRestaurantDisplayName(selectedRestaurant, currentHost),
-        ip: currentHost,
-        port: 27017,
-        sap_code: getRestaurantSapCode(selectedRestaurant),
-        rk7_code: getRestaurantRk7Code(selectedRestaurant)
-      }];
-    } else {
-      targets = newJobSelectedIps.map((ip) => {
-        const r = restaurants.find((item) => getRestaurantMongoIp(item) === ip);
-        return {
-          name: getRestaurantDisplayName(r, ip),
-          ip,
-          port: 27017,
-          sap_code: getRestaurantSapCode(r),
-          rk7_code: getRestaurantRk7Code(r)
-        };
-      });
-    }
-
-    let selectedCodes: string[] | undefined = undefined;
-    let customParamsPayload: any[] | undefined = undefined;
-
-    if (newJobParamMode === 'CUSTOM') {
-      const combinedCodes = Array.from(new Set([
-        ...newJobSelectedParamCodes,
-        ...newJobCustomParams.map((p) => p.paramCode)
-      ]));
-
-      if (combinedCodes.length === 0) {
-        showToast('Vui lòng chọn hoặc tự thêm ít nhất 1 tham số để đẩy xuống nhà hàng!', 'error');
-        return;
-      }
-      selectedCodes = combinedCodes;
-      customParamsPayload = combinedCodes.map((code) => {
-        const customItem = newJobCustomParams.find((cp) => cp.paramCode === code);
-        if (customItem) {
-          return {
-            paramCode: customItem.paramCode,
-            paramName: customItem.paramName || customItem.paramCode,
-            paramType: customItem.paramType,
-            status: customItem.status,
-            value: customItem.value,
-            note: customItem.note || ''
-          };
-        }
-        const std = standardParamsList.find((s) => s.param_code === code);
-        if (std) {
-          return {
-            paramCode: std.param_code,
-            paramName: std.param_name,
-            paramType: std.param_type,
-            status: std.status,
-            value: std.param_value || '',
-            note: std.note || ''
-          };
-        }
-        const cur = paramsList.find((p) => p.paramCode === code);
-        return {
-          paramCode: code,
-          paramName: cur?.paramName || code,
-          paramType: cur?.paramType || 'FUNCTION',
-          status: cur?.status ?? 1,
-          value: String(cur?.value ?? ''),
-          note: cur?.note || ''
-        };
-      });
-    } else {
-      if (newJobCustomParams.length > 0) {
-        customParamsPayload = [
-          ...standardParamsList.map((std) => ({
-            paramCode: std.param_code,
-            paramName: std.param_name,
-            paramType: std.param_type,
-            status: std.status,
-            value: std.param_value || '',
-            note: std.note || ''
-          })),
-          ...newJobCustomParams.map((cp) => ({
-            paramCode: cp.paramCode,
-            paramName: cp.paramName || cp.paramCode,
-            paramType: cp.paramType,
-            status: cp.status,
-            value: cp.value,
-            note: cp.note || ''
-          }))
-        ];
-        const map = new Map();
-        customParamsPayload.forEach((p) => map.set(p.paramCode, p));
-        customParamsPayload = Array.from(map.values());
-      }
-    }
-
-    if (!window.confirm(`Bạn có chắc chắn muốn LƯU và KÍCH HOẠT ĐẨY NGAY LẬP TỨC tham số xuống ${targets.length} nhà hàng?`)) {
+    const targetCount = payload.target_restaurants.length;
+    if (!window.confirm(`Bạn có chắc chắn muốn LƯU và KÍCH HOẠT ĐẨY NGAY LẬP TỨC tham số xuống ${targetCount} nhà hàng?`)) {
       return;
     }
 
     setIsCreatingJob(true);
     try {
-      const now = new Date();
-      const todayStr = now.toISOString().slice(0, 10);
-      const hoursStr = String(now.getHours()).padStart(2, '0');
-      const minsStr = String(now.getMinutes()).padStart(2, '0');
+      let targetJob: ScheduledParamJobItem;
+      if (editingScheduledJobId !== null) {
+        targetJob = await mongoService.updateScheduledParamJob(editingScheduledJobId, payload);
+        showToast(`Đã cập nhật tác vụ #${targetJob.id}, đang kích hoạt thực thi ngay...`, 'info');
+      } else {
+        targetJob = await mongoService.createScheduledParamJob(payload);
+        showToast(`Đã tạo tác vụ #${targetJob.id}, đang kích hoạt thực thi ngay...`, 'info');
+      }
 
-      const createdJob = await mongoService.createScheduledParamJob({
-        job_title: newJobTitle.trim(),
-        run_date: todayStr,
-        run_time: `${hoursStr}:${minsStr}`,
-        mode: newJobMode,
-        target_restaurants: targets,
-        selected_param_codes: selectedCodes,
-        custom_params: customParamsPayload
-      });
-
-      showToast(`Đã tạo tác vụ #${createdJob.id}, đang kích hoạt thực thi ngay...`, 'info');
-
-      // Kích hoạt chạy ngay tác vụ vừa tạo
-      const updated = await mongoService.runScheduledParamJobNow(createdJob.id);
-      showToast(`Đã thực thi thành công tác vụ #${createdJob.id}: ${updated.success_count} thành công, ${updated.failed_count} thất bại!`, updated.failed_count === 0 ? 'success' : 'info');
+      const updated = await mongoService.runScheduledParamJobNow(targetJob.id);
+      showToast(`Đã thực thi thành công tác vụ #${targetJob.id}: ${updated.success_count} thành công, ${updated.failed_count} thất bại!`, updated.failed_count === 0 ? 'success' : 'info');
 
       await loadScheduledJobs();
-      if (batchSelectedIps.includes(currentHost) || targets.some((t) => t.ip === currentHost)) {
+      if (batchSelectedIps.includes(currentHost) || payload.target_restaurants.some((t) => t.ip === currentHost)) {
         await loadParams(currentHost);
       }
+      resetScheduledJobForm();
       setScheduledActiveTab('LIST');
-      setViewingJobDetail(updated); // Mở popup xem kết quả chi tiết ngay
+      setViewingJobDetail(updated);
     } catch (err: any) {
       showToast('Lỗi khi thực thi tác vụ: ' + (err.response?.data?.detail || err.message), 'error');
     } finally {
@@ -3295,7 +3262,12 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
               </button>
               <button
                 type="button"
-                onClick={() => setScheduledActiveTab('CREATE')}
+                onClick={() => {
+                  if (scheduledActiveTab === 'LIST' && editingScheduledJobId !== null) {
+                    resetScheduledJobForm();
+                  }
+                  setScheduledActiveTab('CREATE');
+                }}
                 style={{
                   padding: '8px 16px',
                   borderRadius: '6px',
@@ -3303,11 +3275,11 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                   cursor: 'pointer',
                   fontWeight: 700,
                   fontSize: '13px',
-                  backgroundColor: scheduledActiveTab === 'CREATE' ? '#0284C7' : 'var(--bg-secondary)',
+                  backgroundColor: scheduledActiveTab === 'CREATE' ? (editingScheduledJobId !== null ? '#D97706' : '#0284C7') : 'var(--bg-secondary)',
                   color: scheduledActiveTab === 'CREATE' ? '#FFFFFF' : 'var(--text-primary)'
                 }}
               >
-                ➕ Tạo Lịch Hẹn Giờ Mới
+                {editingScheduledJobId !== null ? `✏️ Chỉnh Sửa Lịch #${editingScheduledJobId}` : '➕ Tạo Lịch Hẹn Giờ Mới'}
               </button>
             </div>
 
@@ -3340,7 +3312,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                         <th style={{ padding: '8px 10px', textAlign: 'center', width: '90px' }}>Số Nhà Hàng</th>
                         <th style={{ padding: '8px 10px', textAlign: 'center', width: '120px' }}>Tham Số Đồng Bộ</th>
                         <th style={{ padding: '8px 10px', textAlign: 'center', width: '110px' }}>Trạng Thái</th>
-                        <th style={{ padding: '8px 10px', textAlign: 'center', width: '170px' }}>Thao Tác</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'center', width: '225px' }}>Thao Tác</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3444,32 +3416,57 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                               <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                                 <div style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
                                   {job.status === 'PENDING' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRunScheduledJobNow(job)}
-                                      disabled={isRunning}
-                                      title="Kích hoạt chạy ngay lập tức tác vụ này"
-                                      style={{
-                                        border: '1px solid #059669',
-                                        backgroundColor: '#ECFDF5',
-                                        color: '#065F46',
-                                        borderRadius: '4px',
-                                        padding: '3px 7px',
-                                        cursor: 'pointer',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '3px',
-                                        fontSize: '11px',
-                                        fontWeight: 600
-                                      }}
-                                    >
-                                      {isRunning ? (
-                                        <RefreshCw size={11} className="spin-animation" />
-                                      ) : (
-                                        <Play size={11} />
-                                      )}
-                                      <span>Chạy Ngay</span>
-                                    </button>
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRunScheduledJobNow(job)}
+                                        disabled={isRunning}
+                                        title="Kích hoạt chạy ngay lập tức tác vụ này"
+                                        style={{
+                                          border: '1px solid #059669',
+                                          backgroundColor: '#ECFDF5',
+                                          color: '#065F46',
+                                          borderRadius: '4px',
+                                          padding: '3px 7px',
+                                          cursor: 'pointer',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '3px',
+                                          fontSize: '11px',
+                                          fontWeight: 600
+                                        }}
+                                      >
+                                        {isRunning ? (
+                                          <RefreshCw size={11} className="spin-animation" />
+                                        ) : (
+                                          <Play size={11} />
+                                        )}
+                                        <span>Chạy Ngay</span>
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => handleEditScheduledJob(job)}
+                                        disabled={isRunning}
+                                        title="Chỉnh sửa thông tin, thời gian, tham số và danh sách nhà hàng của lịch chưa chạy"
+                                        style={{
+                                          border: '1px solid #F59E0B',
+                                          backgroundColor: '#FFFBEB',
+                                          color: '#B45309',
+                                          borderRadius: '4px',
+                                          padding: '3px 7px',
+                                          cursor: 'pointer',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '3px',
+                                          fontSize: '11px',
+                                          fontWeight: 600
+                                        }}
+                                      >
+                                        <Edit2 size={11} />
+                                        <span>Sửa</span>
+                                      </button>
+                                    </>
                                   )}
 
                                   {job.result_summary && (
@@ -3545,9 +3542,50 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
               </div>
             )}
 
-            {/* TAB 2: TẠO LỊCH HẸN GIỜ MỚI */}
+            {/* TAB 2: TẠO MỚI / CHỈNH SỬA LỊCH HẸN GIỜ */}
             {scheduledActiveTab === 'CREATE' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {editingScheduledJobId !== null && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      backgroundColor: '#FFFBEB',
+                      border: '1px solid #FDE68A',
+                      color: '#92400E',
+                      fontSize: '12.5px'
+                    }}
+                  >
+                    <span>
+                      ✏️ Đang chỉnh sửa <strong>Lịch Hẹn #{editingScheduledJobId}</strong> (chưa chạy). Bạn có thể sửa ngày/giờ, param (bấm biểu tượng bút chì trên từng param) và danh sách nhà hàng.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetScheduledJobForm();
+                        showToast('Đã chuyển về chế độ tạo lịch hẹn giờ mới.', 'info');
+                      }}
+                      style={{
+                        border: '1px solid #F59E0B',
+                        backgroundColor: '#FFFFFF',
+                        color: '#B45309',
+                        borderRadius: '4px',
+                        padding: '3px 8px',
+                        fontSize: '11.5px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      + Tạo Mới Khác
+                    </button>
+                  </div>
+                )}
+
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
@@ -4361,7 +4399,14 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center' }}>
-                  <Button variant="outline" onClick={() => setScheduledActiveTab('LIST')} disabled={isCreatingJob}>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      resetScheduledJobForm();
+                      setScheduledActiveTab('LIST');
+                    }}
+                    disabled={isCreatingJob}
+                  >
                     Hủy Bỏ
                   </Button>
                   <Button
@@ -4377,16 +4422,20 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                     }}
                     title="Lưu cấu hình và thực thi đẩy ngay lập tức xuống các nhà hàng đã chọn"
                   >
-                    ⚡ Đẩy Xuống Nhà Hàng Ngay
+                    {editingScheduledJobId !== null ? '⚡ Cập Nhật & Đẩy Ngay' : '⚡ Đẩy Xuống Nhà Hàng Ngay'}
                   </Button>
                   <Button
                     variant="primary"
                     onClick={handleCreateScheduledJob}
                     isLoading={isCreatingJob}
-                    leftIcon={<Clock size={14} />}
-                    style={{ backgroundColor: '#0284C7', borderColor: '#0284C7', fontWeight: 700 }}
+                    leftIcon={editingScheduledJobId !== null ? <Edit2 size={14} /> : <Clock size={14} />}
+                    style={{
+                      backgroundColor: editingScheduledJobId !== null ? '#D97706' : '#0284C7',
+                      borderColor: editingScheduledJobId !== null ? '#D97706' : '#0284C7',
+                      fontWeight: 700
+                    }}
                   >
-                    💾 Lưu Lịch Hẹn Giờ
+                    {editingScheduledJobId !== null ? `💾 Lưu Thay Đổi (#${editingScheduledJobId})` : '💾 Lưu Lịch Hẹn Giờ'}
                   </Button>
                 </div>
               </div>
