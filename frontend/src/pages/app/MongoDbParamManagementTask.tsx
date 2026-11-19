@@ -166,6 +166,8 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
   const [newJobPastedCodes, setNewJobPastedCodes] = useState<string>('');
   const [newJobSearchName, setNewJobSearchName] = useState<string>('');
   const [newJobSelectedIps, setNewJobSelectedIps] = useState<string[]>([]);
+  // Snapshot danh sách IP đã chọn từ lịch hẹn khi nhân bản/sửa để ghim lên đầu danh sách mà không bị nhảy vị trí khi bỏ tick
+  const [newJobPriorityIps, setNewJobPriorityIps] = useState<string[]>([]);
   const [newJobParamMode, setNewJobParamMode] = useState<'ALL' | 'CUSTOM'>('ALL');
   const [newJobSelectedParamCodes, setNewJobSelectedParamCodes] = useState<string[]>([]);
   const [newJobParamSearch, setNewJobParamSearch] = useState<string>('');
@@ -722,8 +724,22 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
   }, [restaurants, batchPastedCodes, batchSearchName]);
 
   const matchedNewJobRestaurants = useMemo(() => {
-    return getMatchedRestaurants(newJobPastedCodes, newJobSearchName);
-  }, [restaurants, newJobPastedCodes, newJobSearchName]);
+    const list = getMatchedRestaurants(newJobPastedCodes, newJobSearchName);
+    if (newJobPriorityIps.length === 0) return list;
+    // Ưu tiên đưa các nhà hàng đã chọn trước đó (khi nhân bản / chỉnh sửa lịch hẹn) lên đầu danh sách để dễ kiểm tra
+    const prioritySet = new Set(newJobPriorityIps);
+    const prioritized: RestaurantItem[] = [];
+    const others: RestaurantItem[] = [];
+    for (const r of list) {
+      const ip = (r.ip || (r as any).mongo_ip || '').trim();
+      if (ip && prioritySet.has(ip)) {
+        prioritized.push(r);
+      } else {
+        others.push(r);
+      }
+    }
+    return [...prioritized, ...others];
+  }, [restaurants, newJobPastedCodes, newJobSearchName, newJobPriorityIps]);
 
   // Lấy IP MongoDB chuẩn (đã trim) từ bản ghi nhà hàng
   const getRestaurantMongoIp = (r?: RestaurantItem | null): string => {
@@ -874,6 +890,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
     setEditingScheduledJobId(null);
     setNewJobTitle('');
     setNewJobSelectedIps([]);
+    setNewJobPriorityIps([]);
     setNewJobSearchName('');
     setNewJobPastedCodes('');
     setNewJobSelectedParamCodes([]);
@@ -1067,9 +1084,11 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
         )
       );
       setNewJobSelectedIps(ips);
+      setNewJobPriorityIps(ips);
     } else {
       setNewJobTargetScope('MULTIPLE');
       setNewJobSelectedIps([]);
+      setNewJobPriorityIps([]);
     }
 
     if (job.params_payload && job.params_payload.length > 0) {
@@ -4353,6 +4372,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                             {matchedNewJobRestaurants.map((r, idx) => {
                               const ip = getRestaurantMongoIp(r);
                               const isChecked = newJobSelectedIps.includes(ip);
+                              const isPrioritized = Boolean(ip && newJobPriorityIps.includes(ip));
                               const sap = getRestaurantSapCode(r);
                               const rk7 = getRestaurantRk7Code(r);
                               const name = getRestaurantDisplayName(r, ip);
@@ -4367,7 +4387,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                                     gap: '6px',
                                     padding: '4px 6px',
                                     borderRadius: '4px',
-                                    border: isChecked ? '1px solid #0284C7' : '1px solid transparent',
+                                    border: isChecked ? '1px solid #0284C7' : (isPrioritized ? '1px dashed #93C5FD' : '1px solid transparent'),
                                     backgroundColor: isChecked ? '#F0F9FF' : 'transparent',
                                     cursor: 'pointer',
                                     fontSize: '11.5px'
@@ -4379,8 +4399,15 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                                     onChange={() => toggleSingleSelectedIp(setNewJobSelectedIps, ip)}
                                   />
                                   <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                      {name}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <span style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>
+                                        {name}
+                                      </span>
+                                      {isPrioritized && (
+                                        <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#0369A1', backgroundColor: '#E0F2FE', padding: '1px 4px', borderRadius: '4px', flexShrink: 0 }}>
+                                          Đã chọn trước
+                                        </span>
+                                      )}
                                     </div>
                                     <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
                                       {sap && <span>SAP: {sap} • </span>}
