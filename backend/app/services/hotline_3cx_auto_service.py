@@ -557,6 +557,30 @@ def delete_holiday(db: Session, holiday_id: int) -> bool:
     return True
 
 
+def normalize_backup_hhmm(raw: Optional[str]) -> Optional[str]:
+    """
+    Chuẩn hóa và kiểm tra giờ hẹn cập nhật Manual Backup theo định dạng 24h HH:mm.
+    Trả về None nếu người dùng để trống; ném ValueError nếu sai định dạng.
+    """
+    if raw is None:
+        return None
+    cleaned = str(raw).strip()
+    if not cleaned:
+        return None
+    m = re.match(r"^(\d{1,2}):(\d{2})$", cleaned)
+    if not m:
+        raise ValueError(
+            f"Giờ hẹn không hợp lệ: '{cleaned}'. Vui lòng nhập theo định dạng 24h HH:mm (VD: 11:30 hoặc 20:00)."
+        )
+    hour_val = int(m.group(1))
+    min_val = int(m.group(2))
+    if not (0 <= hour_val <= 23 and 0 <= min_val <= 59):
+        raise ValueError(
+            f"Giờ hẹn không hợp lệ: '{cleaned}'. Giờ phải từ 00:00 đến 23:59 (HH:mm)."
+        )
+    return f"{hour_val:02d}:{min_val:02d}"
+
+
 def get_schedules_range(db: Session, start_date: date, end_date: date) -> List[ScheduleDayItem]:
     """
     Lấy lưới lịch trực trong khoảng ngày [start_date, end_date] (bao gồm cả 2 đầu mút).
@@ -596,6 +620,10 @@ def get_schedules_range(db: Session, start_date: date, end_date: date) -> List[S
                 evening_lines=_parse_json_lines(r.evening_lines_json),
                 weekend_lines=_parse_json_lines(r.weekend_lines_json),
                 weekend_evening_override=_parse_json_lines(r.weekend_evening_override_json),
+                morning_backup_time=getattr(r, "morning_backup_time", None),
+                morning_backup_lines=_parse_json_lines(getattr(r, "morning_backup_lines_json", "[]")),
+                evening_backup_time=getattr(r, "evening_backup_time", None),
+                evening_backup_lines=_parse_json_lines(getattr(r, "evening_backup_lines_json", "[]")),
                 note=r.note,
                 weekday_label=wk_label,
                 effective_mode=eff_mode,
@@ -615,6 +643,10 @@ def get_schedules_range(db: Session, start_date: date, end_date: date) -> List[S
                 evening_lines=[],
                 weekend_lines=[],
                 weekend_evening_override=[],
+                morning_backup_time=None,
+                morning_backup_lines=[],
+                evening_backup_time=None,
+                evening_backup_lines=[],
                 note=None,
                 weekday_label=wk_label,
                 effective_mode=eff_mode,
@@ -654,6 +686,10 @@ def upsert_schedules(
         evening_json = json.dumps(item.evening_lines, ensure_ascii=False)
         weekend_json = json.dumps(item.weekend_lines, ensure_ascii=False)
         override_json = json.dumps(item.weekend_evening_override, ensure_ascii=False)
+        mb_time = normalize_backup_hhmm(item.morning_backup_time)
+        mb_json = json.dumps(item.morning_backup_lines or [], ensure_ascii=False)
+        eb_time = normalize_backup_hhmm(item.evening_backup_time)
+        eb_json = json.dumps(item.evening_backup_lines or [], ensure_ascii=False)
         now_ts = datetime.now()
 
         if existing:
@@ -662,6 +698,10 @@ def upsert_schedules(
             existing.evening_lines_json = evening_json
             existing.weekend_lines_json = weekend_json
             existing.weekend_evening_override_json = override_json
+            existing.morning_backup_time = mb_time
+            existing.morning_backup_lines_json = mb_json
+            existing.evening_backup_time = eb_time
+            existing.evening_backup_lines_json = eb_json
             existing.note = item.note
             existing.updated_by = updated_by
             existing.updated_at = now_ts
@@ -674,6 +714,10 @@ def upsert_schedules(
                 evening_lines_json=evening_json,
                 weekend_lines_json=weekend_json,
                 weekend_evening_override_json=override_json,
+                morning_backup_time=mb_time,
+                morning_backup_lines_json=mb_json,
+                evening_backup_time=eb_time,
+                evening_backup_lines_json=eb_json,
                 note=item.note,
                 updated_by=updated_by,
                 updated_at=now_ts,
@@ -912,9 +956,9 @@ def resolve_shift_plan(
     4. Bỏ qua đồng bộ (should_skip=True) nếu không có nhân sự nào được phân.
     """
     shift_code_upper = shift_code.upper()
-    if shift_code_upper not in ("MORNING", "EVENING"):
+    if shift_code_upper not in ("MORNING", "EVENING", "MORNING_BACKUP", "EVENING_BACKUP"):
         raise ValueError(
-            f"shift_code không hợp lệ: '{shift_code}'. Chỉ chấp nhận 'MORNING' hoặc 'EVENING'."
+            f"shift_code không hợp lệ: '{shift_code}'. Chỉ chấp nhận MORNING, EVENING, MORNING_BACKUP hoặc EVENING_BACKUP."
         )
 
     # 1. Xác định effective_mode (có xét Ngày Lễ Riêng nếu có)
@@ -929,13 +973,18 @@ def resolve_shift_plan(
         evening_raw = _parse_json_lines(schedule_row.evening_lines_json)
         weekend_raw = _parse_json_lines(schedule_row.weekend_lines_json)
         override_raw = _parse_json_lines(schedule_row.weekend_evening_override_json)
+        morning_backup_raw = _parse_json_lines(getattr(schedule_row, "morning_backup_lines_json", "[]"))
+        evening_backup_raw = _parse_json_lines(getattr(schedule_row, "evening_backup_lines_json", "[]"))
     else:
         morning_raw, evening_raw, weekend_raw, override_raw = [], [], [], []
+        morning_backup_raw, evening_backup_raw = [], []
 
     morning_lines = _clean_lines(morning_raw, active_lines)
     evening_lines = _clean_lines(evening_raw, active_lines)
     weekend_lines = _clean_lines(weekend_raw, active_lines)
     weekend_override = _clean_lines(override_raw, active_lines)
+    morning_backup_lines = _clean_lines(morning_backup_raw, active_lines)
+    evening_backup_lines = _clean_lines(evening_backup_raw, active_lines)
 
     day_queue = (config.day_queue_name or "IT HCM App Day") if config else "IT HCM App Day"
     night_queue = (config.night_queue_name or "IT HCM App Night") if config else "IT HCM App Night"
@@ -944,8 +993,30 @@ def resolve_shift_plan(
     queue_name = day_queue
     use_skill_group = False
 
-    # 3. Phân luồng theo effective_mode và ca trực
-    if effective_mode == "WEEKDAY":
+    # 3. Phân luồng theo ca Backup Manual hoặc ca thường / cuối tuần
+    if shift_code_upper == "MORNING_BACKUP":
+        if effective_mode == "WEEKDAY":
+            queue_name = day_queue
+            use_skill_group = False
+            entries = [
+                ResolvedUserAssignment(ext_line=line, skill_group=None)
+                for line in morning_backup_lines
+            ]
+        else:
+            queue_name = night_queue
+            use_skill_group = True
+            entries = [
+                ResolvedUserAssignment(ext_line=line, skill_group=str(idx + 1))
+                for idx, line in enumerate(morning_backup_lines)
+            ]
+    elif shift_code_upper == "EVENING_BACKUP":
+        queue_name = night_queue
+        use_skill_group = True
+        entries = [
+            ResolvedUserAssignment(ext_line=line, skill_group=str(idx + 1))
+            for idx, line in enumerate(evening_backup_lines)
+        ]
+    elif effective_mode == "WEEKDAY":
         if shift_code_upper == "MORNING":
             queue_name = day_queue
             use_skill_group = False
@@ -1329,9 +1400,25 @@ async def _playwright_sync_3cx_queue(
                 await user_input.fill(assignment.ext_line)
                 await asyncio.sleep(0.6)
 
-                # Chọn kết quả tìm kiếm dung ma line ben trong ng-dropdown-panel
-                line_pattern = re.compile(rf"^\s*{re.escape(assignment.ext_line)}\b")
-                opt = page.locator("ng-dropdown-panel .ng-option").filter(has_text=line_pattern).first
+                # Chọn kết quả tìm kiếm đúng mã line bên trong ng-dropdown-panel:
+                # Ưu tiên [data-qa='peer-number'] (tránh lỗi \b khi 3CX ghép textContent "8778Duy..." không khoảng trắng)
+                await page.locator("ng-dropdown-panel .ng-option").first.wait_for(
+                    state="visible", timeout=10000
+                )
+                ext_val = assignment.ext_line
+                peer_exact = re.compile(r"^\s*" + re.escape(ext_val) + r"\s*$")
+                opt = (
+                    page.locator("ng-dropdown-panel .ng-option")
+                    .filter(has=page.locator("[data-qa='peer-number']", has_text=peer_exact))
+                    .first
+                )
+                if await opt.count() == 0:
+                    fallback_pat = re.compile(r"^\s*" + re.escape(ext_val) + r"(?:\D|$)")
+                    opt = (
+                        page.locator("ng-dropdown-panel .ng-option")
+                        .filter(has_text=fallback_pat)
+                        .first
+                    )
                 await opt.wait_for(state="visible", timeout=10000)
                 await opt.click()
                 await asyncio.sleep(0.3)
@@ -1355,12 +1442,16 @@ async def _playwright_sync_3cx_queue(
                     f"Số lượng nhân sự phân bổ không khớp: mong đợi {len(plan.entries)}, thực tế {final_rows_count}"
                 )
 
-            # 6.3. Nhấn Lưu cấu hình
+            # 6.3. Nhấn Lưu cấu hình (chỉ click khi nút Save không bị disabled)
             logger.info("[3CX_SYNC] Đang lưu cấu hình hàng đợi 3CX...")
             save_btn = page.locator("button#btnSave, button[data-qa='save']").first
-            await save_btn.click()
-            await _safe_wait_network_idle_3cx(page, 15000)
-            await asyncio.sleep(2)
+            await asyncio.sleep(0.5)
+            if await save_btn.is_enabled():
+                await save_btn.click()
+                await _safe_wait_network_idle_3cx(page, 15000)
+                await asyncio.sleep(2)
+            else:
+                logger.info("[3CX_SYNC] Nút Save đang tắt (danh sách giống hiện tại), bỏ qua click Save")
 
             # Chụp ảnh xác nhận kết quả
             if screenshot_file_path:
@@ -1701,6 +1792,81 @@ def report_relay_task_result(
     return task, saved_url_path
 
 
+def get_due_manual_backup_shifts(
+    db: Session, target_date: date, current_hhmm: str
+) -> List[Tuple[str, str]]:
+    """
+    Trả về danh sách các mốc hẹn giờ Backup Manual đến hạn lúc current_hhmm trong ngày target_date:
+    - ('MORNING_BACKUP', hhmm) nếu có morning_backup_time == current_hhmm và có nhân sự backup sáng.
+    - ('EVENING_BACKUP', hhmm) nếu có evening_backup_time == current_hhmm và có nhân sự backup tối.
+    """
+    row = (
+        db.query(Hotline3cxSchedule)
+        .filter(Hotline3cxSchedule.duty_date == target_date)
+        .first()
+    )
+    if not row:
+        return []
+
+    due: List[Tuple[str, str]] = []
+    clean_now = (current_hhmm or "").strip()
+
+    mb_time = (getattr(row, "morning_backup_time", None) or "").strip()
+    mb_lines = _clean_lines(_parse_json_lines(getattr(row, "morning_backup_lines_json", "[]")))
+    if mb_time and mb_time == clean_now and len(mb_lines) > 0:
+        due.append(("MORNING_BACKUP", mb_time))
+
+    eb_time = (getattr(row, "evening_backup_time", None) or "").strip()
+    eb_lines = _clean_lines(_parse_json_lines(getattr(row, "evening_backup_lines_json", "[]")))
+    if eb_time and eb_time == clean_now and len(eb_lines) > 0:
+        due.append(("EVENING_BACKUP", eb_time))
+
+    return due
+
+
+def has_backup_sync_for_slot(
+    db: Session, duty_date: date, shift_code: str, scheduled_hhmm: str
+) -> bool:
+    """
+    Kiểm tra xem mốc hẹn Backup Manual (duty_date, shift_code, scheduled_hhmm) đã chạy thành công
+    hoặc đang chờ/chạy qua Relay Worker hay chưa (chống trùng lặp trong cùng phút hẹn,
+    nhưng vẫn cho chạy nếu người dùng đổi sang giờ hẹn khác trong cùng ngày).
+    """
+    slot_tag = f"({scheduled_hhmm})"
+    shift_up = shift_code.upper()
+
+    logs = (
+        db.query(Hotline3cxSyncLog)
+        .filter(
+            Hotline3cxSyncLog.duty_date == duty_date,
+            Hotline3cxSyncLog.shift_code == shift_up,
+            Hotline3cxSyncLog.status.in_(["SUCCESS", "PENDING", "RUNNING"]),
+            # Dung == False thay vi .is_(False) vi MSSQL T-SQL khong ho tro 'IS 0' cho cot BIT
+            Hotline3cxSyncLog.is_dry_run == False,  # noqa: E712
+        )
+        .all()
+    )
+    for item in logs:
+        if slot_tag in (item.triggered_by or ""):
+            return True
+
+    tasks = (
+        db.query(Hotline3cxRelayTask)
+        .filter(
+            Hotline3cxRelayTask.duty_date == duty_date,
+            Hotline3cxRelayTask.shift_code == shift_up,
+            Hotline3cxRelayTask.status.in_(["PENDING", "RUNNING", "SUCCESS"]),
+            Hotline3cxRelayTask.is_dry_run == False,  # noqa: E712
+        )
+        .all()
+    )
+    for task in tasks:
+        if slot_tag in (task.triggered_by or ""):
+            return True
+
+    return False
+
+
 def has_successful_sync(db: Session, duty_date: date, shift_code: str) -> bool:
     """
     Kiểm tra xem ca trực ngày duty_date đã có bản ghi đồng bộ THÀNH CÔNG THỰC TẾ
@@ -1757,9 +1923,9 @@ async def run_shift_sync(
     else:
         eff_shift = shift_code.upper()
 
-    if eff_shift not in ("MORNING", "EVENING"):
+    if eff_shift not in ("MORNING", "EVENING", "MORNING_BACKUP", "EVENING_BACKUP"):
         raise ValueError(
-            f"Ca trực không hợp lệ: '{shift_code}'. Chỉ chấp nhận 'MORNING' hoặc 'EVENING'."
+            f"Ca trực không hợp lệ: '{shift_code}'. Chỉ chấp nhận MORNING, EVENING, MORNING_BACKUP hoặc EVENING_BACKUP."
         )
 
     # Đọc bản ghi lịch trực, ngày lễ riêng và cấu hình singleton

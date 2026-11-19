@@ -247,7 +247,10 @@ def save_schedules_bulk(
         return []
 
     username = getattr(current_user, "username", "Admin")
-    upsert_schedules(db, payload.days, updated_by=username)
+    try:
+        upsert_schedules(db, payload.days, updated_by=username)
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
 
     min_date = min(d.duty_date for d in payload.days)
     max_date = max(d.duty_date for d in payload.days)

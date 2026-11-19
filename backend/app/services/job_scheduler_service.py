@@ -2513,6 +2513,67 @@ async def job_schedule_worker(stop_event: asyncio.Event):
             current_time = now.strftime("%H:%M")
             current_dow = now.isoweekday()  # 1: Monday ... 7: Sunday
 
+            # Quét lịch hẹn giờ Backup Manual theo ngày (chạy độc lập ngay cả khi lịch chung đang Tạm Dừng)
+            try:
+                today_date = now.date()
+
+                def _find_due_3cx_backups():
+                    from app.core.database import SessionLocal
+                    from app.services.hotline_3cx_auto_service import (
+                        get_due_manual_backup_shifts,
+                        has_backup_sync_for_slot,
+                    )
+
+                    with SessionLocal() as _bdb:
+                        due_list = get_due_manual_backup_shifts(_bdb, today_date, current_time)
+                        return [
+                            (sc, hhmm)
+                            for sc, hhmm in due_list
+                            if not has_backup_sync_for_slot(_bdb, today_date, sc, hhmm)
+                        ]
+
+                due_backups = await asyncio.to_thread(_find_due_3cx_backups)
+                for b_shift, b_hhmm in due_backups:
+                    b_key = f"3cx_backup@{today_date.isoformat()}@{b_shift}@{b_hhmm}"
+                    b_last = last_executed.get(b_key)
+                    if b_last and (now - b_last).total_seconds() < 65:
+                        continue
+                    last_executed[b_key] = now
+                    sched_logger.info(
+                        "[3CX_BACKUP_AUTO] Đến giờ hẹn Backup Manual %s lúc %s ngày %s — bắt đầu đồng bộ...",
+                        b_shift,
+                        b_hhmm,
+                        today_date.strftime("%d-%m-%Y"),
+                    )
+
+                    async def _run_backup_task(t_date=today_date, t_shift=b_shift, t_hhmm=b_hhmm):
+                        from app.core.database import SessionLocal
+                        from app.services.hotline_3cx_auto_service import run_shift_sync
+
+                        _db = SessionLocal()
+                        try:
+                            await run_shift_sync(
+                                _db,
+                                duty_date=t_date,
+                                shift_code=t_shift,
+                                triggered_by=f"Hẹn giờ Backup ({t_hhmm})",
+                                dry_run=False,
+                                allow_retry=True,
+                            )
+                        except Exception as _be:
+                            sched_logger.error(
+                                "[3CX_BACKUP_AUTO] Lỗi chạy Backup Manual %s (%s): %s",
+                                t_shift,
+                                t_hhmm,
+                                _be,
+                            )
+                        finally:
+                            _db.close()
+
+                    asyncio.create_task(_run_backup_task())
+            except Exception as _bk_scan_err:
+                sched_logger.warning("Lỗi kiểm tra lịch hẹn Backup Manual 3CX: %s", _bk_scan_err)
+
             all_jobs = list(job_scheduler_service._jobs.values())
             for job in all_jobs:
                 if not job.get("is_enabled", True):

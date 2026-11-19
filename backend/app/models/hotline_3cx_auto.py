@@ -55,6 +55,14 @@ class Hotline3cxSchedule(Base):
     weekend_evening_override_json: Mapped[str] = mapped_column(
         UnicodeText, default="[]", nullable=False
     )
+    morning_backup_time: Mapped[Optional[str]] = mapped_column(Unicode(10), nullable=True)
+    morning_backup_lines_json: Mapped[str] = mapped_column(
+        UnicodeText, default="[]", nullable=False
+    )
+    evening_backup_time: Mapped[Optional[str]] = mapped_column(Unicode(10), nullable=True)
+    evening_backup_lines_json: Mapped[str] = mapped_column(
+        UnicodeText, default="[]", nullable=False
+    )
     note: Mapped[Optional[str]] = mapped_column(Unicode(500), nullable=True)
     updated_by: Mapped[Optional[str]] = mapped_column(Unicode(100), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(

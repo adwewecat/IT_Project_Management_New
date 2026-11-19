@@ -121,6 +121,66 @@ export const ApplyNowConfirmModal: React.FC<ApplyNowConfirmModalProps> = ({
                   Night Queue: Chính (1) / Phụ (2)
                 </div>
               </button>
+
+              <button
+                type="button"
+                onClick={() => onApplyShiftChange('MORNING_BACKUP')}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  gap: '4px',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border:
+                    applyShift === 'MORNING_BACKUP'
+                      ? '2px solid #0f766e'
+                      : '1px solid var(--border-color)',
+                  backgroundColor:
+                    applyShift === 'MORNING_BACKUP'
+                      ? 'rgba(13, 148, 136, 0.08)'
+                      : 'var(--bg-card)',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f766e' }}>
+                  Ca Sáng Backup (Manual)
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  T2–T6: Day 0006 | T7–CN/Lễ: Night 0007
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onApplyShiftChange('EVENING_BACKUP')}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  gap: '4px',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border:
+                    applyShift === 'EVENING_BACKUP'
+                      ? '2px solid #b45309'
+                      : '1px solid var(--border-color)',
+                  backgroundColor:
+                    applyShift === 'EVENING_BACKUP'
+                      ? 'rgba(217, 119, 6, 0.1)'
+                      : 'var(--bg-card)',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#b45309' }}>
+                  Ca Tối Backup (Manual)
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  Night Queue: 1 (Chính) / 2 (Phụ)
+                </div>
+              </button>
             </div>
           </div>
         </div>

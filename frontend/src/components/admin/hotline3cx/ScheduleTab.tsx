@@ -1,12 +1,11 @@
 import React from 'react';
 import {
   AlertCircle,
-  Calendar,
   CalendarHeart,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Copy,
+  Clock,
   Play,
   RefreshCw,
   Save,
@@ -19,15 +18,17 @@ import {
   ShiftMode,
 } from '../../../types/hotline3cxAuto';
 import { DateInput } from '../../ui/DateInput';
+import { TopScrollTable } from '../../ui/TopScrollTable';
 import { MemberSelectDropdown } from './MemberSelectDropdown';
 import { addDaysToIso, getMondayOfIso } from './hotline3cxHelpers';
 import { formatDateDDMMYYYY, getTodayIsoDate } from '../../../utils/dateFormat';
+
+const HHMM_REGEX = /^([01]?\d|2[0-3]):([0-5]\d)$/;
 
 export interface ScheduleTabProps {
   schedules: Hotline3cxScheduleDay[];
   loadingSchedules: boolean;
   savingSchedules: boolean;
-  cloningWeek: boolean;
   executingDryRun: boolean;
   hasUnsavedChanges: boolean;
   currentMonday: string;
@@ -36,8 +37,6 @@ export interface ScheduleTabProps {
   onNavigateWeek: (offsetDays: number) => void;
   onJumpToWeek: (isoVal: string) => void;
   onGoToThisWeek: () => void;
-  onClonePreviousWeek: () => void;
-  onOpenApplyMonthModal: () => void;
   holidaysCount: number;
   onOpenHolidayManagerModal: () => void;
   onQuickToggleHoliday: (day: Hotline3cxScheduleDay) => void;
@@ -54,7 +53,6 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
   schedules,
   loadingSchedules,
   savingSchedules,
-  cloningWeek,
   executingDryRun,
   hasUnsavedChanges,
   currentMonday,
@@ -63,8 +61,6 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
   onNavigateWeek,
   onJumpToWeek,
   onGoToThisWeek,
-  onClonePreviousWeek,
-  onOpenApplyMonthModal,
   holidaysCount,
   onOpenHolidayManagerModal,
   onQuickToggleHoliday,
@@ -178,58 +174,8 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
           </span>
         </div>
 
-        {/* Các nút sao chép & thao tác lịch */}
+        {/* Các nút thao tác lịch */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={onClonePreviousWeek}
-            disabled={cloningWeek}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '6px 12px',
-              fontSize: '12px',
-              fontWeight: 600,
-              borderRadius: '6px',
-              border: '1px solid #3b82f6',
-              backgroundColor: 'rgba(59, 130, 246, 0.08)',
-              color: '#2563eb',
-              cursor: cloningWeek ? 'not-allowed' : 'pointer',
-              opacity: cloningWeek ? 0.7 : 1,
-            }}
-            title="Sao chép toàn bộ lịch tuần trước sang tuần này"
-          >
-            {cloningWeek ? (
-              <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} />
-            ) : (
-              <Copy size={13} />
-            )}
-            <span>Sao Chép Tuần Trước → Tuần Này</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onOpenApplyMonthModal}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '6px 12px',
-              fontSize: '12px',
-              fontWeight: 600,
-              borderRadius: '6px',
-              border: '1px solid #10b981',
-              backgroundColor: 'rgba(16, 185, 129, 0.08)',
-              color: '#059669',
-              cursor: 'pointer',
-            }}
-            title="Áp dụng mẫu 7 ngày của tuần này cho toàn bộ các ngày trong tháng"
-          >
-            <Calendar size={13} />
-            <span>Áp Dụng Mẫu Cho Cả Tháng</span>
-          </button>
-
           <button
             type="button"
             onClick={onOpenHolidayManagerModal}
@@ -281,14 +227,13 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
         </div>
       </div>
 
-      {/* Lưới 7 ngày (Thứ 2 -> Chủ Nhật) */}
+      {/* Lưới 7 ngày (Thứ 2 -> Chủ Nhật) có thanh cuộn ngang trên đỉnh (TopScrollTable) */}
       <div
         style={{
-          maxHeight: '52vh',
-          overflowY: 'auto',
           border: '1px solid var(--border-color)',
           borderRadius: '8px',
           backgroundColor: 'var(--bg-card)',
+          overflow: 'hidden',
         }}
       >
         {loadingSchedules ? (
@@ -307,50 +252,85 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
             <span>Đang tải lịch trực tuần...</span>
           </div>
         ) : (
-          <table
-            style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-              fontSize: '12px',
-              textAlign: 'left',
-            }}
-          >
-            <thead>
-              <tr
-                style={{
-                  position: 'sticky',
-                  top: 0,
-                  zIndex: 10,
-                  backgroundColor: 'var(--bg-secondary)',
-                  borderBottom: '2px solid var(--border-color)',
-                }}
-              >
-                <th style={{ padding: '10px 12px', width: '130px', fontWeight: 700 }}>
-                  Thứ & Ngày
-                </th>
-                <th style={{ padding: '10px 12px', width: '135px', fontWeight: 700 }}>
-                  Chế Độ Ngày
-                </th>
-                <th style={{ padding: '10px 12px', width: '250px', fontWeight: 700 }}>
-                  <div>Ca Sáng 06:00 (Day 0006)</div>
-                  <div style={{ fontSize: '10.5px', fontWeight: 400, color: 'var(--text-secondary)' }}>
-                    T2–T6 Song Song (Skill 1)
-                  </div>
-                </th>
-                <th style={{ padding: '10px 12px', width: '230px', fontWeight: 700 }}>
-                  <div>Ca Tối 16:29 (Night 0007)</div>
-                  <div style={{ fontSize: '10.5px', fontWeight: 400, color: 'var(--text-secondary)' }}>
-                    T2–T6: 1 (Chính) / 2 (Phụ)
-                  </div>
-                </th>
-                <th style={{ padding: '10px 12px', fontWeight: 700 }}>
-                  <div>T7–CN / Lễ (Night 0007: 06:00 → 16:29 Tự Đảo)</div>
-                  <div style={{ fontSize: '10.5px', fontWeight: 400, color: 'var(--text-secondary)' }}>
-                    06:00 Chính(1)-Phụ(2) → 16:29 Tự đảo Phụ(1)-Chính(2)
-                  </div>
-                </th>
-              </tr>
-            </thead>
+          <TopScrollTable maxHeight="52vh">
+            <table
+              style={{
+                width: '100%',
+                minWidth: '1440px',
+                borderCollapse: 'collapse',
+                fontSize: '12px',
+                textAlign: 'left',
+              }}
+            >
+              <thead>
+                <tr
+                  style={{
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 10,
+                    backgroundColor: 'var(--bg-secondary)',
+                    borderBottom: '2px solid var(--border-color)',
+                  }}
+                >
+                  <th style={{ padding: '10px 10px', width: '118px', fontWeight: 700 }}>
+                    Thứ &amp; Ngày
+                  </th>
+                  <th style={{ padding: '10px 10px', width: '130px', fontWeight: 700 }}>
+                    Chế Độ Ngày
+                  </th>
+                  <th style={{ padding: '10px 10px', width: '215px', fontWeight: 700 }}>
+                    <div>Ca Sáng 06:00 (Day 0006)</div>
+                    <div style={{ fontSize: '10.5px', fontWeight: 400, color: 'var(--text-secondary)' }}>
+                      T2–T6 Song Song (Skill 1)
+                    </div>
+                  </th>
+                  <th style={{ padding: '10px 10px', width: '215px', fontWeight: 700 }}>
+                    <div>Ca Tối 16:29 (Night 0007)</div>
+                    <div style={{ fontSize: '10.5px', fontWeight: 400, color: 'var(--text-secondary)' }}>
+                      T2–T6: 1 (Chính) / 2 (Phụ)
+                    </div>
+                  </th>
+                  <th style={{ padding: '10px 10px', width: '250px', fontWeight: 700 }}>
+                    <div>T7–CN / Lễ (Night 0007)</div>
+                    <div style={{ fontSize: '10.5px', fontWeight: 400, color: 'var(--text-secondary)' }}>
+                      06:00 Chính(1)-Phụ(2) → 16:29 Tự đảo
+                    </div>
+                  </th>
+                  <th
+                    style={{
+                      padding: '10px 10px',
+                      width: '255px',
+                      fontWeight: 700,
+                      borderLeft: '2px solid var(--border-color)',
+                      backgroundColor: 'rgba(13, 148, 136, 0.06)',
+                    }}
+                  >
+                    <div style={{ color: '#0f766e', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Clock size={13} />
+                      <span>Ca Sáng Backup (Hẹn Giờ Manual)</span>
+                    </div>
+                    <div style={{ fontSize: '10.5px', fontWeight: 400, color: 'var(--text-secondary)' }}>
+                      Tới giờ hẹn tự cập nhật Day 0006 (T7–CN: Night)
+                    </div>
+                  </th>
+                  <th
+                    style={{
+                      padding: '10px 10px',
+                      width: '255px',
+                      fontWeight: 700,
+                      backgroundColor: 'rgba(217, 119, 6, 0.06)',
+                    }}
+                  >
+                    <div style={{ color: '#b45309', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Clock size={13} />
+                      <span>Ca Tối Backup (Hẹn Giờ Manual)</span>
+                    </div>
+                    <div style={{ fontSize: '10.5px', fontWeight: 400, color: 'var(--text-secondary)' }}>
+                      Tới giờ hẹn tự cập nhật Night 0007 (1 Chính / 2 Phụ)
+                    </div>
+                  </th>
+                </tr>
+              </thead>
             <tbody>
               {schedules.map((day) => {
                 const isWeekendDay = day.is_weekend;
@@ -832,11 +812,382 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
                         </div>
                       )}
                     </td>
+
+                    {/* Cột 6: Ca Sáng Backup (Hẹn Giờ Manual) */}
+                    {(() => {
+                      const mbTime = (day.morning_backup_time || '').trim();
+                      const mbLines = day.morning_backup_lines || [];
+                      const mbLinesClean = mbLines.filter(Boolean);
+                      const mbTimeInvalid = mbTime.length > 0 && !HHMM_REGEX.test(mbTime);
+                      const mbArmed =
+                        mbTime.length > 0 && !mbTimeInvalid && mbLinesClean.length > 0;
+                      const mbHasAny = mbTime.length > 0 || mbLinesClean.length > 0;
+
+                      return (
+                        <td
+                          style={{
+                            padding: '10px 10px',
+                            verticalAlign: 'top',
+                            borderLeft: '2px solid var(--border-color)',
+                            backgroundColor: mbArmed ? 'rgba(13, 148, 136, 0.05)' : 'transparent',
+                          }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {/* Ô nhập giờ hẹn 24h HH:mm */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <Clock
+                                size={13}
+                                style={{
+                                  flexShrink: 0,
+                                  color: mbTimeInvalid ? '#dc2626' : mbArmed ? '#0f766e' : 'var(--text-muted)',
+                                }}
+                              />
+                              <input
+                                type="text"
+                                value={day.morning_backup_time || ''}
+                                onChange={(e) => {
+                                  const rawVal = e.target.value;
+                                  onUpdateScheduleRow(day.duty_date, (prev) => ({
+                                    ...prev,
+                                    morning_backup_time: rawVal,
+                                  }));
+                                }}
+                                placeholder="Giờ hẹn (VD: 11:30)"
+                                maxLength={5}
+                                style={{
+                                  width: '122px',
+                                  padding: '4px 7px',
+                                  fontSize: '11.5px',
+                                  fontFamily: 'monospace',
+                                  fontWeight: 600,
+                                  borderRadius: '4px',
+                                  border: mbTimeInvalid
+                                    ? '1px solid #dc2626'
+                                    : mbArmed
+                                      ? '1px solid #0f766e'
+                                      : '1px solid var(--border-color)',
+                                  backgroundColor: 'var(--bg-primary)',
+                                  color: 'var(--text-primary)',
+                                }}
+                                title="Nhập giờ hẹn cập nhật Ca Sáng Backup (24h HH:mm)"
+                              />
+                              {mbArmed && (
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    color: '#0f766e',
+                                    backgroundColor: 'rgba(13, 148, 136, 0.14)',
+                                    padding: '2px 5px',
+                                    borderRadius: '4px',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  Đã hẹn
+                                </span>
+                              )}
+                              {mbHasAny && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onUpdateScheduleRow(day.duty_date, (prev) => ({
+                                      ...prev,
+                                      morning_backup_time: '',
+                                      morning_backup_lines: [],
+                                    }));
+                                  }}
+                                  style={{
+                                    border: 'none',
+                                    background: 'none',
+                                    color: '#ef4444',
+                                    cursor: 'pointer',
+                                    padding: '2px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                  }}
+                                  title="Xóa giờ hẹn & người Backup Ca Sáng"
+                                >
+                                  <X size={13} />
+                                </button>
+                              )}
+                            </div>
+
+                            {mbTimeInvalid && (
+                              <div style={{ fontSize: '10px', color: '#dc2626', fontWeight: 600 }}>
+                                Sai định dạng 24h HH:mm (VD: 11:30)
+                              </div>
+                            )}
+
+                            {/* Bộ chọn nhân sự Backup Ca Sáng */}
+                            {isEffectiveWeekend ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <MemberSelectDropdown
+                                  value={mbLines[0] || ''}
+                                  onChange={(val) => {
+                                    const slot2 = mbLines[1] || '';
+                                    const newLines = val ? (slot2 ? [val, slot2] : [val]) : (slot2 ? ['', slot2] : []);
+                                    onUpdateScheduleRow(day.duty_date, (prev) => ({
+                                      ...prev,
+                                      morning_backup_lines: newLines,
+                                    }));
+                                  }}
+                                  activeMembers={activeMembers}
+                                  labelPrefix="1 (Chính):"
+                                  labelColor="#0f766e"
+                                />
+                                <MemberSelectDropdown
+                                  value={mbLines[1] || ''}
+                                  onChange={(val) => {
+                                    const slot1 = mbLines[0] || '';
+                                    const newLines = slot1 ? (val ? [slot1, val] : [slot1]) : (val ? ['', val] : []);
+                                    onUpdateScheduleRow(day.duty_date, (prev) => ({
+                                      ...prev,
+                                      morning_backup_lines: newLines,
+                                    }));
+                                  }}
+                                  activeMembers={activeMembers}
+                                  labelPrefix="2 (Phụ):"
+                                  labelColor="#d97706"
+                                />
+                              </div>
+                            ) : (
+                              <>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                  {mbLinesClean.map((line) => {
+                                    const m = memberMap.get(line);
+                                    return (
+                                      <span
+                                        key={line}
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          padding: '2px 7px',
+                                          fontSize: '11px',
+                                          fontWeight: 600,
+                                          borderRadius: '4px',
+                                          backgroundColor: 'rgba(13, 148, 136, 0.12)',
+                                          color: '#0f766e',
+                                          border: '1px solid rgba(13, 148, 136, 0.25)',
+                                        }}
+                                      >
+                                        <span>
+                                          {line} {m ? m.full_name : ''}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            onUpdateScheduleRow(day.duty_date, (prev) => ({
+                                              ...prev,
+                                              morning_backup_lines: (prev.morning_backup_lines || []).filter(
+                                                (x) => x !== line
+                                              ),
+                                            }));
+                                          }}
+                                          style={{
+                                            border: 'none',
+                                            background: 'none',
+                                            color: '#ef4444',
+                                            cursor: 'pointer',
+                                            padding: 0,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                          }}
+                                          title="Xóa khỏi backup ca sáng"
+                                        >
+                                          <X size={11} />
+                                        </button>
+                                      </span>
+                                    );
+                                  })}
+                                  {mbLinesClean.length === 0 && (
+                                    <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                      Chưa chọn người backup
+                                    </span>
+                                  )}
+                                </div>
+                                <select
+                                  value=""
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (!val) return;
+                                    if (!mbLinesClean.includes(val)) {
+                                      onUpdateScheduleRow(day.duty_date, (prev) => ({
+                                        ...prev,
+                                        morning_backup_lines: [...(prev.morning_backup_lines || []).filter(Boolean), val],
+                                      }));
+                                    }
+                                  }}
+                                  style={{
+                                    padding: '4px 8px',
+                                    fontSize: '11px',
+                                    borderRadius: '4px',
+                                    border: '1px solid var(--border-color)',
+                                    backgroundColor: 'var(--bg-primary)',
+                                    color: 'var(--text-primary)',
+                                  }}
+                                >
+                                  <option value="">+ Thêm backup ca sáng...</option>
+                                  {activeMembers
+                                    .filter((m) => !mbLinesClean.includes(m.ext_line))
+                                    .map((m) => (
+                                      <option key={m.id} value={m.ext_line}>
+                                        {m.ext_line} — {m.full_name}
+                                      </option>
+                                    ))}
+                                </select>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      );
+                    })()}
+
+                    {/* Cột 7: Ca Tối Backup (Hẹn Giờ Manual) */}
+                    {(() => {
+                      const ebTime = (day.evening_backup_time || '').trim();
+                      const ebLines = day.evening_backup_lines || [];
+                      const ebLinesClean = ebLines.filter(Boolean);
+                      const ebTimeInvalid = ebTime.length > 0 && !HHMM_REGEX.test(ebTime);
+                      const ebArmed =
+                        ebTime.length > 0 && !ebTimeInvalid && ebLinesClean.length > 0;
+                      const ebHasAny = ebTime.length > 0 || ebLinesClean.length > 0;
+
+                      return (
+                        <td
+                          style={{
+                            padding: '10px 10px',
+                            verticalAlign: 'top',
+                            backgroundColor: ebArmed ? 'rgba(217, 119, 6, 0.05)' : 'transparent',
+                          }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {/* Ô nhập giờ hẹn 24h HH:mm */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <Clock
+                                size={13}
+                                style={{
+                                  flexShrink: 0,
+                                  color: ebTimeInvalid ? '#dc2626' : ebArmed ? '#b45309' : 'var(--text-muted)',
+                                }}
+                              />
+                              <input
+                                type="text"
+                                value={day.evening_backup_time || ''}
+                                onChange={(e) => {
+                                  const rawVal = e.target.value;
+                                  onUpdateScheduleRow(day.duty_date, (prev) => ({
+                                    ...prev,
+                                    evening_backup_time: rawVal,
+                                  }));
+                                }}
+                                placeholder="Giờ hẹn (VD: 20:00)"
+                                maxLength={5}
+                                style={{
+                                  width: '122px',
+                                  padding: '4px 7px',
+                                  fontSize: '11.5px',
+                                  fontFamily: 'monospace',
+                                  fontWeight: 600,
+                                  borderRadius: '4px',
+                                  border: ebTimeInvalid
+                                    ? '1px solid #dc2626'
+                                    : ebArmed
+                                      ? '1px solid #b45309'
+                                      : '1px solid var(--border-color)',
+                                  backgroundColor: 'var(--bg-primary)',
+                                  color: 'var(--text-primary)',
+                                }}
+                                title="Nhập giờ hẹn cập nhật Ca Tối Backup (24h HH:mm)"
+                              />
+                              {ebArmed && (
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    color: '#b45309',
+                                    backgroundColor: 'rgba(217, 119, 6, 0.14)',
+                                    padding: '2px 5px',
+                                    borderRadius: '4px',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  Đã hẹn
+                                </span>
+                              )}
+                              {ebHasAny && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onUpdateScheduleRow(day.duty_date, (prev) => ({
+                                      ...prev,
+                                      evening_backup_time: '',
+                                      evening_backup_lines: [],
+                                    }));
+                                  }}
+                                  style={{
+                                    border: 'none',
+                                    background: 'none',
+                                    color: '#ef4444',
+                                    cursor: 'pointer',
+                                    padding: '2px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                  }}
+                                  title="Xóa giờ hẹn & người Backup Ca Tối"
+                                >
+                                  <X size={13} />
+                                </button>
+                              )}
+                            </div>
+
+                            {ebTimeInvalid && (
+                              <div style={{ fontSize: '10px', color: '#dc2626', fontWeight: 600 }}>
+                                Sai định dạng 24h HH:mm (VD: 20:00)
+                              </div>
+                            )}
+
+                            {/* Bộ chọn nhân sự Backup Ca Tối (Night 0007: 1 Chính / 2 Phụ) */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <MemberSelectDropdown
+                                value={ebLines[0] || ''}
+                                onChange={(val) => {
+                                  const slot2 = ebLines[1] || '';
+                                  const newLines = val ? (slot2 ? [val, slot2] : [val]) : (slot2 ? ['', slot2] : []);
+                                  onUpdateScheduleRow(day.duty_date, (prev) => ({
+                                    ...prev,
+                                    evening_backup_lines: newLines,
+                                  }));
+                                }}
+                                activeMembers={activeMembers}
+                                labelPrefix="1 (Chính):"
+                                labelColor="#b45309"
+                              />
+                              <MemberSelectDropdown
+                                value={ebLines[1] || ''}
+                                onChange={(val) => {
+                                  const slot1 = ebLines[0] || '';
+                                  const newLines = slot1 ? (val ? [slot1, val] : [slot1]) : (val ? ['', val] : []);
+                                  onUpdateScheduleRow(day.duty_date, (prev) => ({
+                                    ...prev,
+                                    evening_backup_lines: newLines,
+                                  }));
+                                }}
+                                activeMembers={activeMembers}
+                                labelPrefix="2 (Phụ):"
+                                labelColor="#d97706"
+                              />
+                            </div>
+                          </div>
+                        </td>
+                      );
+                    })()}
                   </tr>
                 );
               })}
             </tbody>
           </table>
+          </TopScrollTable>
         )}
       </div>
 

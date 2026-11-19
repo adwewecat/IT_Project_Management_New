@@ -5,6 +5,9 @@
 
 <!-- Archived entries go below, newest archived at top -->
 
+- **[2026-11-13] Integrated `Skill_Workflow_A.I`, 3 MCP Servers & Standardized Project Files**
+  - **Done:** Installed/updated 42 curated workflow skills in `.agents/skills/` (`obra/superpowers` auto backbone + `mattpocock/skills` manual triggers `quy trinh moi`, `nghi ngoi`, `cau hinh`), verified `playwright`, `private-journal`, and `context7` in `~/.gemini/config/mcp_config.json`, streamlined `GEMINI.md` strictly under 300 lines, and initialized `PROGRESS.md` + `ARCHIVE.md`.
+
 - **[2026-11-13] Chuẩn hóa toàn diện định dạng ngày/tháng/giờ Việt Nam (`dd-mm` / `dd-mm-yyyy` / `mm-yyyy` / 24h)** (`de59b31`)
   - **Done:** Tạo `frontend/src/utils/dateFormat.ts`, `DateTimeInput.tsx`, `MonthInput.tsx`, nâng cấp `DateInput.tsx` (`dd-mm-yyyy`), sửa pill Timesheet `formatDateDDMM(day)` (`01-11: 4h`) và thay toàn bộ `<input type="date" | "datetime-local" | "month">` trên các trang/modal.
   - **Verification:** `npm run build` (`exit code 0`), unit tests `dateFormat.ts`, và Edge Playwright headless (`locale="en-US"`).

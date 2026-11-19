@@ -190,22 +190,39 @@ export const LogsTab: React.FC<LogsTabProps> = ({
 
                     {/* Ca trực */}
                     <td style={{ padding: '8px 12px' }}>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          backgroundColor:
-                            log.shift_code === 'MORNING'
-                              ? 'rgba(59, 130, 246, 0.1)'
-                              : 'rgba(139, 92, 246, 0.1)',
-                          color: log.shift_code === 'MORNING' ? '#2563eb' : '#7c3aed',
-                        }}
-                      >
-                        {log.shift_code === 'MORNING' ? 'Sáng 06:00' : 'Chiều 16:29'}
-                      </span>
+                      {(() => {
+                        let shiftBg = 'rgba(139, 92, 246, 0.1)';
+                        let shiftColor = '#7c3aed';
+                        let shiftLabel = 'Chiều 16:29';
+                        if (log.shift_code === 'MORNING') {
+                          shiftBg = 'rgba(59, 130, 246, 0.1)';
+                          shiftColor = '#2563eb';
+                          shiftLabel = 'Sáng 06:00';
+                        } else if (log.shift_code === 'MORNING_BACKUP') {
+                          shiftBg = 'rgba(13, 148, 136, 0.12)';
+                          shiftColor = '#0f766e';
+                          shiftLabel = 'Backup Sáng';
+                        } else if (log.shift_code === 'EVENING_BACKUP') {
+                          shiftBg = 'rgba(217, 119, 6, 0.14)';
+                          shiftColor = '#b45309';
+                          shiftLabel = 'Backup Tối';
+                        }
+                        return (
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              backgroundColor: shiftBg,
+                              color: shiftColor,
+                            }}
+                          >
+                            {shiftLabel}
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     {/* Hàng đợi */}

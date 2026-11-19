@@ -4,7 +4,7 @@
  */
 
 export type ShiftMode = 'AUTO' | 'WEEKDAY' | 'WEEKEND';
-export type ShiftCode = 'MORNING' | 'EVENING';
+export type ShiftCode = 'MORNING' | 'EVENING' | 'MORNING_BACKUP' | 'EVENING_BACKUP';
 export type ExecutionMode = 'DIRECT' | 'RELAY';
 
 /** Bản ghi nhân sự trực hotline 3CX */
@@ -43,6 +43,10 @@ export interface ScheduleDayUpsertItem {
   evening_lines: string[];
   weekend_lines: string[];
   weekend_evening_override: string[];
+  morning_backup_time?: string | null;
+  morning_backup_lines?: string[];
+  evening_backup_time?: string | null;
+  evening_backup_lines?: string[];
   note?: string | null;
 }
 

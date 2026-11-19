@@ -482,8 +482,24 @@ async def _playwright_sync_3cx_queue(
                 await user_input_box.fill(ext_line)
                 await asyncio.sleep(0.6)
 
-                line_pattern = re.compile(r"^\s*" + re.escape(ext_line) + r"\b")
-                opt = page.locator("ng-dropdown-panel .ng-option").filter(has_text=line_pattern).first
+                # Cho danh sach goi y ng-dropdown-panel hien thi, sau do match chinh xac span[data-qa='peer-number']
+                # (tranh loi \b vi 3CX ghep "8778Duy Ngo Nhut..." khong co khoang trang trong textContent)
+                await page.locator("ng-dropdown-panel .ng-option").first.wait_for(
+                    state="visible", timeout=10000
+                )
+                peer_exact = re.compile(r"^\s*" + re.escape(ext_line) + r"\s*$")
+                opt = (
+                    page.locator("ng-dropdown-panel .ng-option")
+                    .filter(has=page.locator("[data-qa='peer-number']", has_text=peer_exact))
+                    .first
+                )
+                if await opt.count() == 0:
+                    fallback_pat = re.compile(r"^\s*" + re.escape(ext_line) + r"(?:\D|$)")
+                    opt = (
+                        page.locator("ng-dropdown-panel .ng-option")
+                        .filter(has_text=fallback_pat)
+                        .first
+                    )
                 await opt.wait_for(state="visible", timeout=10000)
                 await opt.click()
                 await asyncio.sleep(0.3)
@@ -513,9 +529,13 @@ async def _playwright_sync_3cx_queue(
                 )
 
             save_btn = page.locator("button#btnSave, button[data-qa='save']").first
-            await save_btn.click()
-            await _safe_wait_network_idle_3cx(page, 15000)
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(0.5)
+            if await save_btn.is_enabled():
+                await save_btn.click()
+                await _safe_wait_network_idle_3cx(page, 15000)
+                await asyncio.sleep(2.0)
+            else:
+                logger.info("[RELAY-3CX] Nut Save dang disabled (danh sach giong hien tai), bo qua click Save")
 
             os.makedirs(os.path.dirname(os.path.abspath(screenshot_file_path)), exist_ok=True)
             await page.screenshot(path=screenshot_file_path, full_page=True)

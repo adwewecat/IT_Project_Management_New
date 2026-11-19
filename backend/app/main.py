@@ -358,10 +358,25 @@ async def lifespan(app: FastAPI):
                             evening_lines_json NVARCHAR(MAX) NOT NULL DEFAULT N'[]',
                             weekend_lines_json NVARCHAR(MAX) NOT NULL DEFAULT N'[]',
                             weekend_evening_override_json NVARCHAR(MAX) NOT NULL DEFAULT N'[]',
+                            morning_backup_time NVARCHAR(10) NULL,
+                            morning_backup_lines_json NVARCHAR(MAX) NOT NULL DEFAULT N'[]',
+                            evening_backup_time NVARCHAR(10) NULL,
+                            evening_backup_lines_json NVARCHAR(MAX) NOT NULL DEFAULT N'[]',
                             note NVARCHAR(500) NULL,
                             updated_by NVARCHAR(100) NULL,
                             updated_at DATETIME NOT NULL DEFAULT GETDATE()
                         );
+                    END
+                    IF OBJECT_ID('dbo.HOTLINE_3CX_SCHEDULES', 'U') IS NOT NULL
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='HOTLINE_3CX_SCHEDULES' AND COLUMN_NAME='morning_backup_time')
+                            ALTER TABLE dbo.HOTLINE_3CX_SCHEDULES ADD morning_backup_time NVARCHAR(10) NULL;
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='HOTLINE_3CX_SCHEDULES' AND COLUMN_NAME='morning_backup_lines_json')
+                            ALTER TABLE dbo.HOTLINE_3CX_SCHEDULES ADD morning_backup_lines_json NVARCHAR(MAX) NOT NULL CONSTRAINT DF_HOTLINE_3CX_SCHED_MB_LINES DEFAULT N'[]';
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='HOTLINE_3CX_SCHEDULES' AND COLUMN_NAME='evening_backup_time')
+                            ALTER TABLE dbo.HOTLINE_3CX_SCHEDULES ADD evening_backup_time NVARCHAR(10) NULL;
+                        IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='HOTLINE_3CX_SCHEDULES' AND COLUMN_NAME='evening_backup_lines_json')
+                            ALTER TABLE dbo.HOTLINE_3CX_SCHEDULES ADD evening_backup_lines_json NVARCHAR(MAX) NOT NULL CONSTRAINT DF_HOTLINE_3CX_SCHED_EB_LINES DEFAULT N'[]';
                     END
                     IF OBJECT_ID('dbo.HOTLINE_3CX_SYNC_LOGS', 'U') IS NULL
                     BEGIN

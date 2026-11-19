@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # Định nghĩa các loại chế độ phân ca và mã ca trực
 ShiftMode = Literal["AUTO", "WEEKDAY", "WEEKEND"]
-ShiftCode = Literal["MORNING", "EVENING"]
+ShiftCode = Literal["MORNING", "EVENING", "MORNING_BACKUP", "EVENING_BACKUP"]
 ExecutionMode = Literal["DIRECT", "RELAY"]
 
 
@@ -79,6 +79,18 @@ class ScheduleDayUpsertItem(BaseModel):
     )
     weekend_evening_override: List[str] = Field(
         default_factory=list, description="Line trực ca chiều cuối tuần (nếu chỉ định riêng)"
+    )
+    morning_backup_time: Optional[str] = Field(
+        default=None, description="Giờ hẹn cập nhật Manual Backup Ca Sáng (HH:mm 24h)"
+    )
+    morning_backup_lines: List[str] = Field(
+        default_factory=list, description="Danh sách line Backup Ca Sáng"
+    )
+    evening_backup_time: Optional[str] = Field(
+        default=None, description="Giờ hẹn cập nhật Manual Backup Ca Tối (HH:mm 24h)"
+    )
+    evening_backup_lines: List[str] = Field(
+        default_factory=list, description="Danh sách line Backup Ca Tối (Chính 1 / Phụ 2)"
     )
     note: Optional[str] = Field(default=None, description="Ghi chú ngày trực")
 

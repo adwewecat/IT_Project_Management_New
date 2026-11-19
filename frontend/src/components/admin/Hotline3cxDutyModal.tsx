@@ -29,13 +29,11 @@ import { MembersTab } from './hotline3cx/MembersTab';
 import { ConfigTab } from './hotline3cx/ConfigTab';
 import { LogsTab } from './hotline3cx/LogsTab';
 import { ApplyNowConfirmModal } from './hotline3cx/ApplyNowConfirmModal';
-import { ApplyMonthModal } from './hotline3cx/ApplyMonthModal';
 import { HolidayManagerModal } from './hotline3cx/HolidayManagerModal';
 import { ScreenshotLightboxModal } from './hotline3cx/ScreenshotLightboxModal';
 import {
   formatDateDDMMYYYY,
   getTodayIsoDate,
-  getCurrentIsoMonth,
 } from '../../utils/dateFormat';
 
 export interface Hotline3cxDutyModalProps {
@@ -62,14 +60,7 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
   const [schedules, setSchedules] = useState<Hotline3cxScheduleDay[]>([]);
   const [loadingSchedules, setLoadingSchedules] = useState<boolean>(false);
   const [savingSchedules, setSavingSchedules] = useState<boolean>(false);
-  const [cloningWeek, setCloningWeek] = useState<boolean>(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
-
-  // Áp dụng mẫu tháng modal state
-  const [showApplyMonthModal, setShowApplyMonthModal] = useState<boolean>(false);
-  const [targetMonth, setTargetMonth] = useState<string>(() => getCurrentIsoMonth());
-  const [overwriteMonth, setOverwriteMonth] = useState<boolean>(true);
-  const [applyingMonth, setApplyingMonth] = useState<boolean>(false);
 
   // Quản lý Ngày Lễ Riêng modal state
   const [holidays, setHolidays] = useState<Hotline3cxHoliday[]>([]);
@@ -376,8 +367,36 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
     setHasUnsavedChanges(true);
   };
 
+  // Kiểm tra định dạng giờ hẹn 24h HH:mm (cho phép rỗng nếu không hẹn)
+  const isValidOptionalHHMM = (raw?: string | null): boolean => {
+    const txt = (raw || '').trim();
+    if (!txt) return true;
+    const match = /^(\d{1,2}):(\d{2})$/.exec(txt);
+    if (!match) return false;
+    const h = Number(match[1]);
+    const m = Number(match[2]);
+    return h >= 0 && h <= 23 && m >= 0 && m <= 59;
+  };
+
   // Save schedules
   const handleSaveSchedules = async () => {
+    for (const d of schedules) {
+      if (!isValidOptionalHHMM(d.morning_backup_time)) {
+        notify(
+          `Giờ hẹn Ca Sáng Backup ngày ${formatDateDDMMYYYY(d.duty_date)} không hợp lệ ("${d.morning_backup_time}"). Vui lòng nhập định dạng 24h HH:mm (VD: 11:30).`,
+          'error'
+        );
+        return;
+      }
+      if (!isValidOptionalHHMM(d.evening_backup_time)) {
+        notify(
+          `Giờ hẹn Ca Tối Backup ngày ${formatDateDDMMYYYY(d.duty_date)} không hợp lệ ("${d.evening_backup_time}"). Vui lòng nhập định dạng 24h HH:mm (VD: 20:00).`,
+          'error'
+        );
+        return;
+      }
+    }
+
     setSavingSchedules(true);
     try {
       const payload: ScheduleDayUpsertItem[] = schedules.map((d) => ({
@@ -387,84 +406,20 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
         evening_lines: d.evening_lines || [],
         weekend_lines: d.weekend_lines || [],
         weekend_evening_override: d.weekend_evening_override || [],
+        morning_backup_time: (d.morning_backup_time || '').trim() || null,
+        morning_backup_lines: (d.morning_backup_lines || []).filter(Boolean),
+        evening_backup_time: (d.evening_backup_time || '').trim() || null,
+        evening_backup_lines: (d.evening_backup_lines || []).filter(Boolean),
         note: d.note || null,
       }));
       const updated = await hotline3cxAutoService.saveSchedules(payload);
       setSchedules(updated);
       setHasUnsavedChanges(false);
-      notify('Đã lưu thành công lịch trực tuần!', 'success');
+      notify('Đã lưu thành công lịch trực tuần và lịch hẹn Backup Manual!', 'success');
     } catch (err: unknown) {
       notify(`Lỗi khi lưu lịch trực: ${extractApiErrorMessage(err)}`, 'error');
     } finally {
       setSavingSchedules(false);
-    }
-  };
-
-  // Clone previous week
-  const handleClonePreviousWeek = async () => {
-    if (hasUnsavedChanges) {
-      const confirmLeave = window.confirm(
-        'Bạn có thay đổi chưa lưu. Sao chép từ tuần trước sẽ ghi đè lên các thay đổi này. Tiếp tục?'
-      );
-      if (!confirmLeave) return;
-    }
-    setCloningWeek(true);
-    try {
-      const updated = await hotline3cxAutoService.clonePreviousWeek(currentMonday);
-      setSchedules(updated);
-      setHasUnsavedChanges(false);
-      notify(
-        `Đã sao chép toàn bộ lịch trực từ tuần trước sang tuần ${formatDateDDMMYYYY(currentMonday)}!`,
-        'success'
-      );
-    } catch (err: unknown) {
-      notify(`Lỗi khi sao chép tuần trước: ${extractApiErrorMessage(err)}`, 'error');
-    } finally {
-      setCloningWeek(false);
-    }
-  };
-
-  // Apply 7-day template to month
-  const handleApplyMonthTemplate = async () => {
-    if (!targetMonth) {
-      notify('Vui lòng chọn tháng áp dụng (mm-yyyy)', 'error');
-      return;
-    }
-    const [yearStr, monthStr] = targetMonth.split('-');
-    const year = Number(yearStr);
-    const month = Number(monthStr);
-
-    setApplyingMonth(true);
-    try {
-      const templateDays: ScheduleDayUpsertItem[] = schedules.map((d) => ({
-        duty_date: d.duty_date,
-        shift_mode: d.shift_mode,
-        morning_lines: d.morning_lines || [],
-        evening_lines: d.evening_lines || [],
-        weekend_lines: d.weekend_lines || [],
-        weekend_evening_override: d.weekend_evening_override || [],
-        note: d.note || null,
-      }));
-
-      const res = await hotline3cxAutoService.applyMonthTemplate({
-        year,
-        month,
-        template_days: templateDays,
-        overwrite_existing: overwriteMonth,
-      });
-
-      setShowApplyMonthModal(false);
-      notify(
-        `Áp dụng mẫu thành công cho ${res.applied_days} ngày trong tháng ${monthStr}-${yearStr}!`,
-        'success'
-      );
-      // Reload current schedules
-      fetchSchedules(currentMonday);
-      fetchHolidays();
-    } catch (err: unknown) {
-      notify(`Lỗi khi áp dụng mẫu tháng: ${extractApiErrorMessage(err)}`, 'error');
-    } finally {
-      setApplyingMonth(false);
     }
   };
 
@@ -778,7 +733,7 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
             </div>
           </div>
         }
-        maxWidth="1160px"
+        maxWidth="1480px"
       >
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '16px' }}>
           {/* ══ 4-TAB NAVIGATION HEADER ══ */}
@@ -898,7 +853,6 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
               schedules={schedules}
               loadingSchedules={loadingSchedules}
               savingSchedules={savingSchedules}
-              cloningWeek={cloningWeek}
               executingDryRun={executingDryRun}
               hasUnsavedChanges={hasUnsavedChanges}
               currentMonday={currentMonday}
@@ -907,8 +861,6 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
               onNavigateWeek={handleNavigateWeek}
               onJumpToWeek={handleJumpToWeek}
               onGoToThisWeek={handleGoToThisWeek}
-              onClonePreviousWeek={handleClonePreviousWeek}
-              onOpenApplyMonthModal={() => setShowApplyMonthModal(true)}
               holidaysCount={holidays.length}
               onOpenHolidayManagerModal={() => {
                 setHolidayModalInitialDate(undefined);
@@ -997,20 +949,6 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
           onApplyShiftChange={setApplyNowShift}
           executing={executingApplyNow}
           onConfirm={handleConfirmApplyNow}
-        />
-      )}
-
-      {/* ══ MODAL "ÁP DỤNG MẪU CHO CẢ THÁNG" ══ */}
-      {showApplyMonthModal && (
-        <ApplyMonthModal
-          isOpen={showApplyMonthModal}
-          onClose={() => setShowApplyMonthModal(false)}
-          targetMonth={targetMonth}
-          onTargetMonthChange={(m) => setTargetMonth(m || getCurrentIsoMonth())}
-          overwrite={overwriteMonth}
-          onOverwriteChange={setOverwriteMonth}
-          applying={applyingMonth}
-          onConfirm={handleApplyMonthTemplate}
         />
       )}
 
