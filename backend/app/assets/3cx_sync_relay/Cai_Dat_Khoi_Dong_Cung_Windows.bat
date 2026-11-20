@@ -10,7 +10,7 @@ if not exist "%BAT_TARGET%" goto :MissingBat
 
 > "%STARTUP_CMD%" echo Set WshShell = CreateObject("WScript.Shell")
 >> "%STARTUP_CMD%" echo WshShell.CurrentDirectory = "%~dp0"
->> "%STARTUP_CMD%" echo WshShell.Run """%BAT_TARGET%"" --if-not-running", 0, False
+>> "%STARTUP_CMD%" echo WshShell.Run "cmd /c " ^& Chr(34) ^& Chr(34) ^& "%BAT_TARGET%" ^& Chr(34) ^& " --if-not-running" ^& Chr(34), 0, False
 if %errorlevel% neq 0 goto :CopyError
 
 set "WATCHDOG_CMD=wscript.exe \"%STARTUP_CMD%\""

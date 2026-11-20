@@ -22,14 +22,18 @@ Yeu cau moi truong tren PC / VM Relay:
   - Ket noi HTTP/HTTPS duoc ve server_url trong relay_config.json.
   - Ket noi HTTPS duoc toi https://ggg.ringbot.co:5001/#/login.
 
-Huong dan nhanh (2 buoc):
-  Buoc 1: Giai nen toan bo file ZIP vao mot thu muc co dinh (VD: D:\3CX_Relay).
-  Buoc 2: Nhan dup "Chay_3CX_Sync_Relay.bat" lan dau de tu kiem tra Python
+Huong dan nhanh (3 buoc):
+  Buoc 1: Chuot phai vao file 3CX_Sync_Relay_Worker.zip vua tai -> Properties
+          -> tich chon "Unblock" -> Apply / OK truoc khi giai nen
+          (de tranh hop thoai "Open File - Security Warning" chan chay ngam).
+          KHONG can loai tru thu muc khoi phan mem diet virus.
+  Buoc 2: Giai nen toan bo file ZIP vao mot thu muc co dinh (VD: D:\Setup\3CX_Sync_Relay_Worker).
+  Buoc 3: Nhan dup "Chay_3CX_Sync_Relay.bat" lan dau de tu kiem tra Python
           va cai dat playwright. Khi thay thong bao "Ket noi may chu thanh cong!"
           thi quay lai tab "Cau Hinh 3CX & Email" tren Web se thay trang thai
           Relay Worker chuyen sang ONLINE (xanh).
   (Tuy chon): Nhan dup "Cai_Dat_Khoi_Dong_Cung_Windows.bat" de worker tu
-          khoi dong ngam moi lan mo may.
+          khoi dong ngam va tu kiem tra bat lai moi 5 phut.
 
 Luu y bao mat:
   - File relay_config.json KHONG luu mat khau 3CX. Worker chi nhan thong tin
