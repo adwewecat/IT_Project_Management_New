@@ -741,6 +741,20 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
     return [...prioritized, ...others];
   }, [restaurants, newJobPastedCodes, newJobSearchName, newJobPriorityIps]);
 
+  // Sắp xếp danh sách lịch hẹn giờ: nhóm Đang chờ / Đang chạy lên trên, nhóm Đã triển khai xuống dưới
+  const orderedScheduledJobs = useMemo(() => {
+    const active: ScheduledParamJobItem[] = [];
+    const done: ScheduledParamJobItem[] = [];
+    for (const j of scheduledJobsList) {
+      if (j.status === 'PENDING' || j.status === 'RUNNING') {
+        active.push(j);
+      } else {
+        done.push(j);
+      }
+    }
+    return [...active, ...done];
+  }, [scheduledJobsList]);
+
   // Lấy IP MongoDB chuẩn (đã trim) từ bản ghi nhà hàng
   const getRestaurantMongoIp = (r?: RestaurantItem | null): string => {
     if (!r) return '';
@@ -3322,7 +3336,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
 
                 <div style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
-                    <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)' }}>
+                    <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)' }}>
                       <tr>
                         <th style={{ padding: '8px 10px', textAlign: 'center', width: '50px' }}>#ID</th>
                         <th style={{ padding: '8px 12px', textAlign: 'left' }}>Tiêu Đề Tác Vụ</th>
@@ -3335,17 +3349,33 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                       </tr>
                     </thead>
                     <tbody>
-                      {scheduledJobsList.length === 0 ? (
+                      {orderedScheduledJobs.length === 0 ? (
                         <tr>
                           <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                             Chưa có lịch hẹn giờ nào được tạo. Nhấp "Tạo Lịch Hẹn Giờ Mới" để lên lịch chạy tự động!
                           </td>
                         </tr>
                       ) : (
-                        scheduledJobsList.map((job) => {
+                        orderedScheduledJobs.map((job, idx) => {
                           const isRunning = runningJobId === job.id;
+                          const isPendingGroup = (item: ScheduledParamJobItem) =>
+                            item.status === 'PENDING' || item.status === 'RUNNING';
+                          const showGroupSeparator =
+                            idx > 0 && !isPendingGroup(job) && isPendingGroup(orderedScheduledJobs[idx - 1]);
+
                           return (
-                            <tr key={job.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <React.Fragment key={job.id}>
+                              {showGroupSeparator && (
+                                <tr key={`sep-pending-done-${job.id}`} aria-hidden="true">
+                                  <td colSpan={8} style={{ padding: '6px 0', backgroundColor: 'var(--bg-secondary)' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
+                                      <div style={{ width: '100%', height: '2px', backgroundColor: '#94A3B8' }} />
+                                      <div style={{ width: '100%', height: '2px', backgroundColor: '#94A3B8' }} />
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                              <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
                               <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700, color: 'var(--text-muted)' }}>
                                 #{job.id}
                               </td>
@@ -3552,6 +3582,7 @@ export const MongoDbParamManagementTask: React.FC<MongoDbParamManagementTaskProp
                                 </div>
                               </td>
                             </tr>
+                            </React.Fragment>
                           );
                         })
                       )}

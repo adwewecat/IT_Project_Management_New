@@ -5,6 +5,10 @@
 
 <!-- Archived entries go below, newest archived at top -->
 
+- **[2026-11-16] Bổ sung quản lý Ngày Lễ Riêng (nghỉ lễ phát sinh không theo lịch nhà nước) cho Hotline 3CX**
+  - **Done:** Thêm bảng `HOTLINE_3CX_HOLIDAYS` (`Hotline3cxHoliday` model, `main.py` lifespan, `Script/Full_SCRIPT_SQL_TABLE.sql`, tạo sẵn trên Production `.25` & local `ITDEPT`), 3 API `/api/v1/hotline-3cx-auto/holidays` (`GET`/`POST`/`DELETE`), cập nhật `compute_effective_mode`/`resolve_shift_plan`/`run_shift_sync` và bảo vệ ngày lễ trong `clone_previous_week_schedules` & `apply_week_template_to_month`. Frontend bổ sung `HolidayManagerModal.tsx` (chọn 1 ngày hoặc dải ngày `dd-mm-yyyy`, tên lễ, gán nhanh Chính/Phụ 06:00, nút `Xem` nhảy tới tuần, `Xóa`), nút `Ngày Lễ Riêng (N)` trên thanh công cụ và badge `🎉 Ngày Lễ` + nút bật/bỏ nhanh từng dòng trong `ScheduleTab.tsx` (không làm mất unsaved edits).
+  - **Verification:** `44 passed` (`pytest tests/test_hotline_3cx_models.py tests/test_hotline_3cx_auto.py tests/test_jobs.py`), `cmd /c "npm run build"` exit 0 (`dist/web.config` True), `compileall -q app` ✓, `from app.main import app` `>>> PASSED 100%` ✓, Python 3.10 AST `0` lỗi ✓, và Playwright MCP live UI test (bật/tạo/xóa ngày lễ `18-11-2026`, kiểm tra LIFO `Esc`, `0` console errors).
+
 - **[2026-11-16] Khắc phục chẩn đoán lỗi kết nối Portal 3CX (`ERR_CONNECTION_TIMED_OUT` / loại bỏ báo nhầm 600s)**
   - **Root Cause:** Trên Server `.25` ghi nhận `HOTLINE_3CX_SYNC_LOGS` thất bại ở giây thứ 25 với `Page.goto: net::ERR_CONNECTION_TIMED_OUT at https://ggg.ringbot.co:5001/#/login` (trong khi máy ngoài LAN truy cập `103.146.20.65:5001` mất 1.35s → `200 OK`), đồng thời `hotline_3cx_auto_service.py` dùng lại `format_friendly_error` của GPMS nên in nhầm thông báo `"kết nối 600s"`.
   - **Done:** Bổ sung `probe_portal_tcp()`, `format_3cx_sync_error()` báo rõ `host:port -> IP` và nguyên nhân Firewall/NAT Loopback/Proxy cổng `5001` (không bao giờ báo nhầm 600s); chuyển `page.goto(..., wait_until="domcontentloaded")` + `_safe_wait_network_idle_3cx` tránh kẹt WebSocket 3CX; tự thử lại bằng `--no-proxy-server` khi TCP trực tiếp thông nhưng Chromium bị proxy nghẽn.
