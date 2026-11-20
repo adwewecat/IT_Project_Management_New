@@ -217,12 +217,12 @@ export const ApplyNowConfirmModal: React.FC<ApplyNowConfirmModalProps> = ({
             />
             <div>
               <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                Bỏ qua hàng chờ Relay — Chạy trực tiếp ngay từ Server (Direct)
+                Bỏ qua hàng chờ Relay — Ép chạy trực tiếp từ máy chủ Backend (Direct)
               </div>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
                 {relayOnline
-                  ? 'Relay Worker đang Online. Tích chọn nếu bạn muốn ép Server chạy trực tiếp thay vì qua Relay.'
-                  : '⚠️ Relay Worker hiện đang OFFLINE — nếu không tích chọn, lệnh sẽ nằm ở trạng thái "Chờ Relay" tới khi Worker online lại.'}
+                  ? '⚠️ Relay Worker đang Online — KHÔNG nên tích trừ khi cần kiểm tra Firewall trên Server (Server .25 thường bị chặn port 5001).'
+                  : '⚠️ Relay Worker hiện đang OFFLINE — chỉ tích nếu bạn muốn chạy trực tiếp từ Server Backend thay vì chờ Relay.'}
               </div>
             </div>
           </label>

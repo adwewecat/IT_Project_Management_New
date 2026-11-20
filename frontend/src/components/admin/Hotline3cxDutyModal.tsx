@@ -613,13 +613,13 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
     });
   };
 
-  // Chạy trực tiếp ngay từ Server (Direct, bỏ qua hàng chờ Relay) cho ca hiện tại hôm nay
-  const handleRunDirectNowToday = async () => {
+  // Áp dụng nhanh ca hiện tại hôm nay (qua Relay nếu đang Online, hoặc ép Direct khi cần kiểm tra lỗi Server)
+  const handleQuickApplyToday = async (forceDirect: boolean = false) => {
     const defaultShift: ShiftCode = new Date().getHours() < 12 ? 'MORNING' : 'EVENING';
     await executeApplyShift({
       dutyDate: getTodayIsoDate(),
       shiftCode: defaultShift,
-      forceDirect: true,
+      forceDirect,
     });
   };
 
@@ -1037,7 +1037,7 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
                 setApplyNowShift(new Date().getHours() < 12 ? 'MORNING' : 'EVENING');
                 setShowApplyNowModal(true);
               }}
-              onRunDirectNowToday={handleRunDirectNowToday}
+              onQuickApplyToday={handleQuickApplyToday}
               onApplyLogRow={(dutyDate, shiftCode, forceDirect) =>
                 executeApplyShift({
                   dutyDate,

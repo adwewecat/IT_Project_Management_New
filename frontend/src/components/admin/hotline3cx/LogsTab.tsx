@@ -30,7 +30,7 @@ export interface LogsTabProps {
   onRefreshLogs: () => void;
   onViewScreenshot: (screenshotPath: string) => void;
   onOpenApplyNowModal: () => void;
-  onRunDirectNowToday: () => void;
+  onQuickApplyToday: (forceDirect?: boolean) => void;
   onApplyLogRow: (dutyDate: string, shiftCode: ShiftCode, forceDirect?: boolean) => void;
   onCancelLog: (logId: number) => void;
   onCancelAllPending: () => void;
@@ -61,7 +61,7 @@ export const LogsTab: React.FC<LogsTabProps> = ({
   onRefreshLogs,
   onViewScreenshot,
   onOpenApplyNowModal,
-  onRunDirectNowToday,
+  onQuickApplyToday,
   onApplyLogRow,
   onCancelLog,
   onCancelAllPending,
@@ -137,7 +137,7 @@ export const LogsTab: React.FC<LogsTabProps> = ({
                       {pendingCount > 0
                         ? `Đang có ${pendingCount} lệnh bị kẹt ở "Chờ Relay" vì chưa có PC Relay chạy 3cx_sync_relay.py nhận việc (sẽ tự báo lỗi sau 15 phút).`
                         : 'Nếu tạo lệnh ngay bây giờ qua Relay, lệnh sẽ nằm chờ tới khi PC trạm bật lại Relay Worker.'}{' '}
-                      Bạn có thể bấm <strong>"⚡ Chạy Trực Tiếp Ngay (Direct)"</strong> bên dưới để test chạy trực tiếp từ Server ngay lập tức.
+                      Hãy kiểm tra/bật lại Worker trên PC trạm (hoặc bấm <strong>"Thử Direct (Server)"</strong> nếu Server đã mở port 5001).
                     </div>
                   </>
                 )
@@ -220,33 +220,67 @@ export const LogsTab: React.FC<LogsTabProps> = ({
             <span>Áp Dụng Ca Ngay...</span>
           </button>
 
-          <button
-            type="button"
-            onClick={onRunDirectNowToday}
-            disabled={executingAction}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '5px 12px',
-              fontSize: '12px',
-              fontWeight: 700,
-              borderRadius: '6px',
-              border: '1px solid #2563eb',
-              backgroundColor: 'rgba(37, 99, 235, 0.1)',
-              color: '#1d4ed8',
-              cursor: executingAction ? 'not-allowed' : 'pointer',
-              opacity: executingAction ? 0.7 : 1,
-            }}
-            title="Bỏ qua hàng chờ Relay, chạy trực tiếp ca hiện tại hôm nay ngay từ Server để kiểm tra kết nối & lỗi thực tế"
-          >
-            {executingAction ? (
-              <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} />
-            ) : (
-              <Play size={13} />
-            )}
-            <span>Chạy Trực Tiếp Ngay (Direct)</span>
-          </button>
+          {isRelayMode && !isRelayOnline ? (
+            <button
+              type="button"
+              onClick={() => onQuickApplyToday(true)}
+              disabled={executingAction}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '5px 12px',
+                fontSize: '12px',
+                fontWeight: 700,
+                borderRadius: '6px',
+                border: '1px solid #2563eb',
+                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                color: '#1d4ed8',
+                cursor: executingAction ? 'not-allowed' : 'pointer',
+                opacity: executingAction ? 0.7 : 1,
+              }}
+              title="Relay Worker đang Offline — thử bỏ qua hàng chờ và chạy trực tiếp từ máy chủ Backend (yêu cầu Server thông port 5001)"
+            >
+              {executingAction ? (
+                <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} />
+              ) : (
+                <Play size={13} />
+              )}
+              <span>Thử Direct (Từ Server)</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onQuickApplyToday(false)}
+              disabled={executingAction}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '5px 12px',
+                fontSize: '12px',
+                fontWeight: 700,
+                borderRadius: '6px',
+                border: '1px solid #059669',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                color: '#047857',
+                cursor: executingAction ? 'not-allowed' : 'pointer',
+                opacity: executingAction ? 0.7 : 1,
+              }}
+              title={
+                isRelayMode
+                  ? 'Áp dụng ngay ca hiện tại hôm nay qua Relay Worker đang Online'
+                  : 'Áp dụng ngay ca hiện tại hôm nay trực tiếp từ Server'
+              }
+            >
+              {executingAction ? (
+                <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} />
+              ) : (
+                <Play size={13} />
+              )}
+              <span>{isRelayMode ? 'Áp Dụng Ca Hiện Tại (Qua Relay)' : 'Áp Dụng Ca Hiện Tại Ngay'}</span>
+            </button>
+          )}
 
           {pendingCount > 0 && (
             <button
@@ -636,9 +670,7 @@ export const LogsTab: React.FC<LogsTabProps> = ({
                         {canReapplyShift && (
                           <button
                             type="button"
-                            onClick={() =>
-                              onApplyLogRow(log.duty_date, rowShift, isPendingOrRunning || isRelayMode)
-                            }
+                            onClick={() => onApplyLogRow(log.duty_date, rowShift, false)}
                             disabled={executingAction}
                             style={{
                               display: 'inline-flex',
@@ -656,12 +688,12 @@ export const LogsTab: React.FC<LogsTabProps> = ({
                             }}
                             title={
                               isRelayMode
-                                ? 'Chạy trực tiếp ca này ngay từ Server (bỏ qua hàng chờ Relay) để áp dụng & kiểm tra lỗi tức thì'
+                                ? 'Chạy lại ca trực này qua 3CX Relay Worker'
                                 : 'Áp dụng lại ca trực này ngay lập tức'
                             }
                           >
                             <Zap size={11} />
-                            <span>{isRelayMode ? 'Direct' : 'Áp dụng'}</span>
+                            <span>Áp dụng</span>
                           </button>
                         )}
 
