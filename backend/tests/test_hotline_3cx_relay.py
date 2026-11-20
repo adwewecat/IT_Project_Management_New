@@ -496,3 +496,164 @@ def test_worker_standalone_multipart_and_pending_guard(tmp_path):
         db.commit()
         assert has_pending_relay_sync(db, date(2026, 11, 16), "MORNING") is True
 
+
+def test_force_direct_and_cancel_pending_logs_api(tmp_path):
+    """Kiem tra force_direct bo qua hang cho Relay va API huy lenh PENDING trong Nhat ky."""
+    import asyncio
+    from types import SimpleNamespace
+    from fastapi.testclient import TestClient
+
+    from app.api.v1.hotline_3cx_auto import require_hotline_access
+    from app.core.database import get_db
+    from app.main import app
+    from app.models.hotline_3cx_auto import Hotline3cxRelayTask, Hotline3cxSyncLog
+    from app.schemas.hotline_3cx_auto import Hotline3cxConfigUpdate, ScheduleDayUpsertItem
+    from app.services.hotline_3cx_auto_service import (
+        cancel_all_pending_sync_logs,
+        cancel_pending_sync_log,
+        claim_next_relay_task,
+        ensure_seeded_data,
+        has_pending_relay_sync,
+        run_shift_sync,
+        update_config,
+        upsert_schedules,
+    )
+
+    _, SessionLocal = _make_memory_db()
+    with SessionLocal() as db:
+        ensure_seeded_data(db)
+        update_config(
+            db,
+            Hotline3cxConfigUpdate(
+                portal_url="https://ggg.ringbot.co:5001/#/login",
+                username="8740",
+                password="secret",
+                execution_mode="RELAY",
+            ),
+        )
+        upsert_schedules(
+            db,
+            [
+                ScheduleDayUpsertItem(
+                    duty_date=date(2026, 11, 20),
+                    shift_mode="WEEKDAY",
+                    morning_lines=["8779", "8741"],
+                    evening_lines=["8742", "8743"],
+                )
+            ],
+        )
+
+        # 1. Mac dinh RELAY -> tao log PENDING va task PENDING
+        log_q1 = asyncio.run(
+            run_shift_sync(
+                db,
+                duty_date=date(2026, 11, 20),
+                shift_code="MORNING",
+                triggered_by="dung.nguyenanh",
+                dry_run=False,
+            )
+        )
+        assert log_q1.status == "PENDING"
+        assert has_pending_relay_sync(db, date(2026, 11, 20), "MORNING") is True
+
+        # 2. Khi truyen force_direct=True -> bo qua Relay queue, goi sync_fn truc tiep ngay
+        called_direct = {"count": 0}
+
+        async def _fake_direct_sync(**kwargs):
+            called_direct["count"] += 1
+            return {"status": "SUCCESS"}
+
+        log_direct = asyncio.run(
+            run_shift_sync(
+                db,
+                duty_date=date(2026, 11, 20),
+                shift_code="MORNING",
+                triggered_by="dung.nguyenanh",
+                dry_run=False,
+                force_direct=True,
+                sync_fn=_fake_direct_sync,
+            )
+        )
+        assert called_direct["count"] == 1
+        assert log_direct.status == "SUCCESS"
+
+        # 3. Huy 1 lenh PENDING -> chuyen sang CANCELLED va worker khong claim duoc nua
+        log_q2 = asyncio.run(
+            run_shift_sync(
+                db,
+                duty_date=date(2026, 11, 20),
+                shift_code="MORNING",
+                triggered_by="dung.nguyenanh",
+                dry_run=True,
+            )
+        )
+        assert log_q2.status == "PENDING"
+        cancelled = cancel_pending_sync_log(db, log_q1.id, cancelled_by="dung.nguyenanh")
+        assert cancelled is not None
+        assert cancelled.status == "CANCELLED"
+        assert "hủy" in (cancelled.error_message or "").lower()
+        assert has_pending_relay_sync(db, date(2026, 11, 20), "MORNING") is False
+
+        # 4. API endpoints POST /logs/{id}/cancel va POST /logs/cancel-pending
+        def _override_db():
+            yield db
+
+        app.dependency_overrides[get_db] = _override_db
+        app.dependency_overrides[require_hotline_access] = lambda: SimpleNamespace(
+            username="dung.nguyenanh", is_super_admin=True, phanquyen="0"
+        )
+        try:
+            with TestClient(app) as client:
+                r_bad = client.post(f"/api/v1/hotline-3cx-auto/logs/{log_direct.id}/cancel")
+                assert r_bad.status_code == 400
+
+                r_all = client.post("/api/v1/hotline-3cx-auto/logs/cancel-pending")
+                assert r_all.status_code == 200
+                assert r_all.json()["cancelled_count"] >= 1
+        finally:
+            app.dependency_overrides.clear()
+
+        refreshed_q2 = db.query(Hotline3cxSyncLog).filter(Hotline3cxSyncLog.id == log_q2.id).first()
+        assert refreshed_q2.status == "CANCELLED"
+        task_q2 = (
+            db.query(Hotline3cxRelayTask)
+            .filter(Hotline3cxRelayTask.sync_log_id == log_q2.id)
+            .first()
+        )
+        assert task_q2 is not None and task_q2.status == "CANCELLED"
+        assert claim_next_relay_task(db, worker_name="PC_TEST") is None
+        assert cancel_all_pending_sync_logs(db, cancelled_by="dung.nguyenanh") == 0
+
+
+def test_relay_worker_lock_and_bat_files_ascii(tmp_path, monkeypatch):
+    """Kiem tra lock file chong chay trung lap --if-not-running va chuan Pure ASCII cua file .bat."""
+    import importlib.util
+
+    assets_dir = (
+        Path(__file__).resolve().parent.parent
+        / "app"
+        / "assets"
+        / "3cx_sync_relay"
+    )
+    for bat_name in ("Chay_3CX_Sync_Relay.bat", "Cai_Dat_Khoi_Dong_Cung_Windows.bat"):
+        raw = (assets_dir / bat_name).read_text(encoding="ascii")
+        assert raw, f"{bat_name} rong"
+        assert "timeout /t 3" in raw
+
+    worker_path = assets_dir / "3cx_sync_relay.py"
+    spec = importlib.util.spec_from_file_location("relay_worker_lock_mod", str(worker_path))
+    mod = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(mod)
+
+    monkeypatch.setattr(mod, "LOCK_FILE_PATH", str(tmp_path / ".test.lock"))
+    h1 = mod._try_acquire_worker_lock()
+    assert h1 is not None
+    h2 = mod._try_acquire_worker_lock()
+    assert h2 is None
+    mod._release_worker_lock(h1)
+    h3 = mod._try_acquire_worker_lock()
+    assert h3 is not None
+    mod._release_worker_lock(h3)
+
+

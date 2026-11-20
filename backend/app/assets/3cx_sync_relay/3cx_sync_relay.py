@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional, Tuple
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG_PATH = os.path.join(APP_DIR, "relay_config.json")
 PID_FILE_PATH = os.path.join(APP_DIR, ".3cx_sync_relay.pid")
+LOCK_FILE_PATH = os.path.join(APP_DIR, ".3cx_sync_relay.lock")
 LOG_FILE_PATH = os.path.join(APP_DIR, "relay_worker.log")
 
 
@@ -747,11 +748,61 @@ def _safe_mtime(path: str) -> float:
         return 0.0
 
 
+def _try_acquire_worker_lock() -> Optional[Any]:
+    """Thu chiem lock file doc quyen theo OS de ngan chay trung lap khi dung watchdog."""
+    try:
+        lock_file = open(LOCK_FILE_PATH, "a+", encoding="ascii")
+    except Exception:
+        return None
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return lock_file
+    except OSError:
+        try:
+            lock_file.close()
+        except Exception:
+            pass
+        return None
+    except Exception:
+        return lock_file
+
+
+def _release_worker_lock(lock_handle: Optional[Any]) -> None:
+    """Giai phong lock file truoc khi reload hoac thoat."""
+    if lock_handle is None:
+        return
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            lock_handle.seek(0)
+            msvcrt.locking(lock_handle.fileno(), msvcrt.LK_UNLCK, 1)
+    except Exception:
+        pass
+    try:
+        lock_handle.close()
+    except Exception:
+        pass
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="3CX Sync Relay Worker")
     parser.add_argument("--config", default=DEFAULT_CONFIG_PATH, help="Duong dan file relay_config.json")
     parser.add_argument("--once", action="store_true", help="Chi poll 1 lan roi thoat")
     parser.add_argument("--headed", action="store_true", help="Mo cua so trinh duyet truc quan de theo doi")
+    parser.add_argument(
+        "--if-not-running",
+        action="store_true",
+        help="Chi khoi chay neu chua co tien trinh Relay Worker khac dang hoat dong",
+    )
     args = parser.parse_args()
 
     try:
@@ -761,6 +812,21 @@ def main() -> int:
         return 1
 
     headless = False if args.headed else bool(cfg.get("headless", True))
+    worker_lock_handle: Optional[Any] = None
+
+    if not args.once:
+        if args.if_not_running:
+            worker_lock_handle = _try_acquire_worker_lock()
+            if worker_lock_handle is None:
+                return 0
+        else:
+            write_pid_file()
+            for _ in range(10):
+                worker_lock_handle = _try_acquire_worker_lock()
+                if worker_lock_handle is not None:
+                    break
+                time.sleep(0.5)
+
     write_pid_file()
 
     stop_requested = {"stop": False}
@@ -813,6 +879,7 @@ def main() -> int:
         cur_script_mtime = _safe_mtime(script_path)
         if script_mtime > 0 and cur_script_mtime > 0 and cur_script_mtime != script_mtime:
             logger.info("[RELOAD] Phat hien file 3cx_sync_relay.py moi tren dia -> tu dong khoi dong lai!")
+            _release_worker_lock(worker_lock_handle)
             try:
                 subprocess.Popen([sys.executable, script_path] + sys.argv[1:], cwd=APP_DIR)
             except Exception as spawn_err:
@@ -861,6 +928,7 @@ def main() -> int:
         time.sleep(cfg["poll_interval_seconds"])
 
     remove_pid_file()
+    _release_worker_lock(worker_lock_handle)
     logger.info("3CX Sync Relay Worker da dung.")
     return 0
 

@@ -57,6 +57,8 @@ from app.schemas.hotline_3cx_auto import (
 )
 from app.services.hotline_3cx_auto_service import (
     apply_week_template_to_month,
+    cancel_all_pending_sync_logs,
+    cancel_pending_sync_log,
     claim_next_relay_task,
     clone_previous_week_schedules,
     create_member,
@@ -412,6 +414,7 @@ async def dry_run_sync(
     username = getattr(current_user, "username", "Admin")
     d_date = payload.duty_date if payload else None
     s_code = payload.shift_code if payload else None
+    force_direct = bool(payload.force_direct) if payload else False
 
     log = await run_shift_sync(
         db,
@@ -420,6 +423,7 @@ async def dry_run_sync(
         triggered_by=username,
         dry_run=True,
         allow_retry=False,
+        force_direct=force_direct,
     )
     return serialize_sync_log(log)
 
@@ -437,6 +441,7 @@ async def apply_now_sync(
     username = getattr(current_user, "username", "Admin")
     d_date = payload.duty_date if payload else None
     s_code = payload.shift_code if payload else None
+    force_direct = bool(payload.force_direct) if payload else False
 
     log = await run_shift_sync(
         db,
@@ -445,6 +450,7 @@ async def apply_now_sync(
         triggered_by=username,
         dry_run=False,
         allow_retry=False,
+        force_direct=force_direct,
     )
     return serialize_sync_log(log)
 
@@ -463,6 +469,37 @@ def get_sync_logs(
     """Lấy danh sách nhật ký đồng bộ Hotline 3CX mới nhất."""
     logs = list_sync_logs(db, limit=limit)
     return [serialize_sync_log(log) for log in logs]
+
+
+@router.post("/logs/cancel-pending")
+def cancel_all_pending_logs(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """Hủy toàn bộ các tác vụ đồng bộ đang kẹt ở trạng thái Chờ Relay / Đang chạy."""
+    username = getattr(current_user, "username", "Admin")
+    count = cancel_all_pending_sync_logs(db, cancelled_by=username)
+    return {"success": True, "cancelled_count": count}
+
+
+@router.post("/logs/{log_id}/cancel", response_model=Hotline3cxSyncLogOut)
+def cancel_single_pending_log(
+    log_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_hotline_access),
+):
+    """Hủy một tác vụ đồng bộ đang ở trạng thái Chờ Relay / Đang chạy theo ID nhật ký."""
+    username = getattr(current_user, "username", "Admin")
+    try:
+        updated = cancel_pending_sync_log(db, log_id=log_id, cancelled_by=username)
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Không tìm thấy nhật ký ID={log_id}.",
+        )
+    return serialize_sync_log(updated)
 
 
 # ==============================================================================

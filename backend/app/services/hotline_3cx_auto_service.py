@@ -1897,6 +1897,80 @@ def list_sync_logs(db: Session, limit: int = 50) -> List[Hotline3cxSyncLog]:
     )
 
 
+def cancel_pending_sync_log(
+    db: Session,
+    log_id: int,
+    cancelled_by: str = "Admin",
+) -> Optional[Hotline3cxSyncLog]:
+    """Hủy một lệnh đồng bộ đang kẹt ở trạng thái PENDING / RUNNING trong hàng chờ."""
+    log = (
+        db.query(Hotline3cxSyncLog)
+        .filter(Hotline3cxSyncLog.id == log_id)
+        .first()
+    )
+    if not log:
+        return None
+    if log.status not in ("PENDING", "RUNNING"):
+        raise ValueError("Chỉ có thể hủy các tác vụ đang ở trạng thái Chờ Relay hoặc Đang chạy.")
+
+    now_ts = datetime.now()
+    reason = f"Đã hủy lệnh chờ thủ công bởi {cancelled_by}."
+    log.status = "CANCELLED"
+    log.finished_at = now_ts
+    log.error_message = reason
+
+    relay_tasks = (
+        db.query(Hotline3cxRelayTask)
+        .filter(
+            Hotline3cxRelayTask.sync_log_id == log.id,
+            Hotline3cxRelayTask.status.in_(["PENDING", "RUNNING"]),
+        )
+        .all()
+    )
+    for task in relay_tasks:
+        task.status = "CANCELLED"
+        task.finished_at = now_ts
+        task.error_message = reason
+
+    db.commit()
+    db.refresh(log)
+    return log
+
+
+def cancel_all_pending_sync_logs(
+    db: Session,
+    cancelled_by: str = "Admin",
+) -> int:
+    """Hủy toàn bộ các lệnh đồng bộ đang ở trạng thái PENDING / RUNNING trong hàng chờ."""
+    now_ts = datetime.now()
+    reason = f"Đã hủy hàng loạt lệnh chờ thủ công bởi {cancelled_by}."
+
+    active_logs = (
+        db.query(Hotline3cxSyncLog)
+        .filter(Hotline3cxSyncLog.status.in_(["PENDING", "RUNNING"]))
+        .all()
+    )
+    for log in active_logs:
+        log.status = "CANCELLED"
+        log.finished_at = now_ts
+        log.error_message = reason
+
+    active_tasks = (
+        db.query(Hotline3cxRelayTask)
+        .filter(Hotline3cxRelayTask.status.in_(["PENDING", "RUNNING"]))
+        .all()
+    )
+    for task in active_tasks:
+        task.status = "CANCELLED"
+        task.finished_at = now_ts
+        task.error_message = reason
+
+    count = max(len(active_logs), len(active_tasks))
+    if active_logs or active_tasks:
+        db.commit()
+    return count
+
+
 async def run_shift_sync(
     db: Session,
     duty_date: Optional[date] = None,
@@ -1904,6 +1978,7 @@ async def run_shift_sync(
     triggered_by: Optional[str] = "Admin",
     dry_run: bool = False,
     allow_retry: bool = False,
+    force_direct: bool = False,
     sync_fn=None,
     sleep_fn=None,
     alert_fn=None,
@@ -2024,8 +2099,8 @@ async def run_shift_sync(
 
         return fail_log
 
-    # Chuẩn bị đường dẫn ảnh chụp màn hình (static endpoint /uploads/hotline_3cx/)
-    if (config.execution_mode or "DIRECT").upper() == "RELAY":
+    # Nếu cấu hình ở chế độ RELAY và không yêu cầu ép chạy trực tiếp (force_direct) -> đẩy vào hàng đợi Relay
+    if not force_direct and (config.execution_mode or "DIRECT").upper() == "RELAY":
         now_ts = datetime.now()
         applied_lines = [e.ext_line for e in plan.entries]
         queued_log = Hotline3cxSyncLog(

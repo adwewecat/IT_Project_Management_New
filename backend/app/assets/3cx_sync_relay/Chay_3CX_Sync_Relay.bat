@@ -2,6 +2,16 @@
 title 3CX SYNC RELAY WORKER - DONG BO HOTLINE 3CX
 cd /d "%~dp0"
 
+if /I NOT "%~1"=="--if-not-running" goto :ShowBanner
+if not exist "%~dp0.3cx_sync_relay.pid" goto :ShowBanner
+set "EXISTING_PID="
+set /p EXISTING_PID=<"%~dp0.3cx_sync_relay.pid"
+if not defined EXISTING_PID goto :ShowBanner
+if /I "%EXISTING_PID%"=="STOP" exit /b 0
+tasklist /FI "PID eq %EXISTING_PID%" 2>nul | find /I "python" >nul
+if %errorlevel% equ 0 exit /b 0
+
+:ShowBanner
 echo ====================================================================
 echo   3CX SYNC RELAY WORKER - KET NOI SERVER VA CONG 3CX PORT 5001
 echo ====================================================================

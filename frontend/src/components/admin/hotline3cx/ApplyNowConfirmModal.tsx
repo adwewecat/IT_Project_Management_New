@@ -12,6 +12,10 @@ export interface ApplyNowConfirmModalProps {
   onApplyDateChange: (val: string) => void;
   applyShift: ShiftCode;
   onApplyShiftChange: (shift: ShiftCode) => void;
+  executionMode?: string;
+  relayOnline?: boolean;
+  forceDirect?: boolean;
+  onForceDirectChange?: (val: boolean) => void;
   executing: boolean;
   onConfirm: () => void;
 }
@@ -23,6 +27,10 @@ export const ApplyNowConfirmModal: React.FC<ApplyNowConfirmModalProps> = ({
   onApplyDateChange,
   applyShift,
   onApplyShiftChange,
+  executionMode,
+  relayOnline,
+  forceDirect = false,
+  onForceDirectChange,
   executing,
   onConfirm,
 }) => {
@@ -184,6 +192,41 @@ export const ApplyNowConfirmModal: React.FC<ApplyNowConfirmModalProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Tùy chọn bỏ qua hàng chờ Relay khi đang ở chế độ RELAY */}
+        {executionMode === 'RELAY' && onForceDirectChange && (
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '8px',
+              padding: '10px 12px',
+              borderRadius: '8px',
+              border: forceDirect ? '1px solid #2563eb' : '1px solid var(--border-color)',
+              backgroundColor: forceDirect ? 'rgba(37, 99, 235, 0.08)' : 'var(--bg-primary)',
+              cursor: 'pointer',
+              fontSize: '12px',
+              lineHeight: 1.45,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={forceDirect}
+              onChange={(e) => onForceDirectChange(e.target.checked)}
+              style={{ marginTop: '2px' }}
+            />
+            <div>
+              <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                Bỏ qua hàng chờ Relay — Chạy trực tiếp ngay từ Server (Direct)
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                {relayOnline
+                  ? 'Relay Worker đang Online. Tích chọn nếu bạn muốn ép Server chạy trực tiếp thay vì qua Relay.'
+                  : '⚠️ Relay Worker hiện đang OFFLINE — nếu không tích chọn, lệnh sẽ nằm ở trạng thái "Chờ Relay" tới khi Worker online lại.'}
+              </div>
+            </div>
+          </label>
+        )}
 
         {/* Modal actions */}
         <div

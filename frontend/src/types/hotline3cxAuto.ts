@@ -130,6 +130,7 @@ export interface ApplyNowRequest {
   duty_date?: string; // ISO YYYY-MM-DD
   shift_code?: ShiftCode;
   dry_run?: boolean;
+  force_direct?: boolean;
 }
 
 export interface AppliedLineItem {

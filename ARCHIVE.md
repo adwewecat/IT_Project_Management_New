@@ -5,6 +5,11 @@
 
 <!-- Archived entries go below, newest archived at top -->
 
+- **[2026-11-16] Khắc phục chẩn đoán lỗi kết nối Portal 3CX (`ERR_CONNECTION_TIMED_OUT` / loại bỏ báo nhầm 600s)**
+  - **Root Cause:** Trên Server `.25` ghi nhận `HOTLINE_3CX_SYNC_LOGS` thất bại ở giây thứ 25 với `Page.goto: net::ERR_CONNECTION_TIMED_OUT at https://ggg.ringbot.co:5001/#/login` (trong khi máy ngoài LAN truy cập `103.146.20.65:5001` mất 1.35s → `200 OK`), đồng thời `hotline_3cx_auto_service.py` dùng lại `format_friendly_error` của GPMS nên in nhầm thông báo `"kết nối 600s"`.
+  - **Done:** Bổ sung `probe_portal_tcp()`, `format_3cx_sync_error()` báo rõ `host:port -> IP` và nguyên nhân Firewall/NAT Loopback/Proxy cổng `5001` (không bao giờ báo nhầm 600s); chuyển `page.goto(..., wait_until="domcontentloaded")` + `_safe_wait_network_idle_3cx` tránh kẹt WebSocket 3CX; tự thử lại bằng `--no-proxy-server` khi TCP trực tiếp thông nhưng Chromium bị proxy nghẽn.
+  - **Verification:** `39 passed` (`pytest tests/test_hotline_3cx_models.py tests/test_hotline_3cx_auto.py tests/test_jobs.py`), `compileall -q app` ✓, `from app.main import app` `>>> PASSED 100%` ✓, Python 3.10 AST `0` lỗi ✓.
+
 - **[2026-11-16] Xây dựng tác vụ ngầm Tự Động Chỉnh Trực Hotline 3CX (IT HCM App Day & Night)**
   - **Done:** Tạo 4 bảng `HOTLINE_3CX_*` (SQL Server `.25`, local `ITDEPT`, `main.py` lifespan, `Script/Full_SCRIPT_SQL_TABLE.sql`) và nạp sẵn 7 nhân sự mặc định; xây dựng engine `resolve_shift_plan` (ca sáng song song 06:00 T2-T6, ca tối chính/phụ 16:29 Skill 1/2, tự động đảo ca T7-CN/Lễ lúc 16:29, zero-wipe safety, retry 2 lần x 60s, chụp ảnh PNG, SMTP alert), 13 API `/api/v1/hotline-3cx-auto/*`, tích hợp scheduler `job_auto_sync_3cx_hotline_duty` (`06:00` & `16:29`), và modal UI 4 tab `Hotline3cxDutyModal` (`dd-mm-yyyy`, LIFO Esc/X).
   - **Verification:** `35 passed` (`pytest tests/test_hotline_3cx_models.py tests/test_hotline_3cx_auto.py tests/test_jobs.py`, bao gồm test hồi quy T-SQL `== True/False` & selector tabpanel), Playwright live E2E với 3CX (`DRY_RUN` vào đúng `Edit Queue 0006 -> Users`, Lightbox load ảnh, LIFO `Esc`, 0 console errors), `npm run build` exit 0 (`web.config` OK), và Python 3.10 AST check (`0` lỗi).

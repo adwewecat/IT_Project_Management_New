@@ -218,6 +218,10 @@ class ApplyNowRequest(BaseModel):
     dry_run: bool = Field(
         default=False, description="Chạy thử nghiệm không click Save trong portal 3CX"
     )
+    force_direct: bool = Field(
+        default=False,
+        description="Bỏ qua hàng chờ Relay và chạy trực tiếp Playwright ngay trên Server",
+    )
 
 
 # ==============================================================================

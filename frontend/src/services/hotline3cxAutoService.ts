@@ -137,6 +137,20 @@ export const hotline3cxAutoService = {
     return res.data;
   },
 
+  /** Hủy một lệnh đồng bộ đang kẹt ở trạng thái Chờ Relay / Đang chạy */
+  async cancelSyncLog(logId: number): Promise<Hotline3cxSyncLog> {
+    const res = await apiClient.post<Hotline3cxSyncLog>(`/hotline-3cx-auto/logs/${logId}/cancel`);
+    return res.data;
+  },
+
+  /** Hủy toàn bộ các lệnh đang kẹt ở trạng thái Chờ Relay / Đang chạy */
+  async cancelAllPendingLogs(): Promise<{ success: boolean; cancelled_count: number }> {
+    const res = await apiClient.post<{ success: boolean; cancelled_count: number }>(
+      '/hotline-3cx-auto/logs/cancel-pending'
+    );
+    return res.data;
+  },
+
   /** Tạo mới Relay Token bảo mật */
   async regenerateRelayToken(): Promise<Hotline3cxConfig> {
     const res = await apiClient.post<Hotline3cxConfig>('/hotline-3cx-auto/relay/regenerate-token');

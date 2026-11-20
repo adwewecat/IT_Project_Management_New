@@ -10,9 +10,19 @@ if not exist "%BAT_TARGET%" goto :MissingBat
 
 > "%STARTUP_CMD%" echo Set WshShell = CreateObject("WScript.Shell")
 >> "%STARTUP_CMD%" echo WshShell.CurrentDirectory = "%~dp0"
->> "%STARTUP_CMD%" echo WshShell.Run "cmd /c ""%BAT_TARGET%""", 0, False
+>> "%STARTUP_CMD%" echo WshShell.Run """%BAT_TARGET%"" --if-not-running", 0, False
 if %errorlevel% neq 0 goto :CopyError
 
+set "WATCHDOG_CMD=wscript.exe \"%STARTUP_CMD%\""
+schtasks /Create /TN "3CX_Sync_Relay_Watchdog" /TR "%WATCHDOG_CMD%" /SC MINUTE /MO 5 /F >nul 2>nul
+if %errorlevel% equ 0 goto :SchtaskOk
+echo [CANH BAO] Khong the tao Windows Scheduled Task giam sat moi 5 phut (van chay qua thu muc Startup).
+goto :AfterSchtask
+
+:SchtaskOk
+echo [THANH CONG] Da cai dat Windows Watchdog tu kiem tra & bat lai Relay moi 5 phut!
+
+:AfterSchtask
 echo [THANH CONG] Da cai dat 3CX Sync Relay tu dong chay ngam khi dang nhap Windows!
 echo Thu muc chay: %~dp0
 echo File Startup: %STARTUP_CMD%

@@ -97,11 +97,14 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
   const [logs, setLogs] = useState<Hotline3cxSyncLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState<boolean>(false);
   const [selectedScreenshotUrl, setSelectedScreenshotUrl] = useState<string | null>(null);
+  const [cancellingLogId, setCancellingLogId] = useState<number | null>(null);
+  const [cancellingAllLogs, setCancellingAllLogs] = useState<boolean>(false);
 
   // ── Action: Apply Now Modal State (Bảo vệ 2 lớp an toàn) ──
   const [showApplyNowModal, setShowApplyNowModal] = useState<boolean>(false);
   const [applyNowDate, setApplyNowDate] = useState<string>(() => getTodayIsoDate());
   const [applyNowShift, setApplyNowShift] = useState<ShiftCode>('MORNING');
+  const [applyNowForceDirect, setApplyNowForceDirect] = useState<boolean>(false);
   const [executingApplyNow, setExecutingApplyNow] = useState<boolean>(false);
   const [executingDryRun, setExecutingDryRun] = useState<boolean>(false);
 
@@ -203,29 +206,40 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
     }
   }, [notify, syncHolidaysOntoSchedules]);
 
-  // Load config
-  const fetchConfig = useCallback(async () => {
-    setLoadingConfig(true);
-    try {
-      const data = await hotline3cxAutoService.getConfig();
-      setConfig(data);
-      setConfigForm((prev) => ({
-        portal_url: data.portal_url,
-        username: data.username,
-        password: prev.password || '',
-        day_queue_name: data.day_queue_name,
-        night_queue_name: data.night_queue_name,
-        morning_time: data.morning_time,
-        evening_time: data.evening_time,
-        alert_emails: data.alert_emails,
-        execution_mode: data.execution_mode || 'DIRECT',
-      }));
-    } catch (err: unknown) {
-      notify(`Không thể tải cấu hình 3CX: ${extractApiErrorMessage(err)}`, 'error');
-    } finally {
-      setLoadingConfig(false);
-    }
-  }, [notify]);
+  // Load config (hỗ trợ silent polling cho banner trạng thái Relay ở Tab Logs)
+  const fetchConfig = useCallback(
+    async (silent: boolean = false) => {
+      if (!silent) {
+        setLoadingConfig(true);
+      }
+      try {
+        const data = await hotline3cxAutoService.getConfig();
+        setConfig(data);
+        if (!silent) {
+          setConfigForm((prev) => ({
+            portal_url: data.portal_url,
+            username: data.username,
+            password: prev.password || '',
+            day_queue_name: data.day_queue_name,
+            night_queue_name: data.night_queue_name,
+            morning_time: data.morning_time,
+            evening_time: data.evening_time,
+            alert_emails: data.alert_emails,
+            execution_mode: data.execution_mode || 'DIRECT',
+          }));
+        }
+      } catch (err: unknown) {
+        if (!silent) {
+          notify(`Không thể tải cấu hình 3CX: ${extractApiErrorMessage(err)}`, 'error');
+        }
+      } finally {
+        if (!silent) {
+          setLoadingConfig(false);
+        }
+      }
+    },
+    [notify]
+  );
 
   // Load logs (hỗ trợ silent polling cho Relay Worker đang chạy)
   const fetchLogs = useCallback(
@@ -253,9 +267,11 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
   useEffect(() => {
     if (isOpen && !wasOpenRef.current) {
       setActiveTab(initialTab);
+      setApplyNowForceDirect(false);
       fetchMembers();
       fetchHolidays();
       fetchSchedules(currentMonday);
+      fetchConfig(true);
       if (initialOpenApplyConfirm) {
         setApplyNowDate(getTodayIsoDate());
         setShowApplyNowModal(true);
@@ -270,15 +286,17 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
     fetchMembers,
     fetchHolidays,
     fetchSchedules,
+    fetchConfig,
   ]);
 
   // Khi người dùng chuyển tab: chỉ nạp dữ liệu của tab đích nếu chưa có (KHÔNG nạp lại schedules để giữ unsaved edits)
   useEffect(() => {
     if (!isOpen) return;
     if (activeTab === 'config') {
-      fetchConfig();
+      fetchConfig(false);
     } else if (activeTab === 'logs') {
       fetchLogs();
+      fetchConfig(true);
     } else if (activeTab === 'members') {
       fetchMembers();
     }
@@ -298,9 +316,10 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
     if (!hasActiveRelay) return;
     const timer = window.setInterval(() => {
       fetchLogs(true);
+      fetchConfig(true);
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [isOpen, activeTab, logs, fetchLogs]);
+  }, [isOpen, activeTab, logs, fetchLogs, fetchConfig]);
 
   // Active members memo
   const activeMembers = useMemo(() => {
@@ -518,15 +537,23 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
     }
   };
 
-  // Apply Now confirmation execute handler
-  const handleConfirmApplyNow = async () => {
+  // Hàm dùng chung thực thi áp dụng ca trực ngay (từ Modal xác nhận, bảng Lịch hoặc tab Nhật Ký)
+  const executeApplyShift = async (opts: {
+    dutyDate?: string;
+    shiftCode?: ShiftCode;
+    forceDirect?: boolean;
+    closeConfirmModal?: boolean;
+  }) => {
     setExecutingApplyNow(true);
     try {
       const log = await hotline3cxAutoService.applyNow({
-        duty_date: applyNowDate,
-        shift_code: applyNowShift,
+        duty_date: opts.dutyDate,
+        shift_code: opts.shiftCode,
+        force_direct: Boolean(opts.forceDirect),
       });
-      setShowApplyNowModal(false);
+      if (opts.closeConfirmModal) {
+        setShowApplyNowModal(false);
+      }
 
       if (log.status === 'SUCCESS') {
         notify(
@@ -545,12 +572,23 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
       }
       setActiveTab('logs');
       fetchLogs();
+      fetchConfig(true);
       if (onSyncTriggered) onSyncTriggered();
     } catch (err: unknown) {
       notify(`Lỗi khi đồng bộ vào 3CX: ${extractApiErrorMessage(err)}`, 'error');
     } finally {
       setExecutingApplyNow(false);
     }
+  };
+
+  // Apply Now confirmation execute handler
+  const handleConfirmApplyNow = async () => {
+    await executeApplyShift({
+      dutyDate: applyNowDate,
+      shiftCode: applyNowShift,
+      forceDirect: applyNowForceDirect,
+      closeConfirmModal: true,
+    });
   };
 
   // Quick apply for a single shift directly from a table row (Ca Sáng, Ca Tối, Backup Sáng, Backup Tối)
@@ -568,43 +606,48 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
       }
     }
 
-    setExecutingApplyNow(true);
+    await executeApplyShift({
+      dutyDate,
+      shiftCode,
+      forceDirect: false,
+    });
+  };
+
+  // Chạy trực tiếp ngay từ Server (Direct, bỏ qua hàng chờ Relay) cho ca hiện tại hôm nay
+  const handleRunDirectNowToday = async () => {
+    const defaultShift: ShiftCode = new Date().getHours() < 12 ? 'MORNING' : 'EVENING';
+    await executeApplyShift({
+      dutyDate: getTodayIsoDate(),
+      shiftCode: defaultShift,
+      forceDirect: true,
+    });
+  };
+
+  // Hủy 1 lệnh đang kẹt Chờ Relay trong tab Nhật Ký
+  const handleCancelSyncLog = async (logId: number) => {
+    setCancellingLogId(logId);
     try {
-      const shiftNameMap: Record<ShiftCode, string> = {
-        MORNING: 'Ca Sáng (06:00)',
-        EVENING: 'Ca Tối (16:29)',
-        MORNING_BACKUP: 'Ca Sáng Backup (Manual)',
-        EVENING_BACKUP: 'Ca Tối Backup (Manual)',
-      };
-      const label = shiftNameMap[shiftCode] || shiftCode;
-
-      const log = await hotline3cxAutoService.applyNow({
-        duty_date: dutyDate,
-        shift_code: shiftCode,
-      });
-
-      if (log.status === 'SUCCESS') {
-        notify(
-          `Áp dụng thành công ${label} vào cổng 3CX! Hàng đợi: ${log.queue_name}, đã cập nhật ${log.applied_lines?.length || 0} line trực.`,
-          'success'
-        );
-      } else if (log.status === 'PENDING' || log.status === 'RUNNING') {
-        notify(
-          `Đã đẩy lệnh áp dụng ${label} vào hàng đợi 3CX Relay Worker (${log.queue_name}). Đang chuyển sang nhật ký...`,
-          'info'
-        );
-      } else if (log.status === 'SKIPPED') {
-        notify(`Đã bỏ qua ca trực: ${log.error_message || 'Không có cấu hình line'}`, 'info');
-      } else {
-        notify(`Đồng bộ thất bại: ${log.error_message || 'Có lỗi xảy ra'}`, 'error');
-      }
-      setActiveTab('logs');
-      fetchLogs();
-      if (onSyncTriggered) onSyncTriggered();
+      await hotline3cxAutoService.cancelSyncLog(logId);
+      notify('Đã hủy lệnh đang chờ Relay!', 'info');
+      fetchLogs(true);
     } catch (err: unknown) {
-      notify(`Lỗi khi đồng bộ vào 3CX: ${extractApiErrorMessage(err)}`, 'error');
+      notify(`Không thể hủy lệnh #${logId}: ${extractApiErrorMessage(err)}`, 'error');
     } finally {
-      setExecutingApplyNow(false);
+      setCancellingLogId(null);
+    }
+  };
+
+  // Hủy toàn bộ các lệnh đang Chờ Relay / Đang chạy
+  const handleCancelAllPendingLogs = async () => {
+    setCancellingAllLogs(true);
+    try {
+      const res = await hotline3cxAutoService.cancelAllPendingLogs();
+      notify(`Đã hủy ${res.cancelled_count || 0} lệnh đang chờ Relay.`, 'info');
+      fetchLogs(true);
+    } catch (err: unknown) {
+      notify(`Không thể hủy hàng chờ: ${extractApiErrorMessage(err)}`, 'error');
+    } finally {
+      setCancellingAllLogs(false);
     }
   };
 
@@ -977,11 +1020,34 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
             <LogsTab
               logs={logs}
               loadingLogs={loadingLogs}
-              onRefreshLogs={() => fetchLogs(false)}
+              config={config}
+              executingAction={executingApplyNow}
+              cancellingId={cancellingLogId}
+              cancellingAll={cancellingAllLogs}
+              onRefreshLogs={() => {
+                fetchLogs(false);
+                fetchConfig(true);
+              }}
               onViewScreenshot={(screenshotPath) => {
                 const cleanUrl = screenshotPath.startsWith('/') ? screenshotPath : `/${screenshotPath}`;
                 setSelectedScreenshotUrl(cleanUrl);
               }}
+              onOpenApplyNowModal={() => {
+                setApplyNowDate(getTodayIsoDate());
+                setApplyNowShift(new Date().getHours() < 12 ? 'MORNING' : 'EVENING');
+                setShowApplyNowModal(true);
+              }}
+              onRunDirectNowToday={handleRunDirectNowToday}
+              onApplyLogRow={(dutyDate, shiftCode, forceDirect) =>
+                executeApplyShift({
+                  dutyDate,
+                  shiftCode,
+                  forceDirect: Boolean(forceDirect),
+                })
+              }
+              onCancelLog={handleCancelSyncLog}
+              onCancelAllPending={handleCancelAllPendingLogs}
+              onGoToConfigTab={() => setActiveTab('config')}
             />
           )}
         </div>
@@ -1004,6 +1070,10 @@ export const Hotline3cxDutyModal: React.FC<Hotline3cxDutyModalProps> = ({
           onApplyDateChange={(val) => setApplyNowDate(val || getTodayIsoDate())}
           applyShift={applyNowShift}
           onApplyShiftChange={setApplyNowShift}
+          executionMode={config?.execution_mode}
+          relayOnline={config?.relay_online}
+          forceDirect={applyNowForceDirect}
+          onForceDirectChange={setApplyNowForceDirect}
           executing={executingApplyNow}
           onConfirm={handleConfirmApplyNow}
         />
